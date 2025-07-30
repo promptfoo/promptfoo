@@ -1,4 +1,5 @@
 import React from 'react';
+
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -13,9 +14,9 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
 import useTheme from '@mui/material/styles/useTheme';
-import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
+import Typography from '@mui/material/Typography';
+import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';

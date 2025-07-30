@@ -1,8 +1,8 @@
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
-import React from 'react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import SecurityFindings from './SecurityFindings';
+
 import type { ScanResult } from '../ModelAudit.types';
 
 describe('SecurityFindings', () => {
@@ -50,13 +50,12 @@ describe('SecurityFindings', () => {
       );
       expect(detailsContent).toBeInTheDocument();
 
-      const detailsPaper = detailsContent.closest('.MuiPaper-root');
-      expect(detailsPaper).toBeInTheDocument();
-
-      expect(detailsPaper).toHaveStyle({ backgroundColor: 'rgb(66, 66, 66)' });
+      // Details are now displayed in an Alert component, not a Paper
+      const detailsAlert = detailsContent.closest('.MuiAlert-root');
+      expect(detailsAlert).toBeInTheDocument();
     });
 
-    it('should render the raw output Paper with background color theme.palette.grey[900] and text color theme.palette.grey[100] when showRawOutput is true', () => {
+    it('should render the raw output in a dialog when showRawOutput is true', () => {
       render(
         <ThemeProvider theme={darkTheme}>
           <SecurityFindings
@@ -72,13 +71,9 @@ describe('SecurityFindings', () => {
       const rawOutputElement = screen.getByText('Raw scanner output text.');
       expect(rawOutputElement).toBeInTheDocument();
 
-      const rawOutputPaper = rawOutputElement.closest('.MuiPaper-root');
-      expect(rawOutputPaper).toBeInTheDocument();
-
-      expect(rawOutputPaper).toHaveStyle({
-        backgroundColor: 'rgb(33, 33, 33)',
-        color: 'rgb(245, 245, 245)',
-      });
+      // Raw output is now displayed in a dialog with a pre element
+      const dialogTitle = screen.getByText('Raw Scanner Output');
+      expect(dialogTitle).toBeInTheDocument();
     });
   });
 
@@ -89,7 +84,7 @@ describe('SecurityFindings', () => {
       },
     });
 
-    it('should render the raw output Paper with background color theme.palette.grey[50] and text color theme.palette.grey[900] when showRawOutput is true', () => {
+    it('should render the raw output in a dialog when showRawOutput is true', () => {
       render(
         <ThemeProvider theme={lightTheme}>
           <SecurityFindings
@@ -103,11 +98,11 @@ describe('SecurityFindings', () => {
       );
 
       const rawOutputText = screen.getByText('Raw scanner output text.');
-      const rawOutputPaper = rawOutputText.closest('.MuiPaper-root');
+      expect(rawOutputText).toBeInTheDocument();
 
-      expect(rawOutputPaper).toBeInTheDocument();
-      expect(rawOutputPaper).toHaveStyle({ backgroundColor: lightTheme.palette.grey[50] });
-      expect(rawOutputText).toHaveStyle({ color: lightTheme.palette.grey[900] });
+      // Raw output is now displayed in a dialog with a pre element
+      const dialogTitle = screen.getByText('Raw Scanner Output');
+      expect(dialogTitle).toBeInTheDocument();
     });
   });
 });

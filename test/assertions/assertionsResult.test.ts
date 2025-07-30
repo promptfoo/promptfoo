@@ -1,6 +1,7 @@
 import { AssertionsResult, DEFAULT_TOKENS_USED } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
-import type { GradingResult, AssertionSet } from '../../src/types';
+
+import type { AssertionSet, GradingResult } from '../../src/types';
 
 jest.mock('../../src/envars');
 
@@ -52,6 +53,7 @@ describe('AssertionsResult', () => {
         prompt: 50,
         completion: 50,
         cached: 0,
+        numRequests: 0,
       });
       expect(assertionsResult['namedScores']).toEqual({
         accuracy: 0.8,

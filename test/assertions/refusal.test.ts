@@ -1,9 +1,10 @@
 import { handleIsRefusal } from '../../src/assertions/refusal';
+
 import type {
   Assertion,
-  GradingResult,
   AssertionValueFunctionContext,
   AtomicTestCase,
+  GradingResult,
 } from '../../src/types';
 
 const assertion: Assertion = {

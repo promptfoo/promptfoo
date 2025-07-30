@@ -1,5 +1,6 @@
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
+
 import type { Config } from '../../types';
 
 export function getStrategyId(strategy: RedteamStrategy): string {

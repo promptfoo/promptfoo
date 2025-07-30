@@ -1,23 +1,23 @@
 import { relations, sql } from 'drizzle-orm';
 import {
-  text,
-  integer,
-  sqliteTable,
-  primaryKey,
   index,
-  uniqueIndex,
+  integer,
+  primaryKey,
   real,
+  sqliteTable,
+  text,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 import {
-  type Prompt,
-  type ProviderResponse,
-  type GradingResult,
-  type UnifiedConfig,
-  type ProviderOptions,
   type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateSummaryV2,
+  type GradingResult,
+  type Prompt,
+  type ProviderOptions,
+  type ProviderResponse,
   ResultFailureReason,
+  type UnifiedConfig,
 } from '../types';
 
 // ------------ Prompts ------------
@@ -127,6 +127,13 @@ export const evalResultsTable = sqliteTable(
       sql`json_extract(${table.namedScores}, '$')`,
     ),
     metadataIdx: index('eval_result_metadata_idx').on(sql`json_extract(${table.metadata}, '$')`),
+
+    metadataPluginIdIdx: index('eval_result_metadata_plugin_id_idx').on(
+      sql`json_extract(${table.metadata}, '$.pluginId')`,
+    ),
+    metadataStrategyIdIdx: index('eval_result_metadata_strategy_id_idx').on(
+      sql`json_extract(${table.metadata}, '$.strategyId')`,
+    ),
   }),
 );
 

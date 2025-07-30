@@ -27,6 +27,7 @@ The `promptfoo` command line utility supports the following subcommands:
   - `list evals`
   - `list prompts`
   - `list datasets`
+- `mcp` - Start a Model Context Protocol (MCP) server to expose promptfoo tools to AI agents and development environments.
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show <id>` - Show details of a specific resource (evaluation, prompt, dataset).
 - `delete <id>` - Delete a resource by its ID (currently, just evaluations)
@@ -157,6 +158,57 @@ List various resources like evaluations, prompts, and datasets.
 | ------------ | --------------------------------------------------------------- |
 | `-n`         | Show the first n records, sorted by descending date of creation |
 | `--ids-only` | Show only IDs without descriptions                              |
+
+## `promptfoo mcp`
+
+Start a Model Context Protocol (MCP) server to expose promptfoo's eval and testing capabilities as tools that AI agents and development environments can use.
+
+| Option                | Description                       | Default |
+| --------------------- | --------------------------------- | ------- |
+| `-p, --port <number>` | Port number for HTTP transport    | 3100    |
+| `--transport <type>`  | Transport type: "http" or "stdio" | http    |
+
+### Transport Types
+
+- **STDIO**: Best for desktop AI tools like Cursor, Claude Desktop, and local AI agents that communicate via standard input/output
+- **HTTP**: Best for web applications, APIs, and remote integrations that need HTTP endpoints
+
+### Examples
+
+```sh
+# Start MCP server with STDIO transport (for Cursor, Claude Desktop, etc.)
+npx promptfoo@latest mcp --transport stdio
+
+# Start MCP server with HTTP transport on default port
+npx promptfoo@latest mcp --transport http
+
+# Start MCP server with HTTP transport on custom port
+npx promptfoo@latest mcp --transport http --port 8080
+```
+
+### Available Tools
+
+The MCP server provides 9 tools for AI agents:
+
+**Core Evaluation Tools:**
+
+- **`list_evaluations`** - Browse your evaluation runs with optional dataset filtering
+- **`get_evaluation_details`** - Get comprehensive results, metrics, and test cases for a specific evaluation
+- **`run_evaluation`** - Execute evaluations with custom parameters, test case filtering, and concurrency control
+- **`share_evaluation`** - Generate publicly shareable URLs for evaluation results
+
+**Redteam Security Tools:**
+
+- **`redteam_run`** - Execute comprehensive security testing against AI applications with dynamic attack probes
+- **`redteam_generate`** - Generate adversarial test cases for redteam security testing with configurable plugins and strategies
+
+**Configuration & Testing:**
+
+- **`validate_promptfoo_config`** - Validate configuration files using the same logic as the CLI
+- **`test_provider`** - Test AI provider connectivity, credentials, and response quality
+- **`run_assertion`** - Test individual assertion rules against outputs for debugging
+
+For detailed setup instructions and integration examples, see the [MCP Server documentation](/docs/integrations/mcp-server).
 
 ## `promptfoo show <id>`
 
@@ -550,8 +602,8 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_PASS_RATE_THRESHOLD`               | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 100% (no failures allowed)                                                                                                 | 100                           |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`              | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior.                                                        |                               |
 | `PROMPTFOO_SHARE_CHUNK_SIZE`                  | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.                                                                |                               |
-| `PROMPTFOO_EVAL_TIMEOUT_MS`                   | Timeout in milliseconds for each evaluation step.                                                                                                                                                       |                               |
-| `PROMPTFOO_MAX_EVAL_TIME_MS`                  | Maximum runtime in milliseconds for the entire evaluation.                                                                                                                                              |                               |
+| `PROMPTFOO_EVAL_TIMEOUT_MS`                   | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error.                                                                        |                               |
+| `PROMPTFOO_MAX_EVAL_TIME_MS`                  | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the eval ends.                                                      |                               |
 | `PROMPTFOO_STRIP_GRADING_RESULT`              | Strip grading results from results to reduce memory usage                                                                                                                                               | false                         |
 | `PROMPTFOO_STRIP_METADATA`                    | Strip metadata from results to reduce memory usage                                                                                                                                                      | false                         |
 | `PROMPTFOO_STRIP_PROMPT_TEXT`                 | Strip prompt text from results to reduce memory usage                                                                                                                                                   | false                         |

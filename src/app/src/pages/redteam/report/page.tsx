@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+
 import CrispChat from '@app/components/CrispChat';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
+import { useNavigate } from 'react-router-dom';
 import Report from './components/Report';
 import ReportIndex from './components/ReportIndex';
 

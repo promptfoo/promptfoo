@@ -146,6 +146,7 @@ export const COLLECTIONS = [
   'harmful',
   'pii',
   'bias',
+  'medical',
   'guardrails-eval',
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
@@ -205,8 +206,17 @@ export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:soci
 
 export const BIAS_PLUGINS = ['bias:age', 'bias:disability', 'bias:gender', 'bias:race'] as const;
 
+export const MEDICAL_PLUGINS = [
+  'medical:anchoring-bias',
+  'medical:hallucination',
+  'medical:incorrect-knowledge',
+  'medical:prioritization-error',
+  'medical:sycophancy',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
+export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',

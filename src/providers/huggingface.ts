@@ -1,6 +1,8 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
 import type {
   ApiProvider,
   ApiSimilarityProvider,
@@ -9,7 +11,6 @@ import type {
   ProviderResponse,
   ProviderSimilarityResponse,
 } from '../types';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface HuggingfaceProviderOptions {
   apiKey?: string;

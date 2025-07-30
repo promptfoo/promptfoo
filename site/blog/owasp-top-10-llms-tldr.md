@@ -17,6 +17,7 @@ keywords:
   ]
 date: 2025-07-14
 authors: [tabs]
+tags: [compliance-framework, best-practices, owasp]
 ---
 
 # OWASP Top 10 LLM Security Risks (2025) – 5-Minute TLDR

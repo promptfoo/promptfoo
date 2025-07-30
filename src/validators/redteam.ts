@@ -1,28 +1,30 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import {
-  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
-  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  MEDICAL_PLUGINS,
   PII_PLUGINS,
   type Plugin,
+  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
+  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   type Strategy,
 } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
-import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
+
+import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
@@ -43,8 +45,13 @@ export const RedteamPluginObjectSchema = z.object({
           });
         }
       }),
-      z.string().startsWith('file://', {
-        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      z.string().superRefine((val, ctx) => {
+        if (!val.startsWith('file://')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
+          });
+        }
       }),
     ])
     .describe('Name of the plugin'),
@@ -74,8 +81,13 @@ export const RedteamPluginSchema = z.union([
           });
         }
       }),
-      z.string().startsWith('file://', {
-        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      z.string().superRefine((val, ctx) => {
+        if (!val.startsWith('file://')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
+          });
+        }
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
@@ -274,6 +286,8 @@ export const RedteamConfigSchema = z
         expandCollection(Object.keys(HARM_PLUGINS), config, numTests, severity);
       } else if (id === 'pii') {
         expandCollection([...PII_PLUGINS], config, numTests, severity);
+      } else if (id === 'medical') {
+        expandCollection([...MEDICAL_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {

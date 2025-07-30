@@ -1,16 +1,17 @@
 import path from 'path';
-import { fetchWithCache } from '../../cache';
-import { getCache, isCacheEnabled } from '../../cache';
+
+import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { sleep } from '../../util/time';
-import type { CallbackContext } from '../openai/types';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
+
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type { CallbackContext } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
 /**
