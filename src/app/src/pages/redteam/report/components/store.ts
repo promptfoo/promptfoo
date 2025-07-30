@@ -1,7 +1,7 @@
-import { get, set, del } from 'idb-keyval';
+import { del, get, set } from 'idb-keyval';
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import type { StateStorage } from 'zustand/middleware';
-import { persist, createJSONStorage } from 'zustand/middleware';
 
 const storage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
@@ -20,8 +20,6 @@ interface ReportState {
   setShowPercentagesOnRiskCards: (show: boolean) => void;
   pluginPassRateThreshold: number;
   setPluginPassRateThreshold: (threshold: number) => void;
-  showComplianceSection: boolean;
-  setShowComplianceSection: (show: boolean) => void;
 }
 
 export const useReportStore = create<ReportState>()(
@@ -33,8 +31,6 @@ export const useReportStore = create<ReportState>()(
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: (threshold: number) =>
         set(() => ({ pluginPassRateThreshold: threshold })),
-      showComplianceSection: false,
-      setShowComplianceSection: (show: boolean) => set(() => ({ showComplianceSection: show })),
     }),
     {
       name: 'ReportViewStorage',

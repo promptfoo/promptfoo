@@ -1,9 +1,17 @@
-import { render, screen, act, fireEvent } from '@testing-library/react';
-import React from 'react';
-import type { AssertionType, GradingResult } from '@promptfoo/types';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import type { AssertionType, GradingResult } from '@promptfoo/types';
+
+// Mock the Citations component to verify it receives the correct props
+vi.mock('./Citations', () => ({
+  default: vi.fn(({ citations }) => (
+    <div data-testid="citations-component" data-citations={JSON.stringify(citations)}>
+      Mocked Citations Component
+    </div>
+  )),
+}));
 
 const mockOnClose = vi.fn();
 const defaultProps = {
@@ -42,13 +50,13 @@ describe('EvalOutputPromptDialog', () => {
   it('displays prompt content', () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Prompt')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Test prompt')).toBeInTheDocument();
+    expect(screen.getByText('Test prompt')).toBeInTheDocument();
   });
 
   it('displays output when provided', () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
     expect(screen.getByText('Output')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Test output')).toBeInTheDocument();
+    expect(screen.getByText('Test output')).toBeInTheDocument();
   });
 
   it('displays assertion results table with metrics when provided', () => {
@@ -97,10 +105,13 @@ describe('EvalOutputPromptDialog', () => {
 
     render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    // Trigger the hover event to make the copy button visible
-    fireEvent.mouseEnter(screen.getByText('Prompt').parentElement!);
+    // Find the prompt content box and trigger hover to make copy button visible
+    const promptBox = screen.getByText('Test prompt').closest('.MuiPaper-root');
+    expect(promptBox).toBeInTheDocument();
 
-    // Get the button by its aria-label
+    fireEvent.mouseEnter(promptBox!);
+
+    // Get the button by its aria-label (updated to match new implementation)
     const copyButton = screen.getByLabelText('Copy prompt');
     await userEvent.click(copyButton);
 
@@ -150,6 +161,60 @@ describe('EvalOutputPromptDialog', () => {
     const truncatedCell = screen.getByText(/^a+\.\.\.$/);
     await userEvent.click(truncatedCell);
     expect(screen.getByText(longValue)).toBeInTheDocument();
+  });
+
+  it('displays the Citations component when citations are in metadata', () => {
+    const propsWithCitations = {
+      ...defaultProps,
+      metadata: {
+        ...defaultProps.metadata,
+        citations: [
+          {
+            retrievedReferences: [
+              {
+                content: { text: 'Citation content' },
+                location: { s3Location: { uri: 'https://example.com' } },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+
+    // Check if Citations component is rendered with correct props
+    const citationsComponent = screen.getByTestId('citations-component');
+    expect(citationsComponent).toBeInTheDocument();
+
+    // Verify citations data was passed correctly
+    const passedCitations = JSON.parse(citationsComponent.getAttribute('data-citations') || '[]');
+    expect(passedCitations).toEqual(propsWithCitations.metadata.citations);
+  });
+
+  it('does not display the Citations component when no citations in metadata', () => {
+    render(<EvalOutputPromptDialog {...defaultProps} />);
+    expect(screen.queryByTestId('citations-component')).not.toBeInTheDocument();
+  });
+
+  it('excludes citations from metadata table to avoid duplication', () => {
+    const propsWithCitations = {
+      ...defaultProps,
+      metadata: {
+        regularKey: 'regular value',
+        citations: [{ source: 'test', content: 'test content' }],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithCitations} />);
+
+    // Regular metadata should be in the table
+    expect(screen.getByText('regularKey')).toBeInTheDocument();
+    expect(screen.getByText('regular value')).toBeInTheDocument();
+
+    // Citations shouldn't appear in the metadata table
+    const metadataTable = screen.getByText('Metadata').closest('div');
+    expect(metadataTable?.textContent).not.toContain('citations');
   });
 });
 

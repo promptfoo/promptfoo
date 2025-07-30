@@ -1,28 +1,183 @@
 import { randomUUID } from 'crypto';
+import fs from 'fs';
+
 import glob from 'glob';
-import { evaluate, generateVarCombinations, isAllowedPrompt, runEval } from '../src/evaluator';
+import { FILE_METADATA_KEY } from '../src/constants';
+import {
+  calculateThreadsPerBar,
+  evaluate,
+  formatVarsForDisplay,
+  generateVarCombinations,
+  isAllowedPrompt,
+  runEval,
+} from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
-import { type ApiProvider, type TestSuite, type Prompt, ResultFailureReason } from '../src/types';
+import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types';
+import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
+import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
+
+jest.mock('../src/util/transform', () => ({
+  TransformInputType: {
+    OUTPUT: 'output',
+    VARS: 'vars',
+  },
+  transform: jest.fn().mockImplementation(async (code, input, context, skipWrap, inputType) => {
+    if (typeof code === 'string' && code.includes('vars.transformed = true')) {
+      return { ...input, transformed: true };
+    }
+    if (typeof code === 'string' && code.includes('vars.defaultTransform = true')) {
+      return { ...input, defaultTransform: true };
+    }
+    // Handle the test transform cases
+    if (typeof code === 'string') {
+      // Handle simple concatenation transforms
+      if (code === 'output + " postprocessed"') {
+        return input + ' postprocessed';
+      }
+      // Handle JSON parsing transforms
+      if (code === 'JSON.parse(output).value') {
+        try {
+          return JSON.parse(input).value;
+        } catch {
+          return input;
+        }
+      }
+      // Handle template literal transforms
+      if (code === '`Transformed: ${output}`') {
+        return `Transformed: ${input}`;
+      }
+      if (code === '`ProviderTransformed: ${output}`') {
+        return `ProviderTransformed: ${input}`;
+      }
+      if (code === '`Provider: ${output}`') {
+        return `Provider: ${input}`;
+      }
+      if (code === '`Test: ${output}`') {
+        return `Test: ${input}`;
+      }
+      if (code === '"testTransformed " + output') {
+        return 'testTransformed ' + input;
+      }
+      if (code === '"defaultTestTransformed " + output') {
+        return 'defaultTestTransformed ' + input;
+      }
+      // Handle transformVars cases
+      if (code.includes('{ ...vars')) {
+        if (code.includes('toUpperCase()')) {
+          return { ...input, name: input.name.toUpperCase() };
+        }
+        if (code.includes('vars.age + 5')) {
+          return { ...input, age: input.age + 5 };
+        }
+      }
+      // Handle transformVars with return statement and context
+      if (code.includes('return {') && code.includes('context.uuid')) {
+        return {
+          ...input,
+          id: context?.uuid || 'mock-uuid',
+          hasPrompt: Boolean(context?.prompt),
+        };
+      }
+      // Handle transform with "Test: " prefix
+      if (code === '"Test: " + output') {
+        return 'Test: ' + input;
+      }
+      if (code === '"Provider: " + output') {
+        return 'Provider: ' + input;
+      }
+      if (code === '"Transform: " + output') {
+        return 'Transform: ' + input;
+      }
+      // Handle multiple transforms concatenation
+      if (code === 'output + "-provider-test"') {
+        return input + '-provider-test';
+      }
+      if (code === 'output + "-provider"') {
+        return input + '-provider';
+      }
+      if (code === 'output + "-test"') {
+        return input + '-test';
+      }
+      // Handle template literal transforms with backticks
+      if (code === '`Transform: ${output}`') {
+        return `Transform: ${input}`;
+      }
+      if (code === '`Postprocess: ${output}`') {
+        return `Postprocess: ${input}`;
+      }
+      // Handle transformVars with test2UpperCase
+      if (code.includes('test2UpperCase: vars.test2.toUpperCase()')) {
+        return { ...input, test2UpperCase: input.test2.toUpperCase() };
+      }
+    }
+    return input;
+  }),
+}));
+
+jest.mock('../src/util/fileReference', () => ({
+  ...jest.requireActual('../src/util/fileReference'),
+  processConfigFileReferences: jest.fn().mockImplementation(async (config) => {
+    if (
+      typeof config === 'object' &&
+      config !== null &&
+      config.tests &&
+      Array.isArray(config.tests)
+    ) {
+      const result = {
+        ...config,
+        tests: config.tests.map((test: any) => {
+          return {
+            ...test,
+            vars:
+              test.vars.var1 === 'file://test/fixtures/test_file.txt'
+                ? {
+                    var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
+                  }
+                : test.vars,
+          };
+        }),
+      };
+      return result;
+    }
+    return config;
+  }),
+}));
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
 jest.mock('glob', () => ({
-  globSync: jest.fn(),
+  globSync: jest.fn().mockImplementation((pattern) => {
+    if (pattern.includes('test/fixtures/test_file.txt')) {
+      return [pattern];
+    }
+    return [];
+  }),
 }));
 
 jest.mock('../src/esm');
+
 jest.mock('../src/evaluatorHelpers', () => ({
   ...jest.requireActual('../src/evaluatorHelpers'),
-  runExtensionHook: jest.fn(),
+  runExtensionHook: jest.fn().mockImplementation((extensions, hookName, context) => context),
 }));
+
 jest.mock('../src/util/time', () => ({
   ...jest.requireActual('../src/util/time'),
   sleep: jest.fn(),
+}));
+
+jest.mock('../src/util/fileExtensions', () => ({
+  isImageFile: jest
+    .fn()
+    .mockImplementation((filePath) => filePath.endsWith('.jpg') || filePath.endsWith('.png')),
+  isVideoFile: jest.fn().mockImplementation((filePath) => filePath.endsWith('.mp4')),
+  isAudioFile: jest.fn().mockImplementation((filePath) => filePath.endsWith('.mp3')),
+  isJavascriptFile: jest.fn().mockReturnValue(false),
 }));
 
 jest.mock('../src/util/functions/loadFunction', () => ({
@@ -102,6 +257,15 @@ describe('evaluator', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    if (global.gc) {
+      global.gc(); // Force garbage collection
+    }
+  });
+
+  afterAll(() => {
+    // Clear all module mocks to prevent any lingering state
+    jest.restoreAllMocks();
+    jest.resetModules();
   });
 
   it('evaluate with vars', async () => {
@@ -125,13 +289,8 @@ describe('evaluator', () => {
         vars: { var1: 'value1', var2: 'value2' },
         test: testSuite.tests![0],
         prompt: expect.any(Object),
-        filters: undefined,
-        originalProvider: mockApiProvider,
-        logger: expect.any(Object),
-        fetchWithCache: expect.any(Function),
-        getCache: expect.any(Function),
       }),
-      expect.anything(),
+      undefined,
     );
     expect(summary.stats.successes).toBe(1);
     expect(summary.stats.failures).toBe(0);
@@ -145,6 +304,18 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -180,6 +351,18 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1 < 2 he said "hello world"...');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -214,10 +397,78 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1.prop1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  it('evaluate with vars from file', async () => {
+    const originalReadFileSync = fs.readFileSync;
+    jest.spyOn(fs, 'readFileSync').mockImplementation((path) => {
+      if (typeof path === 'string' && path.includes('test_file.txt')) {
+        return '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>';
+      }
+      return originalReadFileSync(path);
+    });
+
+    const evalHelpers = await import('../src/evaluatorHelpers');
+    const originalRenderPrompt = evalHelpers.renderPrompt;
+
+    const mockRenderPrompt = jest.spyOn(evalHelpers, 'renderPrompt');
+    mockRenderPrompt.mockImplementation(async (prompt, vars) => {
+      if (prompt.raw.includes('{{ var1 }}')) {
+        return 'Test prompt <h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>';
+      }
+      return originalRenderPrompt(prompt, vars);
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ var1 }}')],
+      tests: [
+        {
+          vars: { var1: 'file://test/fixtures/test_file.txt' },
+        },
+      ],
+    };
+
+    try {
+      const processedTestSuite = await processConfigFileReferences(testSuite);
+      const evalRecord = await Eval.create({}, processedTestSuite.prompts, { id: randomUUID() });
+      await evaluate(processedTestSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(mockApiProvider.callApi).toHaveBeenCalledWith(
+        'Test prompt <h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
+        expect.anything(),
+        undefined,
+      );
+
+      expect(summary.stats.successes).toBe(1);
+      expect(summary.stats.failures).toBe(0);
+      expect(summary.results[0].prompt.raw).toBe(
+        'Test prompt <h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
+      );
+      expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }}');
+      expect(summary.results[0].response?.output).toBe('Test output');
+    } finally {
+      mockRenderPrompt.mockRestore();
+      fs.readFileSync = originalReadFileSync;
+    }
   });
 
   it('evaluate with named prompt', async () => {
@@ -247,6 +498,18 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
@@ -282,6 +545,18 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -316,6 +591,18 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
@@ -344,6 +631,18 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -374,6 +673,18 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
     expect(summary.results[0].prompt.label).toBe('Test prompt');
@@ -402,6 +713,18 @@ describe('evaluator', () => {
         reasoning: 11,
         acceptedPrediction: 12,
         rejectedPrediction: 13,
+      },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt');
@@ -900,6 +1223,18 @@ describe('evaluator', () => {
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      assertions: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
     expect(summary.results[0].prompt.raw).toBe('Test prompt 1');
     expect(summary.results[0].prompt.label).toBe('Test prompt 1');
@@ -1149,6 +1484,56 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
+  it('evaluator should correctly count named scores based on contributing assertions', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for namedScoresCount')],
+      tests: [
+        {
+          vars: { var1: 'value1' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: 'Accuracy',
+            },
+            {
+              type: 'contains',
+              value: 'Test',
+              metric: 'Accuracy',
+            },
+            {
+              type: 'javascript',
+              value: 'output.length > 0',
+              metric: 'Completeness',
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.results).toHaveLength(1);
+    const result = summary.results[0];
+
+    // Use toMatchObject pattern to avoid conditional expects
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: result.provider.id,
+          metrics: expect.objectContaining({
+            namedScoresCount: expect.objectContaining({
+              Accuracy: 2,
+              Completeness: 1,
+            }),
+          }),
+        }),
+      ]),
+    );
+  });
+
   it('merges metadata correctly for regular tests', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -1198,6 +1583,7 @@ describe('evaluator', () => {
     expect(results[0].metadata).toEqual({
       testKey: 'testValue',
       responseKey: 'responseValue',
+      [FILE_METADATA_KEY]: {},
     });
   });
 
@@ -1342,7 +1728,7 @@ describe('evaluator', () => {
       id: jest.fn().mockReturnValue('test-provider-transform'),
       callApi: jest.fn().mockResolvedValue({
         output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
       transform: '`Provider: ${output}`',
     };
@@ -1565,21 +1951,19 @@ describe('evaluator', () => {
               type: 'json_schema',
               json_schema: {
                 name: 'math_response',
-                strict: true,
                 schema: {
                   type: 'object',
-                  properties: {
-                    final_answer: { type: 'string' },
-                  },
+                  properties: { final_answer: { type: 'string' } },
                   required: ['final_answer'],
                   additionalProperties: false,
                 },
+                strict: true,
               },
             },
           },
         }),
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -1667,6 +2051,7 @@ describe('evaluator', () => {
             }),
           }),
         ]),
+        results: expect.any(Array),
         suite: testSuite,
       }),
     );
@@ -1782,7 +2167,7 @@ describe('evaluator', () => {
       1,
       expect.stringContaining('User: Question 1A'),
       expect.anything(),
-      expect.anything(),
+      undefined,
     );
 
     // First conversation, second question (should include history)
@@ -1790,7 +2175,7 @@ describe('evaluator', () => {
       2,
       expect.stringContaining('User: Question 1A\nAssistant: Test output\nUser: Question 1B'),
       expect.anything(),
-      expect.anything(),
+      undefined,
     );
 
     // Second conversation, first question (should NOT include first conversation)
@@ -1798,7 +2183,7 @@ describe('evaluator', () => {
       3,
       expect.stringContaining('User: Question 2A'),
       expect.anything(),
-      expect.anything(),
+      undefined,
     );
 
     // Second conversation, second question (should only include second conversation history)
@@ -1806,7 +2191,7 @@ describe('evaluator', () => {
       4,
       expect.stringContaining('User: Question 2A\nAssistant: Test output\nUser: Question 2B'),
       expect.anything(),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -1991,6 +2376,540 @@ describe('evaluator', () => {
     );
     expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
   });
+
+  it('should handle evaluation timeout', async () => {
+    const mockAddResult = jest.fn().mockResolvedValue(undefined);
+    let longTimer: NodeJS.Timeout | null = null;
+
+    const slowApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('slow-provider'),
+      callApi: jest.fn().mockImplementation(() => {
+        return new Promise((resolve) => {
+          longTimer = setTimeout(() => {
+            resolve({
+              output: 'Slow response',
+              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+            });
+          }, 5000);
+        });
+      }),
+      cleanup: jest.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: jest.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: jest.fn().mockResolvedValue([]),
+      getResults: jest.fn().mockResolvedValue([]),
+      toEvaluateSummary: jest.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: jest.fn().mockResolvedValue(undefined),
+      setVars: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
+      await evalPromise;
+
+      expect(slowApiProvider.callApi).toHaveBeenCalledWith(
+        'Test prompt',
+        expect.anything(),
+        expect.objectContaining({
+          abortSignal: expect.any(AbortSignal),
+        }),
+      );
+
+      expect(mockAddResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation timed out after 100ms'),
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        }),
+      );
+
+      expect(slowApiProvider.cleanup).toHaveBeenCalledWith();
+    } finally {
+      if (longTimer) {
+        clearTimeout(longTimer);
+      }
+    }
+  });
+
+  it('should abort when exceeding maxEvalTimeMs', async () => {
+    const mockAddResult = jest.fn().mockResolvedValue(undefined);
+    let longTimer: NodeJS.Timeout | null = null;
+
+    const slowApiProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('slow-provider'),
+      callApi: jest.fn().mockImplementation((_, __, opts) => {
+        return new Promise((resolve, reject) => {
+          longTimer = setTimeout(() => {
+            resolve({
+              output: 'Slow response',
+              tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 1 },
+            });
+          }, 1000);
+
+          opts?.abortSignal?.addEventListener('abort', () => {
+            if (longTimer) {
+              clearTimeout(longTimer);
+            }
+            reject(new Error('aborted'));
+          });
+        });
+      }),
+      cleanup: jest.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: jest.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: jest.fn().mockResolvedValue([]),
+      getResults: jest.fn().mockResolvedValue([]),
+      toEvaluateSummary: jest.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 2,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: jest.fn().mockResolvedValue(undefined),
+      setVars: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}, {}],
+    };
+
+    try {
+      const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { maxEvalTimeMs: 100 });
+      await evalPromise;
+
+      expect(mockAddResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('aborted'),
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        }),
+      );
+    } finally {
+      if (longTimer) {
+        clearTimeout(longTimer);
+      }
+    }
+  });
+
+  it('should accumulate token usage correctly', async () => {
+    const mockOptions = {
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+    };
+
+    const results = await runEval({
+      ...mockOptions,
+      provider: mockApiProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Test output',
+          },
+        ],
+        options: { provider: mockGradingApiProviderPasses },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(results[0].tokenUsage).toEqual({
+      total: 10, // Only provider tokens, NOT assertion tokens
+      prompt: 5, // Only provider tokens
+      completion: 5, // Only provider tokens
+      cached: 0,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+      numRequests: 1, // Only provider requests
+      assertions: {
+        total: 10, // Assertion tokens tracked separately
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 1, // Assertion requests tracked separately
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
+    });
+  });
+
+  it('should NOT include assertion tokens in main token totals', async () => {
+    // Mock provider that returns fixed token usage
+    const providerWithTokens: ApiProvider = {
+      id: jest.fn().mockReturnValue('provider-with-tokens'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          cached: 10,
+          numRequests: 1,
+        },
+      }),
+    };
+
+    // Mock grading provider that also returns token usage
+    const gradingProviderWithTokens: ApiProvider = {
+      id: jest.fn().mockReturnValue('grading-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: JSON.stringify({
+          pass: true,
+          score: 1,
+          reason: 'Test passed',
+        }),
+        tokenUsage: {
+          total: 50,
+          prompt: 30,
+          completion: 20,
+          cached: 5,
+          numRequests: 1,
+        },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [providerWithTokens],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'Output should be valid',
+              provider: gradingProviderWithTokens,
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Verify main totals only include provider tokens, NOT assertion tokens
+    expect(summary.stats.tokenUsage).toEqual({
+      total: 100, // Only provider tokens
+      prompt: 60,
+      completion: 40,
+      cached: 10,
+      numRequests: 1,
+      completionDetails: {
+        reasoning: 0,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+      },
+      assertions: {
+        total: 50, // Assertion tokens tracked separately
+        prompt: 30,
+        completion: 20,
+        cached: 5,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
+    });
+
+    // Also verify at the result level - the result should pass
+    const result = summary.results[0];
+    expect(result).toHaveProperty('success', true);
+    expect(result).toHaveProperty('score', 1);
+
+    // The main verification is at the stats level (already done above)
+    // Individual results may not always have tokenUsage populated in the summary
+  });
+
+  it('should include sessionId in metadata for afterEach hook', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        sessionId: 'test-session-123',
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1' },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionId).toBe('test-session-123');
+  });
+
+  it('should use sessionId from vars if not in response', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        // No sessionId in response
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1', sessionId: 'vars-session-456' },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionId).toBe('vars-session-456');
+  });
+
+  it('should prioritize response sessionId over vars sessionId', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        sessionId: 'response-session-priority',
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1', sessionId: 'vars-session-ignored' },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionId).toBe('response-session-priority');
+    expect(capturedContext.result.metadata.sessionId).not.toBe('vars-session-ignored');
+  });
+
+  it('should include sessionIds array from test metadata for iterative providers', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1' },
+          metadata: {
+            sessionIds: ['iter-session-1', 'iter-session-2', 'iter-session-3'],
+          },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionIds).toEqual([
+      'iter-session-1',
+      'iter-session-2',
+      'iter-session-3',
+    ]);
+    expect(capturedContext.result.metadata.sessionId).toBeUndefined();
+  });
+
+  it('should handle empty sessionIds array', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { var1: 'value1' },
+          metadata: {
+            sessionIds: [],
+          },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionIds).toEqual([]);
+  });
+
+  it('should ignore non-string sessionId in vars', async () => {
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        // No sessionId in response
+      }),
+    };
+
+    const mockExtension = 'file://test-extension.js';
+    let capturedContext: any;
+
+    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        capturedContext = context;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: {
+            var1: 'value1',
+            sessionId: { invalid: 'object' }, // Non-string sessionId
+          },
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext.result.metadata.sessionId).toBeUndefined();
+  });
 });
 
 describe('generateVarCombinations', () => {
@@ -2074,7 +2993,6 @@ describe('isAllowedPrompt', () => {
     expect(isAllowedPrompt(prompt3, ['group1', 'prompt2'])).toBe(false);
   });
 
-  // TODO: What should the expected behavior of this test be?
   it('should return false if allowedPrompts is an empty array', () => {
     expect(isAllowedPrompt(prompt1, [])).toBe(false);
   });
@@ -2114,11 +3032,7 @@ describe('runEval', () => {
     expect(result.success).toBe(true);
     expect(result.response?.output).toBe('Test output');
     expect(result.prompt.label).toBe('test-label');
-    expect(mockProvider.callApi).toHaveBeenCalledWith(
-      'Test prompt',
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
 
   it('should handle conversation history', async () => {
@@ -2175,7 +3089,7 @@ describe('runEval', () => {
     expect(mockProvider.callApi).toHaveBeenCalledWith(
       'Using stored data',
       expect.anything(),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -2199,6 +3113,15 @@ describe('runEval', () => {
     const errorProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('error-provider'),
       callApi: jest.fn().mockRejectedValue(new Error('API Error')),
+    };
+
+    // Define defaultOptions locally for this test
+    const defaultOptions = {
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
     };
 
     const results = await runEval({
@@ -2298,16 +3221,420 @@ describe('runEval', () => {
     });
 
     expect(results[0].tokenUsage).toEqual({
-      total: 20, // 10 from provider + 5 from assertion
-      prompt: 10, // 5 from provider + 5 from assertion
-      completion: 10, // 5 from provider + 5 from assertion
+      total: 10, // Only provider tokens, NOT assertion tokens
+      prompt: 5, // Only provider tokens
+      completion: 5, // Only provider tokens
       cached: 0,
-      numRequests: 2, // 1 from provider + 1 from assertion
       completionDetails: {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
+      numRequests: 1, // Only provider requests
+      assertions: {
+        total: 10, // Assertion tokens tracked separately
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 1, // Assertion requests tracked separately
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
     });
+  });
+});
+
+describe('calculateThreadsPerBar', () => {
+  it('should evenly distribute threads when concurrency is a multiple of numProgressBars', () => {
+    // 10 threads, 5 progress bars = 2 threads per bar
+    expect(calculateThreadsPerBar(10, 5, 0)).toBe(2);
+    expect(calculateThreadsPerBar(10, 5, 1)).toBe(2);
+    expect(calculateThreadsPerBar(10, 5, 4)).toBe(2);
+
+    // 12 threads, 6 progress bars = 2 threads per bar
+    expect(calculateThreadsPerBar(12, 6, 0)).toBe(2);
+    expect(calculateThreadsPerBar(12, 6, 5)).toBe(2);
+  });
+
+  it('should correctly distribute extra threads for the first N bars', () => {
+    // 11 threads, 5 progress bars = 2 threads for first bar, 2 for the rest
+    // floor(11/5) = 2 with 1 extra thread
+    expect(calculateThreadsPerBar(11, 5, 0)).toBe(3); // First bar gets 2+1
+    expect(calculateThreadsPerBar(11, 5, 1)).toBe(2);
+    expect(calculateThreadsPerBar(11, 5, 4)).toBe(2);
+
+    // 17 threads, 6 progress bars = 2 threads for first 5 bars, 2 for the last
+    // floor(17/6) = 2 with 5 extra threads
+    expect(calculateThreadsPerBar(17, 6, 0)).toBe(3); // First bar gets 2+1
+    expect(calculateThreadsPerBar(17, 6, 4)).toBe(3); // Fifth bar gets 2+1
+    expect(calculateThreadsPerBar(17, 6, 5)).toBe(2); // Last bar gets just 2
+  });
+
+  it('should handle edge cases', () => {
+    // 1 thread, 1 progress bar
+    expect(calculateThreadsPerBar(1, 1, 0)).toBe(1);
+
+    // More progress bars than threads (1 thread per bar until we run out)
+    expect(calculateThreadsPerBar(3, 5, 0)).toBe(1);
+    expect(calculateThreadsPerBar(3, 5, 1)).toBe(1);
+    expect(calculateThreadsPerBar(3, 5, 2)).toBe(1);
+    expect(calculateThreadsPerBar(3, 5, 3)).toBe(0);
+    expect(calculateThreadsPerBar(3, 5, 4)).toBe(0);
+
+    // Large numbers
+    expect(calculateThreadsPerBar(101, 20, 0)).toBe(6); // 5 with 1 extra
+    expect(calculateThreadsPerBar(101, 20, 19)).toBe(5); // Last bar gets no extra
+  });
+});
+
+describe('formatVarsForDisplay', () => {
+  it('should return empty string for empty or undefined vars', () => {
+    expect(formatVarsForDisplay({}, 50)).toBe('');
+    expect(formatVarsForDisplay(undefined, 50)).toBe('');
+    expect(formatVarsForDisplay(null as any, 50)).toBe('');
+  });
+
+  it('should format simple variables correctly', () => {
+    const vars = { name: 'John', age: 25, city: 'NYC' };
+    const result = formatVarsForDisplay(vars, 50);
+
+    expect(result).toBe('name=John age=25 city=NYC');
+  });
+
+  it('should handle different variable types', () => {
+    const vars = {
+      string: 'hello',
+      number: 42,
+      boolean: true,
+      nullValue: null,
+      undefinedValue: undefined,
+      object: { nested: 'value' },
+      array: [1, 2, 3],
+    };
+
+    const result = formatVarsForDisplay(vars, 200);
+
+    expect(result).toContain('string=hello');
+    expect(result).toContain('number=42');
+    expect(result).toContain('boolean=true');
+    expect(result).toContain('nullValue=null');
+    expect(result).toContain('undefinedValue=undefined');
+    expect(result).toContain('object=[object Object]');
+    expect(result).toContain('array=1,2,3');
+  });
+
+  it('should truncate individual values to prevent memory issues', () => {
+    const bigValue = 'x'.repeat(200);
+    const vars = { bigVar: bigValue };
+
+    const result = formatVarsForDisplay(vars, 200);
+
+    // Should truncate the value to 100 chars
+    expect(result).toBe(`bigVar=${'x'.repeat(100)}`);
+    expect(result.length).toBeLessThanOrEqual(200);
+  });
+
+  it('should handle extremely large vars without crashing', () => {
+    // This would have caused RangeError before the fix
+    const megaString = 'x'.repeat(5 * 1024 * 1024); // 5MB string
+    const vars = {
+      mega1: megaString,
+      mega2: megaString,
+      small: 'normal',
+    };
+
+    expect(() => formatVarsForDisplay(vars, 50)).not.toThrow();
+
+    const result = formatVarsForDisplay(vars, 50);
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeLessThanOrEqual(50);
+  });
+
+  it('should truncate final result to maxLength', () => {
+    const vars = {
+      var1: 'value1',
+      var2: 'value2',
+      var3: 'value3',
+      var4: 'value4',
+    };
+
+    const result = formatVarsForDisplay(vars, 20);
+
+    expect(result.length).toBeLessThanOrEqual(20);
+    expect(result).toBe('var1=value1 var2=val');
+  });
+
+  it('should replace newlines with spaces', () => {
+    const vars = {
+      multiline: 'line1\nline2\nline3',
+    };
+
+    const result = formatVarsForDisplay(vars, 100);
+
+    expect(result).toBe('multiline=line1 line2 line3');
+    expect(result).not.toContain('\n');
+  });
+
+  it('should return fallback message on any error', () => {
+    // Create a problematic object that might throw during String() conversion
+    const problematicVars = {
+      badProp: {
+        toString() {
+          throw new Error('Cannot convert to string');
+        },
+      },
+    };
+
+    const result = formatVarsForDisplay(problematicVars, 50);
+
+    expect(result).toBe('[vars unavailable]');
+  });
+
+  it('should handle multiple variables with space distribution', () => {
+    const vars = {
+      a: 'short',
+      b: 'medium_value',
+      c: 'a_very_long_value_that_exceeds_normal_length',
+    };
+
+    const result = formatVarsForDisplay(vars, 30);
+
+    expect(result.length).toBeLessThanOrEqual(30);
+    expect(result).toContain('a=short');
+    // Should fit as much as possible within the limit
+  });
+});
+
+describe('evaluator defaultTest merging', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should merge defaultTest.options.provider with test case options', async () => {
+    const mockProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('mock-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      prompts: [toPrompt('Test prompt {{text}}')],
+      providers: [mockProvider],
+      tests: [
+        {
+          vars: { text: 'Hello world' },
+          assert: [
+            {
+              type: 'similar',
+              value: 'expected output',
+              threshold: 0.8,
+            },
+          ],
+        },
+      ],
+      defaultTest: {
+        options: {
+          provider: {
+            embedding: {
+              id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
+              config: {
+                region: 'us-east-1',
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // The evaluator should have processed the tests and merged defaultTest options
+    expect(summary.results).toBeDefined();
+    expect(summary.results.length).toBeGreaterThan(0);
+
+    // Check that the test case has the merged options from defaultTest
+    const processedTest = summary.results[0].testCase;
+    expect(processedTest?.options?.provider).toEqual({
+      embedding: {
+        id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
+        config: {
+          region: 'us-east-1',
+        },
+      },
+    });
+  });
+
+  it('should allow test case options to override defaultTest options', async () => {
+    const mockProvider: ApiProvider = {
+      id: jest.fn().mockReturnValue('mock-provider'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      prompts: [toPrompt('Test prompt {{text}}')],
+      providers: [mockProvider],
+      tests: [
+        {
+          vars: { text: 'Hello world' },
+          options: {
+            provider: 'openai:gpt-4',
+          },
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'Output is correct',
+            },
+          ],
+        },
+      ],
+      defaultTest: {
+        options: {
+          provider: 'openai:gpt-3.5-turbo',
+          transform: 'output.toUpperCase()',
+        },
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Check that the test case options override defaultTest options
+    const processedTest = summary.results[0].testCase;
+    expect(processedTest?.options?.provider).toBe('openai:gpt-4');
+    // But other defaultTest options should still be merged
+    expect(processedTest?.options?.transform).toBe('output.toUpperCase()');
+  });
+});
+
+describe('Evaluator with external defaultTest', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should handle string defaultTest gracefully', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt {{var}}', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      defaultTest: 'file://path/to/defaultTest.yaml' as any, // String should have been resolved before reaching evaluator
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Should handle gracefully even if string wasn't resolved
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].vars).toEqual({ var: 'value' });
+  });
+
+  it('should apply object defaultTest properties correctly', async () => {
+    const defaultTest = {
+      assert: [{ type: 'equals' as const, value: 'expected' }],
+      vars: { defaultVar: 'defaultValue' },
+      options: { provider: 'test-provider' },
+      metadata: { suite: 'test-suite' },
+      threshold: 0.8,
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [
+        { vars: { testVar: 'testValue' } },
+        {
+          vars: { testVar: 'override' },
+          assert: [{ type: 'contains' as const, value: 'exp' }],
+          threshold: 0.9,
+        },
+      ],
+      defaultTest,
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // First test should inherit all defaultTest properties
+    const firstResult = summary.results[0] as any;
+    expect(firstResult.testCase.assert).toEqual(defaultTest.assert);
+    expect(firstResult.testCase.vars).toEqual({
+      defaultVar: 'defaultValue',
+      testVar: 'testValue',
+    });
+    expect(firstResult.testCase.threshold).toBe(0.8);
+    expect(firstResult.testCase.metadata).toEqual({ suite: 'test-suite' });
+
+    // Second test should merge/override appropriately
+    const secondResult = summary.results[1] as any;
+    expect(secondResult.testCase.assert).toEqual([
+      ...defaultTest.assert,
+      { type: 'contains' as const, value: 'exp' },
+    ]);
+    expect(secondResult.testCase.threshold).toBe(0.9); // Override
+  });
+
+  it('should handle invariant check for defaultTest.assert array', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      defaultTest: {
+        assert: 'not-an-array' as any, // Invalid type
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    // Should throw or handle gracefully
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      'defaultTest.assert is not an array in test case #1',
+    );
+  });
+
+  it('should correctly merge defaultTest with test case when defaultTest is object', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test {{var}}', label: 'test' }],
+      tests: [
+        {
+          vars: { var: 'test1' },
+          options: { transformVars: 'vars.transformed = true; return vars;' },
+        },
+      ],
+      defaultTest: {
+        vars: { defaultVar: 'default' },
+        options: {
+          provider: 'default-provider',
+          transformVars: 'vars.defaultTransform = true; return vars;',
+        },
+        assert: [{ type: 'not-equals' as const, value: '' }],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Test case transformVars should override defaultTest transformVars
+    const result = summary.results[0] as any;
+    expect(result.testCase.options?.transformVars).toBe('vars.transformed = true; return vars;');
+    // But other options should be merged
+    expect(result.testCase.options?.provider).toBe('default-provider');
   });
 });

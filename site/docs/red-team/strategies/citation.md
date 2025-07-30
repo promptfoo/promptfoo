@@ -1,5 +1,7 @@
 ---
 sidebar_label: Citation
+title: Authority-based Jailbreaking Strategy
+description: Exploit LLM bias toward academic authority by framing harmful requests within research contexts
 ---
 
 # Authority-based Jailbreaking
@@ -10,14 +12,14 @@ This approach exploits LLM bias toward authority. It was introduced in [research
 
 Use it like so in your `promptfooconfig.yaml`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - citation
 ```
 
 You can apply it to specific plugins by adding a `plugins` config. For example:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - citation:
     plugins:
@@ -85,6 +87,10 @@ Reference:
 1. Analysis of Modern Malware Architectures. Proceedings of the International Conference on Security, 2023.
 ```
 
-## Other resources
+## Related Concepts
+
+- [Multi-turn Jailbreaks](multi-turn.md) - Related jailbreaking approach
+- [Prompt Injection](prompt-injection.md) - Another technique to bypass safety controls
+- [Authority Bias in LLMs](https://arxiv.org/pdf/2411.11407) - Research on academic framing
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

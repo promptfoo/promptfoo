@@ -9,12 +9,16 @@ const config: Config = {
   modulePathIgnorePatterns: ['<rootDir>/dist', '<rootDir>/examples', '<rootDir>/node_modules'],
   setupFiles: ['<rootDir>/.jest/setEnvVars.js'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  testEnvironmentOptions: {
+    globalsCleanup: 'soft',
+  },
   testPathIgnorePatterns: [
     '.*\\.test\\.tsx$',
     '.*\\.integration\\.test\\.ts$',
     '<rootDir>/dist',
     '<rootDir>/examples',
     '<rootDir>/node_modules',
+    '<rootDir>/src/app',
   ],
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',

@@ -1,14 +1,15 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
+
 import type {
   ApiModerationProvider,
   ModerationFlag,
   ProviderModerationResponse,
 } from '../../types';
-import { REQUEST_TIMEOUT_MS } from '../shared';
 
-export const OPENAI_MODERATION_MODELS = [
+const OPENAI_MODERATION_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },
   { id: 'omni-moderation-2024-09-26', maxTokens: 32768, capabilities: ['text', 'image'] },
   { id: 'text-moderation-latest', maxTokens: 32768, capabilities: ['text'] },
@@ -16,9 +17,9 @@ export const OPENAI_MODERATION_MODELS = [
   { id: 'text-moderation-007', maxTokens: 32768, capabilities: ['text'] },
 ];
 
-export type OpenAIModerationModelId = string;
+type OpenAIModerationModelId = string;
 
-export type ModerationCategory =
+type ModerationCategory =
   | 'sexual'
   | 'sexual/minors'
   | 'harassment'
@@ -65,7 +66,7 @@ export type ImageInput = {
   };
 };
 
-export type ModerationInput = string | (TextInput | ImageInput)[];
+type ModerationInput = string | (TextInput | ImageInput)[];
 
 export function isTextInput(input: TextInput | ImageInput): input is TextInput {
   return input.type === 'text';
@@ -75,7 +76,7 @@ export function isImageInput(input: TextInput | ImageInput): input is ImageInput
   return input.type === 'image_url';
 }
 
-export interface OpenAIModerationConfig {
+interface OpenAIModerationConfig {
   apiKey?: string;
   headers?: Record<string, string>;
   passthrough?: Record<string, any>;
@@ -182,7 +183,7 @@ export class OpenAiModerationProvider
     assistantResponse: string | (TextInput | ImageInput)[],
   ): Promise<ProviderModerationResponse> {
     const apiKey = this.getApiKey();
-    if (!apiKey) {
+    if (this.requiresApiKey() && !apiKey) {
       return handleApiError(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
@@ -213,7 +214,7 @@ export class OpenAiModerationProvider
 
     const headers = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
       ...this.config.headers,
     };

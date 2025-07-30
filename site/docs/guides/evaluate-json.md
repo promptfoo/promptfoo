@@ -42,7 +42,7 @@ assert:
 
 If you want to validate the structure of the JSON output, you can define a JSON schema. Here's an example of using the `is-json` assertion with a schema that requires `color` to be a string and `countries` to be a list of strings:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - "Output a JSON object that contains the keys `color` and `countries`, describing the following object: {{item}}"
 

@@ -1,4 +1,10 @@
-# HarmBench
+# harmbench (HarmBench)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example harmbench
+```
 
 HarmBench is a standardized evaluation framework designed by the Center for AI Safety for automated red teaming of Large Language Models (LLMs). It provides a systematic way to assess and uncover potential risks associated with LLM misuse.
 

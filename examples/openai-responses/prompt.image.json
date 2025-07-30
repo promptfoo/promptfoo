@@ -1,0 +1,16 @@
+[
+  {
+    "type": "message",
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "Describe what you see in this image and tell me a short story inspired by it about {{topic}}."
+      },
+      {
+        "type": "input_image",
+        "image_url": "{{image_url}}"
+      }
+    ]
+  }
+]

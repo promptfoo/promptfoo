@@ -1,6 +1,6 @@
 # redteam-deepseek (DeepSeek Red Team Evaluation)
 
-This example demonstrates how to run both an eval from a csv file and a redteam against DeepSeek models.
+This example demonstrates how to run both an eval from a csv file and an automated red team against DeepSeek models.
 
 You can run this example with:
 

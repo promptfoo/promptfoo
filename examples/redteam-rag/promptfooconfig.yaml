@@ -13,7 +13,7 @@ targets:
         input: '{{prompt}}'
         role: engineering
       transformResponse: json.response
-      sessionParser: x-session-id
+      sessionParser: 'data.headers["x-session-id"]'
 prompts:
   - '{{prompt}}'
 redteam:
@@ -48,5 +48,8 @@ redteam:
       config:
         stateful: true
     - id: goat # Dynamic multi-turn attack generation using adversarial techniques
+      config:
+        stateful: true
+    - id: mischievous-user
       config:
         stateful: true

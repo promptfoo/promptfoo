@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import ProviderSelector from './ProviderSelector';
 
@@ -51,7 +51,11 @@ describe('ProviderSelector', () => {
   it('opens the config dialog when a provider is clicked', () => {
     const providerChip = screen.getByText(mockProviders[0].id);
     fireEvent.click(providerChip);
-    expect(screen.getByText('Click a provider to configure its settings.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Click a provider to configure its settings. Hover over chips to see model IDs.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('closes the config dialog when Cancel is clicked', async () => {

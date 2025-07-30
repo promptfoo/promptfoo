@@ -1,23 +1,26 @@
 import * as fs from 'fs';
-import { globSync } from 'glob';
 import * as path from 'path';
-import cliState from '../../src/cliState';
+
+import dotenv from 'dotenv';
+import { globSync } from 'glob';
 import { getDb } from '../../src/database';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
 import {
-  ResultFailureReason,
   type ApiProvider,
   type EvaluateResult,
+  ResultFailureReason,
   type TestCase,
 } from '../../src/types';
 import {
-  maybeLoadFromExternalFile,
+  maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   providerToIdentifier,
   readFilters,
   readOutput,
+  renderVarsInObject,
   resultIsForTestCase,
+  setupEnv,
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
@@ -52,10 +55,11 @@ jest.mock('../../src/googleSheets', () => ({
   writeCsvToGoogleSheet: jest.fn(),
 }));
 
-describe('maybeLoadFromExternalFile', () => {
-  const mockFileContent = 'test content';
-  const mockJsonContent = '{"key": "value"}';
-  const mockYamlContent = 'key: value';
+describe('maybeLoadToolsFromExternalFile', () => {
+  const mockFileContent = '{"name": "calculator", "parameters": {"type": "object"}}';
+  const mockToolsArray = [
+    { type: 'function', function: { name: 'calculator', parameters: { type: 'object' } } },
+  ];
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -63,112 +67,62 @@ describe('maybeLoadFromExternalFile', () => {
     jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
   });
 
-  it('should return the input if it is not a string', () => {
-    const input = { key: 'value' };
-    expect(maybeLoadFromExternalFile(input)).toBe(input);
+  it('should process tool objects directly', () => {
+    const tools = mockToolsArray;
+    const vars = { api_key: '123456' };
+    expect(maybeLoadToolsFromExternalFile(tools, vars)).toEqual(tools);
   });
 
-  it('should return the input if it does not start with "file://"', () => {
-    const input = 'not a file path';
-    expect(maybeLoadFromExternalFile(input)).toBe(input);
+  it('should load tools from external file', () => {
+    const tools = 'file://tools.json';
+    expect(maybeLoadToolsFromExternalFile(tools)).toEqual(JSON.parse(mockFileContent));
   });
 
-  it('should throw an error if the file does not exist', () => {
-    jest.mocked(fs.existsSync).mockReturnValue(false);
-    expect(() => maybeLoadFromExternalFile('file://nonexistent.txt')).toThrow(
-      'File does not exist',
-    );
+  it('should render variables in tools object', () => {
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'calculator',
+          parameters: { type: 'object' },
+          apiKey: '{{ api_key }}',
+        },
+      },
+    ];
+    const vars = { api_key: '123456' };
+
+    const expected = [
+      {
+        type: 'function',
+        function: {
+          name: 'calculator',
+          parameters: { type: 'object' },
+          apiKey: '123456',
+        },
+      },
+    ];
+
+    expect(maybeLoadToolsFromExternalFile(tools, vars)).toEqual(expected);
   });
 
-  it('should return the file contents for a non-JSON, non-YAML file', () => {
-    expect(maybeLoadFromExternalFile('file://test.txt')).toBe(mockFileContent);
+  it('should render variables and load from external file', () => {
+    const tools = 'file://{{ file_path }}.json';
+    const vars = { file_path: 'tools' };
+
+    maybeLoadToolsFromExternalFile(tools, vars);
+
+    // Should resolve the file path with variables first
+    expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'));
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
   });
 
-  it('should parse and return JSON content for a .json file', () => {
-    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
-    expect(maybeLoadFromExternalFile('file://test.json')).toEqual({ key: 'value' });
-  });
+  it('should handle array of file paths', () => {
+    const tools = ['file://tools1.json', 'file://tools2.json'];
 
-  it('should parse and return YAML content for a .yaml file', () => {
-    jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
-    expect(maybeLoadFromExternalFile('file://test.yaml')).toEqual({ key: 'value' });
-  });
+    maybeLoadToolsFromExternalFile(tools);
 
-  it('should parse and return YAML content for a .yml file', () => {
-    jest.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
-    expect(maybeLoadFromExternalFile('file://test.yml')).toEqual({ key: 'value' });
-  });
-
-  it('should use basePath when resolving file paths', () => {
-    const basePath = '/base/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-
-    maybeLoadFromExternalFile('file://test.txt');
-
-    const expectedPath = path.resolve(basePath, 'test.txt');
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    cliState.basePath = undefined;
-  });
-
-  it('should handle relative paths correctly', () => {
-    const basePath = './relative/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-
-    maybeLoadFromExternalFile('file://test.txt');
-
-    const expectedPath = path.resolve(basePath, 'test.txt');
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    cliState.basePath = undefined;
-  });
-
-  it('should handle a path with environment variables in Nunjucks template', () => {
-    process.env.TEST_ROOT_PATH = '/root/dir';
-    const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
-
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-
-    const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
-    maybeLoadFromExternalFile(input);
-
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    delete process.env.TEST_ROOT_PATH;
-  });
-
-  it('should ignore basePath when file path is absolute', () => {
-    const basePath = '/base/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-
-    maybeLoadFromExternalFile('file:///absolute/path/test.txt');
-
-    const expectedPath = path.resolve('/absolute/path/test.txt');
-    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-    cliState.basePath = undefined;
-  });
-
-  it('should handle list of paths', () => {
-    const basePath = './relative/path';
-    cliState.basePath = basePath;
-    jest.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
-
-    maybeLoadFromExternalFile(['file://test1.txt', 'file://test2.txt', 'file://test3.txt']);
-
-    expect(fs.existsSync).toHaveBeenCalledTimes(3);
-    expect(fs.existsSync).toHaveBeenNthCalledWith(1, path.resolve(basePath, 'test1.txt'));
-    expect(fs.existsSync).toHaveBeenNthCalledWith(2, path.resolve(basePath, 'test2.txt'));
-    expect(fs.existsSync).toHaveBeenNthCalledWith(3, path.resolve(basePath, 'test3.txt'));
-
-    cliState.basePath = undefined;
+    expect(fs.existsSync).toHaveBeenCalledTimes(2);
+    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -267,6 +221,14 @@ describe('util', () => {
       expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
     });
 
+    it('writeOutput with XML output', async () => {
+      const outputPath = 'output.xml';
+      const eval_ = new Eval({});
+      await writeOutput(outputPath, eval_, null);
+
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+    });
+
     it('writeOutput with json and txt output', async () => {
       const outputPath = ['output.json', 'output.txt'];
       const eval_ = new Eval({});
@@ -274,6 +236,22 @@ describe('util', () => {
       await writeMultipleOutputs(outputPath, eval_, null);
 
       expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+    });
+
+    it('writeOutput with HTML template escapes special characters', async () => {
+      // Use the real fs module to read the template
+      const realFs = jest.requireActual('fs') as typeof fs;
+      const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+      const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+
+      // Check that the template has escape filters on all user-provided content
+      expect(templateContent).toContain('{{ header | escape }}');
+      expect(templateContent).toContain('{{ cell | escape }}');
+
+      // Ensure both data-content attribute and cell content are escaped
+      const cellRegex =
+        /<td[^>]*data-content="\{\{ cell \| escape \}\}"[^>]*>\{\{ cell \| escape \}\}<\/td>/;
+      expect(templateContent).toMatch(cellRegex);
     });
 
     it('writes output to Google Sheets', async () => {
@@ -312,6 +290,12 @@ describe('util', () => {
         'Unsupported output file format: yml currently only supports json',
       );
     });
+
+    it('fails for xml output', async () => {
+      await expect(readOutput('output.xml')).rejects.toThrow(
+        'Unsupported output file format: xml currently only supports json',
+      );
+    });
   });
 
   it('readFilters', async () => {
@@ -326,10 +310,8 @@ describe('util', () => {
   });
 
   describe('providerToIdentifier', () => {
-    it('works with string', () => {
-      const provider = 'openai:gpt-4';
-
-      expect(providerToIdentifier(provider)).toStrictEqual(provider);
+    it('works with provider string', () => {
+      expect(providerToIdentifier('gpt-3.5-turbo')).toStrictEqual('gpt-3.5-turbo');
     });
 
     it('works with provider id undefined', () => {
@@ -354,6 +336,49 @@ describe('util', () => {
       };
 
       expect(providerToIdentifier(providerOptions)).toStrictEqual(providerId);
+    });
+
+    it('uses label when present on ProviderOptions', () => {
+      const providerOptions = {
+        id: 'file://provider.js',
+        label: 'my-provider',
+      };
+
+      expect(providerToIdentifier(providerOptions)).toStrictEqual('my-provider');
+    });
+
+    it('canonicalizes relative file paths to absolute', () => {
+      const originalCwd = process.cwd();
+      expect(providerToIdentifier('file://./provider.js')).toStrictEqual(
+        `file://${path.join(originalCwd, 'provider.js')}`,
+      );
+    });
+
+    it('canonicalizes JavaScript files without file:// prefix', () => {
+      const originalCwd = process.cwd();
+      expect(providerToIdentifier('./provider.js')).toStrictEqual(
+        `file://${path.join(originalCwd, 'provider.js')}`,
+      );
+    });
+
+    it('preserves absolute file paths', () => {
+      expect(providerToIdentifier('file:///absolute/path/provider.js')).toStrictEqual(
+        'file:///absolute/path/provider.js',
+      );
+    });
+
+    it('canonicalizes exec: paths', () => {
+      const originalCwd = process.cwd();
+      expect(providerToIdentifier('exec:./script.py')).toStrictEqual(
+        `exec:${path.join(originalCwd, 'script.py')}`,
+      );
+    });
+
+    it('canonicalizes python: paths', () => {
+      const originalCwd = process.cwd();
+      expect(providerToIdentifier('python:./provider.py')).toStrictEqual(
+        `python:${path.join(originalCwd, 'provider.py')}`,
+      );
     });
   });
 
@@ -406,6 +431,43 @@ describe('util', () => {
       };
 
       expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
+    });
+
+    it('matches when test provider is label and result provider has label and id', () => {
+      const labelledResult = {
+        provider: { id: 'file://provider.js', label: 'provider' },
+        vars: { key: 'value' },
+      } as any as EvaluateResult;
+
+      expect(resultIsForTestCase(labelledResult, testCase)).toBe(true);
+    });
+
+    it('matches when test provider is relative path and result provider is absolute', () => {
+      const relativePathTestCase: TestCase = {
+        provider: 'file://./provider.js',
+        vars: { key: 'value' },
+      };
+
+      const absolutePathResult = {
+        provider: { id: `file://${path.join(process.cwd(), 'provider.js')}` },
+        vars: { key: 'value' },
+      } as any as EvaluateResult;
+
+      expect(resultIsForTestCase(absolutePathResult, relativePathTestCase)).toBe(true);
+    });
+
+    it('matches when test provider has no file:// prefix and result has absolute path', () => {
+      const noPathTestCase: TestCase = {
+        provider: './provider.js',
+        vars: { key: 'value' },
+      };
+
+      const absolutePathResult = {
+        provider: `file://${path.join(process.cwd(), 'provider.js')}`,
+        vars: { key: 'value' },
+      } as any as EvaluateResult;
+
+      expect(resultIsForTestCase(absolutePathResult, noPathTestCase)).toBe(true);
     });
   });
 
@@ -651,6 +713,252 @@ describe('util', () => {
           total: 10,
         },
       });
+    });
+  });
+});
+
+describe('setupEnv', () => {
+  let originalEnv: typeof process.env;
+  let dotenvConfigSpy: jest.SpyInstance<
+    dotenv.DotenvConfigOutput,
+    [options?: dotenv.DotenvConfigOptions]
+  >;
+
+  beforeEach(() => {
+    originalEnv = { ...process.env };
+    // Ensure NODE_ENV is not set at the start of each test
+    delete process.env.NODE_ENV;
+    // Spy on dotenv.config to verify it's called with the right parameters
+    dotenvConfigSpy = jest.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    jest.resetAllMocks();
+  });
+
+  it('should call dotenv.config without parameters when envPath is undefined', () => {
+    setupEnv(undefined);
+
+    expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+    expect(dotenvConfigSpy).toHaveBeenCalledWith();
+  });
+
+  it('should call dotenv.config with path and override=true when envPath is specified', () => {
+    const testEnvPath = '.env.test';
+
+    setupEnv(testEnvPath);
+
+    expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+    expect(dotenvConfigSpy).toHaveBeenCalledWith({
+      path: testEnvPath,
+      override: true,
+    });
+  });
+
+  it('should load environment variables with override when specified env file has conflicting values', () => {
+    // Mock dotenv.config to simulate loading variables
+    dotenvConfigSpy.mockImplementation((options?: dotenv.DotenvConfigOptions) => {
+      if (options?.path === '.env.production') {
+        if (options.override) {
+          process.env.NODE_ENV = 'production';
+        } else if (!process.env.NODE_ENV) {
+          process.env.NODE_ENV = 'production';
+        }
+      } else {
+        // Default .env file
+        if (!process.env.NODE_ENV) {
+          process.env.NODE_ENV = 'development';
+        }
+      }
+      return { parsed: {} };
+    });
+
+    // First load the default .env (setting NODE_ENV to 'development')
+    setupEnv(undefined);
+    expect(process.env.NODE_ENV).toBe('development');
+
+    // Then load .env.production with override (should change NODE_ENV to 'production')
+    setupEnv('.env.production');
+    expect(process.env.NODE_ENV).toBe('production');
+  });
+});
+
+describe('renderVarsInObject', () => {
+  beforeEach(() => {
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+  });
+
+  afterEach(() => {
+    delete process.env.TEST_ENV_VAR;
+    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+  });
+
+  it('should render environment variables in objects', () => {
+    process.env.TEST_ENV_VAR = 'env_value';
+    const obj = { text: '{{ env.TEST_ENV_VAR }}' };
+    const rendered = renderVarsInObject(obj, {});
+    expect(rendered).toEqual({ text: 'env_value' });
+  });
+
+  it('should return object unchanged when no vars provided', () => {
+    const obj = { text: '{{ variable }}', number: 42 };
+    const rendered = renderVarsInObject(obj);
+    expect(rendered).toEqual(obj);
+  });
+
+  it('should return object unchanged when vars is empty object', () => {
+    const obj = { text: '{{ variable }}', number: 42 };
+    const rendered = renderVarsInObject(obj, {});
+    // Empty object {} is truthy, so templating still runs but with no variables
+    expect(rendered).toEqual({ text: '', number: 42 });
+  });
+
+  it('should return object unchanged when PROMPTFOO_DISABLE_TEMPLATING is true', () => {
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const obj = { text: '{{ variable }}' };
+    const vars = { variable: 'test_value' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual(obj);
+  });
+
+  it('should render variables in string objects', () => {
+    const obj = 'Hello {{ name }}!';
+    const vars = { name: 'World' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toBe('Hello World!');
+  });
+
+  it('should render variables in array objects', () => {
+    const obj = ['{{ greeting }}', '{{ name }}', 42];
+    const vars = { greeting: 'Hello', name: 'World' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual(['Hello', 'World', 42]);
+  });
+
+  it('should render variables in nested arrays', () => {
+    const obj = [
+      ['{{ item1 }}', '{{ item2 }}'],
+      ['static', '{{ item3 }}'],
+    ];
+    const vars = { item1: 'first', item2: 'second', item3: 'third' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual([
+      ['first', 'second'],
+      ['static', 'third'],
+    ]);
+  });
+
+  it('should render variables in nested objects', () => {
+    const obj = {
+      level1: {
+        level2: {
+          text: '{{ variable }}',
+          number: 42,
+        },
+        array: ['{{ item }}'],
+      },
+    };
+    const vars = { variable: 'nested_value', item: 'array_item' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual({
+      level1: {
+        level2: {
+          text: 'nested_value',
+          number: 42,
+        },
+        array: ['array_item'],
+      },
+    });
+  });
+
+  it('should handle function objects by calling them with vars', () => {
+    const mockFunction = jest.fn().mockReturnValue({ result: '{{ value }}' });
+    const vars = { value: 'function_result' };
+    const rendered = renderVarsInObject(mockFunction, vars);
+
+    expect(mockFunction).toHaveBeenCalledWith({ vars });
+    // Function result is NOT recursively templated because vars is not passed in recursive call
+    expect(rendered).toEqual({ result: '{{ value }}' });
+  });
+
+  it('should handle null values', () => {
+    const obj = null;
+    const vars = { variable: 'test' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toBeNull();
+  });
+
+  it('should handle undefined values', () => {
+    const obj = undefined;
+    const vars = { variable: 'test' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toBeUndefined();
+  });
+
+  it('should handle primitive number values', () => {
+    const obj = 42;
+    const vars = { variable: 'test' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toBe(42);
+  });
+
+  it('should handle primitive boolean values', () => {
+    const obj = true;
+    const vars = { variable: 'test' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toBe(true);
+  });
+
+  it('should handle objects with null properties', () => {
+    const obj = { nullProp: null, text: '{{ variable }}' };
+    const vars = { variable: 'test_value' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual({ nullProp: null, text: 'test_value' });
+  });
+
+  it('should handle mixed type objects', () => {
+    const obj = {
+      string: '{{ text }}',
+      number: 42,
+      boolean: true,
+      nullValue: null,
+      array: ['{{ item }}', 123],
+      nested: {
+        deep: '{{ deep_value }}',
+      },
+    };
+    const vars = { text: 'rendered', item: 'array_item', deep_value: 'deep_rendered' };
+    const rendered = renderVarsInObject(obj, vars);
+    expect(rendered).toEqual({
+      string: 'rendered',
+      number: 42,
+      boolean: true,
+      nullValue: null,
+      array: ['array_item', 123],
+      nested: {
+        deep: 'deep_rendered',
+      },
+    });
+  });
+
+  it('should handle function that returns complex object structure', () => {
+    const complexFunction = jest.fn().mockReturnValue({
+      data: {
+        items: ['{{ item1 }}', '{{ item2 }}'],
+        metadata: { value: '{{ meta }}' },
+      },
+    });
+    const vars = { item1: 'first', item2: 'second', meta: 'metadata_value' };
+    const rendered = renderVarsInObject(complexFunction, vars);
+
+    expect(complexFunction).toHaveBeenCalledWith({ vars });
+    // Function result is NOT recursively templated because vars is not passed in recursive call
+    expect(rendered).toEqual({
+      data: {
+        items: ['{{ item1 }}', '{{ item2 }}'],
+        metadata: { value: '{{ meta }}' },
+      },
     });
   });
 });

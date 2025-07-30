@@ -15,7 +15,7 @@ This example shows how to:
 - Set up red team evaluations against multiple AI models
 - Compare security responses between DeepSeek-R1 and GPT-4o-mini
 - Analyze model refusals and potential vulnerabilities
-- Use promptfoo's redteam commands for security testing
+- Use promptfoo's red team commands for security testing
 
 ## Environment Variables
 
@@ -30,7 +30,7 @@ You can set these in a `.env` file or directly in your environment.
 
 1. Set up the required environment variables
 2. Navigate to the example directory
-3. Run the redteam evaluation:
+3. Run the red team evaluation:
 
    ```sh
    promptfoo redteam run
@@ -44,7 +44,7 @@ You can set these in a `.env` file or directly in your environment.
 
 ## Configuration
 
-The example includes a `promptfooconfig.yaml` file with the complete redteam evaluation setup. The configuration includes multiple attack vectors and compares responses between models.
+The example includes a `promptfooconfig.yaml` file with the complete red team evaluation setup. The configuration includes multiple attack vectors and compares responses between models.
 
 ## Alternative Configuration
 
@@ -52,4 +52,4 @@ If you prefer to use the official DeepSeek provider instead of OpenRouter, you c
 
 ## Additional Resources
 
-For more information about this redteam evaluation and our security analysis of DeepSeek models, read our detailed [DeepSeek Red Team Blog Post](https://www.promptfoo.dev/blog/deepseek-redteam/).
+For more information about this red team evaluation and our security analysis of DeepSeek models, read our detailed [DeepSeek Red Team Blog Post](https://www.promptfoo.dev/blog/deepseek-redteam/).

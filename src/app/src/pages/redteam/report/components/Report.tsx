@@ -1,10 +1,17 @@
 import React from 'react';
+
+import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { usePageMeta } from '@app/hooks/usePageMeta';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import PrintIcon from '@mui/icons-material/Print';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
+import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -15,31 +22,34 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   type EvaluateResult,
+  type EvaluateSummaryV2,
+  type GradingResult,
+  isProviderOptions,
+  type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
-  type GradingResult,
-  type ResultLightweightWithLabel,
-  type EvaluateSummaryV2,
-  isProviderOptions,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import './Report.css';
 
 const App: React.FC = () => {
+  const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
+  const { recordEvent } = useTelemetry();
 
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
@@ -49,6 +59,14 @@ const App: React.FC = () => {
       });
       const body = (await resp.json()) as SharedResults;
       setEvalData(body.data);
+
+      // Track funnel event for report viewed
+      recordEvent('funnel', {
+        type: 'redteam',
+        step: 'webui_report_viewed',
+        source: 'webui',
+        evalId: id,
+      });
     };
 
     if (searchParams) {
@@ -220,9 +238,10 @@ const App: React.FC = () => {
     return stats;
   }, [failuresByPlugin, passesByPlugin]);
 
-  React.useEffect(() => {
-    document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
-  }, [evalData, evalId]);
+  usePageMeta({
+    title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
+    description: 'Red team evaluation report',
+  });
 
   if (!evalData || !evalId) {
     return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
@@ -268,7 +287,9 @@ const App: React.FC = () => {
   let tools = [];
   if (Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])) {
     const providerTools = evalData.config.providers[0].config?.tools;
-    tools = Array.isArray(providerTools) ? providerTools : [providerTools];
+    // If providerTools exists, convert it to an array (if it's not already)
+    // Otherwise, use an empty array
+    tools = providerTools ? (Array.isArray(providerTools) ? providerTools : [providerTools]) : [];
   }
 
   const handlePromptChipClick = () => {
@@ -281,14 +302,46 @@ const App: React.FC = () => {
   };
 
   return (
-    <Container>
+    <Container maxWidth="xl">
       <Stack spacing={4} pb={8} pt={2}>
+        {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
-          <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
+          <Box
+            sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}
+            className="print-hide"
+          >
+            <Tooltip title="View all logs" placement="top">
+              <IconButton
+                sx={{ position: 'relative' }}
+                aria-label="view all logs"
+                onClick={(event) => {
+                  const url = `/eval/${evalId}`;
+                  if (event.ctrlKey || event.metaKey) {
+                    window.open(url, '_blank');
+                  } else {
+                    navigate(url);
+                  }
+                }}
+              >
+                <ListAltIcon />
+              </IconButton>
+            </Tooltip>
             <ReportDownloadButton
               evalDescription={evalData.config.description || evalId}
               evalData={evalData}
             />
+            <Tooltip
+              title="Print this page (Ctrl+P) and select 'Save as PDF' for best results"
+              placement="top"
+            >
+              <IconButton
+                sx={{ position: 'relative' }}
+                aria-label="print page"
+                onClick={() => window.print()}
+              >
+                <PrintIcon />
+              </IconButton>
+            </Tooltip>
             <ReportSettingsDialogButton />
           </Box>
           <Typography variant="h4">
@@ -308,7 +361,7 @@ const App: React.FC = () => {
                 size="small"
                 label={
                   <>
-                    <strong>Model:</strong> {selectedPrompt.provider}
+                    <strong>Target:</strong> {selectedPrompt.provider}
                   </>
                 }
                 onClick={handlePromptChipClick}
@@ -351,7 +404,7 @@ const App: React.FC = () => {
                 style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
               />
             )}
-            {tools.length > -1 && (
+            {tools.length > 0 && (
               <Chip
                 size="small"
                 label={
@@ -366,7 +419,6 @@ const App: React.FC = () => {
           </Box>
         </Card>
         <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
-        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
         <StrategyStats
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
@@ -384,6 +436,7 @@ const App: React.FC = () => {
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
         />
+        <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
       </Stack>
       <Modal
         open={isPromptModalOpen}

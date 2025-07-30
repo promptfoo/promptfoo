@@ -4,6 +4,9 @@ import { fetchWithRetries } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
+import invariant from '../../util/invariant';
+import { neverGenerateRemote } from '../remoteGeneration';
+
 import type { AtomicTestCase, EvaluateResult, RunEvalOptions } from '../../types';
 import type {
   ApiProvider,
@@ -11,8 +14,21 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import invariant from '../../util/invariant';
-import { neverGenerateRemote } from '../remoteGeneration';
+
+/**
+ * Type guard for RedteamPandamoniumProvider
+ * Checks if a provider is a RedteamPandamoniumProvider by verifying it has the runPandamonium method
+ */
+export const isPandamoniumProvider = (
+  provider: unknown,
+): provider is RedteamPandamoniumProvider => {
+  return (
+    typeof provider === 'object' &&
+    provider !== null &&
+    'runPandamonium' in provider &&
+    typeof (provider as Record<string, unknown>)['runPandamonium'] === 'function'
+  );
+};
 
 const CURRENT_VERSION = 1;
 const TIMEOUT = 120000;

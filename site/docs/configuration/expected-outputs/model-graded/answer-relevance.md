@@ -1,3 +1,7 @@
+---
+sidebar_label: Answer Relevance
+---
+
 # Answer Relevance
 
 The `answer-relevance` assertion evaluates whether an LLM's output is relevant to the original query. It uses a combination of embedding similarity and LLM evaluation to determine relevance.

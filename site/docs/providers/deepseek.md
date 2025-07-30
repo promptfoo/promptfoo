@@ -1,3 +1,7 @@
+---
+sidebar_label: DeepSeek
+---
+
 # DeepSeek
 
 [DeepSeek](https://platform.deepseek.com/) provides an OpenAI-compatible API for their language models, with specialized models for both general chat and advanced reasoning tasks. The DeepSeek provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/).
@@ -21,7 +25,6 @@ providers:
 
   - id: deepseek:deepseek-reasoner # DeepSeek-R1 model
     config:
-      temperature: 0.0
       max_tokens: 8000
 ```
 
@@ -35,12 +38,18 @@ providers:
 
 ## Available Models
 
+:::note
+
+The API model names are aliases that automatically point to the latest versions: `deepseek-chat` points to DeepSeek-V3-0324 and `deepseek-reasoner` points to DeepSeek-R1-0528.
+
+:::
+
 ### deepseek-chat (DeepSeek-V3)
 
 - General purpose model for conversations and content
 - 64K context window, 8K output tokens
-- Input: $0.014/1M (cache), $0.14/1M (no cache)
-- Output: $0.28/1M
+- Input: $0.07/1M (cache), $0.27/1M (no cache)
+- Output: $1.10/1M
 
 ### deepseek-reasoner (DeepSeek-R1)
 
@@ -50,6 +59,12 @@ providers:
 - Output: $2.19/1M
 - Supports showing or hiding reasoning content through the `showThinking` parameter
 
+:::warning
+
+The reasoning model does not support `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, or `top_logprobs` parameters. Setting these parameters will not trigger an error but will have no effect.
+
+:::
+
 ## Example Usage
 
 Here's an example comparing DeepSeek with OpenAI on reasoning tasks:
@@ -58,7 +73,7 @@ Here's an example comparing DeepSeek with OpenAI on reasoning tasks:
 providers:
   - id: deepseek:deepseek-reasoner
     config:
-      temperature: 0.0
+      max_tokens: 8000
       showThinking: true # Include reasoning content in output (default)
   - id: openai:o-1
     config:
@@ -100,3 +115,8 @@ See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/exam
 - Base URL: `https://api.deepseek.com/v1`
 - OpenAI-compatible API format
 - Full [API documentation](https://platform.deepseek.com/docs)
+
+## See Also
+
+- [OpenAI Provider](/docs/providers/openai/) - Compatible configuration options
+- [Complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) - Benchmark against OpenAI's o1 model

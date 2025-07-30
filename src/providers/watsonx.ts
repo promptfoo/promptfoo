@@ -1,15 +1,19 @@
-import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import crypto from 'crypto';
-import type { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
+
 import { z } from 'zod';
-import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import invariant from '../util/invariant';
+import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
+import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
+import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
+
+import type { EnvVarKey } from '../envars';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
-import invariant from '../util/invariant';
-import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
 
 interface TextGenRequestParametersModel {
   max_new_tokens: number;
@@ -169,7 +173,7 @@ async function getModelSpecs(): Promise<WatsonXModel[]> {
   return modelSpecsCache;
 }
 
-export async function calculateWatsonXCost(
+async function calculateWatsonXCost(
   modelName: string,
   config: any,
   promptTokens?: number,
@@ -226,7 +230,7 @@ export class WatsonXProvider implements ApiProvider {
     const apiKey =
       this.config.apiKey ||
       (this.config.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.WATSONX_AI_APIKEY ||
@@ -235,7 +239,7 @@ export class WatsonXProvider implements ApiProvider {
     const bearerToken =
       this.config.apiBearerToken ||
       (this.config.apiBearerTokenEnvar
-        ? process.env[this.config.apiBearerTokenEnvar] ||
+        ? getEnvString(this.config.apiBearerTokenEnvar as EnvVarKey) ||
           this.env?.[this.config.apiBearerTokenEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.WATSONX_AI_BEARER_TOKEN ||
@@ -268,7 +272,7 @@ export class WatsonXProvider implements ApiProvider {
     const projectId =
       this.options.config.projectId ||
       (this.options.config.projectIdEnvar
-        ? process.env[this.options.config.projectIdEnvar] ||
+        ? getEnvString(this.options.config.projectIdEnvar) ||
           this.env?.[this.options.config.projectIdEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.WATSONX_AI_PROJECT_ID ||
@@ -308,7 +312,7 @@ export class WatsonXProvider implements ApiProvider {
       serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
       authenticator,
     });
-    return this.client;
+    return this.client!;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -376,7 +380,7 @@ export class WatsonXProvider implements ApiProvider {
       return {
         error: `API call error: ${String(err)}`,
         output: '',
-        tokenUsage: {},
+        tokenUsage: createEmptyTokenUsage(),
       };
     }
   }

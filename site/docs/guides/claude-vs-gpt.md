@@ -1,17 +1,17 @@
 ---
-sidebar_label: 'Claude 3.7 vs GPT-4o'
-description: 'Learn how to benchmark Claude 3.7 against GPT-4o using your own data with promptfoo. Discover which model performs best for your specific use case.'
+sidebar_label: 'Claude 3.7 vs GPT-4.1'
+description: 'Learn how to benchmark Claude 3.7 against GPT-4.1 using your own data with promptfoo. Discover which model performs best for your specific use case.'
 ---
 
-# Claude 3.7 vs GPT-4o: Benchmark on Your Own Data
+# Claude 3.7 vs GPT-4.1: Benchmark on Your Own Data
 
 When evaluating the performance of LLMs, generic benchmarks will only get you so far. This is especially the case for Claude vs GPT, as there are many split evaluations (subjective and objective) on their efficacy.
 
 You should test these models on tasks that are relevant to your specific use case, rather than relying solely on public benchmarks.
 
-This guide will walk you through setting up a comparison between Anthropic's Claude 3.7 and OpenAI's GPT-4o using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
+This guide will walk you through setting up a comparison between Anthropic's Claude 3.7 and OpenAI's GPT-4.1 using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
 
-![Claude 3.5 vs GPT-4o comparison](/img/docs/claude3.5-vs-gpt4o.png)
+![Claude 3.5 vs GPT-4.1 comparison](/img/docs/claude3.5-vs-gpt4o.png)
 
 ## Prerequisites
 
@@ -33,12 +33,12 @@ Open the generated `promptfooconfig.yaml` file. This is where you'll configure t
 
 ### Configure the Models
 
-Specify the Claude 3.7 and GPT-4o model IDs under `providers`:
+Specify the Claude 3.7 and GPT-4.1 model IDs under `providers`:
 
 ```yaml
 providers:
   - anthropic:messages:claude-3-7-sonnet-20250219
-  - openai:chat:gpt-4o
+  - openai:chat:gpt-4.1
 ```
 
 You can optionally set parameters like temperature and max tokens for each model:
@@ -49,7 +49,7 @@ providers:
     config:
       temperature: 0.3
       max_tokens: 1024
-  - id: openai:chat:gpt-4o
+  - id: openai:chat:gpt-4.1
     config:
       temperature: 0.3
       max_tokens: 1024
@@ -128,7 +128,7 @@ With your configuration complete, you can kick off the evaluation:
 npx promptfoo@latest eval
 ```
 
-This will run each test case against both Claude 3.7 and GPT-4o and record the results.
+This will run each test case against both Claude 3.7 and GPT-4.1 and record the results.
 
 To view the results, start up the `promptfoo` viewer:
 
@@ -136,9 +136,9 @@ To view the results, start up the `promptfoo` viewer:
 npx promptfoo@latest view
 ```
 
-This will display a comparison view showing how Claude 3.7 and GPT-4o performed on each test case:
+This will display a comparison view showing how Claude 3.7 and GPT-4.1 performed on each test case:
 
-![Claude 3.7 vs GPT-4o comparison expanded](/img/docs/claude3-vs-gpt4-expanded.png)
+![Claude 3.7 vs GPT-4.1 comparison expanded](/img/docs/claude3-vs-gpt4-expanded.png)
 
 You can also output the raw results data to a file:
 
@@ -196,7 +196,7 @@ Of course, our requirements are different from yours. You should customize these
 
 ## Conclusion
 
-By running this type of targeted evaluation, you can gain valuable insights into how Claude 3.7 and GPT-4o are likely to perform on your application's real-world data and tasks.
+By running this type of targeted evaluation, you can gain valuable insights into how Claude 3.7 and GPT-4.1 are likely to perform on your application's real-world data and tasks.
 
 `promptfoo` makes it easy to set up a repeatable evaluation pipeline so you can test models as they evolve and measure the impact of model and prompt changes.
 

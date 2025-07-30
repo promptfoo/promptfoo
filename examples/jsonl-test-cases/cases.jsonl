@@ -1,0 +1,2 @@
+{"vars": {"target_language": "French", "text": "Hello, world!" }, "assert": [{"type": "equals", "value": "Translate the following text to French: Hello, world!"}]}
+{"vars": {"target_language": "Spanish", "text": "Hello, world!" }, "assert": [{"type": "equals", "value": "Translate the following text to Spanish: Hello, world!"}]}

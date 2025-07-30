@@ -34,7 +34,7 @@ Document retrieval is the first step of a RAG. It is possible to eval the retrie
 
 Suppose we have a simple file `retrieve.py`, which takes a query and outputs a list of documents and their contents:
 
-```py title=retrieve.py
+```py title="retrieve.py"
 import vectorstore
 
 def call_api(query, options, context):
@@ -121,7 +121,7 @@ Instead of using an external script provider, we'll use the built-in functionali
 
 First, let's set up our prompt by creating a `prompt1.txt` file:
 
-```txt title=prompt1.txt
+```txt title="prompt1.txt"
 You are a corporate intranet chat assistant.  The user has asked the following:
 
 <QUERY>
@@ -139,9 +139,9 @@ Think carefully and respond to the user concisely and accurately.
 
 Now that we've constructed a prompt, let's set up some test cases. In this example, the eval will format each of these test cases using the prompt template and send it to the LLM API:
 
-```yaml title=promptfooconfig.yaml
-prompts: [prompt1.txt]
-providers: [openai:gpt-4o-mini]
+```yaml title="promptfooconfig.yaml"
+prompts: [file://prompt1.txt]
+providers: [openai:gpt-4.1-mini]
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -212,7 +212,7 @@ def get_var(var_name, prompt, other_vars):
 The `load_context.py` script defines two functions:
 
 - `get_var(var_name, prompt, other_vars)`: This is a special function that promptfoo looks for when loading dynamic variables.
-- `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
+  - `retrieve_documents(question: str) -> str`: This function takes the `question` as input and retrieves relevant documents based on the question. You can implement your own logic here to search a vector database or do anything else to fetch context.
 
 ### Run the eval
 
@@ -224,7 +224,7 @@ The `promptfoo eval` command will run the evaluation and check if your tests are
 
 Suppose we're not happy with the performance of the prompt above and we want to compare it with another prompt. Maybe we want to require citations. Let's create `prompt2.txt`:
 
-```txt title=prompt2.txt
+```txt title="prompt2.txt"
 You are a corporate intranet researcher.  The user has asked the following:
 
 <QUERY>
@@ -262,8 +262,8 @@ Imagine we're exploring budget and want to compare the performance of GPT-4 vs L
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4o
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
   - ollama:llama3.1
 ```
 
@@ -278,9 +278,9 @@ defaultTest:
 
 Here's the final config:
 
-```yaml title=promptfooconfig.yaml
-prompts: [prompt1.txt]
-providers: [openai:gpt-4o-mini, openai:gpt-4o, ollama:llama3.1]
+```yaml title="promptfooconfig.yaml"
+prompts: [file://prompt1.txt]
+providers: [openai:gpt-4.1-mini, openai:gpt-4.1, ollama:llama3.1]
 defaultTest:
   assert:
     - type: python
@@ -320,9 +320,9 @@ We've covered how to test the retrieval and generation steps separately. You mig
 
 The way to do this is similar to the "Evaluating document retrieval" step above. You'll have to create a script that performs document retrieval and calls the LLM, then set up a config like this:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 # Test different prompts to find the best
-prompts: [prompt1.txt, prompt2.txt]
+prompts: [file://prompt1.txt, file://prompt2.txt]
 
 # Test different retrieval and generation methods to find the best
 providers:
@@ -336,3 +336,69 @@ tests:
 By following this approach and setting up tests on [assertions & metrics](/docs/configuration/expected-outputs), you can ensure that the quality of your RAG pipeline is improving, and prevent regressions.
 
 See the [RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub for a fully functioning end-to-end example.
+
+### Context evaluation approaches
+
+There are two ways to provide context for RAG evaluation:
+
+#### Context variables approach
+
+Use this when you have separate context data or want explicit control over what context is used:
+
+```yaml
+tests:
+  - vars:
+      query: 'What is the capital of France?'
+      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
+    assert:
+      - type: context-faithfulness
+        threshold: 0.8
+      - type: context-relevance
+        threshold: 0.7
+      - type: context-recall
+        value: 'Expected information to verify'
+        threshold: 0.8
+```
+
+#### Response extraction approach
+
+Use this when your RAG system returns context alongside the generated response:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.context'
+    threshold: 0.8
+  - type: context-relevance
+    contextTransform: 'output.context'
+    threshold: 0.7
+  - type: context-recall
+    contextTransform: 'output.context'
+    value: 'Expected information to verify'
+    threshold: 0.8
+```
+
+For complex response structures, you can use JavaScript expressions:
+
+```yaml
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
+  - type: context-relevance
+    contextTransform: 'output.sources.filter(s => s.relevance > 0.7).map(s => s.text).join("\n\n")'
+```
+
+#### Common patterns
+
+```yaml
+# Extract from array of objects
+contextTransform: 'output.documents.map(d => d.content).join("\n")'
+
+# Handle missing data with fallback
+contextTransform: 'output.context || output.retrieved_content || "No context"'
+
+# Extract from nested metadata (e.g., AWS Bedrock Knowledge Base)
+contextTransform: 'output.citations?.[0]?.content?.text || ""'
+```
+
+For more examples, see the [AWS Bedrock Knowledge Base documentation](../providers/aws-bedrock.md#context-evaluation-with-contexttransform) and [context assertion reference](../configuration/expected-outputs/model-graded/context-faithfulness.md).

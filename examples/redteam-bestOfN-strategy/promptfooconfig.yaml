@@ -7,8 +7,8 @@ prompts:
 targets:
   # Red team targets. To talk directly to your application, use a custom provider.
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
-  - id: openai:gpt-4o-mini
-    label: gpt-4o-mini
+  - id: openai:gpt-4.1-mini
+    label: gpt-4.1-mini
 
 # Other redteam settings
 redteam:

@@ -1,4 +1,5 @@
 import { addBase64Encoding } from '../../../src/redteam/strategies/base64';
+
 import type { TestCase } from '../../../src/types';
 
 describe('addBase64Encoding', () => {
@@ -18,6 +19,7 @@ describe('addBase64Encoding', () => {
     expect(result[0].vars?.query).toBe('SGVsbG8sIHdvcmxkIQ==');
     expect(result[0].metadata).toEqual({
       strategyId: 'base64',
+      originalText: 'Hello, world!',
     });
   });
 });

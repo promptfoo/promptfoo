@@ -1,11 +1,13 @@
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as os from 'os';
 import * as path from 'path';
+
+import yaml from 'js-yaml';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { UnifiedConfig } from '../../types';
 import { orderKeys } from '../json';
+
+import type { UnifiedConfig } from '../../types';
 
 let configDirectoryPath: string | undefined = getEnvString('PROMPTFOO_CONFIG_DIR');
 
@@ -24,6 +26,7 @@ export function setConfigDirectoryPath(newPath: string | undefined): void {
 export function writePromptfooConfig(
   config: Partial<UnifiedConfig>,
   outputPath: string,
+  headerComments?: string[],
 ): Partial<UnifiedConfig> {
   const orderedConfig = orderKeys(config, [
     'description',
@@ -40,9 +43,12 @@ export function writePromptfooConfig(
     logger.warn('Warning: config is empty, skipping write');
     return orderedConfig;
   }
-  fs.writeFileSync(
-    outputPath,
-    `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n${yamlContent}`,
-  );
+
+  const schemaComment = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json`;
+  const headerCommentLines = headerComments
+    ? headerComments.map((comment) => `# ${comment}`).join('\n') + '\n'
+    : '';
+
+  fs.writeFileSync(outputPath, `${schemaComment}\n${headerCommentLines}${yamlContent}`);
   return orderedConfig;
 }

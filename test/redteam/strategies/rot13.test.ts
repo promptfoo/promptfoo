@@ -1,4 +1,5 @@
 import { addRot13 } from '../../../src/redteam/strategies/rot13';
+
 import type { TestCase } from '../../../src/types';
 
 describe('addRot13', () => {
@@ -18,6 +19,7 @@ describe('addRot13', () => {
     expect(result[0].vars?.query).toBe('Uryyb, jbeyq!');
     expect(result[0].metadata).toEqual({
       strategyId: 'rot13',
+      originalText: 'Hello, world!',
     });
   });
 

@@ -1,4 +1,5 @@
 import { addBestOfNTestCases } from '../../../src/redteam/strategies/bestOfN';
+
 import type { TestCaseWithPlugin } from '../../../src/types';
 
 describe('addBestOfNTestCases', () => {
@@ -38,6 +39,7 @@ describe('addBestOfNTestCases', () => {
     expect(result[0].metadata).toEqual({
       pluginId: 'test-plugin',
       strategyId: 'best-of-n',
+      originalText: 'test',
     });
   });
 

@@ -1,7 +1,8 @@
-import async from 'async';
 import fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import async from 'async';
+import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import logger from '../logger';
@@ -20,14 +21,6 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import telemetry from '../telemetry';
-import type {
-  AssertionParams,
-  AssertionValueFunctionContext,
-  BaseAssertionTypes,
-  ProviderResponse,
-  ScoringFunction,
-} from '../types';
 import {
   type ApiProvider,
   type Assertion,
@@ -35,7 +28,7 @@ import {
   type AtomicTestCase,
   type GradingResult,
 } from '../types';
-import { isJavascriptFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
@@ -57,7 +50,10 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import { handleFinishReason } from './finishReason';
+import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
+import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
@@ -66,8 +62,9 @@ import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
-import { handleIsValidOpenAiFunctionCall, handleIsValidOpenAiToolsCall } from './openai';
+import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
+import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
@@ -76,9 +73,20 @@ import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
+import { handleTraceErrorSpans } from './traceErrorSpans';
+import { handleTraceSpanCount } from './traceSpanCount';
+import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
+
+import type {
+  AssertionParams,
+  AssertionValueFunctionContext,
+  BaseAssertionTypes,
+  ProviderResponse,
+  ScoringFunction,
+} from '../types';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -103,6 +111,7 @@ export async function runAssertion({
   latencyMs,
   providerResponse,
   assertIndex,
+  traceId,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -111,6 +120,7 @@ export async function runAssertion({
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
+  traceId?: string;
 }): Promise<GradingResult> {
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
@@ -121,10 +131,6 @@ export async function runAssertion({
   const baseType = inverse
     ? (assertion.type.slice(4) as AssertionType)
     : (assertion.type as AssertionType);
-
-  telemetry.record('assertion_used', {
-    type: baseType,
-  });
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
@@ -142,6 +148,23 @@ export async function runAssertion({
     providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
   };
+
+  // Add trace data if traceId is available
+  if (traceId) {
+    try {
+      const { getTraceStore } = await import('../tracing/store');
+      const traceStore = getTraceStore();
+      const traceData = await traceStore.getTrace(traceId);
+      if (traceData) {
+        context.trace = {
+          traceId: traceData.traceId,
+          spans: traceData.spans || [],
+        };
+      }
+    } catch (error) {
+      logger.debug(`Failed to fetch trace data for assertion: ${error}`);
+    }
+  }
 
   // Render assertion values
   let renderedValue = assertion.value;
@@ -247,6 +270,8 @@ export async function runAssertion({
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
+    'finish-reason': handleFinishReason,
+    gleu: handleGleuScore,
     guardrails: handleGuardrails,
     'g-eval': handleGEval,
     icontains: handleIContains,
@@ -255,13 +280,31 @@ export async function runAssertion({
     'is-json': handleIsJson,
     'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
-    'is-valid-openai-function-call': handleIsValidOpenAiFunctionCall,
+    'is-valid-function-call': handleIsValidFunctionCall,
+    'is-valid-openai-function-call': handleIsValidFunctionCall,
     'is-valid-openai-tools-call': handleIsValidOpenAiToolsCall,
     'is-xml': handleIsXml,
     javascript: handleJavascript,
     latency: handleLatency,
     levenshtein: handleLevenshtein,
     'llm-rubric': handleLlmRubric,
+    meteor: async (params: AssertionParams) => {
+      try {
+        const { handleMeteorAssertion } = await import('./meteor');
+        return handleMeteorAssertion(params);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('Cannot find module')) {
+          return {
+            pass: false,
+            score: 0,
+            reason:
+              'METEOR assertion requires the natural package. Please install it using: npm install natural',
+            assertion: params.assertion,
+          };
+        }
+        throw error;
+      }
+    },
     'model-graded-closedqa': handleModelGradedClosedQa,
     'model-graded-factuality': handleFactuality,
     moderation: handleModeration,
@@ -272,7 +315,11 @@ export async function runAssertion({
     'rouge-n': handleRougeScore,
     similar: handleSimilar,
     'starts-with': handleStartsWith,
+    'trace-error-spans': handleTraceErrorSpans,
+    'trace-span-count': handleTraceSpanCount,
+    'trace-span-duration': handleTraceSpanDuration,
     webhook: handleWebhook,
+    pi: handlePiScorer,
   };
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
@@ -303,6 +350,7 @@ export async function runAssertions({
   provider,
   providerResponse,
   test,
+  traceId,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -310,6 +358,7 @@ export async function runAssertions({
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
+  traceId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -366,6 +415,7 @@ export async function runAssertions({
         test,
         latencyMs,
         assertIndex: index,
+        traceId,
       });
 
       assertResult.addResult({

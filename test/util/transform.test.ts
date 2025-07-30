@@ -1,7 +1,8 @@
 import * as path from 'path';
+
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
-import { transform, TransformInputType } from '../../src/util/transform';
+import { TransformInputType, transform } from '../../src/util/transform';
 
 jest.mock('../../src/esm');
 jest.mock('../../src/logger', () => ({
@@ -227,6 +228,23 @@ describe('util', () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };
       const transformFunction = ''; // Empty function, returns undefined
+      await expect(transform(transformFunction, output, context, true)).rejects.toThrow(
+        'Transform function did not return a value',
+      );
+    });
+
+    it('does not throw error when validateReturn is false and function returns null', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const transformFunction = 'null'; // Will be wrapped with "return" automatically
+      const result = await transform(transformFunction, output, context, false);
+      expect(result).toBeNull();
+    });
+
+    it('throws error when validateReturn is true and function returns null', async () => {
+      const output = 'test';
+      const context = { vars: {}, prompt: {} };
+      const transformFunction = 'null'; // Will be wrapped with "return" automatically
       await expect(transform(transformFunction, output, context, true)).rejects.toThrow(
         'Transform function did not return a value',
       );

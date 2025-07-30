@@ -1,3 +1,11 @@
+# custom-provider-mjs (Custom Provider Mjs)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example custom-provider-mjs
+```
+
 This example uses a custom API provider in `customProvider.mjs`. It also uses CSV test cases.
 
 Run:

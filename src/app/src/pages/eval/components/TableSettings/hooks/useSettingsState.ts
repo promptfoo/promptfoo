@@ -1,7 +1,8 @@
-import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { useStore as useResultsViewStore } from '../../store';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-export interface SettingsState {
+import { useResultsViewSettingsStore } from '../../store';
+
+interface SettingsState {
   maxTextLength: number;
   wordBreak: string;
   showInferenceDetails: boolean;
@@ -15,7 +16,7 @@ export interface SettingsState {
 }
 
 export const useSettingsState = (isOpen: boolean) => {
-  const store = useResultsViewStore();
+  const store = useResultsViewSettingsStore();
   const {
     maxTextLength,
     setMaxTextLength,
@@ -39,8 +40,14 @@ export const useSettingsState = (isOpen: boolean) => {
     setMaxImageHeight,
   } = store;
 
+  const sanitizedMaxTextLength =
+    maxTextLength === Number.POSITIVE_INFINITY
+      ? Number.POSITIVE_INFINITY
+      : Number.isFinite(maxTextLength) && maxTextLength >= 25
+        ? maxTextLength
+        : 500;
   const [localMaxTextLength, setLocalMaxTextLength] = useState(
-    maxTextLength === Number.POSITIVE_INFINITY ? 1001 : maxTextLength,
+    sanitizedMaxTextLength === Number.POSITIVE_INFINITY ? 1001 : sanitizedMaxTextLength,
   );
 
   const initialStateRef = useRef<SettingsState>({

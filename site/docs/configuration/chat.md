@@ -1,14 +1,25 @@
 ---
 sidebar_label: Chat threads
-sidebar_position: 10
+sidebar_position: 32
 title: Chat Conversations and Multi-Turn Threads
-description: Learn how to create and manage chat conversations, multi-turn threads, and conversation history in promptfoo
-keywords: [chat, conversations, threads, multi-turn, history, messages, _conversation]
+description: Configure chat conversations and multi-turn threads for LLM evaluation. Learn conversation history, multi-shot prompts, and chat flow testing.
+keywords:
+  [
+    chat conversations,
+    multi-turn evaluation,
+    conversation history,
+    chat threads,
+    dialogue testing,
+    conversational AI,
+    chat flow,
+  ]
+pagination_prev: configuration/outputs
+pagination_next: configuration/caching
 ---
 
 # Chat conversations / threads
 
-The [prompt file](/docs/configuration/parameters#prompts-from-file) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
+The [prompt file](/docs/configuration/prompts#file-based-prompts) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
 
 ```json
 [
@@ -37,7 +48,7 @@ prompts:
   - file://prompt.json
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 tests:
   - vars:
@@ -276,7 +287,7 @@ Here's the associated config:
 prompts:
   - file://prompt.json
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 tests:
   - vars:
       query: how you doing
@@ -306,7 +317,7 @@ prompts:
   - 'Respond to the user: {{message}}'
 
 providers:
-  - openai:gpt-4o
+  - openai:gpt-4.1
 
 tests:
   - vars:

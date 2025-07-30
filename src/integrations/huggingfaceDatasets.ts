@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { getEnvString } from '../envars';
 import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
+
 import type { TestCase } from '../types';
 
 interface HuggingFaceResponse {
@@ -75,7 +76,10 @@ export async function fetchHuggingFaceDataset(
     const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
     logger.debug(`[Huggingface Dataset] Fetching page from ${url}`);
 
-    const hfToken = getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
+    const hfToken =
+      getEnvString('HF_TOKEN') ||
+      getEnvString('HF_API_TOKEN') ||
+      getEnvString('HUGGING_FACE_HUB_TOKEN');
     const headers: Record<string, string> = {};
     if (hfToken) {
       logger.debug('[Huggingface Dataset] Using token for authentication');
@@ -109,7 +113,11 @@ export async function fetchHuggingFaceDataset(
         vars: {
           ...row,
         },
+        options: {
+          disableVarExpansion: true,
+        },
       };
+
       tests.push(test);
     }
 

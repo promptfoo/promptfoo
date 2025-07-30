@@ -1,16 +1,18 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
+
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
+import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
+
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import invariant from '../util/invariant';
-import { safeJsonStringify } from '../util/json';
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
@@ -91,7 +93,6 @@ export class ScriptCompletionProvider implements ApiProvider {
       const command = scriptParts.shift();
       invariant(command, 'No command found in script path');
       // These are not useful in the shell
-      delete context?.fetchWithCache;
       delete context?.getCache;
       delete context?.logger;
       const scriptArgs = scriptParts.concat([

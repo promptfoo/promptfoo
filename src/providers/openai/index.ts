@@ -1,4 +1,6 @@
 import { getEnvString } from '../../envars';
+
+import type { EnvVarKey } from '../../envars';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -67,12 +69,16 @@ export class OpenAiGenericProvider implements ApiProvider {
     return (
       this.config.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.OPENAI_API_KEY ||
       getEnvString('OPENAI_API_KEY')
     );
+  }
+
+  requiresApiKey(): boolean {
+    return this.config.apiKeyRequired ?? true;
   }
 
   // @ts-ignore: Params are not used in this implementation

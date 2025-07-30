@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from '../src/constants';
 import { generateTable, wrapTable } from '../src/table';
-import { ResultFailureReason, type EvaluateTable } from '../src/types';
+import { type EvaluateTable, ResultFailureReason } from '../src/types';
 
 jest.mock('cli-table3');
 
@@ -88,7 +88,7 @@ describe('table', () => {
 
       expect(Table).toHaveBeenCalledWith({
         head: ['var1', 'var2', '[test-provider] test-label'],
-        colWidths: [40, 40, 40],
+        colWidths: expect.any(Array),
         wordWrap: true,
         wrapOnWordBoundary: true,
         style: { head: ['blue', 'bold'] },

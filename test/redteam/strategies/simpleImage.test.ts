@@ -1,6 +1,7 @@
 import { SingleBar } from 'cli-progress';
 import logger from '../../../src/logger';
 import { addImageToBase64 } from '../../../src/redteam/strategies/simpleImage';
+
 import type { TestCase } from '../../../src/types';
 
 jest.mock('sharp', () => {
@@ -178,6 +179,7 @@ describe('Image strategy', () => {
 
       expect(result[0].metadata).toEqual({
         strategyId: 'image',
+        originalText: 'No metadata',
       });
     });
 
@@ -198,6 +200,7 @@ describe('Image strategy', () => {
         source: 'test',
         category: 'image-test',
         strategyId: 'image',
+        originalText: 'With metadata',
       });
     });
   });

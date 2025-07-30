@@ -1,22 +1,23 @@
-import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
 import {
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
+  type BasePlugin,
   COLLECTIONS,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  FOUNDATION_PLUGINS,
-  type BasePlugin,
   type PIIPlugin,
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
+  ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
 } from '../../src/redteam/constants';
 import {
   RedteamConfigSchema,
   RedteamGenerateOptionsSchema,
+  RedteamPluginObjectSchema,
   RedteamPluginSchema,
   RedteamStrategySchema,
-  RedteamPluginObjectSchema,
 } from '../../src/validators/redteam';
+
+import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
 
 describe('RedteamPluginObjectSchema', () => {
   it('should validate valid plugin object', () => {
@@ -143,7 +144,7 @@ describe('redteamPluginSchema', () => {
   });
 
   it('should reject an invalid plugin name', () => {
-    expect(RedteamPluginSchema.safeParse('medical').success).toBe(false);
+    expect(RedteamPluginSchema.safeParse('invalid-plugin-name').success).toBe(false);
   });
 
   it('should reject a plugin object with negative numTests', () => {
@@ -170,8 +171,9 @@ describe('redteamPluginSchema', () => {
     }
 
     const errorMessage = result.error.errors[0].message;
-    expect(errorMessage).toContain('Custom plugins must start with file://');
-    expect(errorMessage).toContain('built-in plugins');
+    expect(errorMessage).toContain('Invalid plugin id');
+    expect(errorMessage).toContain('built-in plugin');
+    expect(errorMessage).toContain('https://www.promptfoo.dev/docs/red-team/plugins');
   });
 
   it('should provide helpful error message for invalid file:// paths', () => {
@@ -183,8 +185,9 @@ describe('redteamPluginSchema', () => {
     }
 
     const errorMessage = result.error.errors[0].message;
-    expect(errorMessage).toContain('Custom plugins must start with file://');
-    expect(errorMessage).toContain('built-in plugins');
+    expect(errorMessage).toContain('Invalid plugin id');
+    expect(errorMessage).toContain('built-in plugin');
+    expect(errorMessage).toContain('https://www.promptfoo.dev/docs/red-team/plugins');
   });
 
   it('should provide helpful error message for invalid plugin object', () => {
@@ -199,8 +202,9 @@ describe('redteamPluginSchema', () => {
     }
 
     const errorMessage = result.error.errors[0].message;
-    expect(errorMessage).toContain('Custom plugins must start with file://');
-    expect(errorMessage).toContain('built-in plugins');
+    expect(errorMessage).toContain('Invalid plugin id');
+    expect(errorMessage).toContain('built-in plugin');
+    expect(errorMessage).toContain('https://www.promptfoo.dev/docs/red-team/plugins');
   });
 });
 
@@ -324,6 +328,7 @@ describe('redteamConfigSchema', () => {
       strategies: strategiesExceptDefault,
     };
     const result = RedteamConfigSchema.safeParse(input);
+
     expect(result).toEqual({
       success: true,
       data: expect.objectContaining({
@@ -340,7 +345,10 @@ describe('redteamConfigSchema', () => {
     expect(result.data?.plugins).toHaveLength(
       REDTEAM_ALL_PLUGINS.filter((id) => !COLLECTIONS.includes(id as any)).length,
     );
-    expect(result.data?.strategies).toHaveLength(strategiesExceptDefault.length);
+
+    // The schema deduplicates strategies, so we should expect the unique count
+    const uniqueStrategies = [...new Set(strategiesExceptDefault)];
+    expect(result.data?.strategies).toHaveLength(uniqueStrategies.length);
   });
 
   it('should expand harmful plugin to all harm categories', () => {
@@ -748,7 +756,7 @@ describe('redteamConfigSchema', () => {
 
     it('should not duplicate plugins when using multiple aliased names', () => {
       const input = {
-        plugins: ['owasp:llm:01', 'owasp:llm:02'],
+        plugins: ['owasp:llm:01', 'owasp:llm:02', 'owasp:llm:04'],
         numTests: 3,
       };
       const result = RedteamConfigSchema.safeParse(input);
@@ -788,6 +796,10 @@ describe('redteamConfigSchema', () => {
         'pii:session',
         'pii:social',
         'cross-session-leak',
+        'bias:age',
+        'bias:disability',
+        'bias:gender',
+        'bias:race',
       ];
       const actualPlugins = result.data?.plugins || [];
       const expectedPluginObjects = expectedPlugins.map((id) => ({
@@ -882,6 +894,68 @@ describe('redteamConfigSchema', () => {
       expect(strategies).toHaveLength(strategyIds.size);
     });
   });
+
+  describe('severity handling', () => {
+    it('should preserve severity field in plugin objects', () => {
+      const config = {
+        plugins: [
+          { id: 'harmful:hate', numTests: 1, severity: 'low' },
+          { id: 'harmful:self-harm', numTests: 1, severity: 'low' },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      expect(result.plugins!).toHaveLength(2);
+      expect(result.plugins![0]).toEqual({
+        id: 'harmful:hate',
+        numTests: 1,
+        severity: 'low',
+      });
+      expect(result.plugins![1]).toEqual({
+        id: 'harmful:self-harm',
+        numTests: 1,
+        severity: 'low',
+      });
+    });
+
+    it('should handle plugins without severity field', () => {
+      const config = {
+        plugins: [
+          { id: 'harmful:hate', numTests: 1 },
+          { id: 'harmful:self-harm', numTests: 1, severity: 'high' },
+        ],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      expect(result.plugins!).toHaveLength(2);
+      expect(result.plugins![0]).toEqual({
+        id: 'harmful:hate',
+        numTests: 1,
+      });
+      expect(result.plugins![1]).toEqual({
+        id: 'harmful:self-harm',
+        numTests: 1,
+        severity: 'high',
+      });
+    });
+
+    it('should preserve severity when expanding collections', () => {
+      const config = {
+        plugins: [{ id: 'harmful', numTests: 1, severity: 'medium' }],
+      };
+
+      const result = RedteamConfigSchema.parse(config);
+
+      // All expanded harmful plugins should have the severity
+      const harmfulPlugins = result.plugins!.filter((p) => p.id.startsWith('harmful:'));
+      expect(harmfulPlugins.length).toBeGreaterThan(0);
+      harmfulPlugins.forEach((plugin) => {
+        expect(plugin.severity).toBe('medium');
+      });
+    });
+  });
 });
 
 describe('RedteamConfigSchema transform', () => {
@@ -954,6 +1028,7 @@ describe('RedteamConfigSchema transform', () => {
     });
 
     // Should expand 'harmful' into individual harm categories
+    // Note: bias plugins are separate from harmful plugins now
     expect(result.plugins?.every((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
       true,
     );
@@ -1063,23 +1138,7 @@ describe('RedteamConfigSchema transform', () => {
         RedteamConfigSchema.parse({
           plugins: ['custom/path/without/file/protocol.js'],
         }),
-      ).toThrow(
-        JSON.stringify(
-          [
-            {
-              code: 'invalid_string',
-              validation: {
-                startsWith: 'file://',
-              },
-              message:
-                'Custom plugins must start with file:// (or use one of the built-in plugins)',
-              path: ['plugins', 0],
-            },
-          ],
-          null,
-          2,
-        ),
-      );
+      ).toThrow(/Invalid plugin id/);
     });
   });
 
@@ -1200,6 +1259,8 @@ describe('RedteamConfigSchema transform', () => {
       plugins: ['harmful'],
     });
 
+    // Should expand 'harmful' into individual harm categories
+    // Note: bias plugins are separate from harmful plugins now
     expect(result.plugins?.every((p: RedteamPluginObject) => p.id.startsWith('harmful:'))).toBe(
       true,
     );

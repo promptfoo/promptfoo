@@ -139,7 +139,7 @@ describe('handleGEval', () => {
       },
       pass: true,
       score: 0.7,
-      reason: 'test reason 2',
+      reason: 'test reason 1\n\ntest reason 2',
     });
   });
 
@@ -242,5 +242,137 @@ describe('handleGEval', () => {
         },
       }),
     ).rejects.toThrow('G-Eval assertion type must have a string or array of strings value');
+  });
+
+  it('should handle string renderedValue with undefined prompt', async () => {
+    const mockMatchesGEval = jest.mocked(matchesGEval);
+    mockMatchesGEval.mockResolvedValue({
+      pass: true,
+      score: 0.8,
+      reason: 'test reason',
+    });
+
+    const result = await handleGEval({
+      assertion: {
+        type: 'g-eval',
+        value: 'test criteria',
+        threshold: 0.7,
+      },
+      renderedValue: 'test criteria',
+      prompt: undefined,
+      outputString: 'test output',
+      test: {
+        vars: {},
+        assert: [],
+        options: {},
+      },
+      baseType: 'g-eval',
+      context: {
+        prompt: undefined,
+        vars: {},
+        test: {
+          vars: {},
+          assert: [],
+          options: {},
+        },
+        logProbs: undefined,
+        provider: {
+          id: () => 'test-provider',
+          callApi: async () => ({ output: 'test' }),
+        },
+        providerResponse: {
+          output: 'test output',
+          error: undefined,
+        },
+      },
+      inverse: false,
+      output: 'test output',
+      providerResponse: {
+        output: 'test output',
+        error: undefined,
+      },
+    });
+
+    expect(result).toEqual({
+      assertion: {
+        type: 'g-eval',
+        value: 'test criteria',
+        threshold: 0.7,
+      },
+      pass: true,
+      score: 0.8,
+      reason: 'test reason',
+    });
+
+    expect(mockMatchesGEval).toHaveBeenCalledWith('test criteria', '', 'test output', 0.7, {});
+  });
+
+  it('should handle array renderedValue with undefined prompt', async () => {
+    const mockMatchesGEval = jest.mocked(matchesGEval);
+    mockMatchesGEval.mockResolvedValueOnce({
+      pass: true,
+      score: 0.8,
+      reason: 'test reason 1',
+    });
+    mockMatchesGEval.mockResolvedValueOnce({
+      pass: false,
+      score: 0.6,
+      reason: 'test reason 2',
+    });
+
+    const result = await handleGEval({
+      assertion: {
+        type: 'g-eval',
+        value: ['criteria1', 'criteria2'],
+        threshold: 0.7,
+      },
+      renderedValue: ['criteria1', 'criteria2'],
+      prompt: undefined,
+      outputString: 'test output',
+      test: {
+        vars: {},
+        assert: [],
+        options: {},
+      },
+      baseType: 'g-eval',
+      context: {
+        prompt: undefined,
+        vars: {},
+        test: {
+          vars: {},
+          assert: [],
+          options: {},
+        },
+        logProbs: undefined,
+        provider: {
+          id: () => 'test-provider',
+          callApi: async () => ({ output: 'test' }),
+        },
+        providerResponse: {
+          output: 'test output',
+          error: undefined,
+        },
+      },
+      inverse: false,
+      output: 'test output',
+      providerResponse: {
+        output: 'test output',
+        error: undefined,
+      },
+    });
+
+    expect(result).toEqual({
+      assertion: {
+        type: 'g-eval',
+        value: ['criteria1', 'criteria2'],
+        threshold: 0.7,
+      },
+      pass: true,
+      score: 0.7,
+      reason: 'test reason 1\n\ntest reason 2',
+    });
+
+    expect(mockMatchesGEval).toHaveBeenCalledWith('criteria1', '', 'test output', 0.7, {});
+    expect(mockMatchesGEval).toHaveBeenCalledWith('criteria2', '', 'test output', 0.7, {});
   });
 });

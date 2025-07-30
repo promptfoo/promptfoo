@@ -1,14 +1,13 @@
 import logger from '../../logger';
-import type { ProviderResponse } from '../../types';
+import type { DefaultProviders, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { ProviderConfiguration } from '../../types/providerConfig';
-import type { DefaultProviders } from '../../types/providerConfig';
 import { OpenAiEmbeddingProvider } from '../openai/embedding';
 import { OpenAiModerationProvider } from '../openai/moderation';
 import { AnthropicMessagesProvider } from './messages';
 
 // Default model to use for all default providers
-export const DEFAULT_ANTHROPIC_MODEL = 'claude-3-7-sonnet-20250219';
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
 
 // Default OpenAI embedding model to use
 export const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-large';
@@ -147,7 +146,6 @@ export function getAnthropicProviders(
   env?: EnvOverrides,
 ): Pick<
   DefaultProviders,
-  | 'datasetGenerationProvider'
   | 'gradingJsonProvider'
   | 'gradingProvider'
   | 'llmRubricProvider'
@@ -159,7 +157,6 @@ export function getAnthropicProviders(
   const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
 
   return {
-    datasetGenerationProvider: gradingProvider,
     gradingJsonProvider: gradingProvider,
     gradingProvider,
     llmRubricProvider,

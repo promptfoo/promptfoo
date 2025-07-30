@@ -38,7 +38,7 @@ jest.mock('../../src/providers/azure', () => ({
 }));
 
 jest.mock('../../src/providers/azure/defaults', () => ({
-  AzureProviderConfig: (env: any) => ({
+  AzureProviderConfig: jest.fn((env: any) => ({
     datasetGenerationProvider: { id: () => 'mock-azure-provider' },
     embeddingProvider: { id: () => 'mock-azure-provider' },
     gradingJsonProvider: { id: () => 'mock-azure-provider' },
@@ -46,7 +46,11 @@ jest.mock('../../src/providers/azure/defaults', () => ({
     moderationProvider: { id: () => 'mock-azure-provider' },
     suggestionsProvider: { id: () => 'mock-azure-provider' },
     synthesizeProvider: { id: () => 'mock-azure-provider' },
-  }),
+  })),
+}));
+
+jest.mock('../../src/providers/google/util', () => ({
+  hasGoogleDefaultCredentials: jest.fn(() => Promise.resolve(false)),
 }));
 
 /**
@@ -73,6 +77,17 @@ describe('Provider defaults module', () => {
   const logger = loggerModule;
 
   beforeEach(() => {
+    process.env = { ...originalEnv };
+    setDefaultCompletionProviders(undefined as any);
+    setDefaultEmbeddingProviders(undefined as any);
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.MISTRAL_API_KEY;
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
     jest.clearAllMocks();
   });
 
@@ -112,7 +127,6 @@ describe('Provider defaults module', () => {
       const providers = await getDefaultProviders();
 
       // Assert
-      expect(providers.datasetGenerationProvider.id()).toBe('test-completion-provider');
       expect(providers.gradingJsonProvider.id()).toBe('test-completion-provider');
       expect(providers.gradingProvider.id()).toBe('test-completion-provider');
       expect(providers.suggestionsProvider.id()).toBe('test-completion-provider');
@@ -130,7 +144,6 @@ describe('Provider defaults module', () => {
 
       // Assert
       expect(providers.embeddingProvider.id()).toBe('test-embedding-provider');
-      expect(providers.datasetGenerationProvider.id()).not.toBe('test-embedding-provider');
       expect(providers.gradingJsonProvider.id()).not.toBe('test-embedding-provider');
       expect(providers.gradingProvider.id()).not.toBe('test-embedding-provider');
       expect(providers.suggestionsProvider.id()).not.toBe('test-embedding-provider');
@@ -148,7 +161,6 @@ describe('Provider defaults module', () => {
       const providers = await getDefaultProviders();
 
       // Assert
-      expect(providers.datasetGenerationProvider.id()).toBe('test-completion-provider');
       expect(providers.gradingJsonProvider.id()).toBe('test-completion-provider');
       expect(providers.gradingProvider.id()).toBe('test-completion-provider');
       expect(providers.suggestionsProvider.id()).toBe('test-completion-provider');

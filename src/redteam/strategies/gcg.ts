@@ -1,12 +1,13 @@
 import async from 'async';
-import { SingleBar, Presets } from 'cli-progress';
+import { Presets, SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../cache';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+
+import type { TestCase } from '../../types';
 
 export const CONCURRENCY = 10;
 
@@ -24,6 +25,7 @@ async function generateGcgPrompts(
         {
           format: 'GCG Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );
@@ -68,6 +70,7 @@ async function generateGcgPrompts(
 
       // Handle both single response and array of responses
       const responses = data.responses as string[];
+      const originalText = String(testCase.vars[injectVar]);
 
       const gcgTestCases = responses.map((response: string) => ({
         ...testCase,
@@ -82,6 +85,7 @@ async function generateGcgPrompts(
         metadata: {
           ...testCase.metadata,
           strategyId: 'gcg',
+          originalText,
         },
       }));
 

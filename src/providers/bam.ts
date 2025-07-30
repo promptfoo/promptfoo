@@ -1,14 +1,16 @@
+import { getCache, isCacheEnabled } from '../cache';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from './shared';
 import type {
   Client as GenAIClient,
   TextGenerationCreateInput,
   TextGenerationCreateOutput,
 } from '@ibm-generative-ai/node-sdk';
-import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString } from '../envars';
-import logger from '../logger';
+
+import type { EnvVarKey } from '../envars';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface BAMGenerationParameters {
   apiKey?: string | null;
@@ -43,35 +45,35 @@ interface BAMGenerationParameters {
 }
 
 interface BAMModerations {
-  hap?:
-    | boolean
-    | {
-        input?: boolean;
-        output?: boolean;
-        threshold?: number;
-        send_tokens?: boolean;
-      };
-  stigma?:
-    | boolean
-    | {
-        input?: boolean;
-        output?: boolean;
-        threshold?: number;
-        send_tokens?: boolean;
-      };
-  implicit_hate?:
-    | boolean
-    | {
-        input?: boolean;
-        output?: boolean;
-        threshold?: number;
-        send_tokens?: boolean;
-      };
+  hap?: {
+    input?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+    output?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+  };
+  social_bias?: {
+    input?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+    output?: {
+      enabled: boolean;
+      threshold?: number;
+      send_tokens?: boolean;
+    };
+  };
 }
 
 export function convertResponse(response: TextGenerationCreateOutput): ProviderResponse {
   const totalGeneratedTokens = response.results.reduce(
-    (acc, result) => acc + result.generated_token_count,
+    (acc: number, result: any) => acc + result.generated_token_count,
     0,
   );
   const tokenUsage: Partial<TokenUsage> = {
@@ -82,7 +84,7 @@ export function convertResponse(response: TextGenerationCreateOutput): ProviderR
 
   const providerResponse: ProviderResponse = {
     error: undefined,
-    output: response.results.map((result) => result.generated_text).join(', '),
+    output: response.results.map((result: any) => result.generated_text).join(', '),
     tokenUsage,
     cost: undefined,
     cached: undefined,
@@ -130,7 +132,7 @@ export class BAMProvider implements ApiProvider {
     return (
       this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.BAM_API_KEY ||
@@ -171,9 +173,14 @@ export class BAMProvider implements ApiProvider {
         const cachedResponse = await cache.get(cacheKey);
         if (cachedResponse) {
           logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+          const parsedResponse = JSON.parse(cachedResponse as string);
+          // Mark cached tokens in the tokenUsage
+          if (parsedResponse.tokenUsage) {
+            parsedResponse.tokenUsage.cached = parsedResponse.tokenUsage.total || 0;
+          }
           return {
-            output: JSON.parse(cachedResponse as string),
-            tokenUsage: {},
+            ...parsedResponse,
+            cached: true,
           };
         }
       }
@@ -181,7 +188,14 @@ export class BAMProvider implements ApiProvider {
       const client = await this.getClient();
       const result = await client.text.generation.create(params, { signal });
 
-      return convertResponse(result);
+      const response = convertResponse(result);
+
+      // Cache the response if caching is enabled
+      if (isCacheEnabled()) {
+        await cache.set(cacheKey, JSON.stringify(response));
+      }
+
+      return response;
     } catch (err) {
       logger.error(`BAM API call error: ${String(err)}`);
 

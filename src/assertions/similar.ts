@@ -1,6 +1,7 @@
 import { matchesSimilarity } from '../matchers';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 export const handleSimilar = async ({
   assertion,
@@ -13,16 +14,12 @@ export const handleSimilar = async ({
     typeof renderedValue === 'string' || Array.isArray(renderedValue),
     'Similarity assertion type must have a string or array of strings value',
   );
+  const threshold = assertion.threshold ?? 0.75;
+
   if (Array.isArray(renderedValue)) {
-    let minScore = Infinity;
+    let minScore = Number.POSITIVE_INFINITY;
     for (const value of renderedValue) {
-      const result = await matchesSimilarity(
-        value,
-        outputString,
-        assertion.threshold || 0.75,
-        inverse,
-        test.options,
-      );
+      const result = await matchesSimilarity(value, outputString, threshold, inverse, test.options);
       if (result.pass) {
         return {
           assertion,
@@ -42,13 +39,7 @@ export const handleSimilar = async ({
   } else {
     return {
       assertion,
-      ...(await matchesSimilarity(
-        renderedValue,
-        outputString,
-        assertion.threshold || 0.75,
-        inverse,
-        test.options,
-      )),
+      ...(await matchesSimilarity(renderedValue, outputString, threshold, inverse, test.options)),
     };
   }
 };

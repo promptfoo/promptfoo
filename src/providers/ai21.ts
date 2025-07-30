@@ -1,9 +1,11 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+
+import type { EnvVarKey } from '../envars';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const AI21_CHAT_MODELS = [
   {
@@ -24,7 +26,7 @@ const AI21_CHAT_MODELS = [
 
 interface AI21ChatCompletionOptions {
   apiKey?: string;
-  apiKeyEnvar?: string;
+  apiKeyEnvar?: EnvVarKey;
   apiBaseUrl?: string;
   temperature?: number;
   top_p?: number;
@@ -105,7 +107,7 @@ export class AI21ChatCompletionProvider implements ApiProvider {
     return (
       this.config.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.AI21_API_KEY ||
@@ -165,7 +167,9 @@ export class AI21ChatCompletionProvider implements ApiProvider {
         error: `API call error: ${data.error}`,
       };
     }
-    if (!data.choices[0] && !data.choices[0].message.content) {
+    // Ensure the expected shape of the API response to avoid accessing
+    // properties of undefined
+    if (!data.choices?.[0] || !data.choices[0].message?.content) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
       };

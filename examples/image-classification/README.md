@@ -1,4 +1,10 @@
-# Image Classification Example with Promptfoo
+# image-classification (Image Classification Example with Promptfoo)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example image-classification
+```
 
 This example demonstrates how to use Promptfoo for image classification tasks using the Fashion MNIST dataset. The example uses GPT-4o and GPT-4o-mini with a structured json schema to analyze images, including classification, color analysis, and additional attributes.
 

@@ -1,4 +1,6 @@
 import React from 'react';
+
+import CloseIcon from '@mui/icons-material/Close';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -17,11 +19,12 @@ import {
   type Strategy,
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getStrategyIdFromTest } from './shared';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import './RiskCategoryDrawer.css';
 
 interface RiskCategoryDrawerProps {
@@ -121,6 +124,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   numFailed,
   strategyStats,
 }) => {
+  const navigate = useNavigate();
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
     console.error('[RiskCategoryDrawer] Could not load category', category);
@@ -169,9 +173,12 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Box sx={{ width: 750, p: 2 }} className="risk-category-drawer">
-        <Typography variant="h6" gutterBottom>
-          {displayName}
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6">{displayName}</Typography>
+          <IconButton onClick={onClose} size="small" aria-label="close drawer">
+            <CloseIcon />
+          </IconButton>
+        </Box>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Box sx={{ textAlign: 'center', flex: 1 }}>
             <Typography variant="h4" color="primary">
@@ -201,14 +208,13 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
             const testWithPluginId = firstFailure || firstPass;
             const pluginId = testWithPluginId?.result?.metadata?.pluginId;
 
-            const searchQuery = pluginId
-              ? `metadata=pluginId:${pluginId}`
-              : `metric=${categoryName}`;
-            const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`;
+            const url = pluginId
+              ? `/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`
+              : `/eval/${evalId}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {
-              window.location.href = url;
+              navigate(url);
             }
           }}
         >
@@ -304,7 +310,15 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
           passes.length > 0 ? (
             <List>
               {passes.map((pass, index) => (
-                <ListItem key={index} className="failure-item">
+                <ListItem
+                  key={index}
+                  className="failure-item"
+                  sx={{ position: 'relative', cursor: 'pointer' }}
+                  onClick={() => {
+                    setSelectedTest(pass);
+                    setDetailsDialogOpen(true);
+                  }}
+                >
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
                     <Box sx={{ flexGrow: 1 }}>
                       <Typography variant="subtitle1" className="prompt">
@@ -313,6 +327,50 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
                       <Typography variant="body2" className="output">
                         {getOutputDisplay(pass.output)}
                       </Typography>
+                      {pass.gradingResult &&
+                        (() => {
+                          const strategyId = getStrategyIdFromTest(pass);
+                          return (
+                            strategyId && (
+                              <Tooltip title={strategyDescriptions[strategyId as Strategy] || ''}>
+                                <Chip
+                                  size="small"
+                                  label={
+                                    displayNameOverrides[
+                                      strategyId as keyof typeof displayNameOverrides
+                                    ] || strategyId
+                                  }
+                                  sx={{ mt: 1 }}
+                                />
+                              </Tooltip>
+                            )
+                          );
+                        })()}
+                    </Box>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        opacity: 0,
+                        transition: 'opacity 0.2s',
+                        '.failure-item:hover &': {
+                          opacity: 1,
+                        },
+                      }}
+                    >
+                      {pass.gradingResult?.componentResults?.some(
+                        (result) => (result.suggestions?.length || 0) > 0,
+                      ) && (
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent list item click
+                            setCurrentGradingResult(pass.gradingResult);
+                            setSuggestionsDialogOpen(true);
+                          }}
+                          sx={{ ml: 1 }}
+                        >
+                          <LightbulbOutlinedIcon color="primary" />
+                        </IconButton>
+                      )}
                     </Box>
                   </Box>
                 </ListItem>

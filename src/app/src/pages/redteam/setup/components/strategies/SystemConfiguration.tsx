@@ -1,24 +1,18 @@
-import React from 'react';
-import {
-  Paper,
-  Typography,
-  FormControl,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
-  Alert,
-} from '@mui/material';
+import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Paper from '@mui/material/Paper';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import Typography from '@mui/material/Typography';
 
 interface SystemConfigurationProps {
   isStatefulValue: boolean;
   onStatefulChange: (val: boolean) => void;
-  hasSessionParser: boolean;
 }
 
 export function SystemConfiguration({
   isStatefulValue,
   onStatefulChange,
-  hasSessionParser,
 }: SystemConfigurationProps) {
   return (
     <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
@@ -44,13 +38,6 @@ export function SystemConfiguration({
             label="No - System does not maintain conversation history"
           />
         </RadioGroup>
-
-        {!hasSessionParser && isStatefulValue && (
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            Your system is stateful but you don't have session handling set up. Please return to
-            your Target setup to configure it.
-          </Alert>
-        )}
       </FormControl>
     </Paper>
   );

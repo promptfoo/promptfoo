@@ -1,6 +1,18 @@
 ---
-sidebar_position: 5
-sidebar_label: Overview
+sidebar_position: 22
+sidebar_label: Assertions & metrics
+title: Assertions and Metrics - LLM Output Validation
+description: Configure assertions and metrics to validate LLM outputs. Learn deterministic tests, model-graded evaluation, custom scoring, and performance metrics.
+keywords:
+  [
+    LLM assertions,
+    evaluation metrics,
+    output validation,
+    model grading,
+    deterministic testing,
+    performance metrics,
+    accuracy measurement,
+  ]
 ---
 
 # Assertions & metrics
@@ -29,17 +41,18 @@ tests:
 
 ## Assertion properties
 
-| Property     | Type               | Required | Description                                                                                                            |
-| ------------ | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------- |
-| type         | string             | Yes      | Type of assertion                                                                                                      |
-| value        | string             | No       | The expected value, if applicable                                                                                      |
-| threshold    | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                |
-| weight       | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                    |
-| provider     | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                   |
-| rubricPrompt | string \| string[] | No       | Model-graded LLM prompt                                                                                                |
-| config       | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python assertions                          |
-| transform    | string             | No       | Process the output before running the assertion. See [Transformations](/docs/configuration/guide#transforming-outputs) |
-| metric       | string             | No       | Tag that appears in the web UI as a named metric                                                                       |
+| Property         | Type               | Required | Description                                                                                                                                                                                                                                                                            |
+| ---------------- | ------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string             | Yes      | Type of assertion                                                                                                                                                                                                                                                                      |
+| value            | string             | No       | The expected value, if applicable                                                                                                                                                                                                                                                      |
+| threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                                                |
+| weight           | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                                                                                                                                                    |
+| provider         | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                                   |
+| rubricPrompt     | string \| string[] | No       | Model-graded LLM prompt                                                                                                                                                                                                                                                                |
+| config           | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python assertions                                                                                                                                                                                          |
+| transform        | string             | No       | Process the output before running the assertion. See [Transformations](/docs/configuration/guide#transforming-outputs)                                                                                                                                                                 |
+| metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                                       |
+| contextTransform | string             | No       | Javascript expression to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
 
 ## Grouping assertions via Assertion Sets
 
@@ -121,13 +134,19 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | provided webhook returns \{pass: true\}                           |
 | [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)           |
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)               |
+| [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU score is above a given threshold (default 0.5)               |
 | [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                         |
 | [latency](/docs/configuration/expected-outputs/deterministic/#latency)                                             | Latency is below a threshold (milliseconds)                       |
+| [meteor](/docs/configuration/expected-outputs/deterministic/#meteor)                                               | METEOR score is above a given threshold (default 0.5)             |
 | [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                   |
 | [perplexity-score](/docs/configuration/expected-outputs/deterministic/#perplexity-score)                           | Normalized perplexity                                             |
 | [cost](/docs/configuration/expected-outputs/deterministic/#cost)                                                   | Cost is below a threshold (for models with cost info such as GPT) |
+| [is-valid-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema  |
 | [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema  |
 | [is-valid-openai-tools-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                 |
+| [trace-span-count](/docs/configuration/expected-outputs/deterministic/#trace-span-count)                           | Count spans matching patterns with min/max thresholds             |
+| [trace-span-duration](/docs/configuration/expected-outputs/deterministic/#trace-span-duration)                     | Check span durations with percentile support                      |
+| [trace-error-spans](/docs/configuration/expected-outputs/deterministic/#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages |
 | [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Ensure that the output does not contain harmful content           |
 
 :::tip
@@ -140,19 +159,20 @@ These metrics are model-assisted, and rely on LLMs or other machine learning mod
 
 See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [classification](/docs/configuration/expected-outputs/classifier), and [similarity](/docs/configuration/expected-outputs/similar) docs for more information.
 
-| Assertion Type                                                                        | Method                                                                          |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [similar](/docs/configuration/expected-outputs/similar)                               | Embeddings and cosine similarity are above a threshold                          |
-| [classifier](/docs/configuration/expected-outputs/classifier)                         | Run LLM output through a classifier                                             |
-| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                       | LLM output matches a given rubric, using a Language Model to grade output       |
-| [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                    | Chain-of-thought evaluation based on custom criteria using the G-Eval framework |
-| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                 | Ensure that LLM output is related to original query                             |
-| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)             | Ensure that LLM output uses the context                                         |
-| [context-recall](/docs/configuration/expected-outputs/model-graded)                   | Ensure that ground truth appears in context                                     |
-| [context-relevance](/docs/configuration/expected-outputs/model-graded)                | Ensure that context is relevant to original query                               |
-| [factuality](/docs/configuration/expected-outputs/model-graded)                       | LLM output adheres to the given facts, using Factuality method from OpenAI eval |
-| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to given criteria, using Closed QA method from OpenAI eval   |
-| [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | Compare multiple outputs for a test case and pick the best one                  |
+| Assertion Type                                                                        | Method                                                                           |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [similar](/docs/configuration/expected-outputs/similar)                               | Embeddings and cosine similarity are above a threshold                           |
+| [classifier](/docs/configuration/expected-outputs/classifier)                         | Run LLM output through a classifier                                              |
+| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                       | LLM output matches a given rubric, using a Language Model to grade output        |
+| [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                    | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
+| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                 | Ensure that LLM output is related to original query                              |
+| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)             | Ensure that LLM output uses the context                                          |
+| [context-recall](/docs/configuration/expected-outputs/model-graded)                   | Ensure that ground truth appears in context                                      |
+| [context-relevance](/docs/configuration/expected-outputs/model-graded)                | Ensure that context is relevant to original query                                |
+| [factuality](/docs/configuration/expected-outputs/model-graded)                       | LLM output adheres to the given facts, using Factuality method from OpenAI eval  |
+| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to given criteria, using Closed QA method from OpenAI eval    |
+| [pi](/docs/configuration/expected-outputs/model-graded/pi)                            | Alternative scoring approach that uses a dedicated model for evaluating criteria |
+| [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | Compare multiple outputs for a test case and pick the best one                   |
 
 ## Weighted assertions
 
@@ -277,7 +297,7 @@ The `value` of an assertion can be loaded directly from a file using the `file:/
 
 If the file ends in `.js`, the Javascript is executed:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 - assert:
     - type: javascript
       value: file://path/to/assert.js
@@ -320,7 +340,7 @@ You can also use Javascript files in non-`javascript`-type asserts. For example,
 
 If the file ends in `.py`, the Python is executed:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 - assert:
     - type: python
       value: file://path/to/assert.py
@@ -348,7 +368,7 @@ print(json.dumps({
 
 ## Load assertions from CSV
 
-The [Tests file](/docs/configuration/parameters#tests-and-vars) is an optional format that lets you specify test cases outside of the main config file.
+The [Tests file](/docs/configuration/test-cases) is an optional format that lets you specify test cases outside of the main config file.
 
 To add an assertion to a test case in a vars file, use the special `__expected` column.
 
@@ -391,7 +411,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
   - localai:chat:vicuna
 tests:
   - vars:
@@ -453,85 +473,106 @@ See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/exa
 
 ## Creating derived metrics
 
-Derived metrics are computed at runtime based on other metrics and displayed as named metrics (see above). They are calculated after all individual test evaluations are completed using either mathematical expressions (powered by [mathjs](https://mathjs.org/)) or custom functions.
+Derived metrics calculate composite scores from your named assertions after evaluation completes. Use them for metrics like F1 scores, weighted averages, or custom scoring formulas.
 
-### Configuring derived metrics
-
-Add a `derivedMetrics` array to your config. Each entry needs:
-
-- **name**: Identifier for the metric in output results
-- **value**: Either:
-  - A mathematical expression string (using [mathjs syntax](https://mathjs.org/docs/expressions/syntax.html))
-  - A JavaScript function that returns a numeric value
-
-#### Examples
-
-Using mathematical expressions:
+Add a `derivedMetrics` array to your configuration:
 
 ```yaml
 derivedMetrics:
-  # Average score across tests
-  - name: 'AverageScore'
-    value: 'sum(scores) / length(scores)'
-
-  # Weighted scoring with multiple components
-  - name: 'WeightedScore'
-    value: '(accuracy * 0.6 + relevance * 0.3 + speed * 0.1)'
-
-  # Composite metric using previous calculations
-  - name: 'EfficiencyScore'
-    value: 'WeightedScore / (cost + 1)' # Add 1 to avoid division by zero
+  - name: 'f1_score'
+    value: '2 * precision * recall / (precision + recall)'
 ```
 
-Using a JavaScript function for complex logic:
+Each derived metric requires:
+
+- **name**: The metric identifier
+- **value**: A mathematical expression or JavaScript function
+
+:::tip
+Derived metrics are initialized to 0 and calculated per prompt. Errors are logged at debug level.
+:::
+
+### Mathematical expressions
+
+Use [mathjs](https://mathjs.org/) syntax for calculations:
 
 ```yaml
 derivedMetrics:
-  - name: 'CustomScore'
-    value: (namedScores, context) => {
-      // Access to all named metrics and test context
-      const { accuracy = 0, speed = 0, cost = 1 } = namedScores;
-      const { threshold, test } = context;
+  - name: 'weighted_score'
+    value: 'accuracy * 0.6 + relevance * 0.4'
 
-      // Can access test-specific data
-      if (test.vars.difficulty === 'hard') {
-        return accuracy * 2;
+  - name: 'harmonic_mean'
+    value: '3 / (1/accuracy + 1/relevance + 1/coherence)'
+```
+
+### JavaScript functions
+
+For complex logic:
+
+```yaml
+derivedMetrics:
+  - name: 'adaptive_score'
+    value: |
+      function(namedScores, evalStep) {
+        const { accuracy = 0, speed = 0 } = namedScores;
+        if (evalStep.tokensUsed?.total > 1000) {
+          return accuracy * 0.8; // Penalize verbose responses
+        }
+        return accuracy * 0.6 + speed * 0.4;
       }
-
-      return accuracy > threshold ? speed / cost : 0;
-    }
 ```
 
-#### Available Functions and Data
+### Example: F1 score
 
-In mathematical expressions:
+```yaml
+defaultTest:
+  assert:
+    - type: javascript
+      value: output.sentiment === 'positive' && context.vars.expected === 'positive' ? 1 : 0
+      metric: true_positives
+      weight: 0
+    - type: javascript
+      value: output.sentiment === 'positive' && context.vars.expected === 'negative' ? 1 : 0
+      metric: false_positives
+      weight: 0
+    - type: javascript
+      value: output.sentiment === 'negative' && context.vars.expected === 'positive' ? 1 : 0
+      metric: false_negatives
+      weight: 0
 
-- All [mathjs functions](https://mathjs.org/docs/reference/functions.html) (sum, mean, std, etc.)
-- Any named metrics from your assertions
-- Previously defined derived metrics
+derivedMetrics:
+  - name: precision
+    value: 'true_positives / (true_positives + false_positives)'
+  - name: recall
+    value: 'true_positives / (true_positives + false_negatives)'
+  - name: f1_score
+    value: '2 * true_positives / (2 * true_positives + false_positives + false_negatives)'
+```
 
-In JavaScript functions:
+Metrics are calculated in order, so later metrics can reference earlier ones:
 
-- **namedScores**: Object containing all metric values
-- **context**: Object containing:
-  - `threshold`: Test case threshold if set
-  - `test`: Current test case data
-  - `vars`: Test variables
-  - `tokensUsed`: Token usage information
+```yaml
+derivedMetrics:
+  - name: base_score
+    value: '(accuracy + relevance) / 2'
+  - name: final_score
+    value: 'base_score * confidence_multiplier'
+```
 
-:::info
-Good to know:
+### Notes
 
-- Metrics are calculated in the order defined
-- Later metrics can reference earlier ones
-- Basic metrics must be named using the `metric` property in assertions
-- Metric names in expressions cannot contain spaces or special characters
-- Mathjs expressions run in a safe sandbox environment
-- Missing metrics default to 0 in expressions
-- Use default values in JavaScript functions to handle missing metrics
-  :::
+- Missing metrics default to 0
+- To avoid division by zero: `value: 'numerator / (denominator + 0.0001)'`
+- Debug errors with: `LOG_LEVEL=debug promptfoo eval`
+- No circular dependency protection - order your metrics carefully
 
-See the [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete implementation using derived metrics.
+Derived metrics appear in all outputs alongside regular metrics - in the web UI metrics column, JSON `namedScores`, and CSV columns.
+
+See also:
+
+- [Named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/named-metrics) - Basic named metrics usage
+- [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) - Complete F1 score implementation
+- [MathJS documentation](https://mathjs.org/docs/expressions/syntax.html) - Expression syntax reference
 
 ## Running assertions directly on outputs
 

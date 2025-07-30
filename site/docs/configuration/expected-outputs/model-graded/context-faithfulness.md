@@ -1,52 +1,46 @@
-# Context Faithfulness
+---
+sidebar_label: Context Faithfulness
+---
 
-The `context-faithfulness` assertion evaluates whether the LLM's output is faithful to the provided context, ensuring that the response doesn't include information or claims that aren't supported by the context. This is essential for RAG (Retrieval-Augmented Generation) applications to prevent hallucination.
+# Context faithfulness
 
-### How to use it
+The `context-faithfulness` assertion evaluates whether the AI's response is faithful to the provided context, checking for hallucinations or unsupported claims.
 
-To use the `context-faithfulness` assertion type, add it to your test configuration like this:
+## Configuration
 
 ```yaml
 assert:
   - type: context-faithfulness
-    threshold: 0.9 # Score between 0 and 1
+    threshold: 0.8 # Score from 0 to 1
 ```
 
-Note: This assertion requires `query`, `context`, and the LLM's output to evaluate faithfulness.
+:::note
+
+This assertion requires `query`, context, and the LLM's output to evaluate faithfulness. See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
+
+:::
 
 ### How it works
 
 The context faithfulness checker:
 
-1. Extracts claims and statements from the LLM's output
-2. Verifies each statement against the provided context
-3. Calculates a faithfulness score based on the proportion of supported statements
+1. Analyzes the relationship between the provided context and the AI's response
+2. Identifies claims in the response that are not supported by the context
+3. Returns a score from 0 to 1, where 1 means the response is completely faithful to the context
 
-A higher threshold requires the output to be more strictly supported by the context.
-
-### Example Configuration
-
-Here's a complete example showing how to use context faithfulness in a RAG system:
+### Example
 
 ```yaml
-prompts:
-  - |
-    Answer this question: {{query}}
-    Using this context: {{context}}
-    Be specific and detailed in your response.
-providers:
-  - openai:gpt-4
 tests:
   - vars:
-      query: 'What is our parental leave policy?'
-      context: file://docs/policies/parental_leave.md
+      query: 'What is the capital of France?'
+      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
     assert:
       - type: context-faithfulness
-        threshold: 0.9
-      - type: context-recall
         threshold: 0.8
-        value: 'Employees get 4 months paid leave'
 ```
+
+The assertion will pass if the AI's response about France's capital is faithful to the provided context and doesn't include unsupported information.
 
 ### Overriding the Grader
 
@@ -55,7 +49,7 @@ Like other model-graded assertions, you can override the default grader:
 1. Using the CLI:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4o-mini
+   promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
 2. Using test options:
@@ -63,7 +57,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    ```
 
 3. Using assertion-level override:
@@ -71,7 +65,7 @@ Like other model-graded assertions, you can override the default grader:
    assert:
      - type: context-faithfulness
        threshold: 0.9
-       provider: openai:gpt-4o-mini
+       provider: openai:gpt-4.1-mini
    ```
 
 ### Customizing the Prompt
@@ -97,4 +91,5 @@ defaultTest:
 
 # Further reading
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- See [Defining context](/docs/configuration/expected-outputs/model-graded#defining-context) for instructions on how to set context in your test cases.
+- See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.

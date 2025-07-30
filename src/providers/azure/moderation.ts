@@ -1,20 +1,22 @@
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../shared';
+import { AzureGenericProvider } from './generic';
+
+import type { EnvVarKey } from '../../envars';
 import type {
   ApiModerationProvider,
   ModerationFlag,
   ProviderModerationResponse,
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { AzureGenericProvider } from '../azure';
-import { REQUEST_TIMEOUT_MS } from '../shared';
 
-export const AZURE_MODERATION_MODELS = [
+const AZURE_MODERATION_MODELS = [
   { id: 'text-content-safety', maxTokens: 10000, capabilities: ['text'] },
 ];
 
-export type AzureModerationModelId = string;
+type AzureModerationModelId = string;
 export type AzureModerationCategory = 'Hate' | 'SelfHarm' | 'Sexual' | 'Violence';
 
 interface AzureTextCategoriesAnalysis {
@@ -33,7 +35,7 @@ interface AzureAnalyzeTextResult {
   blocklistsMatch?: AzureTextBlocklistMatch[];
 }
 
-export interface AzureModerationConfig {
+interface AzureModerationConfig {
   apiKey?: string;
   apiKeyEnvar?: string;
   endpoint?: string;
@@ -142,7 +144,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     return (
       this.configWithHeaders.apiKey ||
       (this.configWithHeaders.apiKeyEnvar
-        ? process.env[this.configWithHeaders.apiKeyEnvar] ||
+        ? getEnvString(this.configWithHeaders.apiKeyEnvar as EnvVarKey) ||
           (this.env && this.configWithHeaders.apiKeyEnvar in this.env
             ? (this.env as any)[this.configWithHeaders.apiKeyEnvar]
             : undefined)

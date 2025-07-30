@@ -1,4 +1,10 @@
-# OpenAI DALL-E Image Generation Example
+# openai-dalle-images (OpenAI DALL-E Image Generation Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example openai-dalle-images
+```
 
 A simple example showing how to evaluate OpenAI's DALL-E image generation models with promptfoo.
 

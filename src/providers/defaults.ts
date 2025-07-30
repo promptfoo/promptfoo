@@ -1,17 +1,18 @@
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider } from '../types';
+import type { ApiProvider, DefaultProviders } from '../types';
 import type { EnvOverrides } from '../types/env';
-import type { DefaultProviders, ProviderConfiguration } from '../types/providerConfig';
+import type { ProviderConfiguration } from '../types/providerConfig';
 import { AnthropicProviderConfig } from './anthropic/defaults';
 import { AzureProviderConfig } from './azure/defaults';
 import { BedrockProviderConfig } from './bedrock/defaults';
+import { hasGoogleDefaultCredentials } from './google/util';
+import { GitHubProviderConfig } from './github/defaults';
+import { MistralProviderConfig } from './mistral/defaults';
 import { OpenAiProviderConfig } from './openai/defaults';
 import { GeminiProviderConfig } from './vertex/defaults';
-import { hasGoogleDefaultCredentials } from './vertexUtil';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
-  'datasetGenerationProvider',
   'gradingJsonProvider',
   'gradingProvider',
   'llmRubricProvider',
@@ -59,6 +60,7 @@ interface ProviderEntry {
 }
 
 // Exported for testing
+// Order matters - earlier providers take precedence
 export const PROVIDERS: ProviderEntry[] = [
   // OpenAI Provider
   {
@@ -70,24 +72,7 @@ export const PROVIDERS: ProviderEntry[] = [
   // Azure Provider
   {
     name: 'azure',
-    config: (env) => {
-      // Handle backwards compatibility with both object and function styles
-      if (typeof AzureProviderConfig === 'function') {
-        return AzureProviderConfig(env);
-      }
-
-      // For older style with object interface
-      const config = AzureProviderConfig as any;
-      if (config.getDefaultProvidersWithEnv) {
-        return config.getDefaultProvidersWithEnv(env);
-      }
-      if (config.getDefaultProviders) {
-        return config.getDefaultProviders();
-      }
-
-      // Fallback
-      throw new Error('Azure provider configuration is not properly formatted');
-    },
+    config: AzureProviderConfig,
     hasCredentials: (env) => {
       const hasApiKey = isKeySet('AZURE_OPENAI_API_KEY', env) || isKeySet('AZURE_API_KEY', env);
 
@@ -123,6 +108,20 @@ export const PROVIDERS: ProviderEntry[] = [
     config: GeminiProviderConfig,
     hasCredentials: async () => await hasGoogleDefaultCredentials(),
   },
+
+  // GitHub Models Provider
+  {
+    name: 'github',
+    config: GitHubProviderConfig,
+    hasCredentials: (env) => isKeySet('GITHUB_TOKEN', env),
+  },
+
+  // Mistral Provider
+  {
+    name: 'mistral',
+    config: MistralProviderConfig,
+    hasCredentials: (env) => isKeySet('MISTRAL_API_KEY', env),
+  },
 ];
 
 /**
@@ -132,7 +131,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   // Check if we have programmatic overrides before even checking for providers
   if (defaultCompletionProvider || defaultEmbeddingProvider) {
     // Start with the default OpenAI providers as a base
-    const providers = OpenAiProviderConfig(env);
+    const providers = await OpenAiProviderConfig(env);
 
     // Apply completion provider overrides if set
     if (defaultCompletionProvider) {

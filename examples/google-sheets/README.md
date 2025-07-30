@@ -1,3 +1,11 @@
+# google-sheets (Google Sheets)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example google-sheets
+```
+
 This example shows how to use an external Google Sheet to run tests. To get
 started, set your OPENAI_API_KEY environment variable.
 

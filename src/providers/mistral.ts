@@ -1,6 +1,9 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+
+import type { EnvVarKey } from '../envars';
 import type {
   ApiProvider,
   ProviderEmbeddingResponse,
@@ -8,7 +11,6 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { calculateCost, REQUEST_TIMEOUT_MS, parseChatPrompt } from './shared';
 
 const MISTRAL_CHAT_MODELS = [
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
@@ -86,6 +88,44 @@ const MISTRAL_CHAT_MODELS = [
       output: 6 / 1000000,
     },
   })),
+  // New Magistral models - reasoning models announced June 2025
+  {
+    id: 'magistral-small-2506',
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  },
+  {
+    id: 'magistral-medium-2506',
+    cost: {
+      input: 2 / 1000000,
+      output: 5 / 1000000,
+    },
+  },
+  // Also support latest aliases
+  {
+    id: 'magistral-small-latest',
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  },
+  {
+    id: 'magistral-medium-latest',
+    cost: {
+      input: 2 / 1000000,
+      output: 5 / 1000000,
+    },
+  },
+  // Multimodal model
+  {
+    id: 'pixtral-12b',
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.15 / 1000000,
+    },
+  },
 ];
 
 const MISTRAL_EMBEDDING_MODELS = [
@@ -190,15 +230,15 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
-    return (
-      this.config.apiKey ||
+    const apiKeyCandidate =
+      this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY')
-    );
+      getEnvString('MISTRAL_API_KEY');
+    return apiKeyCandidate;
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -343,15 +383,15 @@ export class MistralEmbeddingProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
-    return (
-      this.config.apiKey ||
+    const apiKeyCandidate =
+      this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] ||
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
           this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY')
-    );
+      getEnvString('MISTRAL_API_KEY');
+    return apiKeyCandidate;
   }
 
   async callApi(text: string): Promise<ProviderResponse> {

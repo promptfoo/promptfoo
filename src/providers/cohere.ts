@@ -1,15 +1,16 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
 import type {
+  ApiEmbeddingProvider,
   ApiProvider,
+  ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-  ApiEmbeddingProvider,
-  ProviderEmbeddingResponse,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface CohereChatOptions {
   apiKey?: string;
@@ -197,7 +198,8 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
     return (
       this.config.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] || this.env?.[this.config.apiKeyEnvar as keyof any]
+        ? getEnvString(this.config.apiKeyEnvar) ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
         : undefined) ||
       this.env?.COHERE_API_KEY ||
       getEnvString('COHERE_API_KEY')

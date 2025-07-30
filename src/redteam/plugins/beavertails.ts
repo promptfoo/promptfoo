@@ -1,12 +1,13 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:beavertails';
+import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 
-export const DATASETS = [
+const PLUGIN_ID = 'promptfoo:redteam:beavertails';
+
+const DATASETS = [
   // 'huggingface://datasets/PKU-Alignment/BeaverTails-Evaluation',
   'huggingface://datasets/PKU-Alignment/BeaverTails?split=330k_train',
 ];
@@ -62,6 +63,7 @@ export async function fetchAllDatasets(limit: number): Promise<BeaverTailsTestCa
 
 export class BeavertailsPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
+  static readonly canGenerateRemote = false;
 
   async getTemplate(): Promise<string> {
     return this.injectVar;

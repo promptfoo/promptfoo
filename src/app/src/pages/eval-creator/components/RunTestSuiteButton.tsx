@@ -1,22 +1,25 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import { useNavigate } from 'react-router-dom';
 
 const RunTestSuiteButton: React.FC = () => {
   const navigate = useNavigate();
+  const { config } = useStore();
   const {
     defaultTest,
+    derivedMetrics,
     description,
     env,
     evaluateOptions,
     prompts,
     providers,
     scenarios,
-    testCases,
-  } = useStore();
+    tests,
+  } = config;
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
@@ -25,13 +28,14 @@ const RunTestSuiteButton: React.FC = () => {
 
     const testSuite = {
       defaultTest,
+      derivedMetrics,
       description,
       env,
       evaluateOptions,
       prompts,
       providers,
       scenarios,
-      tests: testCases,
+      tests, // Note: This is 'tests' in the API, not 'testCases'
     };
 
     try {
@@ -50,31 +54,38 @@ const RunTestSuiteButton: React.FC = () => {
       const job = await response.json();
 
       const intervalId = setInterval(async () => {
-        const progressResponse = await callApi(`/eval/job/${job.id}/`);
+        try {
+          const progressResponse = await callApi(`/eval/job/${job.id}/`);
 
-        if (!progressResponse.ok) {
+          if (!progressResponse.ok) {
+            clearInterval(intervalId);
+            throw new Error(`HTTP error! status: ${progressResponse.status}`);
+          }
+
+          const progressData = await progressResponse.json();
+
+          if (progressData.status === 'complete') {
+            clearInterval(intervalId);
+            setIsRunning(false);
+            if (progressData.evalId) {
+              navigate(`/eval/${progressData.evalId}`);
+            }
+          } else if (['failed', 'error'].includes(progressData.status)) {
+            clearInterval(intervalId);
+            setIsRunning(false);
+            throw new Error(progressData.logs?.join('\n') || 'Job failed');
+          } else {
+            const percent =
+              progressData.total === 0
+                ? 0
+                : Math.round((progressData.progress / progressData.total) * 100);
+            setProgressPercent(percent);
+          }
+        } catch (error) {
           clearInterval(intervalId);
-          throw new Error(`HTTP error! status: ${progressResponse.status}`);
-        }
-
-        const progressData = await progressResponse.json();
-
-        if (progressData.status === 'complete') {
-          clearInterval(intervalId);
+          console.error(error);
           setIsRunning(false);
-
-          // TODO(ian): This just redirects to the eval page, which shows the most recent eval.  Redirect to this specific eval to avoid race.
-          navigate('/eval');
-        } else if (progressData.status === 'failed') {
-          clearInterval(intervalId);
-          setIsRunning(false);
-          throw new Error('Job failed');
-        } else {
-          const percent =
-            progressData.total === 0
-              ? 0
-              : Math.round((progressData.progress / progressData.total) * 100);
-          setProgressPercent(percent);
+          alert(`An error occurred: ${(error as Error).message}`);
         }
       }, 1000);
     } catch (error) {
@@ -92,7 +103,7 @@ const RunTestSuiteButton: React.FC = () => {
           {progressPercent.toFixed(0)}% complete
         </>
       ) : (
-        'Run Evaluation'
+        'Run Eval'
       )}
     </Button>
   );

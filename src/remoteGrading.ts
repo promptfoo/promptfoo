@@ -3,6 +3,7 @@ import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getRemoteGenerationUrl } from './redteam/remoteGeneration';
+
 import type { GradingResult } from './types';
 
 type RemoteGradingPayload = {
@@ -17,7 +18,7 @@ export async function doRemoteGrading(
     payload.email = getUserEmail();
     const body = JSON.stringify(payload);
     logger.debug(`Performing remote grading: ${body}`);
-    const { data } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -29,8 +30,21 @@ export async function doRemoteGrading(
       REQUEST_TIMEOUT_MS,
     );
 
+    logger.debug(
+      `Remote grading result: status=${status}, statusText=${statusText}, data=${JSON.stringify(data)}`,
+    );
+
+    if (status !== 200) {
+      throw new Error(
+        `Remote grading failed with status ${status}: ${statusText} ${JSON.stringify(data)}`,
+      );
+    }
     const { result } = data as { result: GradingResult };
-    logger.debug(`Got remote grading result: ${JSON.stringify(result)}`);
+
+    if (!result || result.pass === undefined) {
+      throw new Error(`Remote grading failed. Response data is invalid: ${JSON.stringify(data)}`);
+    }
+
     return {
       pass: result.pass,
       score: result.score,

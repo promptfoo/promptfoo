@@ -7,31 +7,36 @@ import {
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
 } from '../redteam/remoteGeneration';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
 import type {
   ApiProvider,
-  ProviderResponse,
   CallApiContextParams,
   CallApiOptionsParams,
+  PluginConfig,
+  ProviderResponse,
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
   n: number;
   purpose: string;
+  config?: PluginConfig;
 }
 
 export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   harmCategory: string;
   n: number;
   purpose: string;
+  config?: PluginConfig;
 
   constructor(options: PromptfooHarmfulCompletionOptions) {
     this.harmCategory = options.harmCategory;
     this.n = options.n;
     this.purpose = options.purpose;
+    this.config = options.config;
   }
 
   id(): string {
@@ -53,6 +58,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       n: this.n,
       purpose: this.purpose,
       version: VERSION,
+      config: this.config,
     };
 
     try {
@@ -79,8 +85,16 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
       const data = await response.json();
       logger.debug(`[HarmfulCompletionProvider] API call response: ${JSON.stringify(data)}`);
+
+      const validOutputs: string[] = (
+        Array.isArray(data.output) ? data.output : [data.output]
+      ).filter(
+        (item: string | null | undefined): item is string =>
+          typeof item === 'string' && item.length > 0,
+      );
+
       return {
-        output: [data.output].flat(),
+        output: validOutputs,
       };
     } catch (err) {
       logger.info(`[HarmfulCompletionProvider] ${err}`);
@@ -96,7 +110,14 @@ interface PromptfooChatCompletionOptions {
   id?: string;
   jsonOnly: boolean;
   preferSmallModel: boolean;
-  task: 'crescendo' | 'goat' | 'iterative' | 'iterative:image' | 'iterative:tree';
+  task:
+    | 'crescendo'
+    | 'goat'
+    | 'iterative'
+    | 'iterative:image'
+    | 'iterative:tree'
+    | 'judge'
+    | 'blocking-question-analysis';
 }
 
 export class PromptfooChatCompletionProvider implements ApiProvider {
@@ -172,9 +193,11 @@ interface PromptfooAgentOptions {
 
 export class PromptfooSimulatedUserProvider implements ApiProvider {
   private options: PromptfooAgentOptions;
+  private taskId: string;
 
-  constructor(options: PromptfooAgentOptions = {}) {
+  constructor(options: PromptfooAgentOptions = {}, taskId: string) {
     this.options = options;
+    this.taskId = taskId;
   }
 
   id(): string {
@@ -192,7 +215,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const messages = JSON.parse(prompt);
     const body = {
-      task: 'tau',
+      task: this.taskId,
       instructions: this.options.instructions,
       history: messages,
       email: getUserEmail(),

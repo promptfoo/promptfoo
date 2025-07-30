@@ -1,9 +1,10 @@
-import React, { useState, memo } from 'react';
+import { memo, useState } from 'react';
+
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 
 interface Message {
   role: 'user' | 'assistant' | 'system';

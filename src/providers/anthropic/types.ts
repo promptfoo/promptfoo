@@ -1,5 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
+import type { MCPConfig } from '../mcp/types';
+
 export interface AnthropicMessageOptions {
   apiBaseUrl?: string;
   apiKey?: string;
@@ -16,6 +18,7 @@ export interface AnthropicMessageOptions {
   top_p?: number;
   beta?: string[]; // For features like 'output-128k-2025-02-19'
   showThinking?: boolean;
+  mcp?: MCPConfig;
 }
 
 export interface AnthropicCompletionOptions {
@@ -24,4 +27,5 @@ export interface AnthropicCompletionOptions {
   temperature?: number;
   top_p?: number;
   top_k?: number;
+  mcp?: MCPConfig;
 }

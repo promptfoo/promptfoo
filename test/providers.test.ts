@@ -1,6 +1,7 @@
 import fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import yaml from 'js-yaml';
 import cliState from '../src/cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
 import { loadApiProvider, loadApiProviders } from '../src/providers';
@@ -10,8 +11,9 @@ import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
+import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
+
 import type { ProviderOptions } from '../src/types';
-import { getProviderFromCloud } from '../src/util/cloud';
 
 jest.mock('fs');
 jest.mock('js-yaml');
@@ -28,6 +30,14 @@ describe('loadApiProvider', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.spyOn(process, 'exit').mockImplementation((() => {}) as any);
+
+    // Mock the cloud utility functions
+    jest
+      .mocked(isCloudProvider)
+      .mockImplementation((path: string) => path.startsWith('promptfoo://provider/'));
+    jest
+      .mocked(getCloudDatabaseId)
+      .mockImplementation((path: string) => path.slice('promptfoo://provider/'.length));
   });
 
   it('should load echo provider', async () => {
@@ -110,14 +120,17 @@ describe('loadApiProvider', () => {
   });
 
   it('should load OpenAI chat provider', async () => {
-    const provider = await loadApiProvider('openai:chat:gpt-4');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
+    const provider = await loadApiProvider('openai:chat:gpt-4.1');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4.1', expect.any(Object));
     expect(provider).toBeDefined();
   });
 
   it('should load OpenAI chat provider with default model', async () => {
     const provider = await loadApiProvider('openai:chat');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4o-mini', expect.any(Object));
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-4.1-2025-04-14',
+      expect.any(Object),
+    );
     expect(provider).toBeDefined();
   });
 
@@ -166,6 +179,28 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should load GitHub provider with default model', async () => {
+    const provider = await loadApiProvider('github:');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1', {
+      config: expect.objectContaining({
+        apiBaseUrl: 'https://models.github.ai',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      }),
+    });
+    expect(provider).toBeDefined();
+  });
+
+  it('should load GitHub provider with specific model', async () => {
+    const provider = await loadApiProvider('github:openai/gpt-4.1-mini');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1-mini', {
+      config: expect.objectContaining({
+        apiBaseUrl: 'https://models.github.ai',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      }),
+    });
+    expect(provider).toBeDefined();
+  });
+
   it('should load HTTP provider', async () => {
     const provider = await loadApiProvider('http://test.com');
     expect(HttpProvider).toHaveBeenCalledWith('http://test.com', expect.any(Object));
@@ -186,19 +221,28 @@ describe('loadApiProvider', () => {
 
   it('should load script provider', async () => {
     const provider = await loadApiProvider('exec:test.sh');
-    expect(ScriptCompletionProvider).toHaveBeenCalledWith('test.sh', expect.any(Object));
+    expect(ScriptCompletionProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/test\.sh$/),
+      expect.any(Object),
+    );
     expect(provider).toBeDefined();
   });
 
   it('should load Python provider', async () => {
     const provider = await loadApiProvider('python:test.py');
-    expect(PythonProvider).toHaveBeenCalledWith('test.py', expect.any(Object));
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/test\.py$/),
+      expect.any(Object),
+    );
     expect(provider).toBeDefined();
   });
 
   it('should load Python provider from file path', async () => {
     const provider = await loadApiProvider('file://test.py');
-    expect(PythonProvider).toHaveBeenCalledWith('test.py', expect.any(Object));
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/test\.py$/),
+      expect.any(Object),
+    );
     expect(provider).toBeDefined();
   });
 
@@ -539,6 +583,101 @@ describe('loadApiProviders', () => {
     expect(providers).toHaveLength(1);
     expect(fs.readFileSync).toHaveBeenCalledWith(absolutePath, 'utf8');
     expect(yaml.load).toHaveBeenCalledWith('yaml content');
+  });
+
+  it('should load multiple providers from a file specified in a providers array', async () => {
+    // Setup mock file with multiple providers
+    const yamlContent = [
+      {
+        id: 'echo',
+        config: { prefix: 'Echo Provider: ' },
+      },
+      {
+        id: 'openai:gpt-4o-mini',
+        config: { temperature: 0.1 },
+      },
+    ];
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContent);
+
+    // Create provider array with a mix of direct provider and file reference
+    const providerArray = [
+      'anthropic:claude-3-5-sonnet-20241022',
+      'file://./providers.yaml', // This should expand to the two providers above
+    ];
+
+    const providers = await loadApiProviders(providerArray);
+
+    // We should get 3 providers: 1 direct + 2 from file
+    expect(providers).toHaveLength(3);
+
+    // Just verify that all providers are defined
+    providers.forEach((provider) => {
+      expect(provider).toBeDefined();
+    });
+
+    // Verify file was read correctly
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('providers.yaml'), 'utf8');
+    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+  });
+
+  it('should handle nested arrays of providers from multiple file references', async () => {
+    // First file
+    const firstFileContent = [
+      {
+        id: 'echo',
+        config: { prefix: 'First file: ' },
+      },
+    ];
+
+    // Second file
+    const secondFileContent = [
+      {
+        id: 'openai:gpt-4o-mini',
+        config: { temperature: 0.1 },
+      },
+      {
+        id: 'anthropic:claude-3-5-sonnet-20241022',
+        config: { temperature: 0.7 },
+      },
+    ];
+
+    // Mock the file system read for different paths
+    jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (filePath.toString().includes('first.yaml')) {
+        return 'first file content';
+      } else if (filePath.toString().includes('second.yaml')) {
+        return 'second file content';
+      }
+      return '';
+    });
+
+    // Mock yaml loading based on different file contents
+    jest.mocked(yaml.load).mockImplementation((content) => {
+      if (content === 'first file content') {
+        return firstFileContent;
+      } else if (content === 'second file content') {
+        return secondFileContent;
+      }
+      return null;
+    });
+
+    // Provider array with multiple file references
+    const providerArray = ['file://./first.yaml', 'file://./second.yaml'];
+
+    const providers = await loadApiProviders(providerArray);
+
+    // We should get 3 providers total: 1 from first file + 2 from second file
+    expect(providers).toHaveLength(3);
+
+    // Just verify all providers are defined
+    providers.forEach((provider) => {
+      expect(provider).toBeDefined();
+    });
+
+    // Verify both files were read
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('first.yaml'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('second.yaml'), 'utf8');
   });
 
   it('should use env values from cliState.config', async () => {

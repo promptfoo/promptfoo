@@ -38,6 +38,8 @@ func handlePrompt(prompt string, options map[string]interface{}, ctx map[string]
 	}, nil
 }
 
+var CallApi func(string, map[string]interface{}, map[string]interface{}) (map[string]interface{}, error)
+
 func init() {
 	// Assign our implementation to the wrapper's CallApi function.
 	// This makes it available to promptfoo for evaluation.

@@ -1,4 +1,3 @@
-import React from 'react';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ForumIcon from '@mui/icons-material/Forum';
@@ -14,7 +13,7 @@ import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
-const links: { icon: React.ReactNode; text: string; href: string }[] = [
+const links: { icon: JSX.Element; text: string; href: string }[] = [
   {
     icon: <MenuBookIcon fontSize="small" />,
     text: 'Documentation',

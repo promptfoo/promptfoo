@@ -1,0 +1,47 @@
+[
+  {
+    "type": "file_search"
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_weather",
+      "description": "Get current weather information for a location",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "The city and state e.g. Seattle, WA"
+          },
+          "unit": {
+            "type": "string",
+            "enum": ["c", "f"],
+            "description": "Temperature unit (c for Celsius, f for Fahrenheit)"
+          }
+        },
+        "required": ["location"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "suggest_recipe",
+      "description": "Suggest a recipe based on ingredients",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "ingredients": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Available ingredients"
+          }
+        },
+        "required": ["ingredients"]
+      }
+    }
+  }
+]

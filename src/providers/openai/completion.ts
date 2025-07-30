@@ -1,13 +1,18 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
-import { getEnvString, getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
+import {
+  calculateOpenAICost,
+  formatOpenAiError,
+  getTokenUsage,
+  OPENAI_COMPLETION_MODELS,
+} from './util';
+
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
-import { REQUEST_TIMEOUT_MS } from '../shared';
 import type { OpenAiCompletionOptions } from './types';
-import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = OPENAI_COMPLETION_MODELS;
@@ -35,7 +40,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
+    if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
         'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
@@ -75,13 +80,15 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);

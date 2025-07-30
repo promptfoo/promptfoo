@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: xAI image generation evaluation
+prompts:
+  - 'In the style of {{artist}}: {{subject}}'
+
+providers:
+  - xai:image:grok-2-image
+
+tests:
+  - vars:
+      artist: Van Gogh
+      subject: sunset over mountains
+  - vars:
+      artist: Dali
+      subject: melting clocks

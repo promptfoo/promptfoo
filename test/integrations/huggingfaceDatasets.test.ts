@@ -1,3 +1,4 @@
+import { getEnvString } from '../../src/envars';
 import { fetchWithProxy } from '../../src/fetch';
 import {
   fetchHuggingFaceDataset,
@@ -8,21 +9,18 @@ jest.mock('../../src/fetch', () => ({
   fetchWithProxy: jest.fn(),
 }));
 
-describe('huggingfaceDatasets', () => {
-  let originalHfApiToken: string | undefined;
+jest.mock('../../src/envars', () => ({
+  getEnvString: jest.fn().mockReturnValue(''),
+}));
 
+describe('huggingfaceDatasets', () => {
   beforeEach(() => {
     jest.mocked(fetchWithProxy).mockClear();
-    originalHfApiToken = process.env.HF_API_TOKEN;
-    delete process.env.HF_API_TOKEN;
+    jest.mocked(getEnvString).mockReturnValue('');
   });
 
   afterEach(() => {
-    if (originalHfApiToken) {
-      process.env.HF_API_TOKEN = originalHfApiToken;
-    } else {
-      delete process.env.HF_API_TOKEN;
-    }
+    jest.resetAllMocks();
   });
 
   describe('parseDatasetPath', () => {
@@ -92,10 +90,22 @@ describe('huggingfaceDatasets', () => {
       act: 'Math Tutor',
       prompt: 'Solve 2+2',
     });
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
   });
 
   it('should include auth token when HF_TOKEN is set', async () => {
-    process.env.HF_TOKEN = 'test-token';
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      if (key === 'HF_TOKEN') {
+        return 'test-token';
+      }
+      return '';
+    });
 
     jest.mocked(fetchWithProxy).mockResolvedValueOnce({
       ok: true,
@@ -119,8 +129,6 @@ describe('huggingfaceDatasets', () => {
         },
       }),
     );
-
-    delete process.env.HF_TOKEN;
   });
 
   it('should handle custom query parameters', async () => {
@@ -185,6 +193,13 @@ describe('huggingfaceDatasets', () => {
 
     expect(tests).toHaveLength(3);
     expect(tests.map((t) => t.vars?.text)).toEqual(['First', 'Second', 'Third']);
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
   });
 
   it('should handle API errors', async () => {
@@ -219,6 +234,13 @@ describe('huggingfaceDatasets', () => {
 
     expect(tests).toHaveLength(2);
     expect(tests.map((t) => t.vars?.text)).toEqual(['First', 'Second']);
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
   });
 
   it('should handle limit larger than page size', async () => {
@@ -264,5 +286,12 @@ describe('huggingfaceDatasets', () => {
 
     expect(tests).toHaveLength(120);
     expect(tests[119].vars?.text).toBe('Item 120');
+
+    // Check that disableVarExpansion is set for all test cases
+    tests.forEach((test) => {
+      expect(test.options).toEqual({
+        disableVarExpansion: true,
+      });
+    });
   });
 });

@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Vertex AI model evaluation and testing
+
 # This configuration runs each prompt through a series of example inputs and checks if they meet requirements.
 
 prompts:
@@ -8,9 +10,9 @@ providers:
   - id: 'vertex:gemini-1.5-flash'
     config:
       systemInstruction:
-      parts:
-        - text: Always talk like a cow. Mooo!
-  - id: 'vertex:gemini-2.0-flash-thinking-exp-1219'
+        parts:
+          - text: Always talk like a cow. Mooo!
+  - id: 'vertex:gemini-2.0-flash-thinking-exp'
     config:
       systemInstruction:
         parts:

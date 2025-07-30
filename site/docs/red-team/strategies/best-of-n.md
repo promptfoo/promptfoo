@@ -1,5 +1,7 @@
 ---
 sidebar_label: Best-of-N
+title: Best-of-N Jailbreaking Strategy
+description: Black-box jailbreaking technique that tests multiple prompt variations to bypass safety mechanisms
 ---
 
 # Best-of-N (BoN) Jailbreaking Strategy
@@ -14,12 +16,12 @@ While this technique achieves high attack success rates - 89% on GPT-4o and 78% 
 
 Use it like so in your `promptfooconfig.yaml`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   - id: best-of-n
     config:
       useBasicRefusal: false
-      maxConcurrency: 5 # Maximum concurrent API calls (default)
+      maxConcurrency: 3 # Maximum concurrent API calls (default)
       nSteps: 10000 # Maximum number of attempts (optional)
       maxCandidatesPerStep: 1 # Maximum candidates per batch (optional)
 ```
@@ -31,7 +33,6 @@ strategies:
 BoN Jailbreaking works through a simple three-step process:
 
 1. **Generate Variations**: Creates multiple versions of the input prompt using modality-specific augmentations:
-
    - Text: Random capitalization, character scrambling, character noising
    - Vision: Font variations, background colors, text positioning
    - Audio: Speed, pitch, volume, background noise modifications
@@ -56,7 +57,7 @@ We recommend using this setting whenever possible if the default response to you
 ### maxConcurrency
 
 **Type:** `number`  
-**Default:** `5`
+**Default:** `3`
 
 Maximum number of prompt variations to test simultaneously. Higher values increase throughput. We recommend setting this as high as your rate limits allow.
 

@@ -1,6 +1,8 @@
+# claude-thinking (Claude Thinking)
+
 ---
-description: "Demonstrates Claude's thinking capability for complex problem solving"
----
+
+## description: "Demonstrates Claude's thinking capability for complex problem solving"
 
 # Claude's Step-by-Step Thinking Demonstration
 

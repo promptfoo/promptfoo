@@ -1,12 +1,15 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
 import { redteamProviderManager } from '../providers/shared';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
+import { getShortPluginId } from '../util';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
+import type { Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>
@@ -30,6 +33,10 @@ const DEFAULT_EXAMPLES = dedent`
 
 export class CrossSessionLeakPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
+
+  protected getDefaultExcludedStrategies(): string[] {
+    return [...MULTI_TURN_STRATEGIES];
+  }
 
   protected async getTemplate(): Promise<string> {
     return dedent`
@@ -73,12 +80,13 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       purpose: this.purpose,
       n,
     });
+    const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
     const provider = await redteamProviderManager.getProvider({
       provider: this.provider,
       jsonOnly: true,
     });
 
-    const { output, error } = await provider.callApi(renderedTemplate);
+    const { output, error } = await provider.callApi(finalTemplate);
     if (error) {
       logger.error(`Error generating cross-session leak prompts: ${error}`);
       return [];
@@ -103,6 +111,10 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       tests.push({
         options: { runSerially: true },
         vars: { [this.injectVar]: userA },
+        metadata: {
+          pluginId: getShortPluginId(this.id),
+          pluginConfig: this.config,
+        },
       });
       tests.push({
         options: { runSerially: true },
@@ -110,6 +122,8 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
         assert: this.getAssertions(userB),
         metadata: {
           crossSessionLeakMatch: match,
+          pluginId: getShortPluginId(this.id),
+          pluginConfig: this.config,
         },
       });
     }

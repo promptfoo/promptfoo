@@ -1,23 +1,23 @@
 import { relations, sql } from 'drizzle-orm';
 import {
-  text,
-  integer,
-  sqliteTable,
-  primaryKey,
   index,
-  uniqueIndex,
+  integer,
+  primaryKey,
   real,
+  sqliteTable,
+  text,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 import {
-  type Prompt,
-  type ProviderResponse,
-  type GradingResult,
-  type UnifiedConfig,
-  type ProviderOptions,
   type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateSummaryV2,
+  type GradingResult,
+  type Prompt,
+  type ProviderOptions,
+  type ProviderResponse,
   ResultFailureReason,
+  type UnifiedConfig,
 } from '../types';
 
 // ------------ Prompts ------------
@@ -26,9 +26,7 @@ export const promptsTable = sqliteTable(
   'prompts',
   {
     id: text('id').primaryKey(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     prompt: text('prompt').notNull(),
   },
   (table) => ({
@@ -57,14 +55,13 @@ export const evalsTable = sqliteTable(
   'evals',
   {
     id: text('id').primaryKey(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     author: text('author'),
     description: text('description'),
     results: text('results', { mode: 'json' }).$type<EvaluateSummaryV2 | object>().notNull(),
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
+    vars: text('vars', { mode: 'json' }).$type<string[]>(),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
@@ -76,12 +73,8 @@ export const evalResultsTable = sqliteTable(
   'eval_results',
   {
     id: text('id').primaryKey(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: integer('updated_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     evalId: text('eval_id')
       .notNull()
       .references(() => evalsTable.id),
@@ -114,6 +107,33 @@ export const evalResultsTable = sqliteTable(
   },
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
+    testIdxIdx: index('eval_result_test_idx').on(table.testIdx),
+
+    responseIdx: index('eval_result_response_idx').on(table.response),
+
+    gradingResultReasonIdx: index('eval_result_grading_result_reason_idx').on(
+      sql`json_extract(${table.gradingResult}, '$.reason')`,
+    ),
+    gradingResultCommentIdx: index('eval_result_grading_result_comment_idx').on(
+      sql`json_extract(${table.gradingResult}, '$.comment')`,
+    ),
+    testCaseVarsIdx: index('eval_result_test_case_vars_idx').on(
+      sql`json_extract(${table.testCase}, '$.vars')`,
+    ),
+    testCaseMetadataIdx: index('eval_result_test_case_metadata_idx').on(
+      sql`json_extract(${table.metadata}, '$')`,
+    ),
+    namedScoresIdx: index('eval_result_named_scores_idx').on(
+      sql`json_extract(${table.namedScores}, '$')`,
+    ),
+    metadataIdx: index('eval_result_metadata_idx').on(sql`json_extract(${table.metadata}, '$')`),
+
+    metadataPluginIdIdx: index('eval_result_metadata_plugin_id_idx').on(
+      sql`json_extract(${table.metadata}, '$.pluginId')`,
+    ),
+    metadataStrategyIdIdx: index('eval_result_metadata_strategy_id_idx').on(
+      sql`json_extract(${table.metadata}, '$.strategyId')`,
+    ),
   }),
 );
 
@@ -177,9 +197,7 @@ export const datasetsTable = sqliteTable(
   {
     id: text('id').primaryKey(),
     tests: text('tests', { mode: 'json' }).$type<UnifiedConfig['tests']>(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({
     createdAtIdx: index('datasets_created_at_idx').on(table.createdAt),
@@ -245,12 +263,8 @@ export const configsTable = sqliteTable(
   'configs',
   {
     id: text('id').primaryKey(),
-    createdAt: integer('created_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: integer('updated_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     name: text('name').notNull(),
     type: text('type').notNull(), // e.g. 'redteam', 'eval', etc.
     config: text('config', { mode: 'json' }).notNull(),
@@ -303,3 +317,62 @@ export const llmOutputsRelations = relations(llmOutputs, ({ one }) => ({
   }),
 }));
 */
+
+// ------------ Traces ------------
+
+export const tracesTable = sqliteTable(
+  'traces',
+  {
+    id: text('id').primaryKey(),
+    traceId: text('trace_id').notNull().unique(),
+    evaluationId: text('evaluation_id')
+      .notNull()
+      .references(() => evalsTable.id),
+    testCaseId: text('test_case_id').notNull(),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>(),
+  },
+  (table) => ({
+    evaluationIdx: index('traces_evaluation_idx').on(table.evaluationId),
+    traceIdIdx: index('traces_trace_id_idx').on(table.traceId),
+  }),
+);
+
+export const spansTable = sqliteTable(
+  'spans',
+  {
+    id: text('id').primaryKey(),
+    traceId: text('trace_id')
+      .notNull()
+      .references(() => tracesTable.traceId),
+    spanId: text('span_id').notNull(),
+    parentSpanId: text('parent_span_id'),
+    name: text('name').notNull(),
+    startTime: integer('start_time').notNull(),
+    endTime: integer('end_time'),
+    attributes: text('attributes', { mode: 'json' }).$type<Record<string, any>>(),
+    statusCode: integer('status_code'),
+    statusMessage: text('status_message'),
+  },
+  (table) => ({
+    traceIdIdx: index('spans_trace_id_idx').on(table.traceId),
+    spanIdIdx: index('spans_span_id_idx').on(table.spanId),
+  }),
+);
+
+// ------------ Trace Relations ------------
+
+export const tracesRelations = relations(tracesTable, ({ one, many }) => ({
+  eval: one(evalsTable, {
+    fields: [tracesTable.evaluationId],
+    references: [evalsTable.id],
+  }),
+  spans: many(spansTable),
+}));
+
+export const spansRelations = relations(spansTable, ({ one }) => ({
+  trace: one(tracesTable, {
+    fields: [spansTable.traceId],
+    references: [tracesTable.traceId],
+  }),
+}));

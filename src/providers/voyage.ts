@@ -1,8 +1,9 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiEmbeddingProvider, ProviderResponse, ProviderEmbeddingResponse } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+import type { ApiEmbeddingProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
 
 export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   modelName: string;
@@ -20,14 +21,14 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
+    const apiKeyCandidate =
+      this.config?.apiKey ||
       (this.config?.apiKeyEnvar
-        ? process.env[this.config.apiKeyEnvar] || this.env?.[this.config.apiKeyEnvar as keyof any]
+        ? getEnvString(this.config.apiKeyEnvar) || this.env?.[this.config.apiKeyEnvar as keyof any]
         : undefined) ||
       this.env?.VOYAGE_API_KEY ||
-      getEnvString('VOYAGE_API_KEY')
-    );
+      getEnvString('VOYAGE_API_KEY');
+    return apiKeyCandidate;
   }
 
   getApiUrl(): string {

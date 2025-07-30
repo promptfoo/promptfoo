@@ -1,15 +1,16 @@
+import fs from 'fs/promises';
+import path from 'path';
+
 import confirm from '@inquirer/confirm';
 import select from '@inquirer/select';
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
-import fs from 'fs/promises';
-import path from 'path';
 import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
-import { isRunningUnderNpx, setupEnv } from '../util';
+import { isRunningUnderNpx } from '../util';
+import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
@@ -23,17 +24,31 @@ export async function downloadFile(url: string, filePath: string): Promise<void>
 }
 
 export async function downloadDirectory(dirPath: string, targetDir: string): Promise<void> {
+  // First try with VERSION
   const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${VERSION}`;
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     headers: {
       Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'promptfoo-cli',
     },
   });
 
+  // If VERSION fails, try with 'main'
   if (!response.ok) {
-    throw new Error(`Failed to fetch directory contents: ${response.statusText}`);
+    const mainUrl = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=main`;
+    response = await fetch(mainUrl, {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'promptfoo-cli',
+      },
+    });
+
+    // If both attempts fail, throw an error
+    if (!response.ok) {
+      throw new Error(`Failed to fetch directory contents: ${response.statusText}`);
+    }
   }
+
   const contents = await response.json();
 
   for (const item of contents) {
@@ -86,7 +101,7 @@ export async function getExamplesList(): Promise<string[]> {
   }
 }
 
-export async function selectExample(): Promise<string> {
+async function selectExample(): Promise<string> {
   const examples = await getExamplesList();
   const choices = [
     { name: 'None (initialize with dummy files)', value: '' },
@@ -166,7 +181,6 @@ async function handleExampleDownload(
 interface InitCommandOptions {
   interactive: boolean;
   example: string | boolean | undefined;
-  envPath: string | undefined;
 }
 
 export function initCommand(program: Command) {
@@ -174,14 +188,11 @@ export function initCommand(program: Command) {
     .command('init [directory]')
     .description('Initialize project with dummy files or download an example')
     .option('--no-interactive', 'Do not run in interactive mode')
-    .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
       telemetry.record('command_used', {
         name: 'init - started',
       });
-      setupEnv(cmdObj.envPath);
-
       if (directory === 'redteam' && cmdObj.interactive) {
         const useRedteam = await confirm({
           message:
@@ -208,6 +219,5 @@ export function initCommand(program: Command) {
           name: 'init',
         });
       }
-      await telemetry.send();
     });
 }

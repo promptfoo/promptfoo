@@ -1,6 +1,7 @@
-import { describe, it, expect } from '@jest/globals';
+import { describe, expect, it } from '@jest/globals';
 import { addGoatTestCases } from '../../../src/redteam/strategies/goat';
-import type { TestCaseWithPlugin, AssertionType } from '../../../src/types';
+
+import type { AssertionType, TestCaseWithPlugin } from '../../../src/types';
 
 describe('GOAT Strategy', () => {
   it('should add GOAT configuration to test cases', async () => {
@@ -33,6 +34,7 @@ describe('GOAT Strategy', () => {
     expect(result[0].metadata).toEqual({
       pluginId: 'test-plugin',
       strategyId: 'goat',
+      originalText: 'test goal',
     });
   });
 
@@ -54,6 +56,7 @@ describe('GOAT Strategy', () => {
       pluginId: 'test-plugin',
       key: 'value',
       strategyId: 'goat',
+      originalText: 'test goal',
     });
   });
 });

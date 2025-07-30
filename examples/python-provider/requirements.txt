@@ -3,7 +3,7 @@ anyio==4.2.0
 certifi==2024.7.4
 distro==1.9.0
 exceptiongroup==1.2.0
-h11==0.14.0
+h11==0.16.0
 httpcore==1.0.2
 httpx==0.26.0
 idna==3.7

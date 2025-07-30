@@ -1,18 +1,17 @@
 import React from 'react';
+
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpIcon from '@mui/icons-material/Help';
-import {
-  Box,
-  TextField,
-  IconButton,
-  Tooltip,
-  Typography,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@mui/material';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
-import { isJavascriptFile } from '@promptfoo/util/file';
+import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
+import { isJavascriptFile } from '@promptfoo/util/fileExtensions';
 
 interface ValidationError {
   message: string;
@@ -60,7 +59,7 @@ export default function ExtensionEditor({
   onValidationChange,
 }: ExtensionEditorProps) {
   const [isTyping, setIsTyping] = React.useState(false);
-  const typingTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const typingTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const error = React.useMemo(() => validatePath(extensions[0], isTyping), [extensions, isTyping]);
 

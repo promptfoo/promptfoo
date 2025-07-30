@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES } from '../../../src/redteam/constants';
 
 describe('Strategy IDs', () => {
@@ -82,15 +83,20 @@ describe('Strategy IDs', () => {
       gcg: 'gcg.ts',
       goat: 'goat.ts',
       hex: 'hex.ts',
+      homoglyph: 'homoglyph.ts',
       image: 'simpleImage.ts',
       audio: 'simpleAudio.ts',
       leetspeak: 'leetspeak.ts',
       'math-prompt': 'mathPrompt.ts',
+      'mischievous-user': 'mischievousUser.ts',
+      morse: 'otherEncodings.ts',
       multilingual: 'multilingual.ts',
       pandamonium: 'pandamonium.ts',
+      piglatin: 'otherEncodings.ts',
       'prompt-injection': 'promptInjections/index.ts',
       retry: 'retry.ts',
       rot13: 'rot13.ts',
+      video: 'simpleVideo.ts',
     };
 
     // Check all defined strategies

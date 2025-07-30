@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600">
+  <!-- Background -->
+  <rect width="1000" height="600" fill="#ffffff"/>
+  
+  <!-- Main Pyramid Structure -->
+  <path d="M50,550 L950,550 L500,50 Z" fill="#f8f9fa" stroke="#2563eb" stroke-width="3"/>
+  
+  <!-- Horizontal Sections - Precisely calculated to meet edges -->
+  <line x1="200" y1="383" x2="800" y2="383" stroke="#2563eb" stroke-width="2"/>
+  <line x1="350" y1="217" x2="650" y2="217" stroke="#2563eb" stroke-width="2"/>
+  
+  <!-- Text Sections -->
+  <!-- Bottom Level -->
+  <text x="500" y="500" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold" fill="#1e40af">AI Code of Conduct</text>
+  <text x="500" y="470" text-anchor="middle" font-family="Arial" font-size="16" fill="#3b82f6">Brand Values • Legal Requirements • Ethical Guidelines</text>
+  
+  <!-- Middle Level -->
+  <text x="500" y="343" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold" fill="#1e40af">Specific Goals</text>
+  <text x="500" y="313" text-anchor="middle" font-family="Arial" font-size="16" fill="#3b82f6">Technical • Operational • Compliance</text>
+  
+  <!-- Top Level -->
+  <text x="500" y="177" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold" fill="#1e40af">Success Metrics</text>
+  <text x="500" y="147" text-anchor="middle" font-family="Arial" font-size="16" fill="#3b82f6">KPIs • Benchmarks</text>
+</svg>

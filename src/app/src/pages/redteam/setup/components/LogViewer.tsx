@@ -1,4 +1,5 @@
-import React, { useCallback, useRef, useMemo, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+
 import { useToast } from '@app/hooks/useToast';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -11,8 +12,8 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Fab from '@mui/material/Fab';
 import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import Convert from 'ansi-to-html';
 
 interface LogViewerProps {
@@ -78,7 +79,7 @@ export function LogViewer({ logs }: LogViewerProps) {
     }
   }, [logs, shouldAutoScroll]);
 
-  const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement>) => {
+  const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement | null>) => {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
       setShouldAutoScroll(true);

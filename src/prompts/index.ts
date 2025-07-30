@@ -1,18 +1,10 @@
 import { globSync } from 'glob';
 import logger from '../logger';
-import type {
-  UnifiedConfig,
-  Prompt,
-  PromptFunction,
-  ProviderOptionsMap,
-  TestSuite,
-  ProviderOptions,
-  EvaluateTestSuite,
-} from '../types';
 import { parsePathOrGlob } from '../util';
-import { isJavascriptFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
+import { processCsvPrompts } from './processors/csv';
 import { processJsFile } from './processors/javascript';
 import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
@@ -23,6 +15,16 @@ import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput } from './utils';
+
+import type {
+  EvaluateTestSuite,
+  Prompt,
+  PromptFunction,
+  ProviderOptions,
+  ProviderOptionsMap,
+  TestSuite,
+  UnifiedConfig,
+} from '../types';
 
 export * from './grading';
 
@@ -88,7 +90,7 @@ export function readProviderPromptMap(
  * @param maxRecursionDepth - Maximum recursion depth for globbing.
  * @returns Promise resolving to an array of processed prompts.
  */
-export async function processPrompt(
+async function processPrompt(
   prompt: Partial<Prompt>,
   basePath: string = '',
   maxRecursionDepth: number = 1,
@@ -128,8 +130,9 @@ export async function processPrompt(
     );
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
+      const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
       const processedPrompts = await processPrompt(
-        { raw: globbedFilePath },
+        { raw: rawPath },
         basePath,
         maxRecursionDepth - 1,
       );
@@ -145,6 +148,12 @@ export async function processPrompt(
     return prompts;
   }
 
+  if (extension === '.csv') {
+    return processCsvPrompts(filePath, prompt);
+  }
+  if (extension === '.j2') {
+    return processJinjaFile(filePath, prompt);
+  }
   if (extension === '.json') {
     return processJsonFile(filePath, prompt);
   }
@@ -156,9 +165,6 @@ export async function processPrompt(
   }
   if (extension === '.md') {
     return processMarkdownFile(filePath, prompt);
-  }
-  if (extension === '.j2') {
-    return processJinjaFile(filePath, prompt);
   }
   if (extension === '.py') {
     return processPythonFile(filePath, prompt, functionName);
@@ -225,3 +231,45 @@ export async function processPrompts(
     )
   ).flat();
 }
+
+export const GEVAL_PROMPT_STEPS = `
+Given an evaluation criteria which outlines how you should judge some text, generate 3-4 concise evaluation steps for any text based on the criteria below.
+
+Evaluation Criteria:
+{{criteria}}
+
+**
+IMPORTANT: Please make sure to only return in minified JSON format, with the "steps" key as a list of strings. No additional words, explanation or formatting is needed.
+Example JSON:
+{"steps": <list_of_strings>}
+**
+
+JSON:
+`;
+
+export const GEVAL_PROMPT_EVALUATE = `
+You will be given one Reply for a Source Text below. Your task is to rate the Reply on one metric.
+Please make sure you read and understand these instructions carefully. Please keep this document open while reviewing, and refer to it as needed.
+
+Evaluation Criteria:
+{{criteria}}
+
+Evaluation Steps:
+- {{steps}}
+- Given the evaluation steps, return a JSON with two keys: 1) a "score" key ranging from 0 - {{maxScore}}, with {{maxScore}} being that it follows the Evaluation Criteria outlined in the Evaluation Steps and 0 being that it does not; 2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Source Text and Reply in your reason, but be very concise with it!
+
+Source Text:
+{{input}}
+
+Reply:
+{{output}}
+
+**
+IMPORTANT: Please make sure to only return in minified JSON format, with the "score" and "reason" key. No additional words, explanation or formatting is needed.
+
+Example JSON:
+{"score":0,"reason":"The text does not follow the evaluation steps provided."}
+**
+
+JSON:
+`;

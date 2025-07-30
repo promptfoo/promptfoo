@@ -1,0 +1,16 @@
+{
+  "name": "redteam-medical-agent",
+  "version": "1.0.0",
+  "description": "Medical agent example for promptfoo red team testing",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "openai": "^5.10.2",
+    "dotenv": "^17.2.1",
+    "cors": "^2.8.5"
+  }
+}

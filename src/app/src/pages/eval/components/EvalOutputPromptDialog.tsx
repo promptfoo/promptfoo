@@ -1,6 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import type React from 'react';
+
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -8,25 +12,174 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
+import Link from '@mui/material/Link';
+import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import TextareaAutosize from '@mui/material/TextareaAutosize';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { ErrorBoundary } from 'react-error-boundary';
 import { ellipsize } from '../../../../../util/text';
+import TraceView from '../../../components/traces/TraceView';
 import ChatMessages, { type Message } from './ChatMessages';
+import Citations from './Citations';
+import { useTableStore } from './store';
+
 import type { GradingResult } from './types';
 
 // Common style object for copy buttons
 const copyButtonSx = {
   position: 'absolute',
   right: '8px',
-  top: '4px',
-  bgcolor: 'rgba(255, 255, 255, 0.7)',
+  top: '8px',
+  bgcolor: 'background.paper',
+  boxShadow: 1,
+  '&:hover': {
+    bgcolor: 'action.hover',
+    boxShadow: 2,
+  },
 };
+
+// Common typography styles
+const subtitleTypographySx = {
+  mb: 1,
+  fontWeight: 500,
+};
+
+const textContentTypographySx = {
+  fontSize: '0.875rem',
+  lineHeight: 1.6,
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+};
+
+/**
+ * Returns the value of the assertion.
+ * For context-related assertions, read the context value from metadata, if it exists.
+ * Otherwise, return the assertion value.
+ * @param result - The grading result.
+ * @returns The value of the assertion.
+ */
+function getValue(result: GradingResult) {
+  // For context-related assertions, read the context value from metadata, if it exists
+  if (
+    result.assertion?.type &&
+    ['context-faithfulness', 'context-recall', 'context-relevance'].includes(
+      result.assertion.type,
+    ) &&
+    result.metadata?.context
+  ) {
+    return result.metadata?.context;
+  }
+
+  // Otherwise, return the assertion value
+  return result.assertion?.value
+    ? typeof result.assertion.value === 'object'
+      ? JSON.stringify(result.assertion.value, null, 2)
+      : String(result.assertion.value)
+    : '-';
+}
+
+// Code display component
+interface CodeDisplayProps {
+  content: string;
+  title: string;
+  maxHeight?: string | number;
+  onCopy: () => void;
+  copied: boolean;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+  showCopyButton?: boolean;
+}
+
+function CodeDisplay({
+  content,
+  title,
+  maxHeight = 400,
+  onCopy,
+  copied,
+  onMouseEnter,
+  onMouseLeave,
+  showCopyButton = false,
+}: CodeDisplayProps) {
+  // Improved code detection logic
+  const isCode =
+    /^[\s]*[{[]/.test(content) || // JSON-like (starts with { or [)
+    /^#\s/.test(content) || // Markdown headers (starts with # )
+    /```/.test(content) || // Code blocks (contains ```)
+    /^\s*[\w-]+\s*:/.test(content) || // YAML/config-like (key: value)
+    /^\s*<\w+/.test(content) || // XML/HTML-like (starts with <tag)
+    content.includes('function ') || // JavaScript functions
+    content.includes('class ') || // Class definitions
+    content.includes('import ') || // Import statements
+    /^\s*def\s+/.test(content) || // Python functions
+    /^\s*\w+\s*\(/.test(content); // Function calls
+
+  return (
+    <Box mb={2}>
+      <Typography variant="subtitle1" sx={subtitleTypographySx}>
+        {title}
+      </Typography>
+      <Paper
+        variant="outlined"
+        sx={{
+          position: 'relative',
+          bgcolor: 'background.default',
+          borderRadius: 1,
+          overflow: 'hidden',
+          '&:hover': {
+            borderColor: 'primary.main',
+            bgcolor: 'action.hover',
+          },
+        }}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+      >
+        <Box
+          sx={{
+            p: 2,
+            overflowX: 'auto',
+            overflowY: 'auto',
+            maxHeight,
+          }}
+        >
+          {isCode ? (
+            <pre
+              style={{
+                margin: 0,
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {content}
+            </pre>
+          ) : (
+            <Typography variant="body1" sx={textContentTypographySx}>
+              {content}
+            </Typography>
+          )}
+        </Box>
+        {showCopyButton && (
+          <IconButton
+            size="small"
+            onClick={onCopy}
+            sx={copyButtonSx}
+            aria-label={`Copy ${title.toLowerCase()}`}
+          >
+            {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+          </IconButton>
+        )}
+      </Paper>
+    </Box>
+  );
+}
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
@@ -55,8 +208,10 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
   return (
     <Box mt={2}>
-      <Typography variant="subtitle1">Assertions</Typography>
-      <TableContainer>
+      <Typography variant="subtitle1" sx={subtitleTypographySx}>
+        Assertions
+      </Typography>
+      <TableContainer component={Paper} variant="outlined">
         <Table>
           <TableHead>
             <TableRow>
@@ -73,11 +228,8 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
               if (!result) {
                 return null;
               }
-              const value = result.assertion?.value
-                ? typeof result.assertion.value === 'object'
-                  ? JSON.stringify(result.assertion.value, null, 2)
-                  : String(result.assertion.value)
-                : '-';
+
+              const value = getValue(result);
               const truncatedValue = ellipsize(value, 300);
               const isExpanded = expandedValues[i] || false;
               const valueKey = `value-${i}`;
@@ -160,7 +312,19 @@ interface EvalOutputPromptDialogProps {
   output?: string;
   gradingResults?: GradingResult[];
   metadata?: Record<string, any>;
+  evaluationId?: string;
+  testCaseId?: string;
 }
+
+// URL detection function
+const isValidUrl = (str: string): boolean => {
+  try {
+    new URL(str);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export default function EvalOutputPromptDialog({
   open,
@@ -170,11 +334,14 @@ export default function EvalOutputPromptDialog({
   output,
   gradingResults,
   metadata,
+  evaluationId,
+  testCaseId,
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
   const [hoveredElement, setHoveredElement] = useState<string | null>(null);
+  const { addFilter, resetFilters } = useTableStore();
 
   useEffect(() => {
     setCopied(false);
@@ -204,10 +371,27 @@ export default function EvalOutputPromptDialog({
     setExpandedMetadata((prev: ExpandedMetadataState) => ({
       ...prev,
       [key]: {
-        expanded: isDoubleClick ? false : true,
+        expanded: !isDoubleClick,
         lastClickTime: now,
       },
     }));
+  };
+
+  const handleApplyFilter = (
+    field: string,
+    value: string,
+    operator: 'equals' | 'contains' = 'equals',
+  ) => {
+    // Reset all filters first
+    resetFilters();
+    // Then apply only this filter
+    addFilter({
+      type: 'metadata',
+      operator,
+      value: typeof value === 'string' ? value : JSON.stringify(value),
+      field,
+    });
+    onClose();
   };
 
   let parsedMessages: Message[] = [];
@@ -215,114 +399,65 @@ export default function EvalOutputPromptDialog({
     parsedMessages = JSON.parse(metadata?.messages || '[]');
   } catch {}
 
+  // Get citations from metadata if they exist
+  const citationsData = metadata?.citations;
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>Details{provider && `: ${provider}`}</DialogTitle>
       <DialogContent>
-        <Box
-          mb={2}
-          position="relative"
+        <CodeDisplay
+          content={prompt}
+          title="Prompt"
+          onCopy={() => copyToClipboard(prompt)}
+          copied={copied}
           onMouseEnter={() => setHoveredElement('prompt')}
           onMouseLeave={() => setHoveredElement(null)}
-        >
-          <Typography variant="subtitle1" style={{ marginBottom: '1rem' }}>
-            Prompt
-          </Typography>
-          <div style={{ position: 'relative' }}>
-            <TextareaAutosize
-              readOnly
-              value={prompt}
-              style={{ width: '100%', padding: '0.75rem' }}
-              maxRows={20}
-            />
-            {(hoveredElement === 'prompt' || copied) && (
-              <IconButton
-                onClick={() => copyToClipboard(prompt)}
-                sx={copyButtonSx}
-                size="small"
-                aria-label="Copy prompt"
-              >
-                {copied ? <CheckIcon /> : <ContentCopyIcon />}
-              </IconButton>
-            )}
-          </div>
-        </Box>
+          showCopyButton={hoveredElement === 'prompt' || copied}
+        />
         {metadata?.redteamFinalPrompt && (
-          <Box
-            my={2}
-            position="relative"
+          <CodeDisplay
+            content={metadata.redteamFinalPrompt}
+            title="Modified User Input (Red Team)"
+            onCopy={() => copyFieldToClipboard('redteamFinalPrompt', metadata.redteamFinalPrompt)}
+            copied={copiedFields['redteamFinalPrompt'] || false}
             onMouseEnter={() => setHoveredElement('redteamFinalPrompt')}
             onMouseLeave={() => setHoveredElement(null)}
-          >
-            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
-              Modified User Input (Red Team)
-            </Typography>
-            <div style={{ position: 'relative' }}>
-              <TextareaAutosize
-                readOnly
-                maxRows={20}
-                value={metadata.redteamFinalPrompt}
-                style={{ width: '100%', padding: '0.75rem' }}
-              />
-              {(hoveredElement === 'redteamFinalPrompt' || copiedFields['redteamFinalPrompt']) && (
-                <IconButton
-                  onClick={() =>
-                    copyFieldToClipboard('redteamFinalPrompt', metadata.redteamFinalPrompt)
-                  }
-                  sx={{
-                    ...copyButtonSx,
-                    top: '8px',
-                  }}
-                  size="small"
-                  aria-label="Copy modified user input"
-                >
-                  {copiedFields['redteamFinalPrompt'] ? <CheckIcon /> : <ContentCopyIcon />}
-                </IconButton>
-              )}
-            </div>
-          </Box>
+            showCopyButton={
+              hoveredElement === 'redteamFinalPrompt' || copiedFields['redteamFinalPrompt']
+            }
+          />
         )}
         {output && (
-          <Box
-            my={2}
-            position="relative"
+          <CodeDisplay
+            content={output}
+            title="Output"
+            onCopy={() => copyFieldToClipboard('output', output)}
+            copied={copiedFields['output'] || false}
             onMouseEnter={() => setHoveredElement('output')}
             onMouseLeave={() => setHoveredElement(null)}
-          >
-            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
-              Output
-            </Typography>
-            <div style={{ position: 'relative' }}>
-              <TextareaAutosize
-                readOnly
-                maxRows={20}
-                value={output}
-                style={{ width: '100%', padding: '0.75rem' }}
-              />
-              {(hoveredElement === 'output' || copiedFields['output']) && (
-                <IconButton
-                  onClick={() => copyFieldToClipboard('output', output)}
-                  sx={{
-                    ...copyButtonSx,
-                    top: '8px',
-                  }}
-                  size="small"
-                  aria-label="Copy output"
-                >
-                  {copiedFields['output'] ? <CheckIcon /> : <ContentCopyIcon />}
-                </IconButton>
-              )}
-            </div>
-          </Box>
+            showCopyButton={hoveredElement === 'output' || copiedFields['output']}
+          />
         )}
         <AssertionResults gradingResults={gradingResults} />
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
-        {metadata && Object.keys(metadata).length > 0 && (
+        {evaluationId && (
+          <Box mt={2}>
+            <Typography variant="subtitle1" sx={subtitleTypographySx}>
+              Trace Timeline
+            </Typography>
+            <ErrorBoundary fallback={<Alert severity="error">Error loading traces</Alert>}>
+              <TraceView evaluationId={evaluationId} testCaseId={testCaseId} />
+            </ErrorBoundary>
+          </Box>
+        )}
+        {citationsData && <Citations citations={citationsData} />}
+        {metadata && Object.keys(metadata).filter((key) => key !== 'citations').length > 0 && (
           <Box my={2}>
-            <Typography variant="subtitle1" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
+            <Typography variant="subtitle1" sx={subtitleTypographySx}>
               Metadata
             </Typography>
-            <TableContainer>
+            <TableContainer component={Paper} variant="outlined">
               <Table size="small">
                 <TableHead>
                   <TableRow>
@@ -332,12 +467,19 @@ export default function EvalOutputPromptDialog({
                     <TableCell>
                       <strong>Value</strong>
                     </TableCell>
+                    <TableCell width={80} />
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {Object.entries(metadata).map(([key, value]) => {
+                    // Skip citations in metadata display as they're shown in their own component
+                    if (key === 'citations') {
+                      return null;
+                    }
+
                     const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
                     const truncatedValue = ellipsize(stringValue, 300);
+                    const isUrl = typeof value === 'string' && isValidUrl(value);
 
                     return (
                       <TableRow key={key}>
@@ -345,31 +487,59 @@ export default function EvalOutputPromptDialog({
                         <TableCell
                           style={{
                             whiteSpace: 'pre-wrap',
-                            cursor: 'pointer',
-                            position: 'relative',
+                            cursor: isUrl ? 'auto' : 'pointer',
                           }}
-                          onClick={() => handleMetadataClick(key)}
-                          onMouseEnter={() => setHoveredElement(`metadata-${key}`)}
-                          onMouseLeave={() => setHoveredElement(null)}
+                          onClick={() => !isUrl && handleMetadataClick(key)}
                         >
-                          {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
-                          {(hoveredElement === `metadata-${key}` || copiedFields[key]) && (
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                copyFieldToClipboard(key, stringValue);
-                              }}
-                              sx={copyButtonSx}
-                              aria-label={`Copy metadata value for ${key}`}
-                            >
-                              {copiedFields[key] ? (
-                                <CheckIcon fontSize="small" />
-                              ) : (
-                                <ContentCopyIcon fontSize="small" />
-                              )}
-                            </IconButton>
+                          {isUrl ? (
+                            <Link href={value} target="_blank" rel="noopener noreferrer">
+                              {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
+                            </Link>
+                          ) : expandedMetadata[key]?.expanded ? (
+                            stringValue
+                          ) : (
+                            truncatedValue
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            <Tooltip title="Copy value">
+                              <IconButton
+                                size="small"
+                                onClick={() => copyFieldToClipboard(key, stringValue)}
+                                sx={{
+                                  color: 'text.disabled',
+                                  transition: 'color 0.2s ease',
+                                  '&:hover': {
+                                    color: 'text.secondary',
+                                  },
+                                }}
+                                aria-label={`Copy metadata value for ${key}`}
+                              >
+                                {copiedFields[key] ? (
+                                  <CheckIcon fontSize="small" />
+                                ) : (
+                                  <ContentCopyIcon fontSize="small" />
+                                )}
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Filter by value (replaces existing filters)">
+                              <IconButton
+                                size="small"
+                                onClick={() => handleApplyFilter(key, stringValue)}
+                                sx={{
+                                  color: 'text.disabled',
+                                  transition: 'color 0.2s ease',
+                                  '&:hover': {
+                                    color: 'text.secondary',
+                                  },
+                                }}
+                                aria-label={`Filter by ${key}`}
+                              >
+                                <FilterAltIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
                         </TableCell>
                       </TableRow>
                     );

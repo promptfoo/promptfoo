@@ -1,6 +1,7 @@
 import { distance } from 'fastest-levenshtein';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 export function handleLevenshtein({
   assertion,
@@ -12,13 +13,14 @@ export function handleLevenshtein({
     '"levenshtein" assertion type must have a string value',
   );
   const levDistance = distance(outputString, renderedValue);
-  const pass = levDistance <= (assertion.threshold || 5);
+  const threshold = assertion.threshold ?? 5;
+  const pass = levDistance <= threshold;
   return {
     pass,
     score: pass ? 1 : 0,
     reason: pass
       ? 'Assertion passed'
-      : `Levenshtein distance ${levDistance} is greater than threshold ${assertion.threshold || 5}`,
+      : `Levenshtein distance ${levDistance} is greater than threshold ${threshold}`,
     assertion,
   };
 }

@@ -11,6 +11,10 @@ import (
 	"testing"
 )
 
+// Declare CallApi variable for tests
+// This is needed because we've removed it from wrapper.go
+var CallApi func(string, map[string]interface{}, map[string]interface{}) (map[string]interface{}, error)
+
 var (
 	errEmptyOutput = errors.New("empty output")
 	errInvalidJSON = errors.New("invalid JSON")

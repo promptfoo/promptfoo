@@ -22,7 +22,7 @@ export default class CustomApiProvider implements ApiProvider {
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1-mini',
       messages: [
         {
           role: 'user',

@@ -1,4 +1,5 @@
 import { addHexEncoding } from '../../../src/redteam/strategies/hex';
+
 import type { TestCase } from '../../../src/types';
 
 describe('addHexEncoding', () => {
@@ -23,6 +24,7 @@ describe('addHexEncoding', () => {
     expect(result[0].assert![0].metric).toBe('accuracy/Hex');
     expect(result[0].metadata).toEqual({
       strategyId: 'hex',
+      originalText: 'hello',
     });
   });
 

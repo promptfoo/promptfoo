@@ -1,6 +1,19 @@
 ---
-date: 2024-11-20
+title: 'How to Red Team a HuggingFace Model: Complete Security Testing Guide'
+description: 'Open source models on HuggingFace often lack safety training. Learn how to red team these models and assess their vulnerabilities before deployment.'
 image: /img/blog/huggingface-red-team.png
+keywords:
+  [
+    HuggingFace red teaming,
+    open source model security,
+    HuggingFace security testing,
+    model jailbreak testing,
+    AI model evaluation,
+    LLM security assessment,
+  ]
+date: 2024-11-20
+authors: [ian]
+tags: [technical-guide, red-teaming, huggingface]
 ---
 
 # How to Red Team a HuggingFace Model
@@ -43,7 +56,7 @@ export HF_API_TOKEN=your_huggingface_api_token
 Use the `promptfoo` command-line tool to initialize a new red teaming project:
 
 ```bash
-npx promptfoo@latest redteam init my-huggingface-redteam
+npx promptfoo@latest redteam init my-huggingface-redteam --no-gui
 cd my-huggingface-redteam
 ```
 

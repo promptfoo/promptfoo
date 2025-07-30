@@ -42,8 +42,7 @@
   opacity: 1;
 }
 
-/* Some logos need special treatment in dark mode */
-[data-theme='dark'] .shopify,
-[data-theme='dark'] .anthropic {
+/* Apply invert filter to all logos in dark mode for better visibility */
+[data-theme='dark'] .logoContainer img {
   filter: brightness(0) invert(0.9);
 }

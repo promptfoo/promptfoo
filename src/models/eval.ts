@@ -1,37 +1,52 @@
 import { randomUUID } from 'crypto';
-import { and, desc, eq, like, sql } from 'drizzle-orm';
+
+import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
+import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
+  evalResultsTable,
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
+  evalsToTagsTable,
   promptsTable,
   tagsTable,
-  evalsToTagsTable,
-  evalResultsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
-import type {
-  CompletedPrompt,
-  EvaluateResult,
-  EvaluateStats,
-  EvaluateSummaryV3,
-  EvaluateSummaryV2,
-  EvaluateTable,
-  Prompt,
-  ResultsFile,
-  UnifiedConfig,
+import {
+  type CompletedPrompt,
+  type EvalSummary,
+  type EvaluateResult,
+  type EvaluateStats,
+  type EvaluateSummaryV2,
+  type EvaluateSummaryV3,
+  type EvaluateTable,
+  type EvaluateTableRow,
+  type Prompt,
+  ResultFailureReason,
+  type ResultsFile,
+  type UnifiedConfig,
 } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import { convertTestResultsToTableRow } from '../util/exportToFile';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import EvalResult from './evalResult';
+
+interface FilteredCountRow {
+  count: number | null;
+}
+
+interface TestIndexRow {
+  test_idx: number;
+}
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
@@ -53,6 +68,28 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
     }, {});
     return vars;
   }
+
+  static async getVarsFromEval(evalId: string) {
+    const db = getDb();
+    const query = sql.raw(
+      `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
+    FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
+    );
+    // @ts-ignore
+    const results: { key: string }[] = await db.all(query);
+    const vars = results.map((r) => r.key);
+
+    return vars;
+  }
+
+  static async setVars(evalId: string, vars: string[]) {
+    const db = getDb();
+    try {
+      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+    } catch (e) {
+      logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
+    }
+  }
 }
 
 export default class Eval {
@@ -63,11 +100,12 @@ export default class Eval {
   config: Partial<UnifiedConfig>;
   // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
   results: EvalResult[];
-  resultsCount: number; // Fast way to get the number of results
   datasetId?: string;
   prompts: CompletedPrompt[];
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
+  vars: string[];
+  _resultsLoaded: boolean = false;
 
   static async latest() {
     const db = getDb();
@@ -89,24 +127,22 @@ export default class Eval {
   static async findById(id: string) {
     const db = getDb();
 
-    const { evals, datasetResults } = await db.transaction(async (tx) => {
-      const evals = await tx.select().from(evalsTable).where(eq(evalsTable.id, id));
-      const datasetResults = await tx
-        .select({
-          datasetId: evalsToDatasetsTable.datasetId,
-        })
-        .from(evalsToDatasetsTable)
-        .where(eq(evalsToDatasetsTable.evalId, id))
-        .limit(1);
+    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
 
-      return { evals, datasetResults };
-    });
-
-    if (evals.length === 0) {
+    if (evalData.length === 0) {
       return undefined;
     }
-    const eval_ = evals[0];
 
+    const datasetResults = db
+      .select({
+        datasetId: evalsToDatasetsTable.datasetId,
+      })
+      .from(evalsToDatasetsTable)
+      .where(eq(evalsToDatasetsTable.evalId, id))
+      .limit(1)
+      .all();
+
+    const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
     const evalInstance = new Eval(eval_.config, {
@@ -117,9 +153,17 @@ export default class Eval {
       prompts: eval_.prompts || [],
       datasetId,
       persisted: true,
+      vars: eval_.vars || [],
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
+    }
+
+    // backfill vars
+    if (!eval_.vars || eval_.vars.length === 0) {
+      const vars = await EvalQueries.getVarsFromEval(id);
+      evalInstance.setVars(vars);
+      await EvalQueries.setVars(id, vars);
     }
 
     return evalInstance;
@@ -155,15 +199,18 @@ export default class Eval {
       author?: string;
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
+      vars?: string[];
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
     const evalId = opts?.id || createEvalId(createdAt);
     const author = opts?.author || getUserEmail();
     const db = getDb();
-    await db.transaction(async (tx) => {
-      await tx
-        .insert(evalsTable)
+
+    const datasetId = sha256(JSON.stringify(config.tests || []));
+
+    db.transaction(() => {
+      db.insert(evalsTable)
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
@@ -171,6 +218,7 @@ export default class Eval {
           description: config.description,
           config,
           results: {},
+          vars: opts?.vars || [],
         })
         .run();
 
@@ -178,8 +226,7 @@ export default class Eval {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
 
-        await tx
-          .insert(promptsTable)
+        db.insert(promptsTable)
           .values({
             id: promptId,
             prompt: label,
@@ -187,8 +234,7 @@ export default class Eval {
           .onConflictDoNothing()
           .run();
 
-        await tx
-          .insert(evalsToPromptsTable)
+        db.insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
@@ -198,18 +244,16 @@ export default class Eval {
 
         logger.debug(`Inserting prompt ${promptId}`);
       }
+
       if (opts?.results && opts.results.length > 0) {
-        const res = await tx
+        const res = db
           .insert(evalResultsTable)
           .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
 
-      // Record dataset relation
-      const datasetId = sha256(JSON.stringify(config.tests || []));
-      await tx
-        .insert(datasetsTable)
+      db.insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
@@ -217,8 +261,7 @@ export default class Eval {
         .onConflictDoNothing()
         .run();
 
-      await tx
-        .insert(evalsToDatasetsTable)
+      db.insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
@@ -228,13 +271,11 @@ export default class Eval {
 
       logger.debug(`Inserting dataset ${datasetId}`);
 
-      // Record tags
       if (config.tags) {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          await tx
-            .insert(tagsTable)
+          db.insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -243,8 +284,7 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          await tx
-            .insert(evalsToTagsTable)
+          db.insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,
@@ -256,6 +296,7 @@ export default class Eval {
         }
       }
     });
+
     return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
   }
 
@@ -269,6 +310,7 @@ export default class Eval {
       prompts?: CompletedPrompt[];
       datasetId?: string;
       persisted?: boolean;
+      vars?: string[];
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -277,10 +319,11 @@ export default class Eval {
     this.author = opts?.author;
     this.config = config;
     this.results = [];
-    this.resultsCount = 0;
     this.prompts = opts?.prompts || [];
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
+    this._resultsLoaded = false;
+    this.vars = opts?.vars || [];
   }
 
   version() {
@@ -309,6 +352,7 @@ export default class Eval {
       description: this.config.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
+      vars: Array.from(this.vars),
     };
 
     if (this.useOldResults()) {
@@ -319,18 +363,12 @@ export default class Eval {
     this.persisted = true;
   }
 
-  async getVars() {
-    if (this.useOldResults()) {
-      invariant(this.oldResults, 'Old results not found');
-      return this.oldResults.table?.head.vars || [];
-    }
-    const db = getDb();
-    const query = sql`SELECT DISTINCT j.key from (SELECT json_extract(test_case_results.test_case, '$.vars') as vars
-    FROM test_case_results where test_case_results.eval_id = ${this.id}) t, json_each(t.vars) j;`;
-    // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+  setVars(vars: string[]) {
+    this.vars = vars;
+  }
 
-    return results.map((r) => r.key) || [];
+  addVar(varName: string) {
+    this.vars.push(varName);
   }
 
   getPrompts() {
@@ -357,7 +395,10 @@ export default class Eval {
       // This is to avoid memory issues when running large evaluations
       this.results.push(newResult);
     }
-    this.resultsCount++;
+    if (this.persisted) {
+      // Notify watchers that new results are available
+      updateSignalFile();
+    }
   }
 
   async *fetchResultsBatched(batchSize: number = 100) {
@@ -366,8 +407,232 @@ export default class Eval {
     }
   }
 
+  async getResultsCount(): Promise<number> {
+    const db = getDb();
+    const result = db
+      .select({ count: sql<number>`count(*)` })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, this.id))
+      .all();
+    const count = result[0]?.count ?? 0;
+    return Number(count);
+  }
+
   async fetchResultsByTestIdx(testIdx: number) {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
+  }
+
+  /**
+   * Private helper method to build filter conditions and query for test indices
+   */
+  private async queryTestIndices(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: string;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
+    const db = getDb();
+    const offset = opts.offset ?? 0;
+    const limit = opts.limit ?? 50;
+    const mode = opts.filterMode ?? 'all';
+
+    // Build filter conditions
+    const conditions = [`eval_id = '${this.id}'`];
+    if (mode === 'errors') {
+      conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
+    } else if (mode === 'failures') {
+      conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
+    } else if (mode === 'passes') {
+      conditions.push(`success = 1`);
+    }
+
+    // Add filters
+    if (opts.filters && opts.filters.length > 0) {
+      const filterConditions: string[] = [];
+      opts.filters.forEach((filter) => {
+        const { logicOperator, type, operator, value, field } = JSON.parse(filter);
+        let condition: string | null = null;
+
+        if (type === 'metric' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
+          // in double quotes.
+          condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
+        } else if (type === 'metadata' && field) {
+          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedField = field.replace(/'/g, "''");
+
+          if (operator === 'equals') {
+            condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
+          } else if (operator === 'contains') {
+            condition = `json_extract(metadata, '$."${sanitizedField}"') LIKE '%${sanitizedValue}%'`;
+          } else if (operator === 'not_contains') {
+            condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
+          }
+        } else if (type === 'plugin' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          // Plugin ID is stored in metadata.pluginId
+          condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+        } else if (type === 'strategy' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          if (sanitizedValue === 'basic') {
+            // Basic is represented by NULL in the metadata.strategyId field
+            condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
+          } else {
+            // Strategy ID is stored in metadata.strategyId
+            condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
+          }
+        }
+
+        if (condition) {
+          // Logic operator can only be applied if there are already conditions
+          filterConditions.push(
+            // Logic operator can only be applied if there are already conditions
+            filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
+          );
+        }
+      });
+      if (filterConditions.length > 0) {
+        conditions.push(`(${filterConditions.join(' ')})`);
+      }
+    }
+
+    // Add search condition if searchQuery is provided
+    if (opts.searchQuery && opts.searchQuery.trim() !== '') {
+      const sanitizedSearch = opts.searchQuery.replace(/'/g, "''");
+      const searchConditions = [
+        // Search in response text
+        `response LIKE '%${sanitizedSearch}%'`,
+        // Search in grading result reason
+        `json_extract(grading_result, '$.reason') LIKE '%${sanitizedSearch}%'`,
+        // Search in grading result comment
+        `json_extract(grading_result, '$.comment') LIKE '%${sanitizedSearch}%'`,
+        // Search in named scores
+        `json_extract(named_scores, '$') LIKE '%${sanitizedSearch}%'`,
+        // Search in metadata
+        `json_extract(metadata, '$') LIKE '%${sanitizedSearch}%'`,
+        // Search in test case vars
+        `json_extract(test_case, '$.vars') LIKE '%${sanitizedSearch}%'`,
+        // Search in test case metadata
+        `json_extract(test_case, '$.metadata') LIKE '%${sanitizedSearch}%'`,
+      ];
+      conditions.push(`(${searchConditions.join(' OR ')})`);
+    }
+
+    const whereSql = conditions.join(' AND ');
+
+    // Get filtered count
+    const filteredCountQuery = sql.raw(
+      `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
+    );
+    const countStart = Date.now();
+    const countResult = await db.get<FilteredCountRow>(filteredCountQuery);
+    const countEnd = Date.now();
+    logger.debug(`Count query took ${countEnd - countStart}ms`);
+    const filteredCount = countResult?.count || 0;
+
+    // Query for test indices based on filters
+    const idxQuery = sql.raw(
+      `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
+    );
+    const idxStart = Date.now();
+    const rows = await db.all<TestIndexRow>(idxQuery);
+    const idxEnd = Date.now();
+    logger.debug(`Index query took ${idxEnd - idxStart}ms`);
+
+    // Get all test indices from the rows
+    const testIndices = rows.map((row) => row.test_idx);
+
+    return { testIndices, filteredCount };
+  }
+
+  async getTablePage(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: string;
+    testIndices?: number[];
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<{
+    head: { prompts: Prompt[]; vars: string[] };
+    body: EvaluateTableRow[];
+    totalCount: number;
+    filteredCount: number;
+    id: string;
+  }> {
+    // Get total count of tests for this eval
+    const totalCount = await this.getResultsCount();
+
+    // Determine test indices to use
+    let testIndices: number[];
+    let filteredCount: number;
+
+    if (opts.testIndices && opts.testIndices.length > 0) {
+      // Use the provided test indices directly
+      testIndices = opts.testIndices;
+      filteredCount = testIndices.length;
+    } else {
+      // Query for test indices based on filters
+      const queryResult = await this.queryTestIndices({
+        offset: opts.offset,
+        limit: opts.limit,
+        filterMode: opts.filterMode,
+        searchQuery: opts.searchQuery,
+        filters: opts.filters,
+      });
+
+      testIndices = queryResult.testIndices;
+      filteredCount = queryResult.filteredCount;
+    }
+
+    // Get vars for this eval
+    const varsStart = Date.now();
+    const vars = Array.from(this.vars);
+    const varsEnd = Date.now();
+    logger.debug(`Vars query took ${varsEnd - varsStart}ms`);
+
+    // Initialize the body array that will hold table rows
+    const body: EvaluateTableRow[] = [];
+    const bodyStart = Date.now();
+
+    // Early return if no test indices found
+    if (testIndices.length === 0) {
+      const bodyEnd = Date.now();
+      logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
+      return {
+        head: { prompts: this.prompts, vars },
+        body,
+        totalCount,
+        filteredCount,
+        id: this.id,
+      };
+    }
+
+    // Fetch all results for these test indices in a single query
+    const allResults = await EvalResult.findManyByEvalIdAndTestIndices(this.id, testIndices);
+
+    // Group results by test index
+    const resultsByTestIdx = new Map<number, EvalResult[]>();
+    for (const result of allResults) {
+      if (!resultsByTestIdx.has(result.testIdx)) {
+        resultsByTestIdx.set(result.testIdx, []);
+      }
+      resultsByTestIdx.get(result.testIdx)!.push(result);
+    }
+
+    // Create table rows in the same order as the original query
+    for (const testIdx of testIndices) {
+      const results = resultsByTestIdx.get(testIdx) || [];
+      if (results.length > 0) {
+        body.push(convertTestResultsToTableRow(results, vars));
+      }
+    }
+
+    const bodyEnd = Date.now();
+    logger.debug(`Body query took ${bodyEnd - bodyStart}ms`);
+
+    return { head: { prompts: this.prompts, vars }, body, totalCount, filteredCount, id: this.id };
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {
@@ -380,16 +645,16 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     this.results = results;
-    this.resultsCount = results.length;
     if (this.persisted) {
       const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
     }
+    this._resultsLoaded = true;
   }
 
   async loadResults() {
     this.results = await EvalResult.findManyByEvalId(this.id);
-    this.resultsCount = this.results.length;
+    this._resultsLoaded = true;
   }
 
   async getResults(): Promise<EvaluateResult[] | EvalResult[]> {
@@ -398,7 +663,13 @@ export default class Eval {
       return this.oldResults.results;
     }
     await this.loadResults();
+    this._resultsLoaded = true;
     return this.results;
+  }
+
+  clearResults() {
+    this.results = [];
+    this._resultsLoaded = false;
   }
 
   getStats(): EvaluateStats {
@@ -406,36 +677,15 @@ export default class Eval {
       successes: 0,
       failures: 0,
       errors: 0,
-      tokenUsage: {
-        cached: 0,
-        completion: 0,
-        prompt: 0,
-        total: 0,
-        numRequests: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      },
+      tokenUsage: createEmptyTokenUsage(),
     };
 
     for (const prompt of this.prompts) {
-      stats.successes += prompt.metrics?.testPassCount || 0;
-      stats.failures += prompt.metrics?.testFailCount || 0;
-      stats.errors += prompt.metrics?.testErrorCount || 0;
-      stats.tokenUsage.prompt += prompt.metrics?.tokenUsage.prompt || 0;
-      stats.tokenUsage.cached += prompt.metrics?.tokenUsage.cached || 0;
-      stats.tokenUsage.completion += prompt.metrics?.tokenUsage.completion || 0;
-      stats.tokenUsage.total += prompt.metrics?.tokenUsage.total || 0;
-      stats.tokenUsage.numRequests += prompt.metrics?.tokenUsage.numRequests || 0;
+      stats.successes += prompt.metrics?.testPassCount ?? 0;
+      stats.failures += prompt.metrics?.testFailCount ?? 0;
+      stats.errors += prompt.metrics?.testErrorCount ?? 0;
 
-      stats.tokenUsage.completionDetails.reasoning! +=
-        prompt.metrics?.tokenUsage.completionDetails?.reasoning || 0;
-      stats.tokenUsage.completionDetails.acceptedPrediction! +=
-        prompt.metrics?.tokenUsage.completionDetails?.acceptedPrediction || 0;
-      stats.tokenUsage.completionDetails.rejectedPrediction! +=
-        prompt.metrics?.tokenUsage.completionDetails?.rejectedPrediction || 0;
+      accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
     return stats;
@@ -491,59 +741,76 @@ export default class Eval {
 
   async delete() {
     const db = getDb();
-    await db.transaction(() => {
+    db.transaction(() => {
       db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
       db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
       db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
-
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
 }
 
-export async function getSummaryOfLatestEvals(
-  limit: number = DEFAULT_QUERY_LIMIT,
-  filterDescription?: string,
-  datasetId?: string,
-) {
+/**
+ * Queries summaries of all evals, optionally for a given dataset.
+ *
+ * @param datasetId - An optional dataset ID to filter by.
+ * @returns A list of eval summaries.
+ */
+export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
   const db = getDb();
-  const startTime = performance.now();
-  const query = db
+
+  const results = db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
-      numTests: sql`COUNT(DISTINCT ${evalResultsTable.testIdx})`.as('numTests'),
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
+      prompts: evalsTable.prompts,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .leftJoin(evalResultsTable, eq(evalsTable.id, evalResultsTable.evalId))
-    .where(
-      and(
-        datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined,
-        filterDescription ? like(evalsTable.description, `%${filterDescription}%`) : undefined,
-        eq(evalsTable.results, {}),
-      ),
-    )
-    .groupBy(evalsTable.id);
+    .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
+    .orderBy(desc(evalsTable.createdAt))
+    .all();
 
-  const results = query.orderBy(desc(evalsTable.createdAt)).limit(limit).all();
+  /**
+   * Deserialize the evals. A few things to note:
+   *
+   * - Test statistics are derived from the prompt metrics as this is the only reliable source of truth
+   * that's written to the evals table.
+   */
+  return results.map((result) => {
+    const passCount =
+      result.prompts?.reduce((memo, prompt) => {
+        return memo + (prompt.metrics?.testPassCount ?? 0);
+      }, 0) ?? 0;
 
-  const mappedResults = results.map((result) => ({
-    evalId: result.evalId,
-    createdAt: result.createdAt,
-    description: result.description,
-    numTests: (result.numTests as number) || 0,
-    datasetId: result.datasetId,
-    isRedteam: result.isRedteam,
-  }));
+    // All prompts should have the same number of test cases:
+    const testCounts = result.prompts?.map((p) => {
+      return (
+        (p.metrics?.testPassCount ?? 0) +
+        (p.metrics?.testFailCount ?? 0) +
+        (p.metrics?.testErrorCount ?? 0)
+      );
+    }) ?? [0];
 
-  const endTime = performance.now();
-  const executionTime = endTime - startTime;
-  logger.debug(`listPreviousResults execution time: ${executionTime.toFixed(2)}ms`);
+    // Derive the number of tests from the first prompt.
+    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
 
-  return mappedResults;
+    // Test count * prompt count
+    const testRunCount = testCount * (result.prompts?.length ?? 0);
+
+    return {
+      evalId: result.evalId,
+      createdAt: result.createdAt,
+      description: result.description,
+      numTests: testCount,
+      datasetId: result.datasetId,
+      isRedteam: result.isRedteam,
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
+      label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+    };
+  });
 }

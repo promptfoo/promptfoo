@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import type { ProviderConfiguration } from '../../types/providerConfig';
 import { OpenAiModerationProvider } from '../openai/moderation';
-import { VertexChatProvider, VertexEmbeddingProvider } from '../vertex';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../google/vertex';
 
 // Default providers
 export const DefaultGradingProvider = new VertexChatProvider('gemini-1.5-pro');

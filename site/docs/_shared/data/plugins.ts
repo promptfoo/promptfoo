@@ -1,6 +1,7 @@
 export const PLUGIN_CATEGORIES = [
   'Brand',
   'Compliance and Legal',
+  'Dataset',
   'Security and Access Control',
   'Trust and Safety',
   'Custom',
@@ -21,6 +22,11 @@ export const CATEGORY_DESCRIPTIONS: CategoryDescription[] = [
     category: 'Compliance and Legal',
     description:
       'Tests for LLM behavior that may encourage illegal activity, breach contractual commitments, or violate intellectual property rights.',
+  },
+  {
+    category: 'Dataset',
+    description:
+      'Pre-compiled collections of test cases from research datasets designed to evaluate model safety, robustness, and alignment.',
   },
   {
     category: 'Security and Access Control',
@@ -51,9 +57,12 @@ export interface ApplicationTypes {
 }
 
 export type VulnerabilityType =
+  | 'bias'
   | 'criminal'
   | 'custom'
+  | 'financial'
   | 'harmful'
+  | 'medical'
   | 'misinformation and misuse'
   | 'privacy'
   | 'security';
@@ -85,6 +94,21 @@ type AssertArrayIsSorted<T extends readonly { pluginId: string }[]> = T extends 
 export const PLUGINS = [
   {
     category: 'Security and Access Control',
+    description: 'Tests whether an agent is vulnerable to memory poisoning attacks',
+    label: 'security',
+    link: '/docs/red-team/plugins/memory-poisoning/',
+    name: 'Memory Poisoning',
+    pluginId: 'agentic:memory-poisoning',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to obfuscate malicious content using ASCII smuggling',
     label: 'technical',
     link: '/docs/red-team/plugins/ascii-smuggling/',
@@ -99,54 +123,12 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description: 'Uses the BeaverTails prompt injection dataset',
     label: 'harmful',
     link: '/docs/red-team/plugins/beavertails/',
     name: 'BeaverTails',
     pluginId: 'beavertails',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'security',
-  },
-  {
-    category: 'Trust and Safety',
-    description: 'Tests handling of methamphetamine-related content',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'Methamphetamine',
-    pluginId: 'harmful:illegal-drugs:meth',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'harmful content',
-  },
-  {
-    category: 'Trust and Safety',
-    description: 'Tests handling of Improvised Explosive Devices',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'IED',
-    pluginId: 'harmful:weapons:ied',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'harmful content',
-  },
-  {
-    category: 'Security and Access Control',
-    description: 'Tests creation of malicious code',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'Malicious Code',
-    pluginId: 'harmful:cybercrime:malicious-code',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -170,12 +152,88 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Trust and Safety',
+    description: 'Tests handling of age bias, stereotypes, and discrimination',
+    label: 'bias',
+    link: '/docs/red-team/plugins/bias/',
+    name: 'Age Bias',
+    pluginId: 'bias:age',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'bias',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests handling of disability bias, stereotypes, and discrimination',
+    label: 'bias',
+    link: '/docs/red-team/plugins/bias/',
+    name: 'Disability Bias',
+    pluginId: 'bias:disability',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'bias',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests handling of gender bias, stereotypes, and discrimination',
+    label: 'bias',
+    link: '/docs/red-team/plugins/bias/',
+    name: 'Gender Bias',
+    pluginId: 'bias:gender',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'bias',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests handling of racial bias, stereotypes, and discrimination',
+    label: 'bias',
+    link: '/docs/red-team/plugins/bias/',
+    name: 'Race Bias',
+    pluginId: 'bias:race',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'bias',
+    isRemote: true,
+  },
+  {
     category: 'Security and Access Control',
     description: 'Broken Object Level Authorization (BOLA) tests',
     label: 'technical',
     link: '/docs/red-team/plugins/bola/',
     name: 'Unauthorized Data Access',
     pluginId: 'bola',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Simulates Context Compliance Attacks to test whether an AI system can be tricked into generating restricted content using manipulated chat history.',
+    label: 'security',
+    link: '/docs/red-team/plugins/context-compliance-attack/',
+    name: 'CCA',
+    pluginId: 'cca',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -228,7 +286,7 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description: 'Tests prompt injection attacks using the CyberSecEval dataset',
     label: 'technical',
     link: '/docs/red-team/plugins/cyberseceval/',
@@ -242,7 +300,7 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description: 'Tests prompt injection attacks using the Harmbench dataset',
     label: 'technical',
     link: '/docs/red-team/plugins/harmbench/',
@@ -254,6 +312,20 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+  },
+  {
+    category: 'Dataset',
+    description: 'Evaluates model safety responses using the NVIDIA Aegis dataset',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/aegis/',
+    name: 'Aegis',
+    pluginId: 'aegis',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
   },
   {
     category: 'Security and Access Control',
@@ -285,20 +357,18 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
-    category: 'Security and Access Control',
-    description:
-      'Tests for vulnerability to computational resource exhaustion through excessive reasoning patterns. Applicable to reasoning models.',
-    label: 'security',
-    link: '/docs/red-team/plugins/reasoning-dos/',
-    name: 'Reasoning DoS',
-    pluginId: 'reasoning-dos',
+    category: 'Dataset',
+    description: 'Tests how well LLMs handle harmful queries using the DoNotAnswer dataset',
+    label: 'technical',
+    link: '/docs/red-team/plugins/donotanswer/',
+    name: 'DoNotAnswer',
+    pluginId: 'donotanswer',
     applicationTypes: {
       rag: true,
       agent: true,
       chat: true,
     },
     vulnerabilityType: 'security',
-    isRemote: true,
   },
   {
     category: 'Brand',
@@ -313,6 +383,86 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-calculation-error',
+    name: 'Financial Calculation Error',
+    pluginId: 'financial:calculation-error',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for suggestions that violate securities laws, enable insider trading, or circumvent regulations',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-compliance-violation',
+    name: 'Financial Compliance Violation',
+    pluginId: 'financial:compliance-violation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for exposure of proprietary trading strategies or confidential financial data',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-data-leakage',
+    name: 'Financial Data Leakage',
+    pluginId: 'financial:data-leakage',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Brand',
+    description:
+      'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-hallucination',
+    name: 'Financial Hallucination',
+    pluginId: 'financial:hallucination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Brand',
+    description:
+      'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-sycophancy',
+    name: 'Financial Sycophancy',
+    pluginId: 'financial:sycophancy',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -341,6 +491,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -355,6 +506,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -369,6 +521,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -383,6 +536,21 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description: 'Tests creation of malicious code',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/harmful/',
+    name: 'Malicious Code',
+    pluginId: 'harmful:cybercrime:malicious-code',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
   },
   {
     category: 'Trust and Safety',
@@ -397,6 +565,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -411,6 +580,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -425,6 +595,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -439,6 +610,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -453,10 +625,11 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
+    isRemote: true,
   },
   {
-    category: 'Compliance and Legal',
-    description: 'Content related to methamphetamine',
+    category: 'Trust and Safety',
+    description: 'Tests handling of methamphetamine-related content',
     label: 'harmful',
     link: '/docs/red-team/plugins/harmful/',
     name: 'Methamphetamine',
@@ -466,7 +639,8 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'criminal',
+    vulnerabilityType: 'harmful content',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -481,6 +655,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -495,6 +670,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -509,20 +685,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
-  },
-  {
-    category: 'Compliance and Legal',
-    description: 'Content related to generating malicious code',
-    label: 'harmful',
-    link: '/docs/red-team/plugins/harmful/',
-    name: 'Malicious Code',
-    pluginId: 'harmful:cybercrime:malicious-code',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'criminal',
+    isRemote: true,
   },
   {
     category: 'Brand',
@@ -552,6 +715,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -566,6 +730,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'privacy',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -580,6 +745,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -594,6 +760,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -608,6 +775,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -622,6 +790,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -636,6 +805,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -665,6 +835,7 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
@@ -679,20 +850,22 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'criminal',
+    isRemote: true,
   },
   {
-    category: 'Compliance and Legal',
-    description: 'Content related to creating Improvised Explosive Devices',
+    category: 'Trust and Safety',
+    description: 'Tests handling of Improvised Explosive Devices',
     label: 'harmful',
     link: '/docs/red-team/plugins/harmful/',
-    name: 'IEDs',
+    name: 'IED',
     pluginId: 'harmful:weapons:ied',
     applicationTypes: {
       rag: true,
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'criminal',
+    vulnerabilityType: 'harmful content',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -754,6 +927,112 @@ export const PLUGINS = [
     vulnerabilityType: 'custom',
   },
   {
+    category: 'Security and Access Control',
+    description: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+    label: 'technical',
+    link: '/docs/red-team/plugins/mcp/',
+    name: 'Model Context Protocol',
+    pluginId: 'mcp',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for medical anchoring bias where AI fixates on irrelevant information',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-anchoring-bias',
+    name: 'Medical Anchoring Bias',
+    pluginId: 'medical:anchoring-bias',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for fabricated medical facts, studies, or drug interactions',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-hallucination',
+    name: 'Medical Hallucination',
+    pluginId: 'medical:hallucination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for factually wrong medical information that could cause harm',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-incorrect-knowledge',
+    name: 'Medical Incorrect Knowledge',
+    pluginId: 'medical:incorrect-knowledge',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for poor medical prioritization and triage decisions',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-prioritization-error',
+    name: 'Medical Prioritization Error',
+    pluginId: 'medical:prioritization-error',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for agreeing with incorrect medical assumptions to be helpful',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-sycophancy',
+    name: 'Medical Sycophancy',
+    pluginId: 'medical:sycophancy',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Brand',
+    description:
+      'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
+    label: 'technical',
+    link: '/docs/red-team/plugins/off-topic/',
+    name: 'Off-Topic Manipulation',
+    pluginId: 'off-topic',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
+    isRemote: true,
+  },
+  {
     category: 'Brand',
     description: 'Model susceptible to relying on an incorrect user assumption or input',
     label: 'technical',
@@ -766,21 +1045,6 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'misinformation and misuse',
-  },
-  {
-    category: 'Compliance and Legal',
-    description: 'Content related to RAG Document Exfiltration',
-    label: 'technical',
-    link: '/docs/red-team/plugins/rag-document-exfiltration',
-    name: 'RAG Document Exfiltration',
-    pluginId: 'rag-document-exfiltration',
-    applicationTypes: {
-      rag: true,
-      agent: true,
-      chat: true,
-    },
-    vulnerabilityType: 'security',
-    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -839,7 +1103,7 @@ export const PLUGINS = [
     vulnerabilityType: 'privacy',
   },
   {
-    category: 'Trust and Safety',
+    category: 'Dataset',
     description:
       'Tests LLM systems using a curated collection of prompts from https://github.com/elder-plinius/L1B3RT4S',
     label: 'technical',
@@ -896,6 +1160,36 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
+    category: 'Compliance and Legal',
+    description: 'Content related to RAG Document Exfiltration',
+    label: 'technical',
+    link: '/docs/red-team/plugins/rag-document-exfiltration',
+    name: 'RAG Document Exfiltration',
+    pluginId: 'rag-document-exfiltration',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description: 'Tests resistance against poisoning attacks on RAG retrieval systems',
+    label: 'technical',
+    link: '/docs/red-team/plugins/rag-poisoning/',
+    name: 'RAG Poisoning',
+    pluginId: 'rag-poisoning',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
     category: 'Security and Access Control',
     description: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
     label: 'technical',
@@ -908,6 +1202,22 @@ export const PLUGINS = [
       chat: false,
     },
     vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for vulnerability to computational resource exhaustion through excessive reasoning patterns. Applicable to reasoning models.',
+    label: 'security',
+    link: '/docs/red-team/plugins/reasoning-dos/',
+    name: 'Reasoning DoS',
+    pluginId: 'reasoning-dos',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -996,6 +1306,49 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/tool-discovery/',
     name: 'Tool Discovery',
     pluginId: 'tool-discovery',
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Dataset',
+    description: 'Tests handling of toxic user prompts from the ToxicChat dataset',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/toxic-chat/',
+    name: 'ToxicChat',
+    pluginId: 'toxic-chat',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Dataset',
+    description: 'Tests handling of unsafe image content through multi-modal model evaluation',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/unsafebench/',
+    name: 'UnsafeBench',
+    pluginId: 'unsafebench',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Dataset',
+    description:
+      'Tests how well LLMs handle ambiguous words (homonyms) that can have both harmful and benign interpretations',
+    label: 'technical',
+    link: '/docs/red-team/plugins/xstest/',
+    name: 'XSTest',
+    pluginId: 'xstest',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
     vulnerabilityType: 'security',
   },
 ] as const as readonly Plugin[];

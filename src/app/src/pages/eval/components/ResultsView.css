@@ -15,7 +15,50 @@
   display: flex;
   align-items: center;
   flex-grow: 1;
+  transition: height 0.3s ease;
 }
+
+#results-view-container {
+  timeline-scope: --collapseTimeline;
+}
+
+.eval-header {
+  /* animation-name: collapseEvalHeader;
+  animation-duration: 1ms;
+  animation-timeline: --collapseTimeline;
+  animation-range-start: 0px;
+  animation-range-end: 50px;
+  animation-fill-mode: both;
+
+  will-change: contents;
+
+  max-height: var(--max-height, 200px);
+  opacity: var(--opacity, 1);
+  pointer-events: var(--pointer-events, auto);
+  margin-bottom: var(--margin-bottom, 24px);
+  transition:
+    max-height 0.2s ease-out,
+    opacity 0.2s ease-out,
+    pointer-events 0.2s ease-out,
+    margin-bottom 0.2s ease-out; */
+
+  margin-bottom: 24px;
+}
+
+/* @keyframes collapseEvalHeader {
+  from {
+    --max-height: 200px;
+    --opacity: 1;
+    --pointer-events: auto;
+    --margin-bottom: 24px;
+  }
+  to {
+    --max-height: 0px;
+    --opacity: 0;
+    --pointer-events: none;
+    --margin-bottom: 0px;
+  }
+} */
 
 .eval-header strong {
   font-weight: 500;

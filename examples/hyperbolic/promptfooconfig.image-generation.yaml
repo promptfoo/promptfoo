@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: AI image generation showcase
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: hyperbolic:image:SDXL1.0-base
+    label: SDXL Base
+    config:
+      width: 1024
+      height: 1024
+      steps: 30
+      cfg_scale: 7.0
+
+  # Note: These models may not be available with your current API key
+  # - id: hyperbolic:image:SDXL1.0-base
+  #   label: SDXL Base
+  #   config:
+  #     width: 1024
+  #     height: 1024
+  #     steps: 30
+  #     cfg_scale: 7.0
+
+  # - id: hyperbolic:image:SD1.5
+  #   label: SD 1.5
+  #   config:
+  #     width: 512
+  #     height: 512
+  #     steps: 25
+  #     cfg_scale: 7.5
+
+tests:
+  # Dreamy artistic style
+  - vars:
+      prompt: 'A cat wearing sunglasses riding a unicorn through a rainbow portal, painted in Van Gogh style with swirling cosmic backgrounds'
+    assert:
+      - type: regex
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'
+      - type: cost
+        threshold: 0.05
+
+  # Futuristic scene
+  - vars:
+      prompt: 'A pizza-powered rocket ship delivering dinner to aliens on Mars, neon cyberpunk aesthetic with glowing cheese trails'
+    assert:
+      - type: regex
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'
+
+  # Whimsical portrait
+  - vars:
+      prompt: 'A distinguished octopus professor wearing a monocle and bow tie, teaching quantum physics to confused fish students'
+    assert:
+      - type: regex
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'
+
+  # Nature photography style
+  - vars:
+      prompt: 'A tiny dragon napping in a coffee cup surrounded by miniature autumn leaves, macro photography with golden hour lighting'
+    assert:
+      - type: regex
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'
+
+  # Epic fantasy scene
+  - vars:
+      prompt: 'A wizard penguin casting spells to create aurora borealis over an ice castle made entirely of crystallized music notes'
+    assert:
+      - type: regex
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'
+
+  # Sci-fi adventure
+  - vars:
+      prompt: 'An astronaut surfing on Saturn rings while juggling planets, photorealistic style with spectacular cosmic vista background'
+    assert:
+      - type: regex
+        value: '^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$'

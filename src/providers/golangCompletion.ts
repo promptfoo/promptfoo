@@ -3,8 +3,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import util from 'util';
+
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
+import { parsePathOrGlob } from '../util';
+import { sha256 } from '../util/createHash';
+import { safeJsonStringify } from '../util/json';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,9 +18,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import { parsePathOrGlob } from '../util';
-import { sha256 } from '../util/createHash';
-import { safeJsonStringify } from '../util/json';
 
 const execAsync = util.promisify(exec);
 
@@ -86,7 +88,6 @@ export class GolangProvider implements ApiProvider {
     } else {
       if (context) {
         // These are not useful in Golang
-        delete context.fetchWithCache;
         delete context.getCache;
         delete context.logger;
       }
@@ -113,15 +114,7 @@ export class GolangProvider implements ApiProvider {
             if (entry.isDirectory()) {
               copyDir(srcPath, destPath);
             } else {
-              // Special handling for main.go to remove var CallApi declaration
-              if (entry.name === 'main.go') {
-                let content = fs.readFileSync(srcPath, 'utf-8');
-                // Remove the var CallApi declaration while preserving the file
-                content = content.replace(/\/\/\s*CallApi[\s\S]*?var\s+CallApi[\s\S]*?\n/s, '');
-                fs.writeFileSync(destPath, content);
-              } else {
-                fs.copyFileSync(srcPath, destPath);
-              }
+              fs.copyFileSync(srcPath, destPath);
             }
           }
         };
@@ -142,6 +135,7 @@ export class GolangProvider implements ApiProvider {
 
         // Build from the script directory
         const compileCommand = `cd ${scriptDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go ${path.basename(relativeScriptPath)}`;
+
         await execAsync(compileCommand);
 
         const jsonArgs = safeJsonStringify(args) || '[]';

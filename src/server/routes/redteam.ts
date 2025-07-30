@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import type { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { evalJobs } from './eval';
+import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
 
@@ -26,7 +26,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     }
   }
 
-  const { config, force, verbose, delay } = req.body;
+  const { config, force, verbose, delay, maxConcurrency } = req.body;
   const id = uuidv4();
   currentJobId = id;
   currentAbortController = new AbortController();
@@ -44,12 +44,16 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   // Set web UI mode
   cliState.webUI = true;
 
+  // Validate and normalize maxConcurrency
+  const normalizedMaxConcurrency = Math.max(1, Number(maxConcurrency || '1'));
+
   // Run redteam in background
   doRedteamRun({
     liveRedteamConfig: config,
     force,
     verbose,
     delay: Number(delay || '0'),
+    maxConcurrency: normalizedMaxConcurrency,
     logCallback: (message: string) => {
       if (currentJobId === id) {
         const job = evalJobs.get(id);

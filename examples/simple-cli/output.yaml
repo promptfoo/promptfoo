@@ -6,7 +6,7 @@ results:
     - raw: 'Rephrase this in {{language}}: {{body}}'
       label: 'Rephrase this in {{language}}: {{body}}'
       id: dd3415036994f2d82d0ba70cc5bb2caed82da6ccbdaca8a2174cf3992141c207
-      provider: openai:gpt-4o-mini
+      provider: openai:gpt-4.1-mini
       metrics:
         score: 4
         testPassCount: 4
@@ -25,7 +25,7 @@ results:
     - raw: 'Translate this to conversational {{language}}: {{body}}'
       label: 'Translate this to conversational {{language}}: {{body}}'
       id: 68f67e9473a10ba8e5294074e90b8cc9daa9aed6256e89391e4ad7adbffba52c
-      provider: openai:gpt-4o-mini
+      provider: openai:gpt-4.1-mini
       metrics:
         score: 4
         testPassCount: 4
@@ -62,7 +62,7 @@ results:
       promptId: dd3415036994f2d82d0ba70cc5bb2caed82da6ccbdaca8a2174cf3992141c207
       promptIdx: 0
       provider:
-        id: openai:gpt-4o-mini
+        id: openai:gpt-4.1-mini
         label: ''
       response:
         output: J'ai faim.
@@ -102,7 +102,7 @@ results:
       promptId: 68f67e9473a10ba8e5294074e90b8cc9daa9aed6256e89391e4ad7adbffba52c
       promptIdx: 1
       provider:
-        id: openai:gpt-4o-mini
+        id: openai:gpt-4.1-mini
         label: ''
       response:
         output: J'ai faim.
@@ -142,7 +142,7 @@ results:
       promptId: dd3415036994f2d82d0ba70cc5bb2caed82da6ccbdaca8a2174cf3992141c207
       promptIdx: 0
       provider:
-        id: openai:gpt-4o-mini
+        id: openai:gpt-4.1-mini
         label: ''
       response:
         output: Bonjour le monde.
@@ -182,7 +182,7 @@ results:
       promptId: 68f67e9473a10ba8e5294074e90b8cc9daa9aed6256e89391e4ad7adbffba52c
       promptIdx: 1
       provider:
-        id: openai:gpt-4o-mini
+        id: openai:gpt-4.1-mini
         label: ''
       response:
         output: Salut tout le monde !
@@ -222,7 +222,7 @@ results:
       promptId: dd3415036994f2d82d0ba70cc5bb2caed82da6ccbdaca8a2174cf3992141c207
       promptIdx: 0
       provider:
-        id: openai:gpt-4o-mini
+        id: openai:gpt-4.1-mini
         label: ''
       response:
         output: Ahoy, me hearties!
@@ -262,7 +262,7 @@ results:
       promptId: dd3415036994f2d82d0ba70cc5bb2caed82da6ccbdaca8a2174cf3992141c207
       promptIdx: 0
       provider:
-        id: openai:gpt-4o-mini
+        id: openai:gpt-4.1-mini
         label: ''
       response:
         output: Arrr, me belly be grumblin'!
@@ -302,7 +302,7 @@ results:
       promptId: 68f67e9473a10ba8e5294074e90b8cc9daa9aed6256e89391e4ad7adbffba52c
       promptIdx: 1
       provider:
-        id: openai:gpt-4o-mini
+        id: openai:gpt-4.1-mini
         label: ''
       response:
         output: Ahoy, me hearty! Greetings to ye, world!
@@ -342,7 +342,7 @@ results:
       promptId: 68f67e9473a10ba8e5294074e90b8cc9daa9aed6256e89391e4ad7adbffba52c
       promptIdx: 1
       provider:
-        id: openai:gpt-4o-mini
+        id: openai:gpt-4.1-mini
         label: ''
       response:
         output: Arrr, me belly be rumblin'! I be feelin' mighty hungry, matey!
@@ -376,7 +376,7 @@ config:
     - 'Rephrase this in {{language}}: {{body}}'
     - 'Translate this to conversational {{language}}: {{body}}'
   providers:
-    - openai:gpt-4o-mini
+    - openai:gpt-4.1-mini
   tests:
     - vars:
         language: French

@@ -1,0 +1,294 @@
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.scenarioSelector {
+  margin-bottom: 24px;
+}
+
+.scenarioSelector h4 {
+  margin: 0 0 12px;
+  font-size: 1.125rem;
+  color: #111827;
+}
+
+.scenarioButtons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.scenarioButton {
+  padding: 8px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scenarioButton:hover:not(:disabled) {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.scenarioButton.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.scenarioButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scenarioDescription {
+  margin: 0 0 16px;
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.playButton {
+  display: block;
+  width: 100%;
+  padding: 12px 24px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.playButton:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.playButton:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.chatContainer {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+  height: 500px;
+  overflow-y: auto;
+}
+
+.messageList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message {
+  padding: 12px;
+  border-radius: 8px;
+  max-width: 80%;
+}
+
+.message.client {
+  align-self: flex-end;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.message.remote {
+  align-self: flex-start;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.messageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.messageFrom {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.messageTime {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.messageContent {
+  color: #111827;
+  line-height: 1.5;
+}
+
+.messageAck {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.message.request {
+  border-left: 3px solid #3b82f6;
+}
+
+.message.response {
+  border-left: 3px solid #10b981;
+}
+
+.message.context {
+  border-left: 3px solid #8b5cf6;
+}
+
+.message.status {
+  border-left: 3px solid #f59e0b;
+}
+
+.message.ack {
+  border-left: 3px solid #6b7280;
+}
+
+.message.info {
+  background: #f3f4f6;
+}
+
+.message.success {
+  background: #ecfdf5;
+}
+
+.message.warning {
+  background: #fffbeb;
+}
+
+/* Dark mode adjustments */
+html[data-theme='dark'] .container {
+  background: var(--ifm-background-surface-color);
+}
+
+html[data-theme='dark'] .scenarioSelector h4 {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .scenarioButton {
+  background: var(--ifm-card-background-color);
+  border-color: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-emphasis-700);
+}
+
+html[data-theme='dark'] .scenarioButton:hover:not(:disabled) {
+  border-color: var(--ifm-color-primary);
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .scenarioButton.active {
+  border-color: var(--ifm-color-primary);
+  background: var(--ifm-color-primary);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .scenarioDescription {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .chatContainer {
+  background: var(--ifm-card-background-color);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .message.client {
+  background: var(--ifm-color-primary-darker);
+  border-color: var(--ifm-color-primary-dark);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .message.remote {
+  background: var(--ifm-color-emphasis-100);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+html[data-theme='dark'] .messageFrom {
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .messageTime {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .messageContent {
+  color: var(--ifm-color-emphasis-900);
+}
+
+html[data-theme='dark'] .message.client .messageContent,
+html[data-theme='dark'] .message.client .messageFrom,
+html[data-theme='dark'] .message.client .messageTime,
+html[data-theme='dark'] .message.client .messageAck {
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .messageAck {
+  color: var(--ifm-color-emphasis-600);
+}
+
+html[data-theme='dark'] .message.info {
+  background: var(--ifm-color-emphasis-200);
+}
+
+html[data-theme='dark'] .message.success {
+  background: var(--ifm-color-success-darker);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .message.warning {
+  background: var(--ifm-color-warning-darker);
+  color: var(--ifm-color-white);
+}
+
+html[data-theme='dark'] .message.request {
+  border-left-color: var(--ifm-color-primary);
+}
+
+html[data-theme='dark'] .message.response {
+  border-left-color: var(--ifm-color-success);
+}
+
+html[data-theme='dark'] .message.context {
+  border-left-color: var(--ifm-color-info);
+}
+
+html[data-theme='dark'] .message.status {
+  border-left-color: var(--ifm-color-warning);
+}
+
+html[data-theme='dark'] .message.ack {
+  border-left-color: var(--ifm-color-emphasis-500);
+}
+
+/* Ensure text is readable in status messages */
+html[data-theme='dark'] .message.success .messageContent,
+html[data-theme='dark'] .message.success .messageFrom,
+html[data-theme='dark'] .message.success .messageTime,
+html[data-theme='dark'] .message.success .messageAck,
+html[data-theme='dark'] .message.warning .messageContent,
+html[data-theme='dark'] .message.warning .messageFrom,
+html[data-theme='dark'] .message.warning .messageTime,
+html[data-theme='dark'] .message.warning .messageAck {
+  color: var(--ifm-color-white);
+}

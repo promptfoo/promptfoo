@@ -1,16 +1,18 @@
 ---
 sidebar_label: Iterative Jailbreaks
+title: Iterative Jailbreaks Strategy
+description: Systematically probe and bypass AI system constraints by repeatedly refining prompts through multiple iterations
 ---
 
 # Iterative Jailbreaks Strategy
 
 The Iterative Jailbreaks strategy is a technique designed to systematically probe and potentially bypass an AI system's constraints by repeatedly refining a single-shot prompt through multiple iterations. This approach is inspired by research on automated jailbreaking techniques like the Tree of Attacks method [^1].
 
-## Configuration
+## Implementation
 
 Add it to your `promptfooconfig.yaml`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 strategies:
   # Basic usage
   - jailbreak
@@ -30,6 +32,8 @@ PROMPTFOO_NUM_JAILBREAK_ITERATIONS=5
 
 ## How It Works
 
+![algorithmic jailbreak diagram](/img/docs/iterative-jailbreak-diagram.svg)
+
 The Iterative Jailbreaks strategy works by:
 
 1. Starting with a base prompt that attempts to elicit undesired behavior
@@ -43,6 +47,16 @@ The Iterative Jailbreaks strategy works by:
 :::warning
 This strategy is medium cost since it makes multiple API calls per test. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
+
+## Session Management
+
+When using `transformVars` with `context.uuid`, each iteration automatically gets a new UUID. This prevents conversation history from affecting subsequent attempts.
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+```
 
 ## Example Scenario
 

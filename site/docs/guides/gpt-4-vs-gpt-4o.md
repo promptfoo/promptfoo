@@ -31,7 +31,7 @@ npx promptfoo@latest init gpt-comparison
 
 Edit `promptfooconfig.yaml` to include GPT-4o and GPT-4o-mini:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o
   - openai:gpt-4o-mini
@@ -43,7 +43,7 @@ In this example, we consider a custom binary image classification task. If you'r
 
 First, adjust your `promptfooconfig.yaml` to include the prompts and test cases relevant to your image classification task:
 
-```yaml title=promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o
   - openai:gpt-4o-mini

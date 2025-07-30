@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
-import type { StandaloneEval } from '@promptfoo/util';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
+import type { StandaloneEval } from '@promptfoo/util/database';
 
 interface HistoryPageProps {
   showDatasetColumn?: boolean;
@@ -20,6 +22,7 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
       try {
         const response = await callApi(`/history`);
         const data = await response.json();
+
         if (data?.data) {
           setCols(data.data);
         }
@@ -43,6 +46,8 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
 }
 
 export default function HistoryPage({ showDatasetColumn = true }: HistoryPageProps) {
+  usePageMeta({ title: 'History', description: 'Evaluation history' });
+
   return (
     <ErrorBoundary name="History Page">
       <HistoryPageContent showDatasetColumn={showDatasetColumn} />

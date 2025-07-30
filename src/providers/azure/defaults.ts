@@ -2,9 +2,12 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import type { EnvOverrides } from '../../types/env';
 import type { ProviderConfiguration } from '../../types/providerConfig';
-import { AzureChatCompletionProvider, AzureEmbeddingProvider } from '../azure';
+import { AzureChatCompletionProvider } from '../azure/chat';
+import { AzureEmbeddingProvider } from '../azure/embedding';
 import { OpenAiModerationProvider } from '../openai/moderation';
 import { AzureModerationProvider } from './moderation';
+// Re-export models to maintain backward compatibility
+export { DEFAULT_AZURE_API_VERSION, AZURE_MODELS } from './models';
 
 /**
  * Azure provider configuration

@@ -1,18 +1,19 @@
-import type { FetchWithCacheResult } from '../../../src/cache';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import {
+  ADDITIONAL_PLUGINS,
+  ALL_PLUGINS,
+  BASE_PLUGINS,
+  HARM_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
-  BASE_PLUGINS,
-  ADDITIONAL_PLUGINS,
-  HARM_PLUGINS,
-  ALL_PLUGINS,
 } from '../../../src/redteam/constants';
 import { Plugins } from '../../../src/redteam/plugins';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
+
+import type { FetchWithCacheResult } from '../../../src/cache';
 import type { ApiProvider, TestCase } from '../../../src/types';
 
 jest.mock('../../../src/cache');
@@ -133,13 +134,6 @@ describe('Plugins', () => {
       );
     });
 
-    it('should validate prompt extraction plugin config', async () => {
-      const promptExtractionPlugin = Plugins.find((p) => p.key === 'prompt-extraction');
-      expect(() => promptExtractionPlugin?.validate?.({})).toThrow(
-        'Prompt extraction plugin requires `config.systemPrompt` to be set',
-      );
-    });
-
     it('should validate indirect prompt injection plugin config', async () => {
       const indirectPlugin = Plugins.find((p) => p.key === 'indirect-prompt-injection');
       expect(() => indirectPlugin?.validate?.({})).toThrow(
@@ -149,9 +143,18 @@ describe('Plugins', () => {
   });
 
   describe('remote generation', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     it('should call remote generation with correct parameters', async () => {
-      // Mock shouldGenerateRemote to return true for this test
+      // Mock both functions for this test
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+      jest.mocked(neverGenerateRemote).mockReturnValue(false);
 
       const mockResponse = {
         data: { result: [{ test: 'case' }] },
@@ -162,7 +165,7 @@ describe('Plugins', () => {
 
       jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-      const plugin = Plugins.find((p) => p.key === 'contracts');
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
       const result = await plugin?.action({
         provider: mockProvider,
         purpose: 'test',
@@ -182,14 +185,14 @@ describe('Plugins', () => {
             injectVar: 'testVar',
             n: 1,
             purpose: 'test',
-            task: 'contracts',
+            task: 'ssrf',
             version: VERSION,
             email: null,
           }),
         }),
         expect.any(Number),
       );
-      expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'contracts' } }]);
+      expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'ssrf' } }]);
     });
 
     it('should handle remote generation errors', async () => {

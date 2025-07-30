@@ -1,5 +1,7 @@
-import type { ProviderOptions } from '../types';
+import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+
+import type { ProviderOptions } from '../types';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 interface PortkeyProviderOptions extends ProviderOptions {
@@ -52,7 +54,7 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
         ...providerOptions.config,
         apiKeyEnvar: 'PORTKEY_API_KEY',
         apiBaseUrl:
-          process.env.PORTKEY_API_BASE_URL ||
+          getEnvString('PORTKEY_API_BASE_URL') ||
           providerOptions.config?.portkeyApiBaseUrl ||
           'https://api.portkey.ai/v1',
         headers: getPortkeyHeaders(providerOptions.config),

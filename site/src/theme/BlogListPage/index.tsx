@@ -31,14 +31,34 @@ function BlogListPageMetadata(props: Props): JSX.Element {
 
 function BlogListPageContent(props: Props): JSX.Element {
   const { metadata, items, sidebar } = props;
-  const featuredPost = items[0];
-  const otherPosts = items.slice(1);
+
+  // Determine appropriate title based on pagination
+  const isFirstPage = metadata.page === 1;
+  const gridTitle = isFirstPage ? 'Latest Posts' : `Archive • Page ${metadata.page}`;
+
+  // Handle posts differently based on page
+  let featuredPost = null;
+
+  // Determine which posts to display in the grid
+  const displayPosts = React.useMemo(() => {
+    if (isFirstPage && items.length > 0) {
+      // For the grid, take all remaining posts after the featured one
+      return items.slice(1);
+    }
+    // For other pages, or if no items, just use all items
+    return items;
+  }, [isFirstPage, items]);
+
+  // Set featured post if on first page
+  if (isFirstPage && items.length > 0) {
+    featuredPost = items[0];
+  }
 
   return (
     <BlogLayout sidebar={sidebar}>
       <div className={styles.blogListPage}>
-        <FeaturedBlogPost post={featuredPost.content} />
-        <BlogPostGrid posts={otherPosts.map((item) => item.content)} />
+        {featuredPost && <FeaturedBlogPost post={featuredPost.content} />}
+        <BlogPostGrid posts={displayPosts.map((item) => item.content)} title={gridTitle} />
       </div>
       <BlogListPaginator metadata={metadata} />
     </BlogLayout>

@@ -13,7 +13,7 @@ jest.mock('@adaline/gateway', () => ({
   })),
 }));
 jest.mock('../../src/cache');
-jest.mock('../../src/providers/vertexUtil');
+jest.mock('../../src/providers/google/util');
 
 describe('AdalineGatewayCachePlugin', () => {
   let cache: AdalineGatewayCachePlugin<any>;

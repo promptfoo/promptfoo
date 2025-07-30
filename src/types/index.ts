@@ -1,6 +1,14 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
+import { ProviderEnvOverridesSchema } from '../types/env';
+import { BaseTokenUsageSchema } from '../types/shared';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
+import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
+import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+import { RedteamConfigSchema } from '../validators/redteam';
+import { NunjucksFilterMapSchema } from '../validators/shared';
+
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -8,20 +16,16 @@ import type {
   StrategyConfig,
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
-import { ProviderEnvOverridesSchema } from '../types/env';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/file';
-import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
-import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
-import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema, TokenUsageSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { TraceData } from './tracing';
 
+export * from '../redteam/types';
 export * from './prompts';
 export * from './providers';
-export * from '../redteam/types';
 export * from './shared';
+export * from './tracing';
 
 export type { EnvOverrides };
 
@@ -122,7 +126,7 @@ export type OutputConfig = z.infer<typeof OutputConfigSchema>;
 
 export type EvalConversations = Record<
   string,
-  { prompt: string | object; input: string; output: string | object }[]
+  { prompt: string | object; input: string; output: string | object; metadata?: object }[]
 >;
 
 export type EvalRegisters = Record<string, string | object>;
@@ -147,6 +151,12 @@ export interface RunEvalOptions {
   // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
   allTests?: RunEvalOptions[];
   concurrency?: number;
+
+  /**
+   * AbortSignal that can be used to cancel the evaluation
+   * This is passed to the provider's callApi function
+   */
+  abortSignal?: AbortSignal;
 }
 
 const EvaluateOptionsSchema = z.object({
@@ -175,6 +185,19 @@ const EvaluateOptionsSchema = z.object({
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
+  /**
+   * Timeout in milliseconds for each individual test case/provider API call.
+   * When reached, that specific test is marked as an error.
+   * Default is 0 (no timeout).
+   */
+  timeoutMs: z.number().optional(),
+  /**
+   * Maximum total runtime in milliseconds for the entire evaluation process.
+   * When reached, all remaining tests are marked as errors and the evaluation ends.
+   * Default is 0 (no limit).
+   */
+  maxEvalTimeMs: z.number().optional(),
+  isRedteam: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
@@ -186,7 +209,7 @@ const PromptMetricsSchema = z.object({
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
-  tokenUsage: TokenUsageSchema,
+  tokenUsage: BaseTokenUsageSchema,
   namedScores: z.record(z.string(), z.number()),
   namedScoresCount: z.record(z.string(), z.number()),
   redteam: z
@@ -222,6 +245,11 @@ export interface PromptWithMetadata {
   }[];
   count: number;
 }
+
+// The server returns ISO formatted strings for dates, so we need to adjust the type here
+export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'> & {
+  recentEvalDate: string;
+};
 
 export enum ResultFailureReason {
   // The test passed, or we don't know exactly why the test case failed.
@@ -319,6 +347,16 @@ export interface EvaluateSummaryV2 {
   stats: EvaluateStats;
 }
 
+export type EvalTableDTO = {
+  table: EvaluateTable;
+  totalCount: number;
+  filteredCount: number;
+  config: Partial<UnifiedConfig>;
+  author: string | null;
+  version: number;
+  id: string;
+};
+
 export interface ResultSuggestion {
   type: string;
   action: 'replace-prompt' | 'pre-filter' | 'post-filter' | 'note';
@@ -382,26 +420,29 @@ export const BaseAssertionTypesSchema = z.enum([
   'answer-relevance',
   'bleu',
   'classifier',
+  'contains',
   'contains-all',
   'contains-any',
   'contains-json',
   'contains-sql',
   'contains-xml',
-  'contains',
   'context-faithfulness',
   'context-recall',
   'context-relevance',
   'cost',
   'equals',
   'factuality',
+  'finish-reason',
   'g-eval',
+  'gleu',
   'guardrails',
+  'icontains',
   'icontains-all',
   'icontains-any',
-  'icontains',
   'is-json',
   'is-refusal',
   'is-sql',
+  'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
   'is-xml',
@@ -409,16 +450,21 @@ export const BaseAssertionTypesSchema = z.enum([
   'latency',
   'levenshtein',
   'llm-rubric',
+  'pi',
+  'meteor',
   'model-graded-closedqa',
   'model-graded-factuality',
   'moderation',
-  'perplexity-score',
   'perplexity',
+  'perplexity-score',
   'python',
   'regex',
   'rouge-n',
   'similar',
   'starts-with',
+  'trace-error-spans',
+  'trace-span-count',
+  'trace-span-duration',
   'webhook',
 ]);
 
@@ -449,7 +495,7 @@ export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
-  assert: z.array(z.lazy(() => AssertionSchema)), // eslint-disable-line @typescript-eslint/no-use-before-define
+  assert: z.array(z.lazy(() => AssertionSchema)),
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
   // Tag this assertion result as a named metric
@@ -493,6 +539,9 @@ export const AssertionSchema = z.object({
 
   // Process the output before running the assertion
   transform: z.string().optional(),
+
+  // Extract context from the output using a transform
+  contextTransform: z.string().optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
@@ -500,11 +549,12 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
   vars: Record<string, string | object>;
-  test: AtomicTestCase<Record<string, string | object>>;
+  test: AtomicTestCase;
   logProbs: number[] | undefined;
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
+  trace?: TraceData;
 }
 
 export type AssertionValueFunction = (
@@ -512,7 +562,7 @@ export type AssertionValueFunction = (
   context: AssertionValueFunctionContext,
 ) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
 
-export type AssertionValue = string | string[] | object | AssertionValueFunction;
+export type AssertionValue = string | string[] | number | object | AssertionValueFunction;
 
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
@@ -604,7 +654,7 @@ export const TestCaseSchema = z.object({
     .union([
       z
         .string()
-        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS.join('|')}|py)(?::[\\w.]+)?$`)),
+        .regex(new RegExp(`^file://.*\\.(${JAVASCRIPT_EXTENSIONS?.join('|')}|py)(?::[\\w.]+)?$`)),
       z.custom<ScoringFunction>(),
     ])
     .optional(),
@@ -641,10 +691,7 @@ export const TestCaseSchema = z.object({
     .optional(),
 });
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type TestCase<vars = Record<string, string | string[] | object>> = z.infer<
-  typeof TestCaseSchema
->;
+export type TestCase = z.infer<typeof TestCaseSchema>;
 
 export type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
@@ -683,10 +730,53 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
   vars: z.record(z.union([z.string(), z.object({})])).optional(),
 }).strict();
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export type AtomicTestCase<vars = Record<string, string | object>> = z.infer<
-  typeof AtomicTestCaseSchema
->;
+export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
+
+/**
+ * Configuration schema for test generators that accept parameters
+ *
+ * @example
+ * ```yaml
+ * tests:
+ *   - path: file://test_cases.py:generate_tests
+ *     config:
+ *       dataset: truthfulqa
+ *       split: validation
+ *       max_rows: 100
+ * ```
+ */
+export const TestGeneratorConfigSchema = z.object({
+  /** Path to the test generator function (e.g., file://path/to/tests.py:function_name) */
+  path: z.string(),
+  /**
+   * Configuration object passed to the generator function
+   * Common configuration options include:
+   * - dataset: string - Dataset identifier
+   * - split: string - Dataset split (train/validation/test)
+   * - max_rows: number - Maximum number of test cases to generate
+   * - languages: string[] - Array of target languages
+   * - difficulty: string - Difficulty level (basic/intermediate/advanced)
+   * - categories: string[] - Array of test categories
+   * - data: object - Custom data configuration
+   *
+   * Values can reference external files using file:// paths
+   */
+  config: z
+    .record(
+      z.string(),
+      z.union([
+        z.string(),
+        z.number(),
+        z.boolean(),
+        z.array(z.union([z.string(), z.number(), z.boolean()])),
+        z.record(z.string(), z.any()),
+        z.any(), // Allow for complex nested structures and file:// references
+      ]),
+    )
+    .optional(),
+});
+
+export type TestGeneratorConfig = z.infer<typeof TestGeneratorConfigSchema>;
 
 export const DerivedMetricSchema = z.object({
   // The name of this metric
@@ -726,8 +816,15 @@ export const TestSuiteSchema = z.object({
   // scenarios
   scenarios: z.array(ScenarioSchema).optional(),
 
-  // Default test case config
-  defaultTest: TestCaseSchema.partial().optional(),
+  // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
+  defaultTest: z
+    .union([
+      z.string().refine((val) => val.startsWith('file://'), {
+        message: 'defaultTest string must start with file://',
+      }),
+      TestCaseSchema.omit({ description: true }),
+    ])
+    .optional(),
 
   // Nunjucks filters
   nunjucksFilters: NunjucksFilterMapSchema.optional(),
@@ -769,10 +866,49 @@ export const TestSuiteSchema = z.object({
           },
         ),
     )
+    .nullable()
     .optional(),
 
   // Redteam configuration - used only when generating redteam tests
   redteam: z.custom<RedteamFileConfig>().optional(),
+
+  // Tracing configuration (simplified version for parsed TestSuite)
+  tracing: z
+    .object({
+      enabled: z.boolean(),
+      otlp: z
+        .object({
+          http: z
+            .object({
+              enabled: z.boolean(),
+              port: z.number(),
+              host: z.string().optional(),
+              acceptFormats: z.array(z.string()),
+            })
+            .optional(),
+          grpc: z
+            .object({
+              enabled: z.boolean(),
+              port: z.number(),
+            })
+            .optional(),
+        })
+        .optional(),
+      storage: z
+        .object({
+          type: z.string(),
+          retentionDays: z.number(),
+        })
+        .optional(),
+      forwarding: z
+        .object({
+          enabled: z.boolean(),
+          endpoint: z.string(),
+          headers: z.record(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -806,13 +942,26 @@ export const TestSuiteConfigSchema = z.object({
   ]),
 
   // Path to a test file, OR list of LLM prompt variations (aka "test case")
-  tests: z.union([z.string(), z.array(z.union([z.string(), TestCaseSchema]))]).optional(),
+  tests: z
+    .union([
+      z.string(),
+      z.array(z.union([z.string(), TestCaseSchema, TestGeneratorConfigSchema])),
+      TestGeneratorConfigSchema,
+    ])
+    .optional(),
 
   // Scenarios, groupings of data and tests to be evaluated
   scenarios: z.array(z.union([z.string(), ScenarioSchema])).optional(),
 
   // Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.
-  defaultTest: TestCaseSchema.partial().omit({ description: true }).optional(),
+  defaultTest: z
+    .union([
+      z.string().refine((val) => val.startsWith('file://'), {
+        message: 'defaultTest string must start with file://',
+      }),
+      TestCaseSchema.omit({ description: true }),
+    ])
+    .optional(),
 
   // Path to write output. Writes to console/web viewer if not set.
   outputPath: z.union([z.string(), z.array(z.string())]).optional(),
@@ -850,7 +999,7 @@ export const TestSuiteConfigSchema = z.object({
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
   // Extension that is called at various plugin points
-  extensions: z.array(z.string()).optional(),
+  extensions: z.array(z.string()).nullable().optional(),
 
   // Any other information about this configuration.
   metadata: MetadataSchema.optional(),
@@ -860,9 +1009,54 @@ export const TestSuiteConfigSchema = z.object({
 
   // Write results to disk so they can be viewed in web viewer
   writeLatestResults: z.boolean().optional(),
+
+  // Tracing configuration
+  tracing: z
+    .object({
+      enabled: z.boolean().default(false),
+
+      // OTLP receiver configuration
+      otlp: z
+        .object({
+          http: z
+            .object({
+              enabled: z.boolean().default(true),
+              port: z.number().default(4318),
+              host: z.string().default('0.0.0.0'),
+              acceptFormats: z.array(z.enum(['protobuf', 'json'])).default(['json']),
+            })
+            .optional(),
+          grpc: z
+            .object({
+              enabled: z.boolean().default(false),
+              port: z.number().default(4317),
+            })
+            .optional(),
+        })
+        .optional(),
+
+      // Storage configuration
+      storage: z
+        .object({
+          type: z.enum(['sqlite']).default('sqlite'),
+          retentionDays: z.number().default(30),
+        })
+        .optional(),
+
+      // Optional: Forward traces to another collector
+      forwarding: z
+        .object({
+          enabled: z.boolean().default(false),
+          endpoint: z.string(),
+          headers: z.record(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
+
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
@@ -884,6 +1078,16 @@ export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
       data.providers = data.targets;
       delete data.targets;
     }
+
+    // Handle null extensions, undefined extensions, or empty arrays by deleting the field
+    if (
+      data.extensions === null ||
+      data.extensions === undefined ||
+      (Array.isArray(data.extensions) && data.extensions.length === 0)
+    ) {
+      delete data.extensions;
+    }
+
     return data;
   });
 
@@ -935,6 +1139,8 @@ export interface ResultLightweight {
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
+export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
@@ -954,7 +1160,16 @@ export interface Job {
 }
 
 // used for writing eval results
-export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'jsonl', 'txt', 'yaml', 'yml']);
+export const OutputFileExtension = z.enum([
+  'csv',
+  'html',
+  'json',
+  'jsonl',
+  'txt',
+  'xml',
+  'yaml',
+  'yml',
+]);
 export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
 
 export interface LoadApiProviderContext {

@@ -28,7 +28,7 @@ ANTHROPIC_API_KEY=your_anthropic_key_here
 
 ### Step 2: Configure Your Target Model
 
-**Important:** You must overwrite the default target in the command line. The configuration defaults to `openai:chat:gpt-4o-mini`:
+**Important:** You must overwrite the default target in the command line. The configuration defaults to `openai:chat:gpt-4.1-mini`:
 
 ```bash
 promptfoo redteam run --target openrouter:...

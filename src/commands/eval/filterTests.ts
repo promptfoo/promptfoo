@@ -1,7 +1,8 @@
 import logger from '../../logger';
-import type { TestSuite } from '../../types';
 import { ResultFailureReason } from '../../types';
 import { filterTestsByResults } from './filterTestsUtil';
+
+import type { TestSuite } from '../../types';
 
 /**
  * Options for filtering test cases in a test suite.
@@ -29,7 +30,7 @@ type Tests = NonNullable<TestSuite['tests']>;
  * @param pathOrId - Either a file path to a JSON results file or an eval ID
  * @returns A filtered array of tests that failed in the specified eval
  */
-export async function filterFailingTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
+async function filterFailingTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
   return filterTestsByResults(testSuite, pathOrId, (result) => !result.success);
 }
 
@@ -39,7 +40,7 @@ export async function filterFailingTests(testSuite: TestSuite, pathOrId: string)
  * @param pathOrId - Either a file path to a JSON results file or an eval ID
  * @returns A filtered array of tests that resulted in errors in the specified evaluation
  */
-export async function filterErrorTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
+async function filterErrorTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
   return filterTestsByResults(
     testSuite,
     pathOrId,
@@ -86,10 +87,20 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
         return false;
       }
-      const matches = test.metadata[key] === value;
+      const testValue = test.metadata[key];
+      let matches = false;
+
+      if (Array.isArray(testValue)) {
+        // For array metadata, check if any value includes the search term
+        matches = testValue.some((v) => v.toString().includes(value));
+      } else if (testValue !== undefined) {
+        // For single value metadata, check if it includes the search term
+        matches = testValue.toString().includes(value);
+      }
+
       if (!matches) {
         logger.debug(
-          `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key}=${value}, got ${JSON.stringify(test.metadata)}`,
+          `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(test.metadata)}`,
         );
       }
       return matches;
