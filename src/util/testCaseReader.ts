@@ -1,11 +1,12 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import { parse as parsePath } from 'path';
+
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
-import { parse as parsePath } from 'path';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -15,6 +16,9 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
+import { maybeLoadConfigFromExternalFile } from './file';
+import { isJavascriptFile } from './fileExtensions';
+
 import type {
   CsvRow,
   ProviderOptions,
@@ -22,8 +26,6 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types';
-import { maybeLoadConfigFromExternalFile } from './file';
-import { isJavascriptFile } from './fileExtensions';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -235,6 +237,7 @@ async function loadTestWithVars(
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
+  isDefaultTest: boolean = false,
 ): Promise<TestCase> {
   let testCase: TestCase;
 
@@ -260,6 +263,7 @@ export async function readTest(
   }
 
   if (
+    !isDefaultTest &&
     !testCase.assert &&
     !testCase.vars &&
     !testCase.options &&
@@ -326,7 +330,7 @@ export async function loadTestsFromGlob(
     return (await $RefParser.dereference(testCases)) as TestCase[];
   };
 
-  const ret: TestCase<Record<string, string | string[] | object>>[] = [];
+  const ret: TestCase[] = [];
   if (testFiles.length < 1) {
     logger.error(`No test files found for path: ${loadTestsGlob}`);
     return ret;
@@ -353,7 +357,6 @@ export async function loadTestsFromGlob(
         .map((line) => JSON.parse(line));
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       testCases = await _deref(require(testFile), testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);

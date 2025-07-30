@@ -1,12 +1,13 @@
 import fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
-import type { Logger } from 'winston';
+
+import yaml from 'js-yaml';
 import * as esmModule from '../../src/esm';
 import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
 import { isJavascriptFile } from '../../src/util/fileExtensions';
 import { loadFileReference, processConfigFileReferences } from '../../src/util/fileReference';
+import type { Logger } from 'winston';
 
 jest.mock('fs', () => ({
   ...jest.requireActual('fs'),

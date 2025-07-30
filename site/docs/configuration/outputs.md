@@ -35,6 +35,9 @@ promptfoo eval --output results.json
 
 # Create CSV for spreadsheet analysis
 promptfoo eval --output results.csv
+
+# Generate XML for integration with other tools
+promptfoo eval --output results.xml
 ```
 
 ## Available Formats
@@ -109,6 +112,34 @@ promptfoo eval --output results.yaml
 ```
 
 **Use when:** Reviewing results in a text editor or version control.
+
+### XML Format
+
+Structured data for enterprise integrations:
+
+```bash
+promptfoo eval --output results.xml
+```
+
+**Structure:**
+
+```xml
+<promptfoo>
+  <evalId>abc-123-def</evalId>
+  <results>
+    <version>3</version>
+    <timestamp>2024-01-15T10:30:00Z</timestamp>
+    <prompts>...</prompts>
+    <providers>...</providers>
+    <outputs>...</outputs>
+    <stats>...</stats>
+  </results>
+  <config>...</config>
+  <shareableUrl>...</shareableUrl>
+</promptfoo>
+```
+
+**Use when:** Integrating with enterprise systems, XML-based workflows, or when XML is a requirement.
 
 ## Configuration Options
 

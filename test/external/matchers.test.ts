@@ -156,7 +156,7 @@ describe('matchesConversationRelevance', () => {
     const result = await matchesConversationRelevance(messages, 0.5);
     expect(result.pass).toBe(false);
     expect(result.reason).toBe('API error');
-    expect(result.tokensUsed).toEqual({
+    expect(result.tokensUsed).toMatchObject({
       total: 5,
       prompt: 5,
       completion: 0,

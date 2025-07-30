@@ -1,12 +1,12 @@
 // These metrics are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import dedent from 'dedent';
 import { getAndCheckProvider, fail } from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
 import type { GradingConfig, GradingResult, TokenUsage } from '../../types';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { ConversationRelevancyTemplate, type MessageRole } from './conversationRelevancyTemplate';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
@@ -41,24 +41,21 @@ export async function matchesConversationRelevance(
       typeof msg.output === 'string' && vars ? nunjucks.renderString(msg.output, vars) : msg.output,
   }));
 
-  // Generate verdict using LLM
-  const defaultRubricPrompt = dedent`Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether the LAST \`output\` is relevant to the LAST \`input\` in messages. The JSON will have 2 fields: 'verdict' and 'reason'.
-  The 'verdict' key should STRICTLY be either 'yes' or 'no', which states whether the last \`output\` is relevant to the last \`input\`. 
-  Provide a 'reason' ONLY if the answer is 'no'. 
-  You MUST USE the previous messages (if any) provided in the list of messages to make an informed judgement on relevancy.
-  
-  **
-  IMPORTANT: 
-  - Please make sure to only return in JSON format.
-  - You MUST ONLY provide a verdict for the LAST message on the list but MUST USE context from the previous messages.
-  - You DON'T have to provide a reason if the answer is 'yes'.
-  - ONLY provide a 'no' answer if the LLM response is COMPLETELY irrelevant to the message input.
-  - Vague LLM responses to vague inputs, such as greetings DOES NOT count as irrelevant to the conversation.
-  **
-  Messages:
-  {{ messages | dump(2) }}
-  JSON:`;
+  // Convert messages to the format expected by ConversationRelevancyTemplate
+  const messageRoles: MessageRole[] = [];
+  for (const msg of renderedMessages) {
+    messageRoles.push({
+      role: 'user',
+      content: typeof msg.input === 'string' ? msg.input : JSON.stringify(msg.input),
+    });
+    messageRoles.push({
+      role: 'assistant',
+      content: typeof msg.output === 'string' ? msg.output : JSON.stringify(msg.output),
+    });
+  }
 
+  // Generate verdict using the template
+  const defaultRubricPrompt = ConversationRelevancyTemplate.generateVerdicts(messageRoles);
   const rubricPrompt = grading?.rubricPrompt || defaultRubricPrompt;
 
   invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
@@ -90,7 +87,8 @@ export async function matchesConversationRelevance(
     return {
       pass: score >= threshold - Number.EPSILON,
       score,
-      reason: result.reason || `Response ${pass ? 'is' : 'is not'} relevant to the input`,
+      reason:
+        result.reason || `Response ${pass ? 'is' : 'is not'} relevant to the conversation context`,
       tokensUsed: resp.tokenUsage as TokenUsage,
     };
   } catch (err) {

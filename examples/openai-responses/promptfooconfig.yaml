@@ -4,13 +4,13 @@ prompts:
   - 'Extract information about the event: {{event}}'
 
 providers:
-  - id: openai:responses:gpt-4.5-preview
+  - id: openai:responses:gpt-4.1
     label: text-format
     config:
       temperature: 0.7
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'
 
-  - id: openai:responses:gpt-4.5-preview
+  - id: openai:responses:gpt-4.1
     label: json-object
     config:
       temperature: 0.7
@@ -19,7 +19,7 @@ providers:
         type: 'json_object'
       store: true
 
-  - id: openai:responses:gpt-4.5-preview
+  - id: openai:responses:gpt-4.1
     label: json-schema
     config:
       temperature: 0.7

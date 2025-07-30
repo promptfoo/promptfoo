@@ -1,10 +1,11 @@
 import React from 'react';
+
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 
-export const EmptyState: React.FC = () => {
+const EmptyState: React.FC = () => {
   return (
     <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
       <Paper

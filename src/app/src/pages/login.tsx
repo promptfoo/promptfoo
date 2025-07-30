@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
@@ -10,6 +10,7 @@ import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 export default function LoginPage() {
   const [emailInput, setEmailInput] = useState('');

@@ -7,6 +7,8 @@ import {
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
 } from '../redteam/remoteGeneration';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -16,7 +18,6 @@ import type {
   TokenUsage,
 } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
@@ -192,9 +193,11 @@ interface PromptfooAgentOptions {
 
 export class PromptfooSimulatedUserProvider implements ApiProvider {
   private options: PromptfooAgentOptions;
+  private taskId: string;
 
-  constructor(options: PromptfooAgentOptions = {}) {
+  constructor(options: PromptfooAgentOptions = {}, taskId: string) {
     this.options = options;
+    this.taskId = taskId;
   }
 
   id(): string {
@@ -212,7 +215,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const messages = JSON.parse(prompt);
     const body = {
-      task: 'tau',
+      task: this.taskId,
       instructions: this.options.instructions,
       history: messages,
       email: getUserEmail(),

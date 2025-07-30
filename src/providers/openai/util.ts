@@ -1,11 +1,11 @@
 import OpenAI from 'openai';
-import type { TokenUsage } from '../../types';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { getAjv } from '../../util/json';
-import { safeJsonStringify } from '../../util/json';
-import type { ProviderConfig } from '../shared';
+import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
+
+import type { TokenUsage } from '../../types';
+import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
 
@@ -79,13 +79,7 @@ export const OPENAI_CHAT_MODELS = [
       output: 0.4 / 1e6,
     },
   })),
-  ...['gpt-4.5-preview', 'gpt-4.5-preview-2025-02-27'].map((model) => ({
-    id: model,
-    cost: {
-      input: 75 / 1e6,
-      output: 150 / 1e6,
-    },
-  })),
+  // GPT-4.5 models deprecated as of 2025-07-14, removed from API
   ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
     id: model,
     cost: {
@@ -259,6 +253,24 @@ export const OPENAI_CHAT_MODELS = [
   })),
 ];
 
+// Deep research models for Responses API
+export const OPENAI_DEEP_RESEARCH_MODELS = [
+  ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
+    id: model,
+    cost: {
+      input: 10 / 1e6,
+      output: 40 / 1e6,
+    },
+  })),
+  ...['o4-mini-deep-research', 'o4-mini-deep-research-2025-06-26'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2 / 1e6,
+      output: 8 / 1e6,
+    },
+  })),
+];
+
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility
 export const OPENAI_COMPLETION_MODELS = [
   {
@@ -325,6 +337,7 @@ export function calculateOpenAICost(
       ...OPENAI_CHAT_MODELS,
       ...OPENAI_COMPLETION_MODELS,
       ...OPENAI_REALTIME_MODELS,
+      ...OPENAI_DEEP_RESEARCH_MODELS,
     ]);
   }
 
@@ -346,6 +359,7 @@ export function calculateOpenAICost(
     ...OPENAI_CHAT_MODELS,
     ...OPENAI_COMPLETION_MODELS,
     ...OPENAI_REALTIME_MODELS,
+    ...OPENAI_DEEP_RESEARCH_MODELS,
   ].find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;

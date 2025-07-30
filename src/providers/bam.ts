@@ -1,15 +1,16 @@
+import { getCache, isCacheEnabled } from '../cache';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from './shared';
 import type {
   Client as GenAIClient,
   TextGenerationCreateInput,
   TextGenerationCreateOutput,
 } from '@ibm-generative-ai/node-sdk';
-import { getCache, isCacheEnabled } from '../cache';
+
 import type { EnvVarKey } from '../envars';
-import { getEnvString } from '../envars';
-import logger from '../logger';
 import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface BAMGenerationParameters {
   apiKey?: string | null;
@@ -172,9 +173,14 @@ export class BAMProvider implements ApiProvider {
         const cachedResponse = await cache.get(cacheKey);
         if (cachedResponse) {
           logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+          const parsedResponse = JSON.parse(cachedResponse as string);
+          // Mark cached tokens in the tokenUsage
+          if (parsedResponse.tokenUsage) {
+            parsedResponse.tokenUsage.cached = parsedResponse.tokenUsage.total || 0;
+          }
           return {
-            output: JSON.parse(cachedResponse as string),
-            tokenUsage: {},
+            ...parsedResponse,
+            cached: true,
           };
         }
       }
@@ -182,7 +188,14 @@ export class BAMProvider implements ApiProvider {
       const client = await this.getClient();
       const result = await client.text.generation.create(params, { signal });
 
-      return convertResponse(result);
+      const response = convertResponse(result);
+
+      // Cache the response if caching is enabled
+      if (isCacheEnabled()) {
+        await cache.set(cacheKey, JSON.stringify(response));
+      }
+
+      return response;
     } catch (err) {
       logger.error(`BAM API call error: ${String(err)}`);
 

@@ -1,0 +1,24 @@
+{
+  "name": "http-provider-auth-signature-jks",
+  "version": "1.0.0",
+  "description": "Example HTTP provider with JKS certificate signature authentication",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "promptfoo": "^0.117.4",
+    "jks-js": "^1.1.4"
+  },
+  "keywords": [
+    "promptfoo",
+    "authentication",
+    "jks",
+    "certificates",
+    "signature"
+  ],
+  "author": "",
+  "license": "MIT"
+}

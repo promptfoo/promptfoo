@@ -1,6 +1,6 @@
-import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
-import type { Plugin } from './plugins';
 import { FOUNDATION_PLUGINS, PII_PLUGINS } from './plugins';
+
+import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
@@ -195,7 +195,7 @@ export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
   { plugins: Plugin[]; strategies: Strategy[] }
 > = {
   'owasp:agentic:t01': {
-    plugins: [MEMORY_POISONING_PLUGIN_ID],
+    plugins: ['agentic:memory-poisoning'],
     strategies: [],
   },
 };

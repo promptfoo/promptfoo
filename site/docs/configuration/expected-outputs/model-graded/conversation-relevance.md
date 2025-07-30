@@ -170,3 +170,8 @@ defaultTest:
 - [Context relevance](/docs/configuration/expected-outputs/model-graded/context-relevance) - For evaluating if context is relevant to a query
 - [Answer relevance](/docs/configuration/expected-outputs/model-graded/answer-relevance) - For evaluating if an answer is relevant to a question
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) - Overview of all model-graded assertions
+
+## Citation
+
+This implementation is adapted from [DeepEval's Conversation Relevancy metric](https://docs.confident-ai.com/docs/metrics-conversation-relevancy).
+

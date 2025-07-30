@@ -1,12 +1,19 @@
-import Anthropic from '@anthropic-ai/sdk';
-import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
-import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
-import dedent from 'dedent';
 import type { Agent } from 'http';
+
+import Anthropic from '@anthropic-ai/sdk';
+import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { maybeLoadToolsFromExternalFile } from '../../util';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { outputFromMessage, parseMessages } from '../anthropic/util';
+import { parseChatPrompt } from '../shared';
+import { novaOutputFromMessage, novaParseMessages } from './util';
+import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
+
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
@@ -16,10 +23,6 @@ import type {
   ProviderResponse,
 } from '../../types/providers';
 import type { TokenUsage } from '../../types/shared';
-import { maybeLoadToolsFromExternalFile } from '../../util';
-import { outputFromMessage, parseMessages } from '../anthropic/util';
-import { parseChatPrompt } from '../shared';
-import { novaOutputFromMessage, novaParseMessages } from './util';
 
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
@@ -204,7 +207,7 @@ export interface BedrockAI21GenerationOptions extends BedrockOptions {
   top_p?: number;
 }
 
-export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
+interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   interfaceConfig?: {
     max_new_tokens?: number;
     temperature?: number;
@@ -241,12 +244,12 @@ export interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   };
 }
 
-export type ContentType = 'AUDIO' | 'TEXT' | 'TOOL';
+type ContentType = 'AUDIO' | 'TEXT' | 'TOOL';
 
-export type AudioMediaType = 'audio/wav' | 'audio/lpcm' | 'audio/mulaw' | 'audio/mpeg';
-export type TextMediaType = 'text/plain' | 'application/json';
+type AudioMediaType = 'audio/wav' | 'audio/lpcm' | 'audio/mulaw' | 'audio/mpeg';
+type TextMediaType = 'text/plain' | 'application/json';
 
-export interface AudioConfiguration {
+interface AudioConfiguration {
   readonly mediaType: AudioMediaType;
   readonly sampleRateHertz: number;
   readonly sampleSizeBits: number;
@@ -255,7 +258,7 @@ export interface AudioConfiguration {
   readonly audioType: 'SPEECH';
 }
 
-export interface TextConfiguration {
+interface TextConfiguration {
   readonly contentType: ContentType;
   readonly mediaType: TextMediaType;
 }
@@ -300,7 +303,7 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
   };
 }
 
-export interface BedrockDeepseekGenerationOptions extends BedrockOptions {
+interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
@@ -1288,7 +1291,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-instant-v1': BEDROCK_MODEL.CLAUDE_COMPLETION,
@@ -1323,7 +1325,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'apac.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
@@ -1336,7 +1337,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.meta.llama3-2-1b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
@@ -1358,7 +1358,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'us.anthropic.claude-3-sonnet-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
@@ -1562,7 +1561,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
           output: model.output(this.config, JSON.parse(cachedResponse as string)),
-          tokenUsage: {},
+          tokenUsage: createEmptyTokenUsage(),
         };
       }
     }

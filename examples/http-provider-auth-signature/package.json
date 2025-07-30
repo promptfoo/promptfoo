@@ -11,6 +11,6 @@
   "license": "MIT",
   "dependencies": {
     "express": "^5.1.0",
-    "promptfoo": "^0.114.7"
+    "promptfoo": "^0.117.4"
   }
 }
