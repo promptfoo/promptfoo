@@ -3,7 +3,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import { synthesizeFromTestSuite } from '../../../src/assertions/synthesis';
 import { disableCache } from '../../../src/cache';
-import { doGenerateAssertions } from '../../../src/commands/generate/assertions';
+import { doGenerateAssertions } from '../../../src/commands/generate/actions/assertionsAction';
 import telemetry from '../../../src/telemetry';
 import { resolveConfigs } from '../../../src/util/config/load';
 

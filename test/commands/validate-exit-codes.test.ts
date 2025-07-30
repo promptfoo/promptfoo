@@ -145,7 +145,7 @@ describe('Validate Command Exit Codes', () => {
 
   describe('Command registration', () => {
     it('should register validate command correctly', () => {
-      validateCommand(program, defaultConfig, defaultConfigPath);
+      validateCommand(program, {}, undefined);
 
       const validateCmd = program.commands.find((cmd) => cmd.name() === 'validate');
 

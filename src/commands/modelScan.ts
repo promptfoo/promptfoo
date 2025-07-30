@@ -1,111 +1,20 @@
-import { exec, spawn } from 'child_process';
-import { promisify } from 'util';
-
-import chalk from 'chalk';
-import logger from '../logger';
 import type { Command } from 'commander';
 
-const execAsync = promisify(exec);
+export { checkModelAuditInstalled } from './modelScan/modelScanAction';
 
-export async function checkModelAuditInstalled(): Promise<boolean> {
-  try {
-    await execAsync('which modelaudit');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function modelScanCommand(program: Command): void {
+export function modelScanCommand(program: Command) {
   program
-    .command('scan-model')
-    .description('Scan ML models for security vulnerabilities')
-    .argument('[paths...]', 'Paths to model files or directories to scan')
-    .option(
-      '-b, --blacklist <pattern>',
-      'Additional blacklist patterns to check against model names',
-      (val: string, acc: string[]) => [...acc, val],
-      [] as string[],
-    )
-    .option('-f, --format <format>', 'Output format (text or json)', 'text')
-    .option('-o, --output <path>', 'Output file path (prints to stdout if not specified)')
-    .option(
-      '-t, --timeout <seconds>',
-      'Scan timeout in seconds',
-      (val) => Number.parseInt(val, 10),
-      300,
-    )
-    .option('-v, --verbose', 'Enable verbose output')
-    .option('--max-file-size <bytes>', 'Maximum file size to scan in bytes')
-    .option('--max-total-size <bytes>', 'Maximum total bytes to scan before stopping')
-    .action(async (paths: string[], options) => {
-      if (!paths || paths.length === 0) {
-        logger.error(
-          'No paths specified. Please provide at least one model file or directory to scan.',
-        );
-        process.exit(1);
-      }
-
-      // Check if modelaudit is installed
-      const isModelAuditInstalled = await checkModelAuditInstalled();
-      if (!isModelAuditInstalled) {
-        logger.error('ModelAudit is not installed.');
-        logger.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
-        logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
-        process.exit(1);
-      }
-
-      const args = ['scan', ...paths];
-
-      // Add options
-      if (options.blacklist && options.blacklist.length > 0) {
-        options.blacklist.forEach((pattern: string) => {
-          args.push('--blacklist', pattern);
-        });
-      }
-
-      if (options.format) {
-        args.push('--format', options.format);
-      }
-
-      if (options.output) {
-        args.push('--output', options.output);
-      }
-
-      if (options.timeout) {
-        args.push('--timeout', options.timeout.toString());
-      }
-
-      if (options.verbose) {
-        args.push('--verbose');
-      }
-
-      if (options.maxFileSize) {
-        args.push('--max-file-size', options.maxFileSize);
-      }
-
-      if (options.maxTotalSize) {
-        args.push('--max-total-size', options.maxTotalSize);
-      }
-
-      logger.info(`Running model scan on: ${paths.join(', ')}`);
-
-      const modelAudit = spawn('modelaudit', args, { stdio: 'inherit' });
-
-      modelAudit.on('error', (error) => {
-        logger.error(`Failed to start modelaudit: ${error.message}`);
-        logger.info('Make sure modelaudit is installed and available in your PATH.');
-        logger.info('Install it using: pip install modelaudit');
-        process.exit(1);
-      });
-
-      modelAudit.on('close', (code) => {
-        if (code === 0) {
-          logger.info('Model scan completed successfully.');
-        } else {
-          logger.error(`Model scan completed with issues. Exit code: ${code}`);
-          process.exit(code || 1);
-        }
-      });
+    .command('scan-model <modelPaths...>')
+    .description('Scan model files for security risks')
+    .option('--blacklist [pattern]', 'Blacklist pattern to ignore files')
+    .option('--format [format]', 'Output format (json or console)', 'console')
+    .option('--output [file]', 'Output file for results')
+    .option('--timeout [seconds]', 'Scan timeout in seconds', '600')
+    .option('--verbose', 'Enable verbose output')
+    .option('--max-file-size [bytes]', 'Maximum file size to scan', '1000000')
+    .option('--max-total-size [bytes]', 'Maximum total size of all files', '5000000')
+    .action(async (modelPaths: string[], options: any) => {
+      const { modelScanAction } = await import('./modelScan/modelScanAction');
+      await modelScanAction(modelPaths, options);
     });
 }

@@ -23,7 +23,6 @@ import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
 import logger, { setLogLevel } from './logger';
-import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
@@ -32,9 +31,8 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
-import { checkForUpdates } from './updates';
+import { checkForUpdatesDeferred } from './updates-deferred';
 import { setupEnv } from './util';
-import { loadDefaultConfig } from './util/config/default';
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -73,10 +71,14 @@ export function addCommonOptionsRecursively(command: Command) {
 }
 
 async function main() {
-  await checkForUpdates();
-  await runDbMigrations();
+  // Start all resources as promises immediately (non-blocking)
+  const updateCheckPromise = checkForUpdatesDeferred().catch(() => {
+    // Silently ignore update check failures
+  });
 
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+  const dbMigrationPromise = import('./migrate').then((m) => m.runDbMigrations());
+
+  const configPromise = import('./util/config/default').then((m) => m.loadDefaultConfig());
 
   const program = new Command('promptfoo');
   program
@@ -88,6 +90,25 @@ async function main() {
       program.help();
       process.exitCode = 1;
     });
+
+  // For help/version commands, we can skip loading resources
+  const isQuickCommand =
+    process.argv.includes('--help') ||
+    process.argv.includes('-h') ||
+    process.argv.includes('--version') ||
+    process.argv.includes('-V') ||
+    !process.argv[2];
+
+  // Default values for config
+  let defaultConfig: any = {};
+  let defaultConfigPath: string | undefined;
+
+  // For non-help commands, wait for config and database before registering commands
+  if (!isQuickCommand) {
+    const [config] = await Promise.all([configPromise, dbMigrationPromise]);
+    defaultConfig = config.defaultConfig;
+    defaultConfigPath = config.defaultConfigPath;
+  }
 
   // Main commands
   evalCommand(program, defaultConfig, defaultConfigPath);
@@ -116,15 +137,9 @@ async function main() {
   generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
-  const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
-    await loadDefaultConfig(undefined, 'redteam');
-
+  // Red team commands
   redteamInitCommand(redteamBaseCommand);
-  evalCommand(
-    redteamBaseCommand,
-    redteamConfig ?? defaultConfig,
-    redteamConfigPath ?? defaultConfigPath,
-  );
+  evalCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   redteamDiscoverCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(redteamBaseCommand, 'generate', defaultConfig, defaultConfigPath);
   redteamRunCommand(redteamBaseCommand);
@@ -135,10 +150,20 @@ async function main() {
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
 
+  // Add hook to await remaining resources before command execution
+  program.hook('preAction', async () => {
+    if (!isQuickCommand) {
+      // Await update check for non-quick commands
+      await updateCheckPromise;
+    }
+  });
+
   program.parse();
 }
 
 if (require.main === module) {
-  checkNodeVersion();
-  main();
+  (async () => {
+    await checkNodeVersion();
+    await main();
+  })();
 }

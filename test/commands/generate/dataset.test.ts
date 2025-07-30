@@ -2,7 +2,7 @@ import fs from 'fs';
 
 import yaml from 'js-yaml';
 import { disableCache } from '../../../src/cache';
-import { doGenerateDataset } from '../../../src/commands/generate/dataset';
+import { doGenerateDataset } from '../../../src/commands/generate/actions/datasetAction';
 import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
 import { resolveConfigs } from '../../../src/util/config/load';

@@ -1,44 +1,16 @@
-import logger from '../logger';
-import Eval from '../models/eval';
-import telemetry from '../telemetry';
-import { writeOutput } from '../util';
 import type { Command } from 'commander';
 
 export function exportCommand(program: Command) {
   program
     .command('export <evalId>')
-    .description('Export an eval record to a JSON file')
-    .option('-o, --output [outputPath]', 'Output path for the exported file')
-    .action(async (evalId, cmdObj) => {
-      try {
-        let result;
-        if (evalId === 'latest') {
-          result = await Eval.latest();
-        } else {
-          result = await Eval.findById(evalId);
-        }
-
-        if (!result) {
-          logger.error(`No eval found with ID ${evalId}`);
-          process.exit(1);
-        }
-        const summary = await result.toEvaluateSummary();
-        const jsonData = JSON.stringify(summary, null, 2);
-        if (cmdObj.output) {
-          await writeOutput(cmdObj.output, result, null);
-
-          logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
-        } else {
-          logger.info(jsonData);
-        }
-
-        telemetry.record('command_used', {
-          name: 'export',
-          evalId,
-        });
-      } catch (error) {
-        logger.error(`Failed to export eval: ${error}`);
-        process.exit(1);
-      }
+    .description('Export an evaluation to a JSON file')
+    .option('-o, --output <path>', 'Output file path')
+    .option(
+      '--env-path <path>',
+      'Path to the environment directory or file (usually .env, .env.local, or .env.production)',
+    )
+    .action(async (evalId: string, cmdObj: { output?: string; envPath?: string }) => {
+      const { exportAction } = await import('./export/exportAction');
+      await exportAction(evalId, cmdObj);
     });
 }
