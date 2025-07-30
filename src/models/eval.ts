@@ -470,6 +470,19 @@ export default class Eval {
           } else if (operator === 'not_contains') {
             condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
           }
+        } else if (type === 'plugin' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          // Plugin ID is stored in metadata.pluginId
+          condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+        } else if (type === 'strategy' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          if (sanitizedValue === 'basic') {
+            // Basic is represented by NULL in the metadata.strategyId field
+            condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
+          } else {
+            // Strategy ID is stored in metadata.strategyId
+            condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
+          }
         }
 
         if (condition) {
