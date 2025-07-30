@@ -52,7 +52,7 @@ describe('evalRouter', () => {
       expect(updateResult).toHaveBeenCalledWith(evalId, newConfig, undefined);
     });
 
-    it('should return 400 if id is missing', async () => {
+    it('should return 404 if id is missing', async () => {
       const response = await request(app)
         .patch('/api/eval/')
         .send({ config: { description: 'New Description' } });

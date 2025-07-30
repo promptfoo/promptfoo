@@ -1,5 +1,6 @@
+import React from 'react';
 import { render, waitFor, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { callApi } from '@app/utils/api';
 import EvalsDataGrid from './EvalsDataGrid';
@@ -180,10 +181,35 @@ describe('EvalsDataGrid', () => {
       } as any;
     });
 
-    // Test that location change triggers refetch
-    const { rerender } = render(
+    // Create a wrapper component that simulates navigation
+    const NavigationWrapper = () => {
+      const navigate = useNavigate();
+
+      React.useEffect(() => {
+        // Navigate away and back after initial render
+        const timer = setTimeout(async () => {
+          navigate('/eval/eval-1');
+          // Small delay to let the navigation happen
+          setTimeout(() => {
+            navigate('/evals');
+          }, 50);
+        }, 100);
+        return () => clearTimeout(timer);
+      }, [navigate]);
+
+      return <EvalsDataGrid onEvalSelected={vi.fn()} />;
+    };
+
+    const TestComponent = () => (
+      <Routes>
+        <Route path="/evals" element={<NavigationWrapper />} />
+        <Route path="/eval/:id" element={<div>Edit page</div>} />
+      </Routes>
+    );
+
+    render(
       <MemoryRouter initialEntries={['/evals']}>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <TestComponent />
       </MemoryRouter>,
     );
 
@@ -192,17 +218,18 @@ describe('EvalsDataGrid', () => {
       expect(callApi).toHaveBeenCalledTimes(1);
     });
 
-    // Simulate navigation by changing location
-    rerender(
-      <MemoryRouter initialEntries={['/evals']}>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
-      </MemoryRouter>,
+    // Wait for navigation and refetch
+    await waitFor(
+      () => {
+        expect(callApi).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 2000 },
     );
 
-    // The component should refetch when location changes
-    // In a real scenario, this would happen when navigating back from eval detail
-    // For now, we just verify that our fix allows multiple fetches
-    expect(callCount).toBeGreaterThanOrEqual(1);
+    // Verify updated data is displayed
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toHaveTextContent('Updated Description');
+    });
   });
 
   it('should refetch data when query parameters change but pathname remains the same', async () => {
@@ -232,25 +259,42 @@ describe('EvalsDataGrid', () => {
       } as any;
     });
 
-    const { rerender } = render(
+    // Create a wrapper component that can trigger navigation
+    const NavigationWrapper = () => {
+      const navigate = useNavigate();
+
+      // Trigger navigation after initial render
+      React.useEffect(() => {
+        // Small delay to ensure initial render completes
+        const timer = setTimeout(() => {
+          navigate('/evals?param2=value2');
+        }, 100);
+        return () => clearTimeout(timer);
+      }, [navigate]);
+
+      return <EvalsDataGrid onEvalSelected={vi.fn()} />;
+    };
+
+    render(
       <MemoryRouter initialEntries={['/evals?param1=value1']}>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <Routes>
+          <Route path="/evals" element={<NavigationWrapper />} />
+        </Routes>
       </MemoryRouter>,
     );
 
+    // Wait for initial load
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledTimes(1);
     });
 
-    rerender(
-      <MemoryRouter initialEntries={['/evals?param2=value2']}>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
-      </MemoryRouter>,
+    // Wait for navigation and second fetch
+    await waitFor(
+      () => {
+        expect(callApi).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 2000 },
     );
-
-    await waitFor(() => {
-      expect(callApi).toHaveBeenCalledTimes(2);
-    });
 
     await waitFor(() => {
       expect(screen.getByTestId('eval-eval-1')).toHaveTextContent(

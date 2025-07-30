@@ -159,7 +159,7 @@ export default function EvalsDataGrid({
   useEffect(() => {
     // Fetch evals whenever we navigate to this page
     fetchEvals();
-  }, [location.pathname]); // Refetch when the pathname changes
+  }, [location.pathname, location.search]); // Refetch when the pathname or query params change
 
   /**
    * Construct dataset rows:
