@@ -1,109 +1,76 @@
-# PR Summary: Web Search Feature Implementation
+# PR Summary: Add Web Search Assertion Type
 
 ## Overview
 
-This PR adds a new `web-search` assertion type to promptfoo, enabling quick verification of current information using web search capabilities.
+This PR adds a new `web-search` assertion type to promptfoo, enabling quick verification of current information using web search capabilities across multiple providers.
 
-## What was done
+## Changes
 
-### 1. **Implemented New `web-search` Assertion Type** ✅
+### Core Implementation
 
+- Added `web-search` assertion type for real-time fact verification
 - Created `src/assertions/webSearch.ts` handler
 - Added `matchesWebSearch` function to `src/matchers.ts`
-- Registered assertion in `MODEL_GRADED_ASSERTION_TYPES`
-- Added `web-search` to `BaseAssertionTypesSchema` in types
-
-### 2. **Code Quality Improvements** ✅
-
-- Extracted duplicate `hasWebSearchCapability` function to `src/providers/webSearchUtils.ts`
-- Created shared `loadWebSearchProvider` utility to eliminate code duplication
-- Fixed inconsistent error messages across assertions
-- Updated all model IDs to latest July 2025 versions:
-  - Anthropic: `claude-sonnet-4`
-  - OpenAI: `o4-mini`
-  - Google: `gemini-2.5-flash`
-
-### 3. **Documentation** ✅
-
-- Created comprehensive documentation at `site/docs/configuration/expected-outputs/model-graded/web-search.md`
-- Updated model-graded index to include web-search
-- Updated OpenAI provider docs with web search examples
-- Documented use cases, provider configurations, and cost considerations
-
-### 4. **Testing & Validation** ✅
-
-- Fixed all TypeScript compilation errors
-- All linting checks pass
-- Code formatting applied
-
-## Key Features
-
-### Web Search Assertion
-
-- Quick verification of current information
-- Simpler alternative to more comprehensive fact-checking
-- Supports all major providers with web search capabilities:
-  - Anthropic: Built-in web search (no configuration needed)
-  - OpenAI: `web_search_preview` tool
-  - Google/Gemini: `googleSearch` tool
-  - Perplexity: Built-in web search
+- Registered assertion in type definitions and handlers
 
 ### Provider Support
 
-- Automatic detection of web search capabilities
-- Fallback to appropriate providers when web search is needed
-- Support for Anthropic's built-in web search
+- Added web search capability detection for all major providers
+- Created shared utilities in `src/providers/webSearchUtils.ts`
+- Added `webSearchProvider` to default providers configuration
+- Support for:
+  - Anthropic Claude (built-in web search)
+  - OpenAI Responses API (`web_search_preview` tool)
+  - Google/Gemini (`googleSearch` tool)
+  - Perplexity (built-in search)
+  - xAI Grok (search parameters)
 
-## Issues Addressed
+### Documentation
 
-1. ✅ Fixed OpenAI using correct tool type (`web_search_preview`)
-2. ✅ Corrected Anthropic web search capabilities comments
-3. ✅ Eliminated code duplication with shared utilities
-4. ✅ Standardized error messages
-5. ✅ Updated to latest model versions
+- Comprehensive documentation at `site/docs/configuration/expected-outputs/model-graded/web-search.md`
+- Updated OpenAI provider docs with web search configuration
+- Added blog post explaining the feature and use cases
+- Documented cost implications and best practices
+
+### Model Updates
+
+- Updated all model IDs to July 2025 versions
+- OpenAI: Using `o4-mini` as default
+- Anthropic: `claude-sonnet-4`  
+- Google: `gemini-2.5-flash`
 
 ## Example Usage
 
 ```yaml
+# Basic usage
 assert:
   - type: web-search
     value: 'current Bitcoin price USD'
-```
 
-## Provider Configuration
-
-```yaml
-# Anthropic (no config needed)
-providers:
-  - anthropic:messages:claude-sonnet-4
-
-# OpenAI with web search
+# With provider configuration
 providers:
   - id: openai:responses:o4-mini
     config:
       tools:
         - type: web_search_preview
 
-# Google with search
-providers:
-  - id: google:gemini-2.5-flash
-    config:
-      tools:
-        - googleSearch: {}
+tests:
+  - vars:
+      query: "What is the current weather in Tokyo?"
+    assert:
+      - type: web-search
+        value: "Tokyo weather temperature humidity"
 ```
 
-## PR Readiness: ✅ READY
+## Testing
 
-The implementation is complete, follows established patterns, and addresses all requirements. The code:
+- All TypeScript compilation passes
+- Linting and formatting complete
+- Build succeeds without errors
 
-- Compiles without errors
-- Passes linting and formatting checks
-- Includes comprehensive documentation
-- Uses the latest model versions
-- Follows consistent patterns throughout
+## Files Changed
 
-### Files Changed
-
-- 11 files modified/added
-- Key additions: web search assertion, provider utils, documentation
-- No breaking changes to existing functionality
+- **Core**: `src/assertions/webSearch.ts`, `src/matchers.ts`, `src/types/index.ts`
+- **Providers**: `src/providers/webSearchUtils.ts`, `src/providers/defaults.ts`, `src/providers/openai/defaults.ts`
+- **Documentation**: `site/docs/configuration/expected-outputs/model-graded/web-search.md`, `site/blog/web-search-assertions.md`
+- **Config**: `site/static/config-schema.json`
