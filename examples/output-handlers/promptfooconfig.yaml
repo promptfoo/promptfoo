@@ -1,0 +1,21 @@
+description: Output handlers demo
+
+prompts:
+  - 'Tell me a joke about {{topic}}'
+
+providers:
+  - openai:gpt-4o-mini
+  - anthropic:claude-3-5-sonnet-latest
+
+tests:
+  - vars:
+      topic: 'programming'
+  - vars:
+      topic: 'databases'
+  - vars:
+      topic: 'debugging'
+
+# Output to a handler function
+outputPath:
+  - file://output-handler.js
+  - results.json # Also save to JSON for comparison

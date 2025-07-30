@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as path from 'path';
 
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
@@ -8,11 +7,14 @@ import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import * as path from 'path';
+import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import { runPython } from '../python/pythonUtils';
 import {
   type CsvRow,
   type EvaluateResult,
@@ -81,6 +83,69 @@ export async function writeOutput(
     });
     logger.info(`Writing ${rows.length} rows to Google Sheets...`);
     await writeCsvToGoogleSheet(rows, outputPath);
+    return;
+  }
+
+  // Check if this is a handler path (file:// prefix or direct script file)
+  const isHandlerPath =
+    outputPath.startsWith('file://') ||
+    isJavascriptFile(outputPath) ||
+    outputPath.endsWith('.py') ||
+    outputPath.includes('.js:') ||
+    outputPath.includes('.py:') ||
+    outputPath.includes('.mjs:') ||
+    outputPath.includes('.ts:');
+
+  if (isHandlerPath) {
+    // Remove file:// prefix if present
+    const handlerPath = outputPath.startsWith('file://')
+      ? outputPath.slice('file://'.length)
+      : outputPath;
+
+    // Parse the path to extract file and function name
+    // eslint-disable-next-line @typescript-eslint/no-use-before-define
+    const { filePath, functionName, extension } = parsePathOrGlob(
+      cliState.basePath || process.cwd(),
+      handlerPath,
+    );
+
+    // Prepare the output data
+    const summary = await evalRecord.toEvaluateSummary();
+    const output: OutputFile = {
+      evalId: evalRecord.id,
+      results: summary,
+      config: evalRecord.config,
+      shareableUrl,
+    };
+
+    // Determine handler type based on extension
+    if (extension === '.py') {
+      // Python handler
+      await runPython(filePath, functionName ?? 'handle_output', [output]);
+    } else if (isJavascriptFile(filePath)) {
+      // JavaScript/TypeScript handler
+      const handler = await importModule(filePath, functionName);
+      const fn =
+        typeof handler === 'function'
+          ? handler
+          : typeof handler?.default === 'function'
+            ? handler.default
+            : null;
+
+      if (!fn) {
+        throw new Error(
+          `Output handler ${filePath} must export a function${
+            functionName ? ` named ${functionName}` : ' (or export default)'
+          }`,
+        );
+      }
+
+      await Promise.resolve(fn(output));
+    } else {
+      throw new Error(
+        `Unsupported handler file type: ${extension}. Supported types: .js, .mjs, .cjs, .ts, .mts, .cts, .py`,
+      );
+    }
     return;
   }
 
