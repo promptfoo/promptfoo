@@ -63,7 +63,7 @@ describe('ResultsTab', () => {
         onSeverityClick: expect.any(Function),
         onFilesClick: mockOnShowFilesDialog,
       },
-      {},
+      undefined,
     );
 
     expect(SecurityFindings).toHaveBeenCalledTimes(1);
@@ -75,7 +75,7 @@ describe('ResultsTab', () => {
         showRawOutput: false,
         onToggleRawOutput: expect.any(Function),
       },
-      {},
+      undefined,
     );
   });
 
@@ -108,7 +108,7 @@ describe('ResultsTab', () => {
         showRawOutput: false,
         onToggleRawOutput: expect.any(Function),
       }),
-      {},
+      undefined,
     );
   });
 
@@ -141,7 +141,7 @@ describe('ResultsTab', () => {
         showRawOutput: true,
         onToggleRawOutput: expect.any(Function),
       }),
-      {},
+      undefined,
     );
   });
 
@@ -212,7 +212,7 @@ describe('ResultsTab', () => {
         onSeverityClick: expect.any(Function),
         onFilesClick: mockOnShowFilesDialog,
       }),
-      {},
+      undefined,
     );
 
     originalMock.mockReset();
