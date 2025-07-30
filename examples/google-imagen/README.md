@@ -83,12 +83,21 @@ npx promptfoo@latest eval
 - **Google AI Studio**:
   - Uses API key authentication (quick start)
   - Only supports Imagen 4 models (4.0 preview models)
-  - Limited parameter support (no `seed` or `addWatermark`)
+  - Limited parameter support:
+    - No `seed` or `addWatermark` parameters
+    - Only `block_low_and_above` safety filter level
 - **Vertex AI**:
   - Requires authentication via `gcloud auth application-default login`
   - Supports all Imagen models (both 3.0 and 4.0)
-  - Full parameter support including `seed` and `addWatermark`
+  - Full parameter support:
+    - All safety filter levels (`block_most`, `block_some`, `block_few`, `block_fewest`)
+    - `seed` for deterministic generation
+    - `addWatermark` control
   - You must provide a Google Cloud project ID either via:
     - `GOOGLE_PROJECT_ID` environment variable
     - `projectId` in the provider config
 - Seed and watermark parameters are mutually exclusive (Vertex AI only)
+
+## Advanced Configuration
+
+See `promptfooconfig-advanced.yaml` for examples of platform-specific configurations that take advantage of each platform's unique capabilities.
