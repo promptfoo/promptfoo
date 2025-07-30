@@ -7,12 +7,10 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import {
   BIAS_PLUGINS,
-  LEGACY_DATASET_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
   type HarmPlugin,
-  type LegacyDatasetPlugin,
 } from '../constants/plugins';
 import {
   getRemoteGenerationUrl,
