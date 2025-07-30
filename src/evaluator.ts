@@ -180,13 +180,13 @@ async function interpolatePropertyValue(
  * @returns The interpolated assertion(s)
  */
 async function interpolateAssertionProperties(
-  assertion: Assertion | Assertion[] | AssertionSet,
+  assertion: Assertion | (Assertion | AssertionSet)[] | AssertionSet,
   vars: Record<string, any>,
-): Promise<Assertion | Assertion[] | AssertionSet> {
+): Promise<Assertion | (Assertion | AssertionSet)[] | AssertionSet> {
   if (Array.isArray(assertion)) {
     // Handle array of assertions
     return Promise.all(
-      assertion.map((a) => interpolateAssertionProperties(a, vars) as Promise<Assertion>),
+      assertion.map((a) => interpolateAssertionProperties(a, vars) as Promise<Assertion | AssertionSet>),
     );
   }
 
@@ -1271,10 +1271,12 @@ class Evaluator {
 
                   // Interpolate assertion properties with the specific vars from var combinations
                   if (testCase.assert) {
+                    // We know testCase.assert is an array from the invariant check above
                     const interpolatedAssertions = await interpolateAssertionProperties(
                       testCase.assert,
-                      vars,
+                      vars || {},
                     );
+                    // Since we pass an array, we get an array back (which can contain both Assertion and AssertionSet)
                     baseTest.assert = interpolatedAssertions as (Assertion | AssertionSet)[];
                   }
 
