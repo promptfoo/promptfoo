@@ -56,25 +56,21 @@ describe('ResultsTab', () => {
     );
 
     expect(ScanStatistics).toHaveBeenCalledTimes(1);
-    expect(ScanStatistics).toHaveBeenCalledWith(
-      expect.objectContaining({
-        scanResults: mockScanResults,
-        selectedSeverity: null,
-        onSeverityClick: expect.any(Function),
-        onFilesClick: mockOnShowFilesDialog,
-      }),
-    );
+    expect(ScanStatistics.mock.calls[0][0]).toMatchObject({
+      scanResults: mockScanResults,
+      selectedSeverity: null,
+      onSeverityClick: expect.any(Function),
+      onFilesClick: mockOnShowFilesDialog,
+    });
 
     expect(SecurityFindings).toHaveBeenCalledTimes(1);
-    expect(SecurityFindings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        scanResults: mockScanResults,
-        selectedSeverity: null,
-        onSeverityChange: expect.any(Function),
-        showRawOutput: false,
-        onToggleRawOutput: expect.any(Function),
-      }),
-    );
+    expect(SecurityFindings.mock.calls[0][0]).toMatchObject({
+      scanResults: mockScanResults,
+      selectedSeverity: null,
+      onSeverityChange: expect.any(Function),
+      showRawOutput: false,
+      onToggleRawOutput: expect.any(Function),
+    });
   });
 
   it('should update selectedSeverity and pass it to SecurityFindings when a severity is clicked in ScanStatistics', async () => {
@@ -98,15 +94,13 @@ describe('ResultsTab', () => {
     await user.click(severityButton);
 
     expect(SecurityFindings).toHaveBeenCalledTimes(2);
-    expect(SecurityFindings).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scanResults: mockScanResults,
-        selectedSeverity: 'error',
-        onSeverityChange: expect.any(Function),
-        showRawOutput: false,
-        onToggleRawOutput: expect.any(Function),
-      }),
-    );
+    expect(SecurityFindings.mock.lastCall[0]).toMatchObject({
+      scanResults: mockScanResults,
+      selectedSeverity: 'error',
+      onSeverityChange: expect.any(Function),
+      showRawOutput: false,
+      onToggleRawOutput: expect.any(Function),
+    });
   });
 
   it('should toggle showRawOutput and pass the updated value to SecurityFindings when the raw output toggle is triggered', async () => {
@@ -130,15 +124,13 @@ describe('ResultsTab', () => {
     await user.click(toggleButton);
 
     expect(SecurityFindings).toHaveBeenCalledTimes(2);
-    expect(SecurityFindings).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scanResults: mockScanResults,
-        selectedSeverity: null,
-        onSeverityChange: expect.any(Function),
-        showRawOutput: true,
-        onToggleRawOutput: expect.any(Function),
-      }),
-    );
+    expect(SecurityFindings.mock.lastCall[0]).toMatchObject({
+      scanResults: mockScanResults,
+      selectedSeverity: null,
+      onSeverityChange: expect.any(Function),
+      showRawOutput: true,
+      onToggleRawOutput: expect.any(Function),
+    });
   });
 
   it('should handle malformed scanResults gracefully when scanResults.issues is undefined', () => {
@@ -201,14 +193,12 @@ describe('ResultsTab', () => {
 
     await userEvent.click(severityButton);
 
-    expect(ScanStatistics).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scanResults: mockScanResults,
-        selectedSeverity: null,
-        onSeverityClick: expect.any(Function),
-        onFilesClick: mockOnShowFilesDialog,
-      }),
-    );
+    expect(ScanStatistics.mock.lastCall[0]).toMatchObject({
+      scanResults: mockScanResults,
+      selectedSeverity: null,
+      onSeverityClick: expect.any(Function),
+      onFilesClick: mockOnShowFilesDialog,
+    });
 
     originalMock.mockReset();
   });
