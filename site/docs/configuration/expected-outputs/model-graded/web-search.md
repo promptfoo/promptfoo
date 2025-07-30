@@ -91,6 +91,19 @@ grading:
         - googleSearch: {}
 ```
 
+### 5. xAI Grok
+
+xAI's Grok models have built-in web search capabilities:
+
+```yaml
+grading:
+  provider: xai:grok-beta
+  providerOptions:
+    config:
+      search_parameters:
+        enable_search: true
+```
+
 ## Use Cases
 
 ### 1. Current Events Verification
@@ -139,12 +152,13 @@ assert:
 
 ## Cost Considerations
 
-Web search assertions incur additional costs:
+Web search assertions have the following cost implications:
 
-- **Anthropic Claude**: Built-in, no extra cost beyond token usage
-- **Perplexity**: ~$0.001 per search with `sonar` model
-- **Google**: Google Search API pricing + Gemini model costs
-- **OpenAI**: Standard API pricing + potential web search costs
+- **Anthropic Claude**: Built-in web search, no additional cost beyond standard token usage
+- **Perplexity**: Pricing varies by model (check current Perplexity Sonar pricing)
+- **Google Gemini**: Built-in googleSearch tool, included in Gemini API pricing
+- **OpenAI**: web_search_preview tool included in standard API pricing
+- **xAI Grok**: Built-in search, standard API pricing applies
 
 ## Best Practices
 

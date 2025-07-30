@@ -11,3 +11,8 @@ export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-
 });
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4.1-2025-04-14');
 export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');
+export const DefaultWebSearchProvider = new OpenAiChatCompletionProvider('o4-mini', {
+  config: {
+    tools: [{ type: 'web_search_preview' }],
+  },
+});

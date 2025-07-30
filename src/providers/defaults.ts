@@ -27,7 +27,9 @@ import {
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
+  DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
+import { loadWebSearchProvider } from './webSearchUtils';
 
 import type { ApiProvider, DefaultProviders } from '../types';
 import type { EnvOverrides } from '../types/env';
@@ -125,6 +127,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: anthropicProviders.suggestionsProvider,
       synthesizeProvider: anthropicProviders.synthesizeProvider,
+      webSearchProvider: anthropicProviders.gradingProvider, // Anthropic has built-in web search
     };
   } else if (
     !getEnvString('OPENAI_API_KEY') &&
@@ -178,6 +181,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: OpenAiSuggestionsProvider,
       synthesizeProvider: OpenAiGradingJsonProvider,
+      webSearchProvider: OpenAiWebSearchProvider,
     };
   }
 
