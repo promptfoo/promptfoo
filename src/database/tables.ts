@@ -104,6 +104,9 @@ export const evalResultsTable = sqliteTable(
 
     // Metadata fields
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, string>>(),
+
+    // Human rating column for efficient filtering
+    humanRating: integer('human_rating'), // NULL = no rating, 0 = thumbs down, 1 = thumbs up
   },
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
@@ -134,6 +137,7 @@ export const evalResultsTable = sqliteTable(
     metadataStrategyIdIdx: index('eval_result_metadata_strategy_id_idx').on(
       sql`json_extract(${table.metadata}, '$.strategyId')`,
     ),
+    humanRatingIdx: index('eval_result_human_rating_idx').on(table.evalId, table.humanRating),
   }),
 );
 

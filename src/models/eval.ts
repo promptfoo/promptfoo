@@ -32,6 +32,7 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types';
+import { HumanRatingMapping } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile';
@@ -491,23 +492,10 @@ export default class Eval {
             condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
           }
         } else if (type === 'human-rating' && operator === 'equals') {
-          // Human ratings are stored in componentResults array
-          // We need to check if there's a human rating with the specified pass value
-          // Using a more efficient approach with json_extract
-          if (value === 'thumbs-up') {
-            // Look for human ratings with pass = true
-            condition = `grading_result LIKE '%"type":"human"%' AND EXISTS (
-              SELECT 1 FROM json_each(grading_result, '$.componentResults') AS component
-              WHERE json_extract(component.value, '$.assertion.type') = 'human'
-              AND json_extract(component.value, '$.pass') = 1
-            )`;
-          } else if (value === 'thumbs-down') {
-            // Look for human ratings with pass = false
-            condition = `grading_result LIKE '%"type":"human"%' AND EXISTS (
-              SELECT 1 FROM json_each(grading_result, '$.componentResults') AS component
-              WHERE json_extract(component.value, '$.assertion.type') = 'human'
-              AND json_extract(component.value, '$.pass') = 0
-            )`;
+          // Use the indexed human_rating column for efficient filtering
+          const dbValue = HumanRatingMapping[value as keyof typeof HumanRatingMapping];
+          if (dbValue !== undefined) {
+            condition = `human_rating = ${dbValue}`;
           }
         }
 

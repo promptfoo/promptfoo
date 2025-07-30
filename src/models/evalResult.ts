@@ -19,6 +19,8 @@ import type {
   ProviderResponse,
   ResultFailureReason,
 } from '../types';
+import { HumanRatingValue } from '../types';
+import { getHumanRating } from '../util/humanRatingHelpers';
 
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
@@ -224,6 +226,7 @@ export default class EvalResult {
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
+  humanRating?: number | null;
 
   constructor(opts: {
     id: string;
@@ -245,6 +248,7 @@ export default class EvalResult {
     metadata?: Record<string, any> | null;
     failureReason: ResultFailureReason;
     persisted?: boolean;
+    humanRating?: number | null;
   }) {
     this.id = opts.id;
     this.evalId = opts.evalId;
@@ -267,10 +271,22 @@ export default class EvalResult {
     this.failureReason = opts.failureReason;
     this.persisted = opts.persisted || false;
     this.pluginId = opts.testCase.metadata?.pluginId;
+    this.humanRating = opts.humanRating ?? null;
   }
 
   async save() {
     const db = getDb();
+
+    // Calculate human rating from gradingResult
+    const humanRatingResult = getHumanRating(this.gradingResult);
+    if (humanRatingResult !== null) {
+      this.humanRating = humanRatingResult.pass
+        ? HumanRatingValue.THUMBS_UP
+        : HumanRatingValue.THUMBS_DOWN;
+    } else {
+      this.humanRating = null;
+    }
+
     //check if this exists in the db
     if (this.persisted) {
       await db
