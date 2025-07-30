@@ -3,9 +3,9 @@
 # to verify current information from the web
 
 prompts:
-  - "What is the current stock price of Apple (AAPL)?"
-  - "Who is the current CEO of {{company}}?"
-  - "What is the weather like in {{city}} today?"
+  - 'What is the current stock price of Apple (AAPL)?'
+  - 'Who is the current CEO of {{company}}?'
+  - 'What is the weather like in {{city}} today?'
 
 providers:
   # Anthropic with web search tool
@@ -15,30 +15,30 @@ providers:
         - type: web_search_20250305
           name: web_search
           max_uses: 5
-  
+
   # OpenAI with web search tool
   - id: openai:responses:o4-mini
     config:
       tools:
         - type: web_search_preview
-  
+
   # Perplexity with built-in search
   - perplexity:sonar
 
 tests:
   - vars:
-      company: "Microsoft"
+      company: 'Microsoft'
     assert:
       - type: web-search
-        value: "Satya Nadella CEO Microsoft"
-  
+        value: 'Satya Nadella CEO Microsoft'
+
   - vars:
-      city: "San Francisco"
+      city: 'San Francisco'
     assert:
       - type: web-search
-        value: "San Francisco weather temperature today"
-  
+        value: 'San Francisco weather temperature today'
+
   - assert:
       - type: web-search
-        value: "Apple AAPL stock price current"
+        value: 'Apple AAPL stock price current'
         threshold: 0.8

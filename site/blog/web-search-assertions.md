@@ -215,4 +215,3 @@ providers:
 > **In production, "sounds plausible" is failure. Web search makes sure it's true.**
 
 [Get started →](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded/web-search)
-

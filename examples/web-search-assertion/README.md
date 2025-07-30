@@ -28,15 +28,18 @@ npx promptfoo eval
 ## Provider Support
 
 ### Anthropic Claude
+
 - Web search capabilities via tool configuration (launched May 2025)
 - Requires explicit `web_search_20250305` tool configuration
 - Pricing: $10 per 1,000 searches plus standard token costs
 
 ### OpenAI
+
 - Requires `web_search_preview` tool configuration
 - Works with o4-mini and other response models
 
 ### Perplexity
+
 - Built-in web search capabilities
 - No additional configuration needed
 
@@ -45,8 +48,8 @@ npx promptfoo eval
 ```yaml
 assert:
   - type: web-search
-    value: "search query to verify"
-    threshold: 0.8  # Optional: minimum accuracy score (0-1)
+    value: 'search query to verify'
+    threshold: 0.8 # Optional: minimum accuracy score (0-1)
 ```
 
 ## Notes
