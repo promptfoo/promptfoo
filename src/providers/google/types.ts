@@ -111,6 +111,14 @@ export interface CompletionOptions {
   topK?: number;
   top_k?: number; // Alternative format for Claude models
 
+  // Image generation options
+  n?: number; // Number of images to generate
+  aspectRatio?: string; // Aspect ratio like '1:1', '16:9', '9:16'
+  personGeneration?: 'allow_all' | 'allow_adult' | 'dont_allow';
+  safetyFilterLevel?: 'block_most' | 'block_some' | 'block_few' | 'block_fewest';
+  addWatermark?: boolean;
+  seed?: number;
+
   // Live API websocket timeout
   timeoutMs?: number;
 

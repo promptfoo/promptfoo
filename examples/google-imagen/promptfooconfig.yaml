@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Imagen image generation comparison
+
+prompts:
+  - 'Create a {{quality}} image of {{subject}} with {{style}} aesthetic'
+
+providers:
+  # Ultra quality - highest detail and quality
+  - id: google:image:imagen-4.0-ultra-generate-preview-06-06
+    config:
+      aspectRatio: '16:9'
+      seed: 42
+      safetyFilterLevel: 'block_some'
+      addWatermark: false # Must be false when using seed
+
+  # Standard quality - balanced quality and speed
+  - id: google:image:imagen-4.0-generate-preview-06-06
+    config:
+      aspectRatio: '16:9'
+      seed: 42
+      safetyFilterLevel: 'block_some'
+      addWatermark: false # Must be false when using seed
+
+  # Fast generation - optimized for speed
+  - id: google:image:imagen-4.0-fast-generate-preview-06-06
+    config:
+      aspectRatio: '16:9'
+      seed: 42
+      safetyFilterLevel: 'block_some'
+      addWatermark: false # Must be false when using seed
+
+  # Previous generation for comparison
+  - id: google:image:imagen-3.0-generate-002
+    config:
+      aspectRatio: '16:9'
+      seed: 42
+      safetyFilterLevel: 'block_some'
+      addWatermark: false # Must be false when using seed
+
+tests:
+  - vars:
+      quality: 'photorealistic'
+      subject: 'a futuristic spacecraft'
+      style: 'cinematic sci-fi'
+
+  - vars:
+      quality: 'highly detailed'
+      subject: 'starry night over a cyberpunk city'
+      style: 'Van Gogh painting'
+
+  - vars:
+      quality: 'minimalist'
+      subject: 'a zen garden at sunrise'
+      style: 'Japanese ink wash'
+
+  - vars:
+      quality: 'vibrant'
+      subject: 'tropical birds in a rainforest'
+      style: 'watercolor illustration'
+
+  - vars:
+      quality: 'dramatic'
+      subject: 'a medieval castle during a thunderstorm'
+      style: 'fantasy art'
