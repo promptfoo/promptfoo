@@ -452,8 +452,6 @@ export default class Eval {
       conditions.push(`success = 1`);
     } else if (mode === 'highlights') {
       conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
-    } else if (mode === 'human') {
-      conditions.push(`grading_result LIKE '%"type":"human"%'`);
     }
 
     // Add filters

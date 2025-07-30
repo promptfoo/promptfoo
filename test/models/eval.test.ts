@@ -573,10 +573,7 @@ describe('evaluator', () => {
       } as any;
       await results[0].save();
 
-      // Filter should find the human-rated result
-      const humanFiltered = await evaluation.getTablePage({ filterMode: 'human' });
-      expect(humanFiltered.body).toHaveLength(1);
-
+      // Filter should find the human-rated result using filter (not filter mode)
       const thumbsUpFiltered = await evaluation.getTablePage({
         filters: [
           JSON.stringify({
@@ -807,9 +804,18 @@ describe('evaluator', () => {
       } as any;
       await results[0].save();
 
-      // Verify human filter finds it
-      let humanFiltered = await evaluation.getTablePage({ filterMode: 'human' });
-      expect(humanFiltered.body).toHaveLength(1);
+      // Verify human rating filter finds it using the filter (not filter mode)
+      let humanRatingFiltered = await evaluation.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-up',
+          }),
+        ],
+      });
+      expect(humanRatingFiltered.body).toHaveLength(1);
 
       // Simulate clearing the human rating (removing it from componentResults)
       const gradingResult = results[0].gradingResult;
@@ -829,9 +835,18 @@ describe('evaluator', () => {
       }
       await results[0].save();
 
-      // Verify human filter no longer finds it
-      humanFiltered = await evaluation.getTablePage({ filterMode: 'human' });
-      expect(humanFiltered.body).toHaveLength(0);
+      // Verify human rating filter no longer finds it
+      humanRatingFiltered = await evaluation.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-up',
+          }),
+        ],
+      });
+      expect(humanRatingFiltered.body).toHaveLength(0);
     });
   });
 });
