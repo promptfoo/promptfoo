@@ -52,11 +52,8 @@ export class GoogleImageProvider implements ApiProvider {
     this.env = options.env;
 
     // Determine whether to use Vertex AI or Google AI Studio
-    this.useVertexApi = !!(
-      this.config.projectId ||
-      process.env.GOOGLE_PROJECT_ID ||
-      (this.env as any)?.GOOGLE_PROJECT_ID
-    );
+    this.useVertexApi = !!(this.config.projectId ||
+      getEnvString('GOOGLE_PROJECT_ID', this.env));
   }
 
   id(): string {
@@ -89,15 +86,9 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   private async callVertexApi(prompt: string, apiKey: string): Promise<ProviderResponse> {
-    const projectId =
-      this.config.projectId ||
-      process.env.GOOGLE_PROJECT_ID ||
-      (this.env as any)?.GOOGLE_PROJECT_ID;
+    const projectId = this.config.projectId || getEnvString('GOOGLE_PROJECT_ID', this.env);
     const location =
-      this.config.region ||
-      process.env.GOOGLE_LOCATION ||
-      (this.env as any)?.GOOGLE_LOCATION ||
-      'us-central1';
+      this.config.region || getEnvString('GOOGLE_LOCATION', this.env) || 'us-central1';
 
     if (!projectId) {
       return {
@@ -332,12 +323,7 @@ export class GoogleImageProvider implements ApiProvider {
   }
 
   private getApiHost(): string {
-    return (
-      this.config.apiHost ||
-      process.env.GOOGLE_API_HOST ||
-      (this.env as any)?.GOOGLE_API_HOST ||
-      DEFAULT_API_HOST
-    );
+    return this.config.apiHost || getEnvString('GOOGLE_API_HOST', this.env) || DEFAULT_API_HOST;
   }
 
   private getModelPath(): string {
@@ -347,17 +333,6 @@ export class GoogleImageProvider implements ApiProvider {
     }
     // Otherwise prepend imagen- prefix
     return `imagen-${this.modelName}`;
-  }
-
-  private mapSafetyLevel(level?: string): string {
-    // Map from Google AI Studio format to Vertex AI format
-    const mapping: Record<string, string> = {
-      block_most: 'block_low_and_above',
-      block_some: 'block_medium_and_above',
-      block_few: 'block_only_high',
-      block_fewest: 'block_only_high',
-    };
-    return mapping[level || ''] || 'block_medium_and_above';
   }
 
   private getCost(): number {
@@ -370,7 +345,6 @@ export class GoogleImageProvider implements ApiProvider {
       'imagen-3.0-generate-001': 0.04,
       'imagen-3.0-fast-generate-001': 0.02,
     };
-
-    return costMap[this.modelName] || 0.04; // Default to standard cost
+    return costMap[this.modelName] || 0.04; // Default cost
   }
 }
