@@ -9,7 +9,6 @@ import { XMLBuilder } from 'fast-xml-parser';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as os from 'os';
-import * as path from 'path';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';

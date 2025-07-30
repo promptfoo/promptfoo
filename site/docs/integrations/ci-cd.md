@@ -31,7 +31,7 @@ If you're using GitHub Actions, check out our [dedicated GitHub Actions guide](/
 
 For other platforms, here's a basic example:
 
-```bash
+````bash
 # Run eval (no global install required)
 npx promptfoo@latest eval -c promptfooconfig.yaml -o results.json
 
@@ -53,7 +53,7 @@ interface OutputFile {
     author?: string;
   };
 }
-```
+````
 
 ## Prerequisites
 

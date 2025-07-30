@@ -24,7 +24,6 @@ import {
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
-  maybeLoadToolsFromExternalFile,
   createOutputMetadata,
 } from '../../src/util';
 import { TestGrader } from './utils';
