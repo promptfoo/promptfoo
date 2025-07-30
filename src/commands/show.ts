@@ -12,7 +12,7 @@ export function showCommand(program: Command) {
     )
     .action(async (id: string | undefined, cmdObj: { envPath?: string }) => {
       const { showAction } = await import('./show/showAction');
-      await showAction(id || 'latest', cmdObj);
+      await showAction(id, cmdObj);
     });
 
   // Add subcommands for specific types
@@ -21,22 +21,47 @@ export function showCommand(program: Command) {
     .description('Show details of a specific evaluation')
     .action(async (id: string | undefined) => {
       const { handleEval } = await import('./show/showAction');
-      await handleEval(id || 'latest');
+      const Eval = (await import('../models/eval')).default;
+      
+      if (!id) {
+        const latestEval = await Eval.latest();
+        if (latestEval) {
+          await handleEval(latestEval.id);
+        } else {
+          const logger = (await import('../logger')).default;
+          logger.error('No evaluation found');
+          process.exitCode = 1;
+        }
+      } else {
+        await handleEval(id);
+      }
     });
 
   showCmd
     .command('prompt [id]')
     .description('Show details of a specific prompt')
     .action(async (id: string | undefined) => {
+      if (!id) {
+        const logger = (await import('../logger')).default;
+        logger.error('Prompt ID is required');
+        process.exitCode = 1;
+        return;
+      }
       const { handlePrompt } = await import('./show/showAction');
-      await handlePrompt(id || 'latest');
+      await handlePrompt(id);
     });
 
   showCmd
     .command('dataset [id]')
     .description('Show details of a specific dataset')
     .action(async (id: string | undefined) => {
+      if (!id) {
+        const logger = (await import('../logger')).default;
+        logger.error('Dataset ID is required');
+        process.exitCode = 1;
+        return;
+      }
       const { handleDataset } = await import('./show/showAction');
-      await handleDataset(id || 'latest');
+      await handleDataset(id);
     });
 }

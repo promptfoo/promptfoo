@@ -91,9 +91,24 @@ async function main() {
       process.exitCode = 1;
     });
 
-  // Default values until config is loaded
+  // For help/version commands, we can skip loading resources
+  const isQuickCommand =
+    process.argv.includes('--help') ||
+    process.argv.includes('-h') ||
+    process.argv.includes('--version') ||
+    process.argv.includes('-V') ||
+    !process.argv[2];
+
+  // Default values for config
   let defaultConfig: any = {};
   let defaultConfigPath: string | undefined;
+  
+  // For non-help commands, wait for config before registering commands
+  if (!isQuickCommand) {
+    const config = await configPromise;
+    defaultConfig = config.defaultConfig;
+    defaultConfigPath = config.defaultConfigPath;
+  }
 
   // Main commands
   evalCommand(program, defaultConfig, defaultConfigPath);
@@ -122,7 +137,7 @@ async function main() {
   generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
-  // Red team commands use default config initially
+  // Red team commands
   redteamInitCommand(redteamBaseCommand);
   evalCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
   redteamDiscoverCommand(redteamBaseCommand, defaultConfig, defaultConfigPath);
@@ -135,27 +150,11 @@ async function main() {
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
 
-  // Add hook to await resources before command execution
+  // Add hook to await remaining resources before command execution
   program.hook('preAction', async () => {
-    // For help/version commands, we skip waiting for resources
-    const isQuickCommand =
-      process.argv.includes('--help') ||
-      process.argv.includes('-h') ||
-      process.argv.includes('--version') ||
-      process.argv.includes('-V') ||
-      !process.argv[2];
-
     if (!isQuickCommand) {
-      // Await all resources in parallel
-      const [config] = await Promise.all([configPromise, dbMigrationPromise, updateCheckPromise]);
-
-      // Update config values
-      defaultConfig = config.defaultConfig;
-      defaultConfigPath = config.defaultConfigPath;
-
-      // Update commands that use config
-      // Note: This is a limitation - commands are already registered with empty config
-      // In practice, commands read config during execution, not registration
+      // Await remaining resources (DB and update check)
+      await Promise.all([dbMigrationPromise, updateCheckPromise]);
     }
   });
 
