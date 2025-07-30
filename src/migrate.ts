@@ -5,6 +5,21 @@ import { getDb } from './database';
 import logger from './logger';
 
 /**
+ * Get the directory name of the current file.
+ * This is a workaround to support both CommonJS and ESM.
+ */
+const dirname = (() => {
+  try {
+    // ES module approach
+    // @ts-expect-error - `module` is set to "CommonJS" in the tsconfig.json file
+    return path.dirname(new URL(import.meta.url).pathname);
+  } catch {
+    // CommonJS approach (global __dirname is available)
+    return __dirname;
+  }
+})();
+
+/**
  * Run migrations on the database, skipping the ones already applied. Also creates the sqlite db if it doesn't exist.
  *
  * Note: While the underlying drizzle-orm migrate() function is synchronous, we wrap it in a Promise
@@ -17,7 +32,7 @@ export async function runDbMigrations(): Promise<void> {
     setImmediate(() => {
       try {
         const db = getDb();
-        const migrationsFolder = path.join(__dirname, '..', 'drizzle');
+        const migrationsFolder = path.join(dirname, '..', 'drizzle');
         logger.debug(`Running database migrations...`);
         migrate(db, { migrationsFolder });
         logger.debug('Database migrations completed');
@@ -28,11 +43,4 @@ export async function runDbMigrations(): Promise<void> {
       }
     });
   });
-}
-
-if (require.main === module) {
-  // Run migrations and exit with appropriate code
-  runDbMigrations()
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1));
 }

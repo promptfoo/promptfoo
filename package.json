@@ -44,7 +44,7 @@
     "postbuild": "git checkout -- src/generated-constants.ts 2>/dev/null || true",
     "citation:generate": "ts-node scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
-    "db:migrate": "npx tsx src/migrate.ts",
+    "db:migrate": "npx tsx scripts/runDbMigrations.ts",
     "db:studio": "npx drizzle-kit studio",
     "dev:app": "npm run dev --prefix src/app",
     "dev:server": "nodemon -P 1000 src/server/index.ts",
