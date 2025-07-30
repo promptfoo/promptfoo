@@ -225,6 +225,8 @@ prompts:
   - file://generate.js:createPrompt
 ```
 
+Wildcards like `path/to/prompts/**/*.py:func_name` are also supported.
+
 ## Next Steps
 
 - **[Prompts](/docs/configuration/prompts)** - Deep dive into prompt configuration

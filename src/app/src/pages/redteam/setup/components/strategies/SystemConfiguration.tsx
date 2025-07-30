@@ -1,5 +1,3 @@
-import React from 'react';
-import Alert from '@mui/material/Alert';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Paper from '@mui/material/Paper';
@@ -10,13 +8,11 @@ import Typography from '@mui/material/Typography';
 interface SystemConfigurationProps {
   isStatefulValue: boolean;
   onStatefulChange: (val: boolean) => void;
-  hasSessionParser: boolean;
 }
 
 export function SystemConfiguration({
   isStatefulValue,
   onStatefulChange,
-  hasSessionParser,
 }: SystemConfigurationProps) {
   return (
     <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
@@ -42,13 +38,6 @@ export function SystemConfiguration({
             label="No - System does not maintain conversation history"
           />
         </RadioGroup>
-
-        {!hasSessionParser && isStatefulValue && (
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            Your system is stateful but you don't have session handling set up. Please return to
-            your Target setup to configure it.
-          </Alert>
-        )}
       </FormControl>
     </Paper>
   );

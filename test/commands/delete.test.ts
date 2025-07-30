@@ -3,8 +3,9 @@ import { Command } from 'commander';
 import { deleteCommand, handleEvalDelete, handleEvalDeleteAll } from '../../src/commands/delete';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import type { EvalWithMetadata } from '../../src/types';
 import * as database from '../../src/util/database';
+
+import type { EvalWithMetadata } from '../../src/types';
 
 jest.mock('@inquirer/confirm');
 jest.mock('../../src/util/database');

@@ -1,13 +1,14 @@
 import fs from 'fs';
 import path from 'path';
+
 import {
+  ADDITIONAL_PLUGINS,
   ALL_PLUGINS,
   BASE_PLUGINS,
-  ADDITIONAL_PLUGINS,
+  BIAS_PLUGINS,
   CONFIG_REQUIRED_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  BIAS_PLUGINS,
 } from '../../../src/redteam/constants';
 
 describe('Plugin IDs', () => {

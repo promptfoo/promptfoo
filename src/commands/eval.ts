@@ -4,6 +4,8 @@ import { DEFAULT_MAX_CONCURRENCY } from '../evaluator';
 import { CommandLineOptionsSchema } from '../types';
 import type { EvaluateOptions, UnifiedConfig } from '../types';
 
+export { doEval, showRedteamProviderLabelMissingWarning, formatTokenUsage } from './eval/evalAction';
+
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
@@ -12,12 +14,6 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
-// Re-export functions for backward compatibility
-export {
-  showRedteamProviderLabelMissingWarning,
-  formatTokenUsage,
-  doEval,
-} from './eval/evalAction';
 
 export function evalCommand(
   program: Command,
@@ -198,6 +194,10 @@ export function evalCommand(
       }
 
       if (command.args.length > 0) {
+        if (command.args[0] === 'help') {
+          evalCmd.help();
+          return;
+        }
         logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
       }
 
@@ -238,3 +238,5 @@ ${chalk.green(`${runCommand} -j 1`)}`),
 
   return evalCmd;
 }
+
+export { EvalCommandSchema };

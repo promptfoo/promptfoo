@@ -3,6 +3,7 @@ description: 'Compare Promptfoo and Garak for LLM security testing. Learn how dy
 image: /img/blog/garak/promptfoo-vs-garak.jpg
 date: 2025-06-26
 authors: [ian]
+tags: [tool-comparison, red-teaming, garak]
 ---
 
 # Promptfoo vs Garak: Choosing the Right LLM Red Teaming Tool

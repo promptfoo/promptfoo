@@ -1,12 +1,16 @@
 /// <reference types="vitest" />
-import react from '@vitejs/plugin-react';
+
 import path from 'path';
+
+import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
 
 const API_PORT = process.env.API_PORT || '15500';
 
+// These environment variables are inherited from the parent process (main promptfoo server)
+// We set VITE_ prefixed variables here so Vite can expose them to the client code
 if (process.env.NODE_ENV === 'development') {
   process.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
     process.env.PROMPTFOO_REMOTE_API_BASE_URL || `http://localhost:${API_PORT}`;
@@ -34,6 +38,9 @@ export default defineConfig({
       '@promptfoo': path.resolve(__dirname, '../'),
     },
   },
+  optimizeDeps: {
+    exclude: ['react-syntax-highlighter'],
+  },
   build: {
     emptyOutDir: true,
     outDir: '../../dist/src/app',
@@ -58,7 +65,7 @@ export default defineConfig({
           'vendor-mui-x': ['@mui/x-data-grid', '@mui/x-charts'],
           'vendor-charts': ['recharts', 'chart.js'],
           'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
-          'vendor-syntax': ['prismjs', 'react-syntax-highlighter'],
+          'vendor-syntax': ['prismjs'],
           'vendor-markdown': ['react-markdown', 'remark-gfm'],
         },
       },

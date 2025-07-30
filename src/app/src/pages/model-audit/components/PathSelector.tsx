@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
+
 import { callApi } from '@app/utils/api';
 import {
   Clear as ClearIcon,
+  Cloud as CloudIcon,
+  CloudUpload as CloudUploadIcon,
+  Computer as ComputerIcon,
   Delete as DeleteIcon,
   InsertDriveFile as FileIcon,
   Folder as FolderIcon,
-  CloudUpload as CloudUploadIcon,
-  Storage as StorageIcon,
   GitHub as GitHubIcon,
   Lock as LockIcon,
-  Cloud as CloudIcon,
-  Computer as ComputerIcon,
+  Storage as StorageIcon,
 } from '@mui/icons-material';
 import Alert from '@mui/material/Alert';
 import Badge from '@mui/material/Badge';
@@ -31,8 +32,9 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import type { ScanPath } from '../ModelAudit.types';
 import { useModelAuditStore } from '../store';
+
+import type { ScanPath } from '../ModelAudit.types';
 
 interface PathSelectorProps {
   paths: ScanPath[];
@@ -227,7 +229,16 @@ export default function PathSelector({
 
           <Grid container spacing={3}>
             <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+              <Paper
+                sx={{
+                  p: 3,
+                  textAlign: 'center',
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? theme.palette.grey[800]
+                      : theme.palette.grey[50],
+                }}
+              >
                 <CloudUploadIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
                 <Typography variant="subtitle1" gutterBottom>
                   AWS S3
@@ -241,7 +252,16 @@ export default function PathSelector({
               </Paper>
             </Grid>
             <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+              <Paper
+                sx={{
+                  p: 3,
+                  textAlign: 'center',
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? theme.palette.grey[800]
+                      : theme.palette.grey[50],
+                }}
+              >
                 <CloudIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
                 <Typography variant="subtitle1" gutterBottom>
                   Azure Blob
@@ -255,7 +275,16 @@ export default function PathSelector({
               </Paper>
             </Grid>
             <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, textAlign: 'center', bgcolor: 'grey.50' }}>
+              <Paper
+                sx={{
+                  p: 3,
+                  textAlign: 'center',
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? theme.palette.grey[800]
+                      : theme.palette.grey[50],
+                }}
+              >
                 <CloudIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
                 <Typography variant="subtitle1" gutterBottom>
                   Google Cloud
@@ -383,7 +412,10 @@ export default function PathSelector({
                   </IconButton>
                 }
                 sx={{
-                  bgcolor: 'grey.50',
+                  bgcolor: (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? theme.palette.grey[800]
+                      : theme.palette.grey[50],
                   borderRadius: 2,
                   mb: 1,
                 }}

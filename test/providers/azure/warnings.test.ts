@@ -1,5 +1,6 @@
 import logger from '../../../src/logger';
 import { maybeEmitAzureOpenAiWarning } from '../../../src/providers/azure/warnings';
+
 import type { TestCase, TestSuite } from '../../../src/types';
 
 describe('maybeEmitAzureOpenAiWarning', () => {

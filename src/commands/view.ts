@@ -1,17 +1,20 @@
 import type { Command } from 'commander';
-import { getDefaultPort } from '../constants';
 
 export function viewCommand(program: Command) {
   program
     .command('view [directory]')
-    .description('Start browser UI')
-    .option('-p, --port <number>', 'Port number', getDefaultPort().toString())
+    .option('-p, --port <number>', 'Port number', '15500')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('-n, --no', 'Skip confirmation and do not open the URL')
+    .option('--api-base-url <url>', 'Base URL for viewer API calls')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
-    .option('--env-file, --env-path <path>', 'Path to .env file')
+    .option('--share', 'Create a shareable URL')
+    .option(
+      '--env-path <path>',
+      'Path to the environment directory or file (usually .env, .env.local, or .env.production)',
+    )
+    .description('Open the web viewer')
     .action(async (directory: string | undefined, cmdObj: any) => {
-      // Lazy load the action handler
       const { viewAction } = await import('./view/viewAction');
       await viewAction(directory, cmdObj);
     });

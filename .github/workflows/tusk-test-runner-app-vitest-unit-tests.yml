@@ -43,7 +43,9 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm install @vitest/coverage-v8
 
       - name: Start runner
         id: test-action
@@ -67,7 +69,7 @@ jobs:
           authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
 
           # Vitest for the React app tests
-          testFramework: 'Vitest'
+          testFramework: 'vitest'
 
           # Test file regex to match Vitest test files in src/app
           testFileRegex: '^src/app/.*\.(test|spec)\.(js|jsx|ts|tsx)$'
@@ -81,8 +83,11 @@ jobs:
 
             FILE_PATH="{{file}}"
 
-            npx prettier --write $FILE_PATH
-            npx eslint --fix $FILE_PATH --no-warn-ignored
+            cd ../..
+            # Adjust the file path to be relative to the root directory
+            npx @biomejs/biome format --write "src/app/$FILE_PATH"
+            npx @biomejs/biome lint --write "src/app/$FILE_PATH"
+            cd src/app
 
             # Use incremental build to reduce latency for subsequent build checks
             # However, this means that we need to run with concurrency of 1 (on Tusk)
@@ -90,6 +95,16 @@ jobs:
 
           # The script to run Vitest tests for individual files
           testScript: 'npx vitest run {{file}} --reporter=basic'
+
+          coverageScript: |
+            npx vitest run {{testFilePaths}} \
+              --coverage \
+              --coverage.reportsDirectory=coverage \
+              --coverage.reporter=json-summary \
+              --coverage.reporter=json \
+              --coverage.reportOnFailure \
+              --coverage.include="**/*.{ts,tsx}" \
+              --coverage.exclude="**/*.{test,spec}.{ts,tsx}"
 
           # Max concurrency is set to 1 because we need to run tsc with incremental build
           maxConcurrency: 1

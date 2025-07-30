@@ -24,9 +24,9 @@ export function configCommand(program: Command) {
 
   unsetCommand
     .command('email')
-    .description('Unset user email')
     .option('-f, --force', 'Force unset without confirmation')
-    .action(async (options) => {
+    .description('Unset user email')
+    .action(async (options: { force?: boolean }) => {
       const { unsetEmailAction } = await import('./config/configAction');
       await unsetEmailAction(options);
     });

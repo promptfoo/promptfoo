@@ -6,11 +6,23 @@ pre {
   font-weight: bold;
 }
 
+#results-table-container {
+  overflow: scroll;
+  margin: 1rem -1rem 0 -1rem;
+  padding: 0 1rem;
+
+  /*
+    NOTE: The timeline is defined on the `#results-view-container` element
+    in `ResultsView.css`.
+  */
+  scroll-timeline: --collapseTimeline y;
+  scroll-timeline: --collapseTimeline vertical;
+  will-change: scroll-position;
+}
+
 table.results-table,
 .divTable {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1rem 0;
+  min-width: 100%;
   background-color: #fff;
 }
 
@@ -102,8 +114,7 @@ table.results-table,
 
 @-moz-document url-prefix() {
   /* Firefox fix */
-  .results-table td,
-  .results-table th {
+  .results-table td {
     height: 100%;
   }
 }
@@ -203,7 +214,6 @@ table.results-table,
 /* Table-within-a-cell, used for markdown tables */
 .results-table tr .cell table {
   width: 100%;
-  border-collapse: collapse;
   margin: 1rem 0;
 }
 
@@ -245,6 +255,7 @@ table.results-table,
 
 .results-table th .prompt-container {
   font-weight: bold;
+  font-size: 15px;
   margin-bottom: 0.5rem;
 }
 
@@ -406,10 +417,6 @@ table.results-table,
   border-left: 2px solid #888;
 }
 
-.results-table td.first-prompt-row {
-  border-top: 2px solid #888;
-}
-
 .search-highlight {
   color: var(--search-text-color);
   background-color: var(--search-highlight-color);
@@ -487,34 +494,73 @@ table.results-table,
   cursor: pointer;
   z-index: 101;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: 100%;
   background: #eee;
-  display: none;
+}
+
+thead.sticky {
+  animation-name: collapseHeader;
+  animation-duration: 1ms;
+  animation-timeline: --collapseTimeline;
+  animation-range-start: 0px;
+  animation-range-end: 50px;
+  animation-fill-mode: both;
+
+  will-change: contents;
+}
+
+@keyframes collapseHeader {
+  from {
+    --collapsed--header-dismiss-opacity: 0;
+    --collapsed--header-dismiss-pointer-events: none;
+
+    --collapse--collapse-hidden-opacity: 1;
+    --collapse--collapse-hidden-pointer-events: auto;
+    --collapse--collapse-hidden-max-height: 1000px;
+
+    --collapsed--mui-form-label-margin-top: 0px;
+
+    --collapsed--font-small-font-size: 15px;
+  }
+  to {
+    --collapsed--header-dismiss-opacity: 1;
+    --collapsed--header-dismiss-pointer-events: auto;
+
+    --collapse--collapse-hidden-opacity: 0;
+    --collapse--collapse-hidden-pointer-events: none;
+    --collapse--collapse-hidden-max-height: 0px;
+
+    --collapsed--mui-form-label-margin-top: -8px;
+
+    --collapsed--font-small-font-size: 12px;
+  }
 }
 
 [data-theme='dark'] .header-dismiss {
   background: #333;
 }
 
-.header-dismiss:hover {
-  background: #ddd;
+thead .header-dismiss {
+  opacity: var(--collapsed--header-dismiss-opacity);
+  pointer-events: var(--collapsed--header-dismiss-pointer-events, inherit);
+  transition: opacity 0.2s ease-out;
+  z-index: 100;
 }
 
-[data-theme='dark'] .header-dismiss:hover {
-  background: #444;
+.results-table thead .collapse-hidden {
+  opacity: var(--collapse--collapse-hidden-opacity);
+  pointer-events: var(--collapse--collapse-hidden-pointer-events);
+  max-height: var(--collapse--collapse-hidden-max-height);
+  overflow: hidden;
+  transition:
+    opacity 0.1s ease-out,
+    max-height 0.2s ease-out,
+    pointer-events 0.2s ease-out;
 }
 
-thead.collapsed .header-dismiss {
-  display: block;
-}
-
-.results-table thead.collapsed .prompt-detail,
-.results-table thead.collapsed .custom-metric-container {
-  display: none;
-}
-
-.results-table thead.collapsed .MuiFormControlLabel-root {
-  margin-top: -8px;
+.results-table thead .MuiFormControlLabel-root {
+  margin-top: var(--collapsed--mui-form-label-margin-top);
+  transition: margin-top 0.2s ease-out;
 }
 
 /* Ensure the header cells have a solid background */
@@ -525,13 +571,12 @@ thead.collapsed .header-dismiss {
 
 /* Add these additional styles */
 .results-table {
-  border-collapse: separate;
   border-spacing: 0;
 }
 
-.results-table thead.collapsed th {
-  padding-top: 4px;
-  padding-bottom: 4px;
+.results-table thead th {
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 /* Ensure content below header doesn't jump when header collapses */
@@ -544,10 +589,9 @@ thead.collapsed .header-dismiss {
   transition: max-height 0.2s ease-out;
 }
 
-/* Update these styles */
-.results-table thead.collapsed {
-  border-bottom: 2px solid var(--border-color);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.results-table thead .collapse-font-small {
+  font-size: var(--collapsed--font-small-font-size);
+  transition: font-size 0.2s ease-out;
 }
 
 /* Ensure the header cells have a solid background */

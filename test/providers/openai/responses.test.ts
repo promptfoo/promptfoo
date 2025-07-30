@@ -29,10 +29,7 @@ describe('OpenAiResponsesProvider', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1-2025-04-14');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.5-preview');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
-      'gpt-4.5-preview-2025-02-27',
-    );
+    // GPT-4.5 models deprecated as of 2025-07-14, removed from API
   });
 
   it('should support the latest o-series reasoning models', () => {
@@ -2405,10 +2402,1357 @@ describe('OpenAiResponsesProvider', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini-2025-04-16');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini-2025-01-31');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.5-preview');
-    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
-      'gpt-4.5-preview-2025-02-27',
-    );
+    // GPT-4.5 models deprecated as of 2025-07-14, removed from API
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('codex-mini-latest');
+    // Deep research models
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-deep-research');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'o3-deep-research-2025-06-26',
+    );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini-deep-research');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'o4-mini-deep-research-2025-06-26',
+    );
+  });
+
+  describe('deep research model validation', () => {
+    beforeAll(() => {
+      jest.mocked(cache.fetchWithCache).mockImplementation(
+        () =>
+          ({
+            get: jest.fn(),
+            set: jest.fn(),
+          }) as any,
+      );
+    });
+
+    it('should require web_search_preview tool for deep research models', async () => {
+      const provider = new OpenAiResponsesProvider('o3-deep-research', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ type: 'code_interpreter' } as any], // Missing web_search_preview
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('requires the web_search_preview tool');
+      expect(result.error).toContain('o3-deep-research');
+    });
+
+    it('should accept deep research models with web_search_preview tool', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Research complete' }],
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 200 },
+      };
+
+      (cache.fetchWithCache as jest.Mock).mockResolvedValueOnce({
+        data: mockData,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ type: 'web_search_preview' } as any],
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Research complete');
+    });
+
+    it('should require MCP tools to have require_approval: never for deep research', async () => {
+      const provider = new OpenAiResponsesProvider('o3-deep-research', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            { type: 'web_search_preview' } as any,
+            {
+              type: 'mcp',
+              server_label: 'test_server',
+              server_url: 'http://test.com',
+              require_approval: 'auto' as any, // Should be 'never'
+            },
+          ],
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain("requires MCP tools to have require_approval: 'never'");
+    });
+
+    it('should use longer timeout for deep research models', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Research complete' }],
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 200 },
+      };
+
+      (cache.fetchWithCache as jest.Mock).mockResolvedValueOnce({
+        data: mockData,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new OpenAiResponsesProvider('o3-deep-research', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ type: 'web_search_preview' } as any],
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      // Check that fetchWithCache was called with 10-minute timeout
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        600000, // 10 minutes
+        'json',
+        undefined,
+      );
+    });
+  });
+
+  describe('response format handling', () => {
+    it('should handle json_object format correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: '{"result": "success"}',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          response_format: {
+            type: 'json_object',
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt with JSON');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.text).toEqual({
+        format: {
+          type: 'json_object',
+        },
+      });
+    });
+
+    it('should handle json_schema format correctly with name parameter', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: '{"result": "success"}',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const config = {
+        apiKey: 'test-key',
+        response_format: {
+          type: 'json_schema' as const,
+          json_schema: {
+            name: 'test_schema',
+            strict: true,
+            schema: {
+              type: 'object' as const,
+              properties: {
+                result: { type: 'string' },
+              },
+              required: ['result'],
+              additionalProperties: false,
+            },
+          },
+        },
+      } as any;
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', { config });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.text.format.type).toBe('json_schema');
+      expect(body.text.format.name).toBe('test_schema');
+      expect(body.text.format.schema).toBeDefined();
+      expect(body.text.format.strict).toBe(true);
+    });
+
+    it('should handle json_schema format with default name when not provided', async () => {
+      const mockApiResponse = {
+        id: 'resp_def456',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: '{"result": "default name test"}',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const config = {
+        apiKey: 'test-key',
+        response_format: {
+          type: 'json_schema' as const,
+          json_schema: {
+            strict: true,
+            schema: {
+              type: 'object' as const,
+              properties: {
+                result: { type: 'string' },
+              },
+              required: ['result'],
+              additionalProperties: false,
+            },
+          },
+        },
+      } as any;
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', { config });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.text.format.type).toBe('json_schema');
+      expect(body.text.format.name).toBeTruthy();
+      expect(body.text.format.schema).toBeDefined();
+      expect(body.text.format.strict).toBe(true);
+    });
+
+    it('should handle json_schema format with nested json_schema.schema', async () => {
+      const mockApiResponse = {
+        id: 'resp_ghi789',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: '{"result": "nested schema test"}',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const config = {
+        apiKey: 'test-key',
+        response_format: {
+          type: 'json_schema' as const,
+          json_schema: {
+            name: 'nested_test',
+            strict: true,
+            schema: {
+              type: 'object' as const,
+              properties: {
+                result: { type: 'string' },
+              },
+              required: ['result'],
+              additionalProperties: false,
+            },
+          },
+        } as any,
+      };
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', { config });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.text.format.type).toBe('json_schema');
+      expect(body.text.format.name).toBe('nested_test');
+      expect(body.text.format.schema).toBeDefined();
+      expect(body.text.format.strict).toBe(true);
+    });
+
+    it('should handle text format correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Simple text response',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.text).toEqual({
+        format: {
+          type: 'text',
+        },
+      });
+    });
+
+    it('should handle external file loading for response_format correctly', () => {
+      // Test that the provider can be configured with external file syntax
+      // This verifies the type handling for external file references
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file://./response_format.json' as any,
+          },
+        });
+      }).not.toThrow();
+    });
+
+    it('should handle explicit text format correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Explicit text format response',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 15, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          response_format: {
+            type: 'text' as any,
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.text).toEqual({
+        format: {
+          type: 'text',
+        },
+      });
+    });
+
+    it('should accept external file reference syntax for response_format', () => {
+      // Test that the provider can be instantiated with external file syntax
+      // without throwing type errors (using type assertion as needed)
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file://./schema.json' as any,
+          },
+        });
+      }).not.toThrow();
+
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file://relative/path/schema.json' as any,
+          },
+        });
+      }).not.toThrow();
+
+      expect(() => {
+        new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            response_format: 'file:///absolute/path/schema.json' as any,
+          },
+        });
+      }).not.toThrow();
+    });
+  });
+
+  describe('refusal handling', () => {
+    it('should handle explicit refusal content in message', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'refusal',
+                refusal: 'I cannot fulfill this request due to content policy violation.',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('Test prompt with refusal');
+
+      expect(result.isRefusal).toBe(true);
+      expect(result.output).toBe('I cannot fulfill this request due to content policy violation.');
+    });
+
+    it('should handle direct refusal in message object', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            refusal: 'I cannot provide that information.',
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('Test prompt with direct refusal');
+
+      expect(result.isRefusal).toBe(true);
+      expect(result.output).toBe('I cannot provide that information.');
+    });
+  });
+
+  it('should configure o3 model correctly with reasoning parameters', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'o3',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response from o3 model',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('o3', {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'high',
+        max_output_tokens: 2000,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.model).toBe('o3');
+    expect(body.reasoning).toEqual({ effort: 'high' });
+    expect(body.max_output_tokens).toBe(2000);
+    expect(body.temperature).toBeUndefined(); // o3 model should not have temperature
+  });
+
+  it('should configure o3-pro model correctly with reasoning parameters', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'o3-pro',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response from o3-pro model',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('o3-pro', {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'high',
+        max_output_tokens: 2000,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.model).toBe('o3-pro');
+    expect(body.reasoning).toEqual({ effort: 'high' });
+    expect(body.max_output_tokens).toBe(2000);
+    expect(body.temperature).toBeUndefined(); // o3-pro model should not have temperature
+  });
+
+  it('should configure o4-mini model correctly with reasoning parameters', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'o4-mini',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response from o4-mini model',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('o4-mini', {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'medium',
+        max_output_tokens: 1000,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.model).toBe('o4-mini');
+    expect(body.reasoning).toEqual({ effort: 'medium' });
+    expect(body.max_output_tokens).toBe(1000);
+    expect(body.temperature).toBeUndefined(); // o4-mini model should not have temperature
+  });
+
+  it('should configure codex-mini-latest model correctly with reasoning parameters', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'codex-mini-latest',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response from codex-mini-latest model',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('codex-mini-latest', {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'medium',
+        max_output_tokens: 1000,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.model).toBe('codex-mini-latest');
+    expect(body.reasoning).toEqual({ effort: 'medium' });
+    expect(body.max_output_tokens).toBe(1000);
+    expect(body.temperature).toBeUndefined(); // codex-mini-latest model should not have temperature
+  });
+
+  describe('MCP (Model Context Protocol) support', () => {
+    it('should include MCP tools in request body correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Response with MCP tools',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'deepwiki',
+              server_url: 'https://mcp.deepwiki.com/mcp',
+              require_approval: 'never',
+              allowed_tools: ['ask_question'],
+            },
+          ],
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.tools).toBeDefined();
+      expect(body.tools).toHaveLength(1);
+      expect(body.tools[0]).toEqual({
+        type: 'mcp',
+        server_label: 'deepwiki',
+        server_url: 'https://mcp.deepwiki.com/mcp',
+        require_approval: 'never',
+        allowed_tools: ['ask_question'],
+      });
+    });
+
+    it('should handle MCP tools with authentication headers', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Response with authenticated MCP tools',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'stripe',
+              server_url: 'https://mcp.stripe.com',
+              headers: {
+                Authorization: 'Bearer sk-test_123',
+              },
+              require_approval: 'never',
+            },
+          ],
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.tools[0].headers).toEqual({
+        Authorization: 'Bearer sk-test_123',
+      });
+    });
+
+    it('should handle MCP list tools response correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'mcp_list_tools',
+            id: 'mcpl_123',
+            server_label: 'deepwiki',
+            tools: [
+              {
+                name: 'ask_question',
+                input_schema: {
+                  type: 'object',
+                  properties: {
+                    question: { type: 'string' },
+                    repoName: { type: 'string' },
+                  },
+                  required: ['question', 'repoName'],
+                },
+              },
+            ],
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'I can help you search repositories.',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'deepwiki',
+              server_url: 'https://mcp.deepwiki.com/mcp',
+              require_approval: 'never',
+            },
+          ],
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toContain('MCP Tools from deepwiki');
+      expect(result.output).toContain('ask_question');
+      expect(result.output).toContain('I can help you search repositories.');
+    });
+
+    it('should handle MCP tool call response correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'mcp_call',
+            id: 'mcp_456',
+            server_label: 'deepwiki',
+            name: 'ask_question',
+            arguments:
+              '{"question":"What is MCP?","repoName":"modelcontextprotocol/modelcontextprotocol"}',
+            output:
+              'MCP (Model Context Protocol) is an open protocol that standardizes how applications provide tools and context to LLMs.',
+            error: null,
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Based on the search results, MCP is a protocol for LLM integration.',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 25, output_tokens: 20, total_tokens: 45 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toContain('MCP Tool Result (ask_question)');
+      expect(result.output).toContain('MCP (Model Context Protocol) is an open protocol');
+      expect(result.output).toContain(
+        'Based on the search results, MCP is a protocol for LLM integration.',
+      );
+    });
+
+    it('should handle MCP tool call error correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'mcp_call',
+            id: 'mcp_456',
+            server_label: 'deepwiki',
+            name: 'ask_question',
+            arguments: '{"question":"Invalid query"}',
+            output: null,
+            error: 'Repository not found',
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'I encountered an error while searching.',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toContain('MCP Tool Error (ask_question)');
+      expect(result.output).toContain('Repository not found');
+      expect(result.output).toContain('I encountered an error while searching.');
+    });
+
+    it('should handle MCP approval request correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'mcp_approval_request',
+            id: 'mcpr_789',
+            server_label: 'deepwiki',
+            name: 'ask_question',
+            arguments: '{"question":"What is the latest version?","repoName":"facebook/react"}',
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 5, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'deepwiki',
+              server_url: 'https://mcp.deepwiki.com/mcp',
+              // require_approval defaults to requiring approval
+            },
+          ],
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toContain('MCP Approval Required for deepwiki.ask_question');
+      expect(result.output).toContain('facebook/react');
+    });
+
+    it('should handle mixed MCP and regular tools correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'I have access to both MCP and regular tools.',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 30, output_tokens: 15, total_tokens: 45 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get weather information',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    location: { type: 'string' },
+                  },
+                  required: ['location'],
+                },
+              },
+            },
+            {
+              type: 'mcp',
+              server_label: 'deepwiki',
+              server_url: 'https://mcp.deepwiki.com/mcp',
+              require_approval: 'never',
+            },
+          ],
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.tools).toHaveLength(2);
+      expect(body.tools[0].type).toBe('function');
+      expect(body.tools[0].function.name).toBe('get_weather');
+      expect(body.tools[1].type).toBe('mcp');
+      expect(body.tools[1].server_label).toBe('deepwiki');
+    });
+
+    it('should handle MCP tool configuration with selective approval correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Response with selective approval MCP tools',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'deepwiki',
+              server_url: 'https://mcp.deepwiki.com/mcp',
+              require_approval: {
+                never: {
+                  tool_names: ['ask_question', 'read_wiki_structure'],
+                },
+              },
+              allowed_tools: ['ask_question', 'read_wiki_structure', 'search_repo'],
+            },
+          ],
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.tools).toBeDefined();
+      expect(body.tools).toHaveLength(1);
+      expect(body.tools[0]).toEqual({
+        type: 'mcp',
+        server_label: 'deepwiki',
+        server_url: 'https://mcp.deepwiki.com/mcp',
+        require_approval: {
+          never: {
+            tool_names: ['ask_question', 'read_wiki_structure'],
+          },
+        },
+        allowed_tools: ['ask_question', 'read_wiki_structure', 'search_repo'],
+      });
+    });
+  });
+
+  describe('Enhanced OpenAI tools assertion with MCP support', () => {
+    it('should validate MCP tool success correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'mcp_call',
+            id: 'mcp_456',
+            server_label: 'deepwiki',
+            name: 'ask_question',
+            arguments: '{"question":"What is MCP?"}',
+            output: 'MCP is a protocol for LLM integration.',
+            error: null,
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Based on the search results, MCP is a protocol for LLM integration.',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 25, output_tokens: 20, total_tokens: 45 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'deepwiki',
+              server_url: 'https://mcp.deepwiki.com/mcp',
+              require_approval: 'never',
+            },
+          ],
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      // The output should contain MCP Tool Result
+      expect(result.output).toContain('MCP Tool Result (ask_question)');
+
+      // Test the enhanced assertion
+      const { handleIsValidOpenAiToolsCall } = await import('../../../src/assertions/openai');
+      const assertionResult = handleIsValidOpenAiToolsCall({
+        assertion: { type: 'is-valid-openai-tools-call' },
+        output: result.output,
+        provider,
+        test: { vars: {} },
+      } as any);
+
+      expect(assertionResult.pass).toBe(true);
+      expect(assertionResult.reason).toContain('MCP tool call succeeded for ask_question');
+    });
+
+    it('should validate MCP tool error correctly', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'mcp_call',
+            id: 'mcp_456',
+            server_label: 'deepwiki',
+            name: 'ask_question',
+            arguments: '{"question":"Invalid query"}',
+            output: null,
+            error: 'Repository not found',
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'I encountered an error while searching.',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      // The output should contain MCP Tool Error
+      expect(result.output).toContain('MCP Tool Error (ask_question)');
+
+      // Test the enhanced assertion
+      const { handleIsValidOpenAiToolsCall } = await import('../../../src/assertions/openai');
+      const assertionResult = handleIsValidOpenAiToolsCall({
+        assertion: { type: 'is-valid-openai-tools-call' },
+        output: result.output,
+        provider,
+        test: { vars: {} },
+      } as any);
+
+      expect(assertionResult.pass).toBe(false);
+      expect(assertionResult.reason).toContain(
+        'MCP tool call failed for ask_question: Repository not found',
+      );
+    });
   });
 });

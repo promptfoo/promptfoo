@@ -1,14 +1,13 @@
 import type { Command } from 'commander';
 
 export function cacheCommand(program: Command) {
-  program
-    .command('cache')
-    .description('Manage cache')
+  const cacheCommand = program.command('cache').description('Manage cache');
+
+  cacheCommand
     .command('clear')
-    .description('Clear cache')
-    .option('--env-file, --env-path <path>', 'Path to .env file')
-    .action(async (cmdObj: { envPath?: string }) => {
+    .description('Clear all cache')
+    .action(async () => {
       const { cacheClearAction } = await import('./cache/cacheAction');
-      await cacheClearAction(cmdObj);
+      await cacheClearAction({});
     });
 }

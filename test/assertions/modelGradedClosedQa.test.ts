@@ -1,8 +1,9 @@
-import type nunjucks from 'nunjucks';
 import { handleModelGradedClosedQa } from '../../src/assertions/modelGradedClosedQa';
 import { matchesClosedQa } from '../../src/matchers';
-import type { AssertionParams } from '../../src/types';
 import { getNunjucksEngine } from '../../src/util/templates';
+import type nunjucks from 'nunjucks';
+
+import type { AssertionParams } from '../../src/types';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/util/templates');

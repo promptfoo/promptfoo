@@ -1,11 +1,12 @@
-import type Eval from '../../../src/models/eval';
-import type EvalResult from '../../../src/models/evalResult';
 import { ResultFailureReason } from '../../../src/types';
 import {
   convertEvalResultToTableCell,
   convertTestResultsToTableRow,
 } from '../../../src/util/exportToFile';
 import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
+
+import type Eval from '../../../src/models/eval';
+import type EvalResult from '../../../src/models/evalResult';
 
 describe('exportToFile utils', () => {
   describe('getHeaderForTable', () => {

@@ -1,54 +1,27 @@
 import type { Command } from 'commander';
-import { InvalidArgumentError } from 'commander';
-import { type UnifiedConfig } from '../../types';
 
-// Re-export for backward compatibility
-export { doGenerateAssertions } from './actions/assertionsAction';
-
-function validateAssertionType(value: string) {
-  const validTypes = ['pi', 'g-eval', 'llm-rubric'];
-  if (!validTypes.includes(value)) {
-    throw new InvalidArgumentError(
-      `Invalid assertion type. Must be one of: ${validTypes.join(', ')}`,
-    );
-  }
-  return value;
-}
-
-export function generateAssertionsCommand(
-  program: Command,
-  defaultConfig: Partial<UnifiedConfig>,
-  defaultConfigPath: string | undefined,
-) {
-  program
-    .command('assertions')
-    .description('Generate additional subjective/objective assertions')
+export function generateAssertionsCommand(command: Command) {
+  const cmd = command.command('assertions');
+  cmd
+    .description('Generate AI-based assertions for the specified configuration')
+    .option('-c, --config <path>', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option(
-      '-t, --type [type]',
-      'The type of natural language assertion to generate (pi, g-eval, or llm-rubric)',
-      validateAssertionType,
-      'pi',
+      '-o, --output <path>',
+      'Path to output file. Defaults to `<config_dir>/redteam.yaml`',
     )
-    .option(
-      '-c, --config [path]',
-      'Path to configuration file. Defaults to promptfooconfig.yaml. Requires at least 1 prompt to be defined.',
-    )
-    .option('-o, --output [path]', 'Path to output file. Supports YAML output')
-    .option('-w, --write', 'Write results to promptfoo configuration file')
-    .option('--numAssertions <amount>', 'Number of assertions to generate')
-    .option(
-      '-i, --instructions [instructions]',
-      'Additional instructions to guide assertion generation',
-    )
-    .option(
-      '--provider <provider>',
-      `Provider to use for generating assertions. Defaults to the default grading provider.`,
-    )
-    .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
-    .action(async (opts) => {
-      // Lazy load the action handler
+    .option('-p, --prompts <paths...>', 'Paths to prompt files')
+    .option('-r, --providers <names...>', 'Provider names to use for redteam generation')
+    .option('-i, --injectVar <varname>', 'Variable name to inject user/redteam input')
+    .option('--purpose <purpose>', 'Purpose override for redteam generation')
+    .action(async (options: any) => {
       const { doGenerateAssertions } = await import('./actions/assertionsAction');
-      await doGenerateAssertions({ ...opts, defaultConfig, defaultConfigPath });
-    });
+      await doGenerateAssertions(options);
+    })
+    .addHelpText(
+      'after',
+      `
+Example:
+    npx promptfoo generate assertions -c path/to/config.yaml -o assertions.yaml
+`,
+    );
 }

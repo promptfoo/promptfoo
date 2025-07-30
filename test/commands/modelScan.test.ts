@@ -1,20 +1,22 @@
-import { spawn, type ChildProcess } from 'child_process';
-import { Command } from 'commander';
-import { modelScanCommand, checkModelAuditInstalled } from '../../src/commands/modelScan';
-import logger from '../../src/logger';
+import { type ChildProcess, exec, spawn } from "child_process";
+import { Command } from "commander";
+import { checkModelAuditInstalled, modelScanCommand } from "../../src/commands/modelScan";
+import logger from "../../src/logger";
 
-jest.mock('child_process');
-jest.mock('../../src/logger');
+jest.mock("child_process");
+jest.mock("../../src/logger");
 
-describe('modelScanCommand', () => {
+describe("modelScanCommand", () => {
   let program: Command;
-  let mockSpawn: jest.MockedFunction<typeof spawn>;
+  let mockSpawn: jest.SpyInstance;
+  let mockExec: jest.SpyInstance;
   let mockExit: jest.SpyInstance;
 
   beforeEach(() => {
     program = new Command();
-    mockSpawn = jest.mocked(spawn);
-    mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    mockSpawn = jest.spyOn({ spawn }, "spawn");
+    mockExec = jest.spyOn({ exec }, "exec");
+    mockExit = jest.spyOn(process, "exit").mockImplementation(() => undefined as never);
     jest.clearAllMocks();
   });
 
@@ -22,200 +24,199 @@ describe('modelScanCommand', () => {
     mockExit.mockRestore();
   });
 
-  it('should exit if no paths are provided', async () => {
-    // Mock checkModelAuditInstalled to return true
+  it("should exit if no paths are provided", async () => {
     const mockChildProcess = {
-      on: jest.fn((event, callback) => {
-        if (event === 'exit') {
-          callback(0);
-        }
-      }),
+      on: jest.fn(),
     } as unknown as ChildProcess;
     mockSpawn.mockReturnValue(mockChildProcess);
+    mockExec.mockImplementation((cmd, callback) => {
+      if (callback) {
+        callback(null, "", "");
+      }
+      return undefined;
+    });
 
     modelScanCommand(program);
 
-    const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
-    await command?.parseAsync(['scan-model']);
+    const command = program.commands.find((cmd) => cmd.name() === "scan-model");
+    await command?.parseAsync(["scan-model"]);
 
     expect(logger.error).toHaveBeenCalledWith(
-      'No paths specified. Please provide at least one model file or directory to scan.',
+      "No paths specified. Please provide at least one model file or directory to scan.",
     );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
-  it('should exit if modelaudit is not installed', async () => {
-    // Mock checkModelAuditInstalled to return false
+  it("should exit if modelaudit is not installed", async () => {
     const mockChildProcess = {
-      on: jest.fn((event, callback) => {
-        if (event === 'error') {
-          callback(new Error('command not found'));
+      on: jest.fn(),
+    } as unknown as ChildProcess;
+    mockSpawn.mockReturnValue(mockChildProcess);
+    mockExec.mockImplementation((cmd, callback) => {
+      if (callback) {
+        callback(new Error("command not found"), "", "");
+      }
+      return undefined;
+    });
+
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === "scan-model");
+    await command?.parseAsync(["scan-model", "path/to/model"]);
+
+    expect(logger.error).toHaveBeenCalledWith("ModelAudit is not installed.");
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it("should spawn modelaudit process with correct arguments", async () => {
+    mockExec.mockImplementation((cmd, callback) => {
+      if (callback) {
+        callback(null, "", "");
+      }
+      return undefined;
+    });
+
+    const mockChildProcess = {
+      on: jest.fn().mockImplementation((event: string, callback: any) => {
+        if (event === "close") {
+          callback(0);
         }
+        return mockChildProcess;
       }),
     } as unknown as ChildProcess;
+
     mockSpawn.mockReturnValue(mockChildProcess);
 
     modelScanCommand(program);
 
-    const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
-    await command?.parseAsync(['scan-model', 'path/to/model']);
-
-    expect(logger.error).toHaveBeenCalledWith('ModelAudit is not installed.');
-    expect(mockExit).toHaveBeenCalledWith(1);
-  });
-
-  it('should spawn modelaudit process with correct arguments', async () => {
-    // Mock for checkModelAuditInstalled call
-    let isFirstCall = true;
-    mockSpawn.mockImplementation((command, args, options) => {
-      if (isFirstCall) {
-        // First call is checkModelAuditInstalled
-        isFirstCall = false;
-        const mockCheckProcess = {
-          on: jest.fn((event, callback) => {
-            if (event === 'exit') {
-              callback(0);
-            }
-          }),
-        } as unknown as ChildProcess;
-        return mockCheckProcess;
-      } else {
-        // Second call is the actual modelaudit scan
-        const mockScanProcess = {
-          on: jest.fn((event, callback) => {
-            if (event === 'close') {
-              callback(0);
-            }
-          }),
-        } as unknown as ChildProcess;
-        return mockScanProcess;
-      }
-    });
-
-    modelScanCommand(program);
-
-    // Parse the command with the program, not the command directly
-    await program.parseAsync([
-      'node',
-      'test',
-      'scan-model',
-      'path/to/model1',
-      'path/to/model2',
-      '--blacklist',
-      '*.log',
-      '--format',
-      'json',
-      '--output',
-      'report.json',
-      '--timeout',
-      '300',
-      '--verbose',
-      '--max-file-size',
-      '100MB',
-      '--max-total-size',
-      '1GB',
+    const command = program.commands.find((cmd) => cmd.name() === "scan-model")!;
+    await command.parseAsync([
+      "node",
+      "scan-model",
+      "path1",
+      "path2",
+      "--blacklist",
+      "pattern1",
+      "--format",
+      "json",
+      "--output",
+      "output.json",
+      "--timeout",
+      "600",
+      "--verbose",
+      "--max-file-size",
+      "1000000",
+      "--max-total-size",
+      "5000000",
     ]);
 
-    // Check the actual scan spawn call
-    expect(mockSpawn).toHaveBeenCalledTimes(2);
-    expect(mockSpawn).toHaveBeenNthCalledWith(1, 'modelaudit', ['--version'], {
-      stdio: 'ignore',
-      shell: true,
-    });
-    expect(mockSpawn).toHaveBeenNthCalledWith(
-      2,
-      'modelaudit',
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "modelaudit",
       [
-        'scan',
-        'path/to/model1',
-        'path/to/model2',
-        '--blacklist',
-        '*.log',
-        '--format',
-        'json',
-        '--output',
-        'report.json',
-        '--timeout',
-        '300',
-        '--verbose',
-        '--max-file-size',
-        '100MB',
-        '--max-total-size',
-        '1GB',
+        "scan",
+        "path1",
+        "path2",
+        "--blacklist",
+        "pattern1",
+        "--format",
+        "json",
+        "--output",
+        "output.json",
+        "--timeout",
+        "600",
+        "--verbose",
+        "--max-file-size",
+        "1000000",
+        "--max-total-size",
+        "5000000",
       ],
-      { stdio: 'inherit' },
+      { stdio: "inherit" },
     );
   });
 
-  it('should handle non-zero exit code', async () => {
-    // Mock for checkModelAuditInstalled call
-    let isFirstCall = true;
-    mockSpawn.mockImplementation((command, args, options) => {
-      if (isFirstCall) {
-        // First call is checkModelAuditInstalled
-        isFirstCall = false;
-        const mockCheckProcess = {
-          on: jest.fn((event, callback) => {
-            if (event === 'exit') {
-              callback(0);
-            }
-          }),
-        } as unknown as ChildProcess;
-        return mockCheckProcess;
-      } else {
-        // Second call is the actual modelaudit scan
-        const mockScanProcess = {
-          on: jest.fn((event, callback) => {
-            if (event === 'close') {
-              callback(1);
-            }
-          }),
-        } as unknown as ChildProcess;
-        return mockScanProcess;
+  it("should handle modelaudit process error", async () => {
+    mockExec.mockImplementation((cmd, callback) => {
+      if (callback) {
+        callback(null, "", "");
       }
+      return undefined;
     });
+
+    const mockChildProcess = {
+      on: jest.fn().mockImplementation((event: string, callback: any) => {
+        if (event === "error") {
+          callback(new Error("spawn error"));
+        }
+        return mockChildProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    mockSpawn.mockReturnValue(mockChildProcess);
 
     modelScanCommand(program);
 
-    const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
-    await command?.parseAsync(['scan-model', 'path/to/model']);
+    const command = program.commands.find((cmd) => cmd.name() === "scan-model");
+    await command?.parseAsync(["scan-model", "path/to/model"]);
 
-    expect(logger.error).toHaveBeenCalledWith('Model scan completed with issues. Exit code: 1');
+    expect(logger.error).toHaveBeenCalledWith("Failed to start modelaudit: spawn error");
+    expect(mockExit).toHaveBeenCalledWith(1);
+  });
+
+  it("should handle non-zero exit code", async () => {
+    mockExec.mockImplementation((cmd, callback) => {
+      if (callback) {
+        callback(null, "", "");
+      }
+      return undefined;
+    });
+
+    const mockChildProcess = {
+      on: jest.fn().mockImplementation((event: string, callback: any) => {
+        if (event === "close") {
+          callback(1);
+        }
+        return mockChildProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    mockSpawn.mockReturnValue(mockChildProcess);
+
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === "scan-model");
+    await command?.parseAsync(["scan-model", "path/to/model"]);
+
+    expect(logger.error).toHaveBeenCalledWith("Model scan completed with issues. Exit code: 1");
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 });
 
-describe('checkModelAuditInstalled', () => {
-  let mockSpawn: jest.MockedFunction<typeof spawn>;
+describe("checkModelAuditInstalled", () => {
+  let mockExec: jest.SpyInstance;
 
   beforeEach(() => {
-    mockSpawn = jest.mocked(spawn);
-    jest.clearAllMocks();
+    mockExec = jest.spyOn({ exec }, "exec");
   });
 
-  it('should return true if modelaudit is installed', async () => {
-    const mockChildProcess = {
-      on: jest.fn((event, callback) => {
-        if (event === 'exit') {
-          callback(0);
-        }
-      }),
-    } as unknown as ChildProcess;
-    mockSpawn.mockReturnValue(mockChildProcess);
+  it("should return true if modelaudit is installed", async () => {
+    mockExec.mockImplementation((cmd, callback) => {
+      if (callback) {
+        callback(null, "", "");
+      }
+      return undefined;
+    });
 
     const result = await checkModelAuditInstalled();
     expect(result).toBe(true);
   });
 
-  it('should return false if modelaudit is not installed', async () => {
-    const mockChildProcess = {
-      on: jest.fn((event, callback) => {
-        if (event === 'error') {
-          callback(new Error('command not found'));
-        }
-      }),
-    } as unknown as ChildProcess;
-    mockSpawn.mockReturnValue(mockChildProcess);
+  it("should return false if modelaudit is not installed", async () => {
+    mockExec.mockImplementation((cmd, callback) => {
+      if (callback) {
+        callback(new Error("command not found"), "", "");
+      }
+      return undefined;
+    });
 
     const result = await checkModelAuditInstalled();
     expect(result).toBe(false);

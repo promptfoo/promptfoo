@@ -1,7 +1,9 @@
-import type { TokenCredential } from '@azure/identity';
-import type { EnvVarKey } from '../../envars';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { throwConfigurationError } from './util';
+import type { TokenCredential } from '@azure/identity';
+
+import type { EnvVarKey } from '../../envars';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -10,7 +12,6 @@ import type {
 } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { AzureCompletionOptions, AzureProviderOptions } from './types';
-import { throwConfigurationError } from './util';
 
 export class AzureGenericProvider implements ApiProvider {
   deploymentName: string;

@@ -1,35 +1,43 @@
 import type { Command } from 'commander';
-import { type UnifiedConfig } from '../../types';
 
-// Re-export for backward compatibility
-export { doGenerateDataset } from './actions/datasetAction';
-
-export function generateDatasetCommand(
-  program: Command,
-  defaultConfig: Partial<UnifiedConfig>,
-  defaultConfigPath: string | undefined,
-) {
-  program
-    .command('dataset')
+export function generateDatasetCommand(command: Command) {
+  const cmd = command.command('dataset');
+  cmd
     .description('Generate test cases')
+    .option('-c, --config <path>', 'Path to configuration file. Defaults to promptfooconfig.yaml')
     .option(
-      '-i, --instructions [instructions]',
-      'Additional instructions to follow while generating test cases',
+      '-i, --instructions <text>',
+      'Additional instructions to guide test case generation',
     )
-    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
-    .option('-o, --output [path]', 'Path to output file. Supports CSV and YAML output.')
-    .option('-w, --write', 'Write results to promptfoo configuration file')
+    .option(
+      '-o, --output <path>',
+      'Path to output file',
+    )
+    .option(
+      '-w, --write',
+      'Write directly to the loaded config file',
+    )
+    .option(
+      '--numPersonas <number>',
+      'Number of personas to generate. If not provided, AI will choose.',
+    )
+    .option(
+      '--numTestCasesPerPersona <number>',
+      'Number of test cases per persona',
+    )
     .option(
       '--provider <provider>',
-      `Provider to use for generating adversarial tests. Defaults to the default grading provider.`,
+      'Provider to use for generating dataset (e.g., openai:chat:gpt-4)',
     )
-    .option('--numPersonas <number>', 'Number of personas to generate', '5')
-    .option('--numTestCasesPerPersona <number>', 'Number of test cases per persona', '3')
-    .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('--env-file, --env-path <path>', 'Path to .env file')
-    .action(async (opts) => {
-      // Lazy load the action handler
+    .action(async (options: any) => {
       const { doGenerateDataset } = await import('./actions/datasetAction');
-      await doGenerateDataset({ ...opts, defaultConfig, defaultConfigPath });
-    });
+      await doGenerateDataset(options);
+    })
+    .addHelpText(
+      'after',
+      `
+Example:
+    npx promptfoo generate dataset -i "Create test cases covering a wide range of math problems"
+`,
+    );
 }

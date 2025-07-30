@@ -13,6 +13,7 @@ keywords:
   ]
 date: 2024-11-20
 authors: [ian]
+tags: [technical-guide, red-teaming, huggingface]
 ---
 
 # How to Red Team a HuggingFace Model
