@@ -152,9 +152,7 @@ async function interpolatePropertyValue(
 
   // Handle arrays recursively
   if (Array.isArray(value)) {
-    return Promise.all(
-      value.map((item) => interpolatePropertyValue(item, vars, propertyName)),
-    );
+    return Promise.all(value.map((item) => interpolatePropertyValue(item, vars, propertyName)));
   }
 
   // Handle objects recursively, excluding certain properties

@@ -2765,19 +2765,21 @@ describe('evaluator', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
-      tests: [{
-        vars: { 
-          metric: ['accuracy', 'performance'],
-        }
-      }],
+      tests: [
+        {
+          vars: {
+            metric: ['accuracy', 'performance'],
+          },
+        },
+      ],
       defaultTest: {
         assert: [
-          { 
+          {
             type: 'llm-rubric' as const,
             value: 'Check output',
             metric: '{{metric}}',
             // Remove provider from assertion to avoid conflicting with options.provider
-          }
+          },
         ],
         options: {
           provider: mockGradingApiProviderPasses, // This will be used for llm-rubric assertions
