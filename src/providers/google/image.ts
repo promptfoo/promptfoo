@@ -52,8 +52,7 @@ export class GoogleImageProvider implements ApiProvider {
     this.env = options.env;
 
     // Determine whether to use Vertex AI or Google AI Studio
-    this.useVertexApi = !!(this.config.projectId ||
-      getEnvString('GOOGLE_PROJECT_ID', this.env));
+    this.useVertexApi = !!(this.config.projectId || getEnvString('GOOGLE_PROJECT_ID', this.env));
   }
 
   id(): string {
