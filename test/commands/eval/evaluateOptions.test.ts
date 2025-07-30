@@ -22,7 +22,7 @@ jest.mock('../../../src/logger', () => ({
 }));
 
 jest.mock('../../../src/migrate', () => ({
-  runDbMigrations: jest.fn(),
+  runDbMigrations: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../../../src/telemetry', () => ({
