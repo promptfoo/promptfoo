@@ -5,6 +5,7 @@ import type { EnvOverrides } from '../types/env';
 import type { ProviderConfiguration } from '../types/providerConfig';
 import { AnthropicProviderConfig } from './anthropic/defaults';
 import { AzureProviderConfig } from './azure/defaults';
+import { AzureModerationProvider } from './azure/moderation';
 import { BedrockProviderConfig } from './bedrock/defaults';
 import { hasGoogleDefaultCredentials } from './google/util';
 import { GitHubProviderConfig } from './github/defaults';
@@ -131,7 +132,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   // Check if we have programmatic overrides before even checking for providers
   if (defaultCompletionProvider || defaultEmbeddingProvider) {
     // Start with the default OpenAI providers as a base
-    const providers = await OpenAiProviderConfig(env);
+    const providers = OpenAiProviderConfig(env);
 
     // Apply completion provider overrides if set
     if (defaultCompletionProvider) {
@@ -159,32 +160,30 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
 
     if (hasCredentials) {
       logger.debug(`Using ${provider.name} default providers`);
-      const providers = await provider.config(env);
+      const providers = provider.config(env);
       return applyGlobalModerationOverride(providers, env);
     }
   }
 
   // Fallback to OpenAI if no credentials are available
   logger.debug('No credentials found, falling back to OpenAI providers');
-  const providers = await OpenAiProviderConfig(env);
+  const providers = OpenAiProviderConfig(env);
   return applyGlobalModerationOverride(providers, env);
 }
 
 /**
  * Apply global Azure Content Safety moderation if configured
  */
-async function applyGlobalModerationOverride(
+function applyGlobalModerationOverride(
   providers: DefaultProviders,
   env?: EnvOverrides,
-): Promise<DefaultProviders> {
+): DefaultProviders {
   // Check if Azure Content Safety endpoint is configured
   const hasAzureContentSafety =
     isKeySet('AZURE_CONTENT_SAFETY_ENDPOINT', env) || isKeySet('AZURE_CONTENT_SAFETY_API_KEY', env);
 
   if (hasAzureContentSafety) {
     logger.debug('Applying global Azure Content Safety moderation');
-    // Dynamically import to avoid circular dependencies
-    const { AzureModerationProvider } = await import('./azure/moderation');
     providers.moderationProvider = new AzureModerationProvider('text-content-safety', { env });
   }
 

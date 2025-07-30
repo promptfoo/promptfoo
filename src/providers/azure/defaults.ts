@@ -3,6 +3,9 @@ import logger from '../../logger';
 import type { EnvOverrides } from '../../types/env';
 import type { ProviderConfiguration } from '../../types/providerConfig';
 import { OpenAiModerationProvider } from '../openai/moderation';
+import { AzureChatCompletionProvider } from './chat';
+import { AzureEmbeddingProvider } from './embedding';
+import { AzureModerationProvider } from './moderation';
 // Re-export models to maintain backward compatibility
 export { DEFAULT_AZURE_API_VERSION, AZURE_MODELS } from './models';
 
@@ -10,13 +13,8 @@ export { DEFAULT_AZURE_API_VERSION, AZURE_MODELS } from './models';
  * Azure provider configuration
  * This version supports environment variables directly
  */
-export const AzureProviderConfig: ProviderConfiguration = async (env?: EnvOverrides) => {
+export const AzureProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
   logger.debug('Using Azure OpenAI default providers');
-
-  // Use dynamic imports to avoid circular dependencies
-  const { AzureChatCompletionProvider } = await import('./chat');
-  const { AzureEmbeddingProvider } = await import('./embedding');
-  const { AzureModerationProvider } = await import('./moderation');
 
   const deploymentName =
     getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') ||
