@@ -69,7 +69,6 @@ import { handlePython } from './python';
 import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
-import { handleResearchRubric } from './researchRubric';
 import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
@@ -101,7 +100,6 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'llm-rubric',
   'model-graded-closedqa',
   'model-graded-factuality',
-  'research-rubric',
   'web-search',
 ]);
 
@@ -316,7 +314,6 @@ export async function runAssertion({
     'perplexity-score': handlePerplexityScore,
     python: handlePython,
     regex: handleRegex,
-    'research-rubric': handleResearchRubric,
     'rouge-n': handleRougeScore,
     similar: handleSimilar,
     'web-search': handleWebSearch,

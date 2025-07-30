@@ -280,28 +280,28 @@ Then, enable 'Render markdown' under Table Settings.
 
 ## Web Search Support
 
-The OpenAI Responses API supports web search capabilities through the `web_search` tool, which is essential for the `research-rubric` assertion type. This allows models to verify facts, check current information, and validate citations.
+The OpenAI Responses API supports web search capabilities through the `web_search_preview` tool, which enables the `web-search` assertion type. This allows models to search the web for current information and verify facts.
 
 ### Enabling Web Search
 
-To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add the `web_search` tool to your configuration:
+To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add the `web_search_preview` tool to your configuration:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4o
+  - id: openai:responses:o4-mini
     config:
       tools:
-        - type: web_search
+        - type: web_search_preview
 ```
 
-### Using Web Search with Research-Rubric
+### Using Web Search Assertions
 
-The `research-rubric` assertion type automatically uses web search when available to verify:
+The `web-search` assertion type uses web search to quickly verify current information:
 
-- Real-time information (weather, stock prices, news)
-- Mathematical calculations and facts
-- Citations and academic references
+- Real-time data (weather, stock prices, news)
 - Current events and statistics
+- Time-sensitive information
+- Quick fact verification
 
 Example configuration:
 
@@ -338,10 +338,10 @@ Web search API calls are significantly more expensive than regular completions:
 
 1. **Use specific rubrics**: More specific requirements reduce the number of searches needed
 2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
-3. **Limit scope**: Only use research-rubric for tests that truly need fact verification
+3. **Use appropriate models**: o4-mini is recommended for cost-effective web search
 4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
 
-For more details on using research-rubric assertions, see the [Research-Rubric documentation](/docs/configuration/expected-outputs/model-graded/research-rubric).
+For more details on using web-search assertions, see the [Web-Search documentation](/docs/configuration/expected-outputs/model-graded/web-search).
 
 ## Using tools and functions
 

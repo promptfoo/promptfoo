@@ -17,12 +17,11 @@ import {
   GEVAL_PROMPT_STEPS,
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
-  RESEARCH_RUBRIC_FINAL_EVALUATION,
   SELECT_BEST_PROMPT,
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
-import { hasWebSearchCapability } from './providers/webSearchUtils';
+import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
@@ -583,216 +582,6 @@ export async function matchesLlmRubric(
       },
     },
   };
-}
-
-export async function matchesResearchRubric(
-  rubric: string | object,
-  llmOutput: string,
-  grading?: GradingConfig,
-  vars?: Record<string, string | object>,
-  assertion?: Assertion | null,
-  provider?: ApiProvider | null,
-  prompt?: string,
-): Promise<GradingResult> {
-  if (!grading) {
-    throw new Error(
-      'Cannot grade output without grading config. Specify --grader option or grading config.',
-    );
-  }
-
-  // If remote grading is enabled, use it
-  if (!grading.rubricPrompt && cliState.config?.redteam && shouldGenerateRemote()) {
-    return {
-      ...(await doRemoteGrading({
-        task: 'research-rubric',
-        rubric,
-        output: llmOutput,
-        vars: vars || {},
-      })),
-      assertion,
-    };
-  }
-
-  const defaultProviders = await getDefaultProviders();
-
-  // Get the grading provider - this needs web search capabilities
-  let gradingProvider =
-    grading.provider ||
-    defaultProviders.researchProvider ||
-    defaultProviders.llmRubricProvider ||
-    defaultProviders.gradingProvider;
-
-  // Check if current provider has web search, if not try to load one
-  if (!hasWebSearchCapability(gradingProvider)) {
-    // Try to load a provider with web search capabilities
-    const webSearchProviders = [
-      // Try OpenAI responses API first (as mentioned in error message)
-      async () => {
-        try {
-          return await loadApiProvider('openai:responses:o4-mini', {
-            options: {
-              config: { tools: [{ type: 'web_search_preview' }] },
-            },
-          });
-        } catch {
-          return null;
-        }
-      },
-      // Try Perplexity (has built-in web search)
-      async () => {
-        try {
-          return await loadApiProvider('perplexity:sonar');
-        } catch {
-          return null;
-        }
-      },
-      // Google/Gemini with search tools
-      async () => {
-        try {
-          return await loadApiProvider('google:gemini-2.5-flash', {
-            options: {
-              config: { tools: [{ googleSearch: {} }] },
-            },
-          });
-        } catch {
-          return null;
-        }
-      },
-      async () => {
-        try {
-          return await loadApiProvider('vertex:gemini-2.5-flash', {
-            options: {
-              config: { tools: [{ googleSearch: {} }] },
-            },
-          });
-        } catch {
-          return null;
-        }
-      },
-      // xAI with search parameters
-      async () => {
-        try {
-          return await loadApiProvider('xai:grok-2', {
-            options: {
-              config: { search_parameters: { mode: 'on' } },
-            },
-          });
-        } catch {
-          return null;
-        }
-      },
-    ];
-
-    for (const getProvider of webSearchProviders) {
-      const p = await getProvider();
-      if (p) {
-        gradingProvider = p;
-        logger.info(`Using ${p.id()} as research grading provider`);
-        break;
-      }
-    }
-  }
-
-  // Ensure we have a provider with web search capabilities
-  if (!gradingProvider || !hasWebSearchCapability(gradingProvider)) {
-    throw new Error(
-      'research-rubric requires a grading provider with web search capabilities. ' +
-        'Use --grader with a web search provider (e.g., openai:responses:gpt-4o with tools configured) or configure one in defaultTest.options.provider',
-    );
-  }
-
-  // Load the rubric prompt - use research-specific prompt by default
-  const rubricPrompt = await loadRubricPrompt(
-    grading?.rubricPrompt,
-    RESEARCH_RUBRIC_FINAL_EVALUATION,
-  );
-
-  // Build the evaluation prompt
-  const evalPrompt = await renderLlmRubricPrompt(rubricPrompt, {
-    output: tryParse(llmOutput),
-    rubric,
-    ...(prompt !== undefined && { prompt }),
-    ...(vars || {}),
-  });
-
-  // Add instructions to use web search for verification
-  const researchPrompt = `You are evaluating the accuracy of an output. Use web search to verify any factual claims, current information, calculations, or citations.
-
-${evalPrompt}
-
-IMPORTANT: 
-- Use web search to verify factual claims in the output
-- Check current information (weather, prices, news) against live data
-- Verify mathematical calculations
-- Confirm citations and references exist
-- Base your evaluation on verified facts, not assumptions
-
-Return your evaluation as a JSON object with:
-- "pass": true/false based on accuracy
-- "score": 0-1 representing overall accuracy
-- "reason": Detailed explanation of what you verified
-- "verifiedClaims": Array of claims you checked with web search
-- "failedClaims": Array of claims that were incorrect or unverifiable`;
-
-  // Get the evaluation from the grading provider with web search
-  const resp = await gradingProvider.callApi(researchPrompt);
-
-  if (resp.error || !resp.output) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `Grading failed: ${resp.error || 'No output'}`,
-      tokensUsed: resp.tokenUsage,
-      assertion,
-    };
-  }
-
-  // Parse the response
-  try {
-    interface ResearchRubricResult {
-      pass?: boolean;
-      score?: number;
-      reason?: string;
-      verifiedClaims?: any[];
-      failedClaims?: any[];
-    }
-
-    const result = extractFirstJsonObject(String(resp.output)) as ResearchRubricResult;
-
-    // Apply threshold if specified
-    let pass = result.pass ?? false;
-    const score = typeof result.score === 'number' ? result.score : pass ? 1 : 0;
-
-    if (assertion?.threshold !== undefined) {
-      pass = pass && score >= assertion.threshold;
-    }
-
-    return {
-      pass,
-      score,
-      reason: result.reason || 'No reason provided',
-      tokensUsed: resp.tokenUsage,
-      assertion,
-      metadata: {
-        verifiedClaims: result.verifiedClaims || [],
-        failedClaims: result.failedClaims || [],
-        gradingProvider: gradingProvider.id(),
-        hasWebSearch: true,
-      },
-    };
-  } catch {
-    // Try to parse as a simple pass/fail
-    const outputLower = String(resp.output).toLowerCase();
-    const pass = outputLower.includes('"pass":true') || outputLower.includes('"pass": true');
-
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: resp.output as string,
-      tokensUsed: resp.tokenUsage,
-      assertion,
-    };
-  }
 }
 
 export async function matchesPiScore(
@@ -1517,64 +1306,15 @@ export async function matchesWebSearch(
 
   // Get a provider with web search capabilities
   let searchProvider =
-    grading.provider ||
-    defaultProviders.researchProvider ||
-    defaultProviders.llmRubricProvider ||
-    defaultProviders.gradingProvider;
+    grading.provider || defaultProviders.llmRubricProvider || defaultProviders.gradingProvider;
 
   // Check if current provider has web search, if not try to load one
   if (!hasWebSearchCapability(searchProvider)) {
     // Try to load a provider with web search capabilities
-    const webSearchProviders = [
-      // Try Anthropic first (built-in web search)
-      async () => {
-        try {
-          return await loadApiProvider('anthropic:messages:claude-sonnet-4');
-        } catch {
-          return null;
-        }
-      },
-      // Try OpenAI responses API
-      async () => {
-        try {
-          return await loadApiProvider('openai:responses:o4-mini', {
-            options: {
-              config: { tools: [{ type: 'web_search_preview' }] },
-            },
-          });
-        } catch {
-          return null;
-        }
-      },
-      // Try Perplexity (has built-in web search)
-      async () => {
-        try {
-          return await loadApiProvider('perplexity:sonar');
-        } catch {
-          return null;
-        }
-      },
-      // Google/Gemini with search tools
-      async () => {
-        try {
-          return await loadApiProvider('google:gemini-2.5-flash', {
-            options: {
-              config: { tools: [{ googleSearch: {} }] },
-            },
-          });
-        } catch {
-          return null;
-        }
-      },
-    ];
-
-    for (const getProvider of webSearchProviders) {
-      const p = await getProvider();
-      if (p) {
-        searchProvider = p;
-        logger.info(`Using ${p.id()} as web search provider`);
-        break;
-      }
+    // For web-search assertion, prefer Anthropic first (pass true)
+    const webSearchProvider = await loadWebSearchProvider(true);
+    if (webSearchProvider) {
+      searchProvider = webSearchProvider;
     }
   }
 

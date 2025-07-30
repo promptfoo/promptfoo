@@ -459,7 +459,6 @@ export const BaseAssertionTypesSchema = z.enum([
   'perplexity-score',
   'python',
   'regex',
-  'research-rubric',
   'rouge-n',
   'similar',
   'starts-with',

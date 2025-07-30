@@ -221,7 +221,6 @@ export interface DefaultProviders {
   gradingProvider: ApiProvider;
   llmRubricProvider?: ApiProvider;
   moderationProvider: ApiProvider;
-  researchProvider?: ApiProvider;
   suggestionsProvider: ApiProvider;
   synthesizeProvider: ApiProvider;
 }

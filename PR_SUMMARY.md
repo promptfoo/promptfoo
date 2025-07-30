@@ -1,35 +1,37 @@
 # PR Summary: Web Search Feature Implementation
 
 ## Overview
-This PR enhances the agent-search branch by adding comprehensive web search capabilities to promptfoo, including a new `web-search` assertion type and improved provider support.
+
+This PR adds a new `web-search` assertion type to promptfoo, enabling quick verification of current information using web search capabilities.
 
 ## What was done
 
-### 1. **Added Web Search Provider Support** ✅
-- Added Anthropic Claude with built-in web search capabilities
-- Updated OpenAI to use `o3-deep-research` model with `web_search_preview` tool
-- Updated Google to use `gemini-2.5-flash` with `googleSearch` tool
-- Fixed incorrect comment about Anthropic not having web search
+### 1. **Implemented New `web-search` Assertion Type** ✅
 
-### 2. **Implemented New `web-search` Assertion Type** ✅
 - Created `src/assertions/webSearch.ts` handler
 - Added `matchesWebSearch` function to `src/matchers.ts`
 - Registered assertion in `MODEL_GRADED_ASSERTION_TYPES`
 - Added `web-search` to `BaseAssertionTypesSchema` in types
 
-### 3. **Code Quality Improvements** ✅
+### 2. **Code Quality Improvements** ✅
+
 - Extracted duplicate `hasWebSearchCapability` function to `src/providers/webSearchUtils.ts`
+- Created shared `loadWebSearchProvider` utility to eliminate code duplication
 - Fixed inconsistent error messages across assertions
 - Updated all model IDs to latest July 2025 versions:
   - Anthropic: `claude-sonnet-4`
   - OpenAI: `o4-mini`
   - Google: `gemini-2.5-flash`
 
-### 4. **Documentation** ✅
+### 3. **Documentation** ✅
+
 - Created comprehensive documentation at `site/docs/configuration/expected-outputs/model-graded/web-search.md`
+- Updated model-graded index to include web-search
+- Updated OpenAI provider docs with web search examples
 - Documented use cases, provider configurations, and cost considerations
 
-### 5. **Testing & Validation** ✅
+### 4. **Testing & Validation** ✅
+
 - Fixed all TypeScript compilation errors
 - All linting checks pass
 - Code formatting applied
@@ -37,65 +39,71 @@ This PR enhances the agent-search branch by adding comprehensive web search capa
 ## Key Features
 
 ### Web Search Assertion
-- Quick verification of current information
-- Simpler alternative to `research-rubric` for single facts
-- Supports all major providers with web search capabilities
 
-### Provider Enhancements
+- Quick verification of current information
+- Simpler alternative to more comprehensive fact-checking
+- Supports all major providers with web search capabilities:
+  - Anthropic: Built-in web search (no configuration needed)
+  - OpenAI: `web_search_preview` tool
+  - Google/Gemini: `googleSearch` tool
+  - Perplexity: Built-in web search
+
+### Provider Support
+
 - Automatic detection of web search capabilities
 - Fallback to appropriate providers when web search is needed
 - Support for Anthropic's built-in web search
 
 ## Issues Addressed
-1. ✅ Fixed OpenAI using wrong tool type (`web_search` → `web_search_preview`)
-2. ✅ Corrected Anthropic web search comment
-3. ✅ Eliminated code duplication
+
+1. ✅ Fixed OpenAI using correct tool type (`web_search_preview`)
+2. ✅ Corrected Anthropic web search capabilities comments
+3. ✅ Eliminated code duplication with shared utilities
 4. ✅ Standardized error messages
 5. ✅ Updated to latest model versions
 
-## Remaining Considerations
+## Example Usage
 
-### Minor Issues
-1. **Remote grading for web-search**: The `doRemoteGrading` function doesn't have a handler for `task: 'web-search'` type. This would need to be added if remote grading is required.
+```yaml
+assert:
+  - type: web-search
+    value: 'current Bitcoin price USD'
+```
 
-2. **Test coverage**: While the implementation follows established patterns, specific unit tests for the new `web-search` assertion would strengthen the PR.
+## Provider Configuration
 
-### Recommendations
-1. **Add unit tests** for:
-   - `handleWebSearch` function
-   - `matchesWebSearch` function
-   - `hasWebSearchCapability` utility
+```yaml
+# Anthropic (no config needed)
+providers:
+  - anthropic:messages:claude-sonnet-4
 
-2. **Consider performance**: Web search assertions may be slower than standard assertions. Consider adding timeout configuration.
+# OpenAI with web search
+providers:
+  - id: openai:responses:o4-mini
+    config:
+      tools:
+        - type: web_search_preview
 
-3. **Cost monitoring**: Web search can be expensive. Consider adding usage tracking or warnings.
+# Google with search
+providers:
+  - id: google:gemini-2.5-flash
+    config:
+      tools:
+        - googleSearch: {}
+```
 
 ## PR Readiness: ✅ READY
 
-The implementation is complete, follows established patterns, and addresses all the requirements. The code:
+The implementation is complete, follows established patterns, and addresses all requirements. The code:
+
 - Compiles without errors
 - Passes linting and formatting checks
 - Includes comprehensive documentation
 - Uses the latest model versions
 - Follows consistent patterns throughout
 
-### Suggested PR Description
-```
-feat: Add web search assertion type and improve provider support
+### Files Changed
 
-- Add new `web-search` assertion for quick fact verification
-- Add Anthropic Claude with built-in web search support
-- Update all providers to latest July 2025 models
-- Extract shared web search capability detection
-- Add comprehensive documentation
-
-Fixes:
-- OpenAI web_search_preview tool type
-- Anthropic web search capability comment
-- Code duplication in matchers.ts
-```
-
-## Files Changed
-- 15 files modified/added
+- 11 files modified/added
 - Key additions: web search assertion, provider utils, documentation
 - No breaking changes to existing functionality

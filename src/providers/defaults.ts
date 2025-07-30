@@ -28,7 +28,6 @@ import {
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
-import { loadApiProvider } from './index';
 
 import type { ApiProvider, DefaultProviders } from '../types';
 import type { EnvOverrides } from '../types/env';
@@ -118,20 +117,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     logger.debug('Using Anthropic default providers');
     const anthropicProviders = getAnthropicProviders(env);
 
-    // Load Anthropic with web search capabilities for research
-    // Note: Anthropic has built-in web search capabilities
-    let researchProvider: ApiProvider | undefined;
-    try {
-      researchProvider = await loadApiProvider('anthropic:messages:claude-sonnet-4', {
-        options: {
-          // Anthropic web search is built-in and doesn't require tool configuration
-          // The provider will use web search automatically when needed for research tasks
-        },
-      });
-    } catch (err) {
-      logger.debug(`Failed to load Anthropic research provider: ${err}`);
-    }
-
     providers = {
       embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
       gradingJsonProvider: anthropicProviders.gradingJsonProvider,
@@ -140,7 +125,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: anthropicProviders.suggestionsProvider,
       synthesizeProvider: anthropicProviders.synthesizeProvider,
-      researchProvider,
     };
   } else if (
     !getEnvString('OPENAI_API_KEY') &&
@@ -149,18 +133,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   ) {
     logger.debug('Using Google default providers');
 
-    // Load Gemini with search tools for research
-    let researchProvider: ApiProvider | undefined;
-    try {
-      researchProvider = await loadApiProvider('google:gemini-2.5-flash', {
-        options: {
-          config: { tools: [{ googleSearch: {} }] },
-        },
-      });
-    } catch (err) {
-      logger.debug(`Failed to load Google research provider: ${err}`);
-    }
-
     providers = {
       embeddingProvider: GeminiEmbeddingProvider,
       gradingJsonProvider: GeminiGradingProvider,
@@ -168,8 +140,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
-      // Google providers can have web search capabilities
-      researchProvider,
     };
   } else if (
     !getEnvString('OPENAI_API_KEY') &&
@@ -201,18 +171,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else {
     logger.debug('Using OpenAI default providers');
 
-    // Load OpenAI responses API with web search for research
-    let researchProvider: ApiProvider | undefined;
-    try {
-      researchProvider = await loadApiProvider('openai:responses:o4-mini', {
-        options: {
-          config: { tools: [{ type: 'web_search_preview' }] },
-        },
-      });
-    } catch (err) {
-      logger.debug(`Failed to load OpenAI research provider: ${err}`);
-    }
-
     providers = {
       embeddingProvider: OpenAiEmbeddingProvider,
       gradingJsonProvider: OpenAiGradingJsonProvider,
@@ -220,8 +178,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: OpenAiSuggestionsProvider,
       synthesizeProvider: OpenAiGradingJsonProvider,
-      // OpenAI can use responses API with web search
-      researchProvider,
     };
   }
 

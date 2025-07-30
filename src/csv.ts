@@ -51,12 +51,6 @@ export function assertionFromString(expected: string): Assertion {
       value: expected.slice(expected.startsWith('grade:') ? 6 : 11),
     };
   }
-  if (expected.startsWith('research-rubric:')) {
-    return {
-      type: 'research-rubric',
-      value: expected.slice('research-rubric:'.length),
-    };
-  }
   if (
     expected.startsWith('python:') ||
     (expected.startsWith('file://') && (expected.endsWith('.py') || expected.includes('.py:')))

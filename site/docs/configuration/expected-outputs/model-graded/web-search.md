@@ -6,11 +6,6 @@ sidebar_label: Web Search
 
 The `web-search` assertion type evaluates outputs by searching for current information on the web and verifying the accuracy of the response. It's designed for quick, real-time fact verification.
 
-:::tip When to use web-search vs research-rubric
-- **web-search**: Quick verification of current information, single facts, or time-sensitive data
-- **research-rubric**: In-depth research with multiple searches, citation verification, and comprehensive fact-checking
-:::
-
 ## How it works
 
 1. You provide a search query as the expected value
@@ -23,18 +18,18 @@ The `web-search` assertion type evaluates outputs by searching for current infor
 ```yaml
 assert:
   - type: web-search
-    value: "current price of Bitcoin in USD"
+    value: 'current price of Bitcoin in USD'
 ```
 
 ## With Custom Prompt
 
 ```yaml
 prompts:
-  - "What is the current weather in San Francisco?"
+  - 'What is the current weather in San Francisco?'
 
 assert:
   - type: web-search
-    value: "current weather San Francisco temperature humidity"
+    value: 'current weather San Francisco temperature humidity'
 ```
 
 ## Advanced Usage
@@ -42,7 +37,7 @@ assert:
 ```yaml
 assert:
   - type: web-search
-    value: "latest Claude AI model release date features"
+    value: 'latest Claude AI model release date features'
     threshold: 0.8 # Require 80% accuracy score
 ```
 
@@ -102,11 +97,11 @@ grading:
 
 ```yaml
 prompts:
-  - "Who won the latest Super Bowl?"
+  - 'Who won the latest Super Bowl?'
 
 assert:
   - type: web-search
-    value: "Super Bowl 2025 winner"
+    value: 'Super Bowl 2025 winner'
 ```
 
 ### 2. Real-time Price Checking
@@ -117,7 +112,7 @@ prompts:
 
 assert:
   - type: web-search
-    value: "AAPL stock price today"
+    value: 'AAPL stock price today'
 ```
 
 ### 3. Weather Information
@@ -128,7 +123,7 @@ prompts:
 
 assert:
   - type: web-search
-    value: "Tokyo weather forecast temperature"
+    value: 'Tokyo weather forecast temperature'
 ```
 
 ### 4. Latest Software Versions
@@ -139,7 +134,7 @@ prompts:
 
 assert:
   - type: web-search
-    value: "Node.js latest stable version"
+    value: 'Node.js latest stable version'
 ```
 
 ## Cost Considerations

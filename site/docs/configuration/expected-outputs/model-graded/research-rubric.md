@@ -215,6 +215,7 @@ tests:
    ```
 
 4. **Be specific in rubrics**: More specific rubrics require fewer searches
+
    ```yaml
    # Better - specific claim
    value: "Stock price must be within $5 of current AAPL price"
@@ -222,6 +223,7 @@ tests:
    # Worse - vague requirement
    value: "Information about Apple stock should be accurate"
    ```
+
    :::
 
 ## Output Format
