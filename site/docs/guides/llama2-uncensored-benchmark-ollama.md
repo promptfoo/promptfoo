@@ -21,7 +21,7 @@ This guide assumes you have installed both promptfoo and Ollama.
 Run this on the command line to download the models:
 
 ```sh
-ollama pull llama3.3
+ollama pull llama2
 ollama pull llama2-uncensored
 ```
 
@@ -37,7 +37,7 @@ Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of mod
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - ollama:chat:llama3.3
+  - ollama:llama2
   - ollama:llama2-uncensored
   - openai:gpt-4.1-mini
 ```
@@ -76,7 +76,7 @@ prompts:
   file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:llama2
     prompts:
       - llama_prompt
   - id: ollama:llama2-uncensored
@@ -123,7 +123,7 @@ prompts:
   file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:llama2
     prompts:
     - llama_prompt
   - id: ollama:llama2-uncensored
@@ -179,7 +179,7 @@ prompts:
   llama_prompt.txt: llama_prompt
 
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:llama2
     prompts:
     - llama_prompt
   - id: ollama:llama2-uncensored
