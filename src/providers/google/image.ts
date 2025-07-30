@@ -146,7 +146,9 @@ export class GoogleImageProvider implements ApiProvider {
       authHeader = `Bearer ${token}`;
       logger.debug(`Using OAuth token: Bearer ${token.substring(0, 20)}...`);
     } catch (err) {
-      logger.error(`Failed to get OAuth token: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(
+        `Failed to get OAuth token: ${err instanceof Error ? err.message : String(err)}`,
+      );
       return {
         error: `Failed to get OAuth token. Run "gcloud auth application-default login" to authenticate with Google Cloud. Error: ${err instanceof Error ? err.message : String(err)}`,
       };
