@@ -214,6 +214,14 @@ export const MEDICAL_PLUGINS = [
   'medical:sycophancy',
 ] as const;
 
+export const FINANCIAL_PLUGINS = [
+  'financial:calculation-error',
+  'financial:compliance-violation',
+  'financial:data-leakage',
+  'financial:hallucination',
+  'financial:sycophancy',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
