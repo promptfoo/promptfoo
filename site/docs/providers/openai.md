@@ -311,32 +311,32 @@ prompts:
   - 'What is the current temperature in {{city}}?'
 
 providers:
-  - id: openai:responses:gpt-4o
+  - id: openai:responses:o4-mini
     config:
       tools:
-        - type: web_search
+        - type: web_search_preview
 
 tests:
   - vars:
       city: New York
     assert:
-      - type: research-rubric
-        value: Must provide accurate current temperature for the specified city
+      - type: web-search
+        value: Current temperature in New York City
 ```
 
 ### Cost Considerations
 
-:::warning
-Web search API calls are significantly more expensive than regular completions:
+:::info
+Web search is included in the OpenAI Responses API pricing:
 
-- Each research-rubric assertion may perform multiple searches
-- Costs can be 5-10x higher than standard assertions
-- Use caching (`--cache`) to avoid redundant searches
-  :::
+- No additional cost beyond standard API usage
+- Each web-search assertion may perform one or more searches
+- Use caching (`--cache`) to avoid redundant searches during development
+:::
 
 ### Best Practices
 
-1. **Use specific rubrics**: More specific requirements reduce the number of searches needed
+1. **Use specific search queries**: More specific queries yield better verification results
 2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
 3. **Use appropriate models**: o4-mini is recommended for cost-effective web search
 4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
