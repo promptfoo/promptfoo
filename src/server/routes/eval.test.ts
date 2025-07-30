@@ -1,11 +1,9 @@
 import request from 'supertest';
 import express from 'express';
 import { evalRouter } from './eval';
-import Eval from '../../models/eval';
 import { updateResult } from '../../util/database';
 
 // Mock dependencies
-jest.mock('../../models/eval');
 jest.mock('../../util/database');
 
 describe('evalRouter', () => {
