@@ -27,7 +27,7 @@ describe('evalRouter', () => {
       const evalId = 'test-eval-id';
       const newConfig = {
         description: 'Updated Test Description',
-        otherField: 'value'
+        otherField: 'value',
       };
 
       const mockEval = {
@@ -45,9 +45,7 @@ describe('evalRouter', () => {
         }
       });
 
-      const response = await request(app)
-        .patch(`/api/eval/${evalId}`)
-        .send({ config: newConfig });
+      const response = await request(app).patch(`/api/eval/${evalId}`).send({ config: newConfig });
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ message: 'Eval updated successfully' });
@@ -76,4 +74,4 @@ describe('evalRouter', () => {
       expect(response.body).toEqual({ error: 'Failed to update eval table' });
     });
   });
-}); 
+});

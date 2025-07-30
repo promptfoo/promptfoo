@@ -1,5 +1,5 @@
 import { render, waitFor, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { callApi } from '@app/utils/api';
 import EvalsDataGrid from './EvalsDataGrid';
@@ -14,19 +14,20 @@ vi.mock('@mui/x-data-grid', () => ({
       const LoadingOverlay = slots.loadingOverlay;
       return <LoadingOverlay />;
     }
-    
+
     if (!loading && rows.length === 0 && slots?.noRowsOverlay) {
       const NoRowsOverlay = slots.noRowsOverlay;
       return <NoRowsOverlay />;
     }
-    
+
     return (
       <div data-testid="data-grid">
-        {!loading && rows.map((row: any) => (
-          <div key={row.evalId} data-testid={`eval-${row.evalId}`}>
-            {row.description || row.label}
-          </div>
-        ))}
+        {!loading &&
+          rows.map((row: any) => (
+            <div key={row.evalId} data-testid={`eval-${row.evalId}`}>
+              {row.description || row.label}
+            </div>
+          ))}
       </div>
     );
   },
@@ -77,7 +78,7 @@ describe('EvalsDataGrid', () => {
     render(
       <MemoryRouter>
         <EvalsDataGrid onEvalSelected={vi.fn()} />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -92,17 +93,17 @@ describe('EvalsDataGrid', () => {
 
   it('should refetch data when location changes', async () => {
     let callCount = 0;
-    
+
     vi.mocked(callApi).mockImplementation(async () => {
       callCount++;
-      
+
       if (callCount === 1) {
         return {
           ok: true,
           json: vi.fn().mockResolvedValue({ data: mockEvals }),
         } as any;
       }
-      
+
       // Second call returns updated data
       const updatedEvals = [
         {
@@ -111,7 +112,7 @@ describe('EvalsDataGrid', () => {
         },
         mockEvals[1],
       ];
-      
+
       return {
         ok: true,
         json: vi.fn().mockResolvedValue({ data: updatedEvals }),
@@ -122,7 +123,7 @@ describe('EvalsDataGrid', () => {
     const { rerender } = render(
       <MemoryRouter initialEntries={['/evals']}>
         <EvalsDataGrid onEvalSelected={vi.fn()} />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     // Wait for initial load
@@ -134,7 +135,7 @@ describe('EvalsDataGrid', () => {
     rerender(
       <MemoryRouter initialEntries={['/evals']}>
         <EvalsDataGrid onEvalSelected={vi.fn()} />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     // The component should refetch when location changes
@@ -144,15 +145,12 @@ describe('EvalsDataGrid', () => {
   });
 
   it('should handle fetch errors gracefully', async () => {
-    const mockResponse = {
-      ok: false,
-    };
     vi.mocked(callApi).mockRejectedValue(new Error('Failed to fetch evals'));
 
     render(
       <MemoryRouter>
         <EvalsDataGrid onEvalSelected={vi.fn()} />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -160,4 +158,4 @@ describe('EvalsDataGrid', () => {
       expect(screen.getByText('Failed to fetch evals')).toBeInTheDocument();
     });
   });
-}); 
+});
