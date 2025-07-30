@@ -3,7 +3,6 @@ import React, { useMemo } from 'react';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
-import { getHumanRating } from '@promptfoo/util/humanRatingHelpers';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -64,6 +63,14 @@ function EvalOutputCell({
     output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
       ?.pass ?? null,
   );
+
+  // Update activeRating when output changes
+  React.useEffect(() => {
+    const humanRating = output.gradingResult?.componentResults?.find(
+      (result) => result.assertion?.type === 'human',
+    )?.pass;
+    setActiveRating(humanRating ?? null);
+  }, [output]);
 
   const handlePromptOpen = () => {
     setOpen(true);
@@ -251,18 +258,10 @@ function EvalOutputCell({
 
   const handleRating = React.useCallback(
     (isPass: boolean) => {
-      // Toggle rating if clicking the same button
-      const newRating = activeRating === isPass ? null : isPass;
-      setActiveRating(newRating);
-
-      if (newRating === null) {
-        // When clearing a rating, pass undefined for isPass and score of -1 as a signal
-        onRating(undefined, -1, output.gradingResult?.comment);
-      } else {
-        onRating(newRating, undefined, output.gradingResult?.comment);
-      }
+      setActiveRating(isPass);
+      onRating(isPass, undefined, output.gradingResult?.comment);
     },
-    [onRating, output.gradingResult?.comment, activeRating],
+    [onRating, output.gradingResult?.comment],
   );
 
   const handleSetScore = React.useCallback(() => {
@@ -618,12 +617,6 @@ function EvalOutputCell({
       </span>
     </div>
   );
-
-  // Update activeRating when output changes using the helper
-  React.useEffect(() => {
-    const humanRating = getHumanRating(output.gradingResult);
-    setActiveRating(humanRating?.pass ?? null);
-  }, [output.gradingResult]);
 
   return (
     <div id="eval-output-cell" className="cell" style={cellStyle}>
