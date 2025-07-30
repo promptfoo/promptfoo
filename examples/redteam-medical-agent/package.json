@@ -9,8 +9,8 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "openai": "^5.9.0",
-    "dotenv": "^17.2.0",
+    "openai": "^5.10.2",
+    "dotenv": "^17.2.1",
     "cors": "^2.8.5"
   }
 }
