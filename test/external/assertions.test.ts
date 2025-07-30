@@ -107,23 +107,27 @@ describe('handleConversationRelevance', () => {
     // Create a smart mock provider that only fails for the math/Paris response
     const smartMockProvider: ApiProvider = {
       id: () => 'mock',
-      callApi: async (prompt: string) => ({
-        output: JSON.stringify({
-          verdict: prompt.includes('2+2') ? 'no' : 'yes',
-          ...(prompt.includes('2+2') && {
-            reason:
-              'The response about Paris is completely unrelated to the mathematical question about 2+2',
+      callApi: async (prompt: string) => {
+        // Check if the prompt contains the math question and Paris response
+        const hasIrrelevantResponse = prompt.includes('2+2') && prompt.includes('Paris');
+        return {
+          output: JSON.stringify({
+            verdict: hasIrrelevantResponse ? 'no' : 'yes',
+            ...(hasIrrelevantResponse && {
+              reason:
+                'The response about Paris is completely unrelated to the mathematical question about 2+2',
+            }),
           }),
-        }),
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
-      }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        };
+      },
     };
 
     const params: AssertionParams = {
       ...defaultParams,
       assertion: {
         type: 'conversation-relevance',
-        threshold: 0.8,
+        threshold: 0.85, // Score will be 0.8 (4/5), so threshold > 0.8 to fail
         config: {
           windowSize: 3,
         },
