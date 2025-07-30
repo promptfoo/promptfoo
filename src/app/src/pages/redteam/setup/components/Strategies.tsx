@@ -26,12 +26,7 @@ import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import {
-  PRESET_IDS,
-  type PresetId,
-  STRATEGY_PRESETS,
-  type StrategyPreset,
-} from './strategies/types';
+import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
 import { getEstimatedProbes, getStrategyId } from './strategies/utils';
 import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
 
@@ -367,9 +362,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     ['goat', 'crescendo'].includes(getStrategyId(s)),
   );
 
-  const hasSessionParser = Boolean(
-    config.target.config?.sessionParser || config.target.config?.sessionSource === 'client',
-  );
+  const selectedPresetHasAgenticStrategies =
+    selectedPreset &&
+    selectedPreset !== 'Custom' &&
+    (STRATEGY_PRESETS[selectedPreset as PresetId]?.strategies ?? []).some((s) =>
+      AGENTIC_STRATEGIES.includes(s as any),
+    );
 
   // ----------------------------------------------
   // Render
@@ -430,7 +428,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       />
 
       {/* Recommended-specific options */}
-      {(selectedPreset === PRESET_IDS.MEDIUM || selectedPreset === PRESET_IDS.LARGE) && (
+      {selectedPresetHasAgenticStrategies && (
         <RecommendedOptions
           isMultiTurnEnabled={isMultiTurnEnabled}
           isStatefulValue={isStatefulValue}
@@ -505,11 +503,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       )}
 
       {/* Additional system config section, if needed */}
-      {showSystemConfig && (
+      {showSystemConfig && !selectedPresetHasAgenticStrategies && (
         <SystemConfiguration
           isStatefulValue={isStatefulValue}
           onStatefulChange={handleStatefulChange}
-          hasSessionParser={hasSessionParser}
         />
       )}
 
