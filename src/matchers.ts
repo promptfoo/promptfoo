@@ -1347,7 +1347,9 @@ Return your evaluation as a JSON object with:
 - "pass": true if the output is accurate and up-to-date, false otherwise
 - "score": 0-1 representing accuracy (1 = fully accurate, 0 = completely inaccurate)
 - "reason": Detailed explanation of what you found and why you gave this score
-- "searchResults": Summary of key information found via web search`;
+- "searchResults": Summary of key information found via web search
+
+Return ONLY the JSON object, no other text.`;
 
   // Get the evaluation from the search provider
   const resp = await searchProvider.callApi(searchPrompt);

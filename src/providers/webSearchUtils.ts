@@ -39,10 +39,11 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Anthropic has built-in web search capabilities
-  // According to their May 2025 release notes, web search is automatically available
-  // for Claude models without explicit tool configuration
-  if (id.includes('anthropic')) {
+  // Check for Anthropic with web_search tool
+  if (
+    id.includes('anthropic') &&
+    provider.config?.tools?.some((t: any) => t.type === 'web_search_20250305')
+  ) {
     return true;
   }
 
@@ -59,10 +60,22 @@ export async function loadWebSearchProvider(
 ): Promise<ApiProvider | null> {
   const providers = preferAnthropic
     ? [
-        // For web-search assertion, prefer Anthropic (built-in web search)
+        // For web-search assertion, prefer Anthropic with web search tool
         async () => {
           try {
-            return await loadApiProvider('anthropic:messages:claude-sonnet-4');
+            return await loadApiProvider('anthropic:messages:claude-sonnet-4-20250514', {
+              options: {
+                config: {
+                  tools: [
+                    {
+                      type: 'web_search_20250305',
+                      name: 'web_search',
+                      max_uses: 5,
+                    },
+                  ],
+                },
+              },
+            });
           } catch {
             return null;
           }

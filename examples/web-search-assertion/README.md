@@ -28,9 +28,9 @@ npx promptfoo eval
 ## Provider Support
 
 ### Anthropic Claude
-- Built-in web search capabilities (launched May 2025)
-- No explicit tool configuration needed
-- Web search is automatically available when needed for fact verification
+- Web search capabilities via tool configuration (launched May 2025)
+- Requires explicit `web_search_20250305` tool configuration
+- Pricing: $10 per 1,000 searches plus standard token costs
 
 ### OpenAI
 - Requires `web_search_preview` tool configuration

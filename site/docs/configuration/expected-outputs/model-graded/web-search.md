@@ -45,16 +45,20 @@ assert:
 
 The web-search assertion requires a grading provider with web search capabilities:
 
-### 1. Anthropic Claude (Built-in Web Search)
+### 1. Anthropic Claude
 
-Anthropic Claude models have built-in web search capabilities:
+Anthropic Claude models support web search through the `web_search_20250305` tool:
 
 ```yaml
 grading:
-  provider: anthropic:messages:claude-sonnet-4
+  provider: anthropic:messages:claude-sonnet-4-20250514
+  providerOptions:
+    config:
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 5
 ```
-
-No additional configuration needed - web search is automatically available.
 
 ### 2. OpenAI with Web Search
 
@@ -154,7 +158,7 @@ assert:
 
 Web search assertions have the following cost implications:
 
-- **Anthropic Claude**: Built-in web search, no additional cost beyond standard token usage
+- **Anthropic Claude**: $10 per 1,000 searches plus standard token costs
 - **Perplexity**: Pricing varies by model (check current Perplexity Sonar pricing)
 - **Google Gemini**: Built-in googleSearch tool, included in Gemini API pricing
 - **OpenAI**: web_search_preview tool included in standard API pricing
@@ -164,7 +168,7 @@ Web search assertions have the following cost implications:
 
 1. **Use specific search queries**: More specific queries yield better verification results
 2. **Consider caching**: Enable caching to avoid repeated searches during development
-3. **Choose the right provider**: Anthropic Claude for built-in search, Perplexity for cost-effective searches
+3. **Choose the right provider**: Perplexity for built-in search, Anthropic for comprehensive search with citations
 4. **Set appropriate thresholds**: Use lower thresholds (0.7-0.8) for general information, higher (0.9+) for critical facts
 
 ## Troubleshooting

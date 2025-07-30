@@ -1,0 +1,21 @@
+# Simple test to verify web-search assertion
+prompts:
+  - "The CEO of Microsoft is {{name}}"
+
+providers:
+  # Test with OpenAI (simpler)
+  - id: openai:gpt-4o-mini
+    
+tests:
+  - vars:
+      name: "Satya Nadella"
+    assert:
+      - type: web-search
+        value: "Satya Nadella CEO Microsoft"
+        
+  - vars:
+      name: "Bill Gates"  # Intentionally wrong
+    assert:
+      - type: web-search
+        value: "current CEO Microsoft 2025"
+        threshold: 0.8

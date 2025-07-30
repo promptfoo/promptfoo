@@ -156,8 +156,13 @@ Academic review of hallucination mitigation notes similar trade-offs ([MDPI](htt
 
 ```yaml
 providers:
-  # Anthropic - built-in web search
-  - anthropic:claude-sonnet-4
+  # Anthropic - requires web search tool
+  - id: anthropic:claude-sonnet-4-20250514
+    config:
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 5
 
   # OpenAI - requires tool config
   - id: openai:o4-mini
