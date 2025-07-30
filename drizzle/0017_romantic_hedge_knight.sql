@@ -1,5 +1,5 @@
-ALTER TABLE `eval_results` ADD `human_rating` integer;--> statement-breakpoint
-CREATE INDEX `eval_result_human_rating_idx` ON `eval_results` (`eval_id`,`human_rating`);--> statement-breakpoint
+ALTER TABLE `eval_results` ADD `human_rating` integer CHECK (`human_rating` IN (0, 1) OR `human_rating` IS NULL);--> statement-breakpoint
+CREATE INDEX `eval_result_human_rating_idx` ON `eval_results` (`eval_id`,`human_rating`) WHERE `human_rating` IS NOT NULL;--> statement-breakpoint
 -- Backfill existing human ratings from JSON data
 UPDATE eval_results 
 SET human_rating = 

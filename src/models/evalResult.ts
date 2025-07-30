@@ -226,7 +226,7 @@ export default class EvalResult {
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
-  humanRating?: number | null;
+  humanRating?: HumanRatingValue | null;
 
   constructor(opts: {
     id: string;
@@ -248,7 +248,7 @@ export default class EvalResult {
     metadata?: Record<string, any> | null;
     failureReason: ResultFailureReason;
     persisted?: boolean;
-    humanRating?: number | null;
+    humanRating?: HumanRatingValue | null;
   }) {
     this.id = opts.id;
     this.evalId = opts.evalId;
@@ -278,6 +278,8 @@ export default class EvalResult {
     const db = getDb();
 
     // Calculate human rating from gradingResult
+    // Note: This column sync was added in v0.117.4+. Older clients won't populate this column.
+    // The filtering will still work via JSON parsing fallback for data created by older clients.
     const humanRatingResult = getHumanRating(this.gradingResult);
     if (humanRatingResult !== null) {
       this.humanRating = humanRatingResult.pass

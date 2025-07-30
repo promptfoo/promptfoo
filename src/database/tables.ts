@@ -106,7 +106,7 @@ export const evalResultsTable = sqliteTable(
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, string>>(),
 
     // Human rating column for efficient filtering
-    humanRating: integer('human_rating'), // NULL = no rating, 0 = thumbs down, 1 = thumbs up
+    humanRating: integer('human_rating'), // NULL = no rating, 0 = thumbs down (HumanRatingValue.THUMBS_DOWN), 1 = thumbs up (HumanRatingValue.THUMBS_UP)
   },
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
