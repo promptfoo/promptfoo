@@ -141,7 +141,7 @@ describe('PathSelector', () => {
         expect(onAddPath).toHaveBeenCalledWith({
           path: pathToAdd,
           type: 'directory',
-          name: pathToAdd,
+          name: 'directory', // Extracted directory name from path
         });
       });
 
@@ -201,15 +201,12 @@ describe('PathSelector', () => {
       </ThemeProvider>,
     );
 
-    const listItems = screen.getAllByRole('listitem');
-    const deleteButton = listItems[0].querySelector('button');
+    // Find the delete button for the first path
+    const deleteButton = screen.getByLabelText('Remove model1');
+    fireEvent.click(deleteButton);
 
-    if (deleteButton) {
-      fireEvent.click(deleteButton);
-
-      expect(onRemovePath).toHaveBeenCalledTimes(1);
-      expect(onRemovePath).toHaveBeenCalledWith(0);
-    }
+    expect(onRemovePath).toHaveBeenCalledTimes(1);
+    expect(onRemovePath).toHaveBeenCalledWith(0);
   });
 
   it('should call clearRecentScans when the clear recent scans button is clicked and there are more than three recent scans', () => {
@@ -233,7 +230,7 @@ describe('PathSelector', () => {
       </ThemeProvider>,
     );
 
-    const clearButton = screen.getByTitle('Clear recent scans');
+    const clearButton = screen.getByText('Clear');
     fireEvent.click(clearButton);
 
     expect(clearRecentScansMock).toHaveBeenCalledTimes(1);
