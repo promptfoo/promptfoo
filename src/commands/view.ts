@@ -13,7 +13,7 @@ export function viewCommand(program: Command) {
       '--env-path <path>',
       'Path to the environment directory or file (usually .env, .env.local, or .env.production)',
     )
-    .description('Open the web viewer')
+    .description('Start browser UI')
     .action(async (directory: string | undefined, cmdObj: any) => {
       const { viewAction } = await import('./view/viewAction');
       await viewAction(directory, cmdObj);

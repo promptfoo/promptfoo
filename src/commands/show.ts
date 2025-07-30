@@ -29,7 +29,7 @@ export function showCommand(program: Command) {
           await handleEval(latestEval.id);
         } else {
           const logger = (await import('../logger')).default;
-          logger.error('No evaluation found');
+          logger.error('No eval found');
           process.exitCode = 1;
         }
       } else {

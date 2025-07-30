@@ -5,7 +5,7 @@ export { doValidate } from './validate/validateAction';
 export function validateCommand(program: Command, defaultConfig: any, defaultConfigPath?: string) {
   program
     .command('validate [filePath]')
-    .description('Validate the configuration')
+    .description('Validate a promptfoo configuration file')
     .option(
       '-c, --config <path>',
       'Path to config file(s) (option for compatibility, prefer positional arg)',

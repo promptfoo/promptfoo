@@ -5,7 +5,7 @@ export { downloadFile, downloadDirectory } from './init/initAction';
 export function initCommand(program: Command) {
   program
     .command('init [directory]')
-    .description('Initialize project with a promptfooconfig.yaml')
+    .description('Initialize project with dummy files or download an example')
     .option('--no-interactive', 'Run in interactive mode')
     .option('--web', 'Initialize a web viewer project from the Promptfoo github repository')
     .action(

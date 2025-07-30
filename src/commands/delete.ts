@@ -3,16 +3,23 @@ import type { Command } from 'commander';
 export { handleEvalDelete, handleEvalDeleteAll } from './delete/deleteAction';
 
 export function deleteCommand(program: Command) {
-  program
-    .command('delete <evalId>')
-    .description('Delete an evaluation by ID')
-    .option('-y, --yes', 'Skip confirmation')
-    .option(
-      '--env-path <path>',
-      'Path to the environment directory or file (usually .env, .env.local, or .env.production)',
-    )
-    .action(async (evalId: string, cmdObj: { yes: boolean; envPath?: string }) => {
+  const deleteCommand = program
+    .command('delete <id>')
+    .description('Delete various resources')
+    .option('--env-file, --env-path <path>', 'Path to .env file')
+    .action(async (id: string, cmdObj: { envPath?: string }) => {
       const { deleteAction } = await import('./delete/deleteAction');
-      await deleteAction(evalId, cmdObj);
+      await deleteAction(id, cmdObj);
+    });
+
+  deleteCommand
+    .command('eval <id>')
+    .description(
+      'Delete an evaluation by ID. Use "latest" to delete the most recent evaluation, or "all" to delete all evaluations.',
+    )
+    .option('--env-file, --env-path <path>', 'Path to .env file')
+    .action(async (evalId, cmdObj) => {
+      const { deleteEvalAction } = await import('./delete/deleteAction');
+      await deleteEvalAction(evalId, cmdObj);
     });
 }
