@@ -70,13 +70,15 @@ function Dropdown({
           },
         }}
       >
-        {values
-          .filter((item) => !disabledValues.includes(item.value))
-          .map((item) => (
-            <MenuItem key={item.value} value={item.value}>
-              {item.label}
-            </MenuItem>
-          ))}
+        {values.map((item) => (
+          <MenuItem
+            key={item.value}
+            value={item.value}
+            disabled={disabledValues.includes(item.value)}
+          >
+            {item.label}
+          </MenuItem>
+        ))}
       </Select>
     </FormControl>
   );
@@ -139,6 +141,16 @@ function Filter({
   // Get list of already selected metric values (excluding current filter)
   const selectedMetricValues = Object.values(filters.values)
     .filter((filter) => filter.id !== value.id && filter.type === 'metric' && filter.value)
+    .map((filter) => filter.value);
+
+  // Compute selected plugin values (excluding current filter)
+  const selectedPluginValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'plugin' && filter.value)
+    .map((filter) => filter.value);
+
+  // Compute selected strategy values (excluding current filter)
+  const selectedStrategyValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'strategy' && filter.value)
     .map((filter) => filter.value);
 
   /**
@@ -382,7 +394,15 @@ function Filter({
               value={value.value}
               onChange={(e) => handleValueChange(e)}
               width="100%"
-              disabledValues={value.type === 'metric' ? selectedMetricValues : []}
+              disabledValues={
+                value.type === 'metric'
+                  ? selectedMetricValues
+                  : value.type === 'plugin'
+                    ? selectedPluginValues
+                    : value.type === 'strategy'
+                      ? selectedStrategyValues
+                      : []
+              }
             />
           ) : (
             <DebouncedTextField
