@@ -67,6 +67,21 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
+  const [selectedTargetType, setSelectedTargetType] = useState<string>(() => {
+    const target = config.target || DEFAULT_HTTP_TARGET;
+    if (
+      target.id === 'custom' ||
+      (!knownTargetIds.includes(target.id) &&
+        target.id !== 'http' &&
+        target.id !== 'websocket' &&
+        target.id !== 'browser' &&
+        !target.id.startsWith('javascript') &&
+        !target.id.startsWith('python'))
+    ) {
+      return 'custom';
+    }
+    return target.id;
+  });
   const [useGuardrail, setUseGuardrail] = useState(
     config.defaultTest?.assert?.some((a) => a.type === 'guardrails') ?? false,
   );
@@ -82,7 +97,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [urlError, setUrlError] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
-  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
+  const [testingEnabled, setTestingEnabled] = useState(selectedTargetType === 'http');
 
   const { recordEvent } = useTelemetry();
   const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -121,7 +136,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       missingFields.push('Target Name');
     }
 
-    if (selectedTarget.id.startsWith('http')) {
+    if (selectedTargetType === 'http') {
       if (selectedTarget.config.request) {
         // Skip URL validation for raw request mode
       } else if (!selectedTarget.config.url || !validateUrl(selectedTarget.config.url)) {
@@ -131,12 +146,14 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
     setMissingFields(missingFields);
     setPromptRequired(requiresPrompt(selectedTarget));
-  }, [selectedTarget, useGuardrail, updateConfig]);
+  }, [selectedTarget, selectedTargetType, useGuardrail, updateConfig]);
 
   const handleTargetChange = (event: SelectChangeEvent<string>) => {
     const value = event.target.value as string;
     const currentLabel = selectedTarget.label;
     recordEvent('feature_used', { feature: 'redteam_config_target_changed', target: value });
+
+    setSelectedTargetType(value);
 
     if (value === 'custom') {
       setSelectedTarget({
@@ -197,8 +214,8 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   };
 
   useEffect(() => {
-    setTestingEnabled(selectedTarget.id === 'http');
-  }, [selectedTarget]);
+    setTestingEnabled(selectedTargetType === 'http');
+  }, [selectedTargetType]);
 
   const updateCustomTarget = (field: string, value: any) => {
     if (typeof selectedTarget === 'object') {
@@ -394,7 +411,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
                 <InputLabel id="predefined-target-label">Target Type</InputLabel>
                 <Select
                   labelId="predefined-target-label"
-                  value={selectedTarget.id}
+                  value={selectedTargetType}
                   onChange={handleTargetChange}
                   label="Target Type"
                   fullWidth
@@ -431,7 +448,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           'customer-service-agent', 'compliance-bot'
         </Typography>
 
-        {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
+        {(selectedTargetType === 'javascript' || selectedTargetType === 'python') && (
           <TextField
             fullWidth
             label="Custom Target"
@@ -470,7 +487,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
             )}
           </>
         )}
-        {(selectedTarget.id === 'custom' || !knownTargetIds.includes(selectedTarget.id)) && (
+        {selectedTargetType === 'custom' && (
           <CustomTargetConfiguration
             selectedTarget={selectedTarget}
             updateCustomTarget={updateCustomTarget}
@@ -480,7 +497,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           />
         )}
 
-        {selectedTarget.id.startsWith('http') && (
+        {selectedTargetType === 'http' && (
           <HttpEndpointConfiguration
             selectedTarget={selectedTarget}
             updateCustomTarget={updateCustomTarget}
@@ -492,7 +509,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           />
         )}
 
-        {selectedTarget.id.startsWith('websocket') && (
+        {selectedTargetType === 'websocket' && (
           <WebSocketEndpointConfiguration
             selectedTarget={selectedTarget}
             updateWebSocketTarget={updateWebSocketTarget}
@@ -500,7 +517,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
           />
         )}
 
-        {selectedTarget.id.startsWith('browser') && (
+        {selectedTargetType === 'browser' && (
           <BrowserAutomationConfiguration
             selectedTarget={selectedTarget}
             updateCustomTarget={updateCustomTarget}
