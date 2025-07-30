@@ -223,7 +223,8 @@ export class GoogleImageProvider implements ApiProvider {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
-        error: 'API key not found. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable.',
+        error:
+          'API key not found. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable.',
       };
     }
 

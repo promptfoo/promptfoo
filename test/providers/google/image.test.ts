@@ -264,7 +264,7 @@ describe('GoogleImageProvider', () => {
     it('should support different API key environment variables', async () => {
       delete process.env.GOOGLE_API_KEY;
       process.env.GEMINI_API_KEY = 'gemini-key';
-      
+
       const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
       mockFetchWithCache.mockResolvedValueOnce({

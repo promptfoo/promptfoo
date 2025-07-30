@@ -13,11 +13,13 @@ npx promptfoo@latest init --example google-imagen
 You can use Imagen models through either Google AI Studio or Vertex AI:
 
 ### Option 1: Google AI Studio (Quick Start, Limited Features)
+
 - Get an API key from [Google AI Studio](https://aistudio.google.com/apikey)
 - **Supports**: Imagen 4 models only
 - **Limitations**: No `seed` or `addWatermark` parameters
 
 ### Option 2: Vertex AI (Full Features)
+
 - Google Cloud project with billing enabled
 - Vertex AI API enabled
 - Authentication via `gcloud auth application-default login`
@@ -26,12 +28,14 @@ You can use Imagen models through either Google AI Studio or Vertex AI:
 ## Setup
 
 ### For Google AI Studio:
+
 ```bash
 # Set your API key
 export GOOGLE_API_KEY=your-api-key
 ```
 
 ### For Vertex AI:
+
 ```bash
 # Enable Vertex AI API
 gcloud services enable aiplatform.googleapis.com
