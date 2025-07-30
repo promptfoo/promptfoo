@@ -6,8 +6,6 @@ import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 
-const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
-
 interface GoogleImageOptions {
   config?: CompletionOptions;
   id?: string;
@@ -29,34 +27,15 @@ interface VertexImageGenerationRequest {
   };
 }
 
-// Google AI Studio request format
-interface GeminiImageGenerationRequest {
-  prompt: string;
-  numberOfImages?: number;
-  aspectRatio?: string;
-  personGeneration?: string;
-  safetyFilterLevel?: string;
-  addWatermark?: boolean;
-  seed?: number;
-}
-
 export class GoogleImageProvider implements ApiProvider {
   modelName: string;
   config: CompletionOptions;
   env?: EnvOverrides;
-  useVertexApi: boolean;
 
   constructor(modelName: string, options: GoogleImageOptions = {}) {
     this.modelName = modelName;
     this.config = options.config || {};
     this.env = options.env;
-
-    // Determine whether to use Vertex AI or Google AI Studio
-    this.useVertexApi = !!(
-      this.config.projectId ||
-      getEnvString('GOOGLE_PROJECT_ID') ||
-      this.env?.GOOGLE_PROJECT_ID
-    );
   }
 
   id(): string {
@@ -74,21 +53,21 @@ export class GoogleImageProvider implements ApiProvider {
       };
     }
 
-    const apiKey = this.getApiKey();
+    // Imagen models are only available through Vertex AI
+    const projectId =
+      this.config.projectId || getEnvString('GOOGLE_PROJECT_ID') || this.env?.GOOGLE_PROJECT_ID;
 
-    if (this.useVertexApi) {
-      return this.callVertexApi(prompt, apiKey || '');
-    } else {
-      if (!apiKey) {
-        return {
-          error: 'Google API key is required. Set GOOGLE_API_KEY environment variable.',
-        };
-      }
-      return this.callGeminiApi(prompt, apiKey);
+    if (!projectId) {
+      return {
+        error:
+          'Imagen models require Google Cloud Project ID. Set GOOGLE_PROJECT_ID environment variable or provide projectId in config.',
+      };
     }
+
+    return this.callVertexApi(prompt);
   }
 
-  private async callVertexApi(prompt: string, apiKey: string): Promise<ProviderResponse> {
+  private async callVertexApi(prompt: string): Promise<ProviderResponse> {
     const projectId =
       this.config.projectId || getEnvString('GOOGLE_PROJECT_ID') || this.env?.GOOGLE_PROJECT_ID;
     const location =
@@ -228,118 +207,6 @@ export class GoogleImageProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-  }
-
-  private async callGeminiApi(prompt: string, apiKey: string): Promise<ProviderResponse> {
-    const apiHost = this.getApiHost();
-    const modelPath = this.getModelPath();
-
-    // Use the Gemini API format
-    const endpoint = `https://${apiHost}/v1beta/models/${modelPath}:predict`;
-    const url = new URL(endpoint);
-    url.searchParams.append('key', apiKey);
-    const fullUrl = url.toString();
-
-    logger.debug(`Google AI Studio Image API endpoint: ${endpoint}`);
-    logger.debug(`Full URL (with key): ${fullUrl.replace(apiKey, 'REDACTED')}`);
-
-    const body: GeminiImageGenerationRequest = {
-      prompt: prompt.trim(),
-      numberOfImages: this.config.n || 1,
-      aspectRatio: this.config.aspectRatio || '1:1',
-      personGeneration: this.config.personGeneration || 'allow_adult',
-      safetyFilterLevel: this.config.safetyFilterLevel || 'block_medium_and_above',
-      addWatermark: this.config.addWatermark !== false,
-      // Only include seed if watermark is disabled, as they're incompatible
-      ...(this.config.seed !== undefined &&
-        this.config.addWatermark === false && { seed: this.config.seed }),
-    };
-
-    logger.debug(`Calling Google AI Studio Image API: ${JSON.stringify(body)}`);
-
-    try {
-      const response = await fetchWithCache(
-        fullUrl,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.config.headers || {}),
-          },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-        'json',
-      );
-
-      const data = response.data;
-
-      if (!data || typeof data !== 'object') {
-        return {
-          error: 'Invalid response from Google AI Studio',
-        };
-      }
-
-      if (data.error) {
-        return {
-          error: `Google AI Studio error: ${data.error.message || JSON.stringify(data.error)}`,
-        };
-      }
-
-      if (!data.candidates || data.candidates.length === 0) {
-        return {
-          error: 'No images generated',
-        };
-      }
-
-      // Collect all generated images
-      const outputs: string[] = [];
-      for (const generatedImage of data.candidates) {
-        if (generatedImage.raiFilteredReason) {
-          outputs.push(`[Image blocked: ${generatedImage.raiFilteredReason}]`);
-        } else if (generatedImage.image && generatedImage.image.imageBytes) {
-          const imageData = `data:image/png;base64,${generatedImage.image.imageBytes}`;
-          outputs.push(`![Generated image](${imageData})`);
-        }
-      }
-
-      if (outputs.length === 0) {
-        return {
-          error: 'No valid images generated',
-        };
-      }
-
-      return {
-        output: outputs.join('\n\n'),
-        cached: response.cached,
-        cost: this.getCost() * outputs.length,
-      };
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
-  }
-
-  private getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      getEnvString('GOOGLE_API_KEY') ||
-      this.env?.GOOGLE_API_KEY ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      getEnvString('GEMINI_API_KEY') ||
-      this.env?.GEMINI_API_KEY
-    );
-  }
-
-  private getApiHost(): string {
-    return (
-      this.config.apiHost ||
-      getEnvString('GOOGLE_API_HOST') ||
-      this.env?.GOOGLE_API_HOST ||
-      DEFAULT_API_HOST
-    );
   }
 
   private getModelPath(): string {

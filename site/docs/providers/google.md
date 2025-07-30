@@ -304,7 +304,7 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 ### Image Generation Models
 
-Imagen models are available through **Vertex AI only**. Use the `google:image:` prefix:
+Imagen models are available **exclusively through Vertex AI** and require Google Cloud authentication. Use the `google:image:` prefix:
 
 - `google:image:imagen-4.0-ultra-generate-preview-06-06` - Ultra quality ($0.06/image)
 - `google:image:imagen-4.0-generate-preview-06-06` - Standard quality ($0.04/image)

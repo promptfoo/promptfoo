@@ -29,78 +29,15 @@ describe('GoogleImageProvider', () => {
     expect(provider.toString()).toBe('[Google Image Generation Provider imagen-3.0-generate-001]');
   });
 
-  describe('Gemini API (Google AI Studio)', () => {
-    it('should make correct API request', async () => {
-      const provider = new GoogleImageProvider('imagen-3.0-generate-001', {
-        config: {
-          n: 2,
-          aspectRatio: '16:9',
-          personGeneration: 'dont_allow',
-          safetyFilterLevel: 'block_some',
-          addWatermark: true,
-          seed: 42,
-        },
-      });
+  it('should return error when project ID is missing', async () => {
+    delete process.env.GOOGLE_PROJECT_ID;
+    const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          candidates: [
-            {
-              image: {
-                imageBytes: 'base64data',
-              },
-            },
-          ],
-        },
-        cached: false,
-      });
+    const result = await provider.callApi('Test prompt');
 
-      const result = await provider.callApi('A beautiful sunset');
-
-      expect(mockFetchWithCache).toHaveBeenCalledWith(
-        'https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=test-api-key',
-        expect.objectContaining({
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: expect.stringContaining('"prompt":"A beautiful sunset"'),
-        }),
-        300000,
-        'json',
-      );
-
-      expect(result.output).toContain('![Generated image](data:image/png;base64,base64data)');
-      expect(result.cost).toBe(0.04);
-    });
-
-    it('should handle API errors', async () => {
-      const provider = new GoogleImageProvider('imagen-3.0-generate-001');
-
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          error: {
-            message: 'Invalid request',
-          },
-        },
-        cached: false,
-      });
-
-      const result = await provider.callApi('Test prompt');
-
-      expect(result.error).toBe('Google AI Studio error: Invalid request');
-    });
-
-    it('should return error when API key is missing', async () => {
-      delete process.env.GOOGLE_API_KEY;
-      const provider = new GoogleImageProvider('imagen-3.0-generate-001');
-
-      const result = await provider.callApi('Test prompt');
-
-      expect(result.error).toBe(
-        'Google API key is required. Set GOOGLE_API_KEY environment variable.',
-      );
-    });
+    expect(result.error).toBe(
+      'Imagen models require Google Cloud Project ID. Set GOOGLE_PROJECT_ID environment variable or provide projectId in config.',
+    );
   });
 
   describe('Vertex AI', () => {
