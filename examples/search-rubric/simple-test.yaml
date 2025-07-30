@@ -1,4 +1,4 @@
-# Simple test to verify web-search assertion
+# Simple test to verify search-rubric assertion
 prompts:
   - 'The CEO of Microsoft is {{name}}'
 
@@ -10,12 +10,12 @@ tests:
   - vars:
       name: 'Satya Nadella'
     assert:
-      - type: web-search
+      - type: search-rubric
         value: 'Confirms that {{name}} is the current CEO of Microsoft'
 
   - vars:
       name: 'Bill Gates' # Intentionally wrong
     assert:
-      - type: web-search
+      - type: search-rubric
         value: 'States the correct current CEO of Microsoft (should identify this is incorrect)'
         threshold: 0.8

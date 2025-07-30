@@ -1,7 +1,7 @@
-import { matchesWebSearch } from '../matchers';
+import { matchesSearchRubric } from '../matchers';
 import type { AssertionParams, GradingResult } from '../types';
 
-export async function handleWebSearch({
+export async function handleSearchRubric({
   assertion,
   baseType,
   inverse,
@@ -11,10 +11,10 @@ export async function handleWebSearch({
   providerResponse,
 }: AssertionParams): Promise<GradingResult> {
   if (renderedValue == null) {
-    throw new Error('web-search assertion type must have a string value');
+    throw new Error('search-rubric assertion type must have a string value');
   }
 
-  const result = await matchesWebSearch(
+  const result = await matchesSearchRubric(
     String(renderedValue),
     providerResponse.output,
     test.options,

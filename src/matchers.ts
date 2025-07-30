@@ -1287,7 +1287,7 @@ interface ModerationMatchOptions {
   categories?: string[];
 }
 
-export async function matchesWebSearch(
+export async function matchesSearchRubric(
   rubric: string,
   llmOutput: string,
   grading?: GradingConfig,
@@ -1301,7 +1301,7 @@ export async function matchesWebSearch(
     );
   }
 
-  // Web search assertion is like llm-rubric but with web search capabilities
+  // Search rubric assertion is like llm-rubric but with web search capabilities
   const defaultProviders = await getDefaultProviders();
 
   // Get a provider with web search capabilities
@@ -1314,7 +1314,7 @@ export async function matchesWebSearch(
   // Check if current provider has web search, if not try to load one
   if (!hasWebSearchCapability(searchProvider)) {
     // Try to load a provider with web search capabilities
-    // For web-search assertion, prefer Anthropic first (pass true)
+    // For search-rubric assertion, prefer Anthropic first (pass true)
     const webSearchProvider = await loadWebSearchProvider(true);
     if (webSearchProvider) {
       searchProvider = webSearchProvider;
@@ -1324,7 +1324,7 @@ export async function matchesWebSearch(
   // Ensure we have a provider with web search capabilities
   if (!searchProvider || !hasWebSearchCapability(searchProvider)) {
     throw new Error(
-      'web-search assertion requires a grading provider with web search capabilities. ' +
+      'search-rubric assertion requires a grading provider with web search capabilities. ' +
         'Use --grader with a web search provider (e.g., anthropic:messages:claude-sonnet-4, openai:responses:o4-mini with tools configured, perplexity:sonar) or configure one in defaultTest.options.provider',
     );
   }

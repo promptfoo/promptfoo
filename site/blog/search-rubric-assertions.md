@@ -1,9 +1,9 @@
 ---
 title: 'Real-Time Fact Checking for LLM Outputs'
 description: 'Promptfoo now supports web search in assertions, allowing you to verify time-sensitive information like stock prices and weather during testing.'
-image: /img/blog/web-search-assertions/title.jpg
-image_alt: 'Web search assertion verifying current information'
-slug: llm-web-search-assertions
+image: /img/blog/search-rubric-assertions/title.jpg
+image_alt: 'Search rubric assertion verifying current information'
+slug: llm-search-rubric-assertions
 keywords: [promptfoo, LLM testing, web search, fact checking, real-time verification, assertions]
 date: 2025-07-30
 authors: [steve]
@@ -16,17 +16,17 @@ On July 29, 2025, two U.S. federal judges withdrew rulings containing AI-generat
 
 This type of error happens because LLM outputs often include outdated or incorrect information from training data. Traditional assertion types check format and style, but can't verify current facts.
 
-We're releasing web-search assertions that verify time-sensitive information during testing.
+We're releasing search-rubric assertions that verify time-sensitive information during testing.
 
 <!-- truncate -->
 
 ## How It Works
 
-The web-search assertion works like llm-rubric but with web search capabilities:
+The search-rubric assertion works like llm-rubric but with web search capabilities:
 
 ```yaml
 assert:
-  - type: web-search
+  - type: search-rubric
     value: 'Provides accurate AAPL stock price within 2% of current market value'
 ```
 
@@ -48,7 +48,7 @@ providers:
 tests:
   - prompt: "What's the current stock price of {{company}}?"
     assert:
-      - type: web-search
+      - type: search-rubric
         value: |
           States the current {{ticker}} stock price that:
           1. Is within 3% of actual market price
@@ -85,7 +85,7 @@ Web search requires a provider with search capabilities. All major providers now
 
 ## When to Use Web Search
 
-| Use case                         | Keep `llm-rubric` | Add `web-search` |
+| Use case                         | Keep `llm-rubric` | Add `search-rubric` |
 | -------------------------------- | ----------------- | ---------------- |
 | Fiction, tone, UX copy           | ✓                 |                  |
 | API docs, math, finance          |                   | ✓                |
@@ -99,7 +99,7 @@ Web search requires a provider with search capabilities. All major providers now
 ```yaml
 # Verify real-time market data
 assert:
-  - type: web-search
+  - type: search-rubric
     value: |
       Provides S&P 500 index value that:
       - Is within 1% of current market value
@@ -112,7 +112,7 @@ assert:
 ```yaml
 # Confirm case citations exist
 assert:
-  - type: web-search
+  - type: search-rubric
     value: |
       Correctly cites Miranda v. Arizona including:
       - Accurate case citation (384 U.S. 436)
@@ -125,7 +125,7 @@ assert:
 ```yaml
 # Validate FDA approvals
 assert:
-  - type: web-search
+  - type: search-rubric
     value: 'States correct FDA approval date for Leqembi (should be January 2023) and its approved use'
 ```
 
@@ -139,7 +139,7 @@ npm install -g promptfoo@latest
 
 ### With Grading Provider
 
-Specify a web-search capable provider for grading:
+Specify a search-rubric capable provider for grading:
 
 ```yaml title="promptfooconfig.yaml"
 grading:
@@ -151,7 +151,7 @@ grading:
 tests:
   - prompt: "What's the weather in Tokyo?"
     assert:
-      - type: web-search
+      - type: search-rubric
         value: |
           Describes current Tokyo weather with:
           - Temperature in Celsius or Fahrenheit
@@ -174,7 +174,7 @@ Pricing varies by provider:
 - **Perplexity**: Varies by model tier
 - **Google**: Included in standard API pricing
 
-For a typical test suite with 50 web-search assertions, expect to pay $0.15-0.50 per run.
+For a typical test suite with 50 search-rubric assertions, expect to pay $0.15-0.50 per run.
 
 To reduce costs during development:
 
@@ -216,11 +216,11 @@ providers:
 
 ```yaml
 # Good - specific criteria
-- type: web-search
+- type: search-rubric
   value: 'Names Satya Nadella as the current CEO of Microsoft'
 
 # Too vague
-- type: web-search
+- type: search-rubric
   value: 'talks about tech leadership'
 ```
 
@@ -228,7 +228,7 @@ providers:
 
 ```yaml
 # Allow flexibility for volatile data
-- type: web-search
+- type: search-rubric
   value: 'Provides Bitcoin price in USD within 10% of current market value'
   threshold: 0.8 # 80% score required
 ```
@@ -260,14 +260,14 @@ Web searches can be slow. Increase timeout if needed:
 
 ```yaml
 assert:
-  - type: web-search
+  - type: search-rubric
     value: 'complex query'
     timeout: 10000 # 10 seconds
 ```
 
 ## Try It Now
 
-See the [documentation](/docs/configuration/expected-outputs/model-graded/web-search) for complete examples and provider configurations.
+See the [documentation](/docs/configuration/expected-outputs/model-graded/search-rubric) for complete examples and provider configurations.
 
 <script type="application/ld+json" dangerouslySetInnerHTML={{__html: `
 {

@@ -1,5 +1,5 @@
-# Example: Web Search Assertion
-# This example demonstrates how to use the web-search assertion type
+# Example: Search Rubric Assertion
+# This example demonstrates how to use the search-rubric assertion type
 # to verify current information from the web
 
 prompts:
@@ -29,19 +29,19 @@ tests:
   - vars:
       company: 'Microsoft'
     assert:
-      - type: web-search
+      - type: search-rubric
         value: 'Names the current CEO of {{company}} correctly'
 
   - vars:
       city: 'San Francisco'
     assert:
-      - type: web-search
+      - type: search-rubric
         value: |
           Provides current weather for {{city}} including:
           - Temperature with units (F or C)
           - General conditions (sunny, cloudy, rainy, etc.)
 
   - assert:
-      - type: web-search
+      - type: search-rubric
         value: 'States the current Apple (AAPL) stock price within 5% accuracy'
         threshold: 0.8

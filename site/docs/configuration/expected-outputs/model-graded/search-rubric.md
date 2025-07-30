@@ -1,10 +1,10 @@
 ---
-sidebar_label: Web Search
+sidebar_label: Search Rubric
 ---
 
-# Web-Search
+# Search-Rubric
 
-The `web-search` assertion type is like `llm-rubric` but with web search capabilities. It evaluates outputs according to a rubric while having the ability to search for current information when needed.
+The `search-rubric` assertion type is like `llm-rubric` but with web search capabilities. It evaluates outputs according to a rubric while having the ability to search for current information when needed.
 
 ## How it works
 
@@ -17,13 +17,13 @@ The `web-search` assertion type is like `llm-rubric` but with web search capabil
 
 ```yaml
 assert:
-  - type: web-search
+  - type: search-rubric
     value: 'Provides accurate current Bitcoin price within 5% of market value'
 ```
 
 ## Comparing to LLM-Rubric
 
-The `web-search` assertion behaves exactly like `llm-rubric`, but automatically uses a provider with web search capabilities:
+The `search-rubric` assertion behaves exactly like `llm-rubric`, but automatically uses a provider with web search capabilities:
 
 ```yaml
 # These are equivalent:
@@ -33,8 +33,8 @@ assert:
     value: 'Contains current stock price for Apple (AAPL) within $5'
     provider: openai:responses:o4-mini # Must configure web search tool
 
-  # Using web-search (automatically selects a web-search provider)
-  - type: web-search
+  # Using search-rubric (automatically selects a web-search provider)
+  - type: search-rubric
     value: 'Contains current stock price for Apple (AAPL) within $5'
 ```
 
@@ -47,7 +47,7 @@ prompts:
   - 'What is the current weather in {{city}}?'
 
 assert:
-  - type: web-search
+  - type: search-rubric
     value: 'Provides current temperature in {{city}} with units (F or C)'
 
 tests:
@@ -59,7 +59,7 @@ tests:
 
 ## Grading Providers
 
-The web-search assertion requires a grading provider with web search capabilities:
+The search-rubric assertion requires a grading provider with web search capabilities:
 
 ### 1. Anthropic Claude
 
@@ -133,7 +133,7 @@ prompts:
   - 'Who won the latest Super Bowl?'
 
 assert:
-  - type: web-search
+  - type: search-rubric
     value: 'Names the correct winner of the most recent Super Bowl with the final score'
 ```
 
@@ -144,7 +144,7 @@ prompts:
   - "What's the current stock price of {{ticker}}?"
 
 assert:
-  - type: web-search
+  - type: search-rubric
     value: |
       Provides accurate stock price for {{ticker}} that:
       1. Is within 2% of current market price
@@ -160,7 +160,7 @@ prompts:
   - "What's the weather like in Tokyo?"
 
 assert:
-  - type: web-search
+  - type: search-rubric
     value: |
       Describes current Tokyo weather including:
       - Temperature (with units)
@@ -175,7 +175,7 @@ prompts:
   - "What's the latest version of Node.js?"
 
 assert:
-  - type: web-search
+  - type: search-rubric
     value: 'States the correct latest LTS version of Node.js (not experimental or nightly)'
 ```
 
@@ -191,11 +191,11 @@ Web search assertions have the following cost implications:
 
 ## Threshold Support
 
-Like `llm-rubric`, the `web-search` assertion supports thresholds:
+Like `llm-rubric`, the `search-rubric` assertion supports thresholds:
 
 ```yaml
 assert:
-  - type: web-search
+  - type: search-rubric
     value: 'Contains accurate information about current US inflation rate'
     threshold: 0.9 # Requires 90% accuracy for economic data
 ```
