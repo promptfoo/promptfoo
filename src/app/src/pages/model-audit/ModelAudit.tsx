@@ -54,22 +54,8 @@ export default function ModelAudit() {
 
   useEffect(() => {
     useModelAuditStore.persist.rehydrate();
-  }, []);
-
-  // Check on mount and periodically in background
-  useEffect(() => {
-    // Initial check
+    // Check installation status immediately after rehydration
     checkInstallation();
-
-    // Background check every 5 minutes
-    const interval = setInterval(
-      () => {
-        checkInstallation();
-      },
-      5 * 60 * 1000,
-    );
-
-    return () => clearInterval(interval);
   }, [checkInstallation]);
 
   const handleScan = async () => {
