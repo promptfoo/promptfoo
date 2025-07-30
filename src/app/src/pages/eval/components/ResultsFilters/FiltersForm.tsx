@@ -26,6 +26,7 @@ const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   metadata: 'Metadata',
   plugin: 'Plugin',
   strategy: 'Strategy',
+  'human-rating': 'Human Rating',
 };
 
 const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
@@ -170,7 +171,10 @@ function Filter({
       }
       // Reset operator to 'equals' when changing to types that only support 'equals'
       if (
-        (filterType === 'metric' || filterType === 'plugin' || filterType === 'strategy') &&
+        (filterType === 'metric' ||
+          filterType === 'plugin' ||
+          filterType === 'strategy' ||
+          filterType === 'human-rating') &&
         value.operator !== 'equals'
       ) {
         updatedFilter.operator = 'equals';
@@ -299,6 +303,7 @@ function Filter({
             ...(filters.options.strategy.length > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.strategy, value: 'strategy' }]
               : []),
+            { label: TYPE_LABELS_BY_TYPE['human-rating'], value: 'human-rating' },
           ]}
           value={value.type}
           onChange={(e) => handleTypeChange(e as ResultsFilter['type'])}
@@ -322,7 +327,10 @@ function Filter({
           id={`${index}-operator-select`}
           label="Operator"
           values={
-            value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy'
+            value.type === 'metric' ||
+            value.type === 'plugin' ||
+            value.type === 'strategy' ||
+            value.type === 'human-rating'
               ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
               : [
                   { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
@@ -336,7 +344,10 @@ function Filter({
         />
 
         <Box sx={{ flex: 1, minWidth: 250 }}>
-          {value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy' ? (
+          {value.type === 'metric' ||
+          value.type === 'plugin' ||
+          value.type === 'strategy' ||
+          value.type === 'human-rating' ? (
             <Dropdown
               id={`${index}-value-select`}
               label={TYPE_LABELS_BY_TYPE[value.type]}
@@ -371,6 +382,12 @@ function Filter({
                           </code>
                         </div>
                       );
+                    }
+                  } else if (value.type === 'human-rating') {
+                    if (optionValue === 'thumbs-up') {
+                      label = '👍 Thumbs Up';
+                    } else if (optionValue === 'thumbs-down') {
+                      label = '👎 Thumbs Down';
                     }
                   }
                   return { label, value: optionValue, sortValue: displayName ?? optionValue };

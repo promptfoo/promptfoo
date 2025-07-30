@@ -481,7 +481,16 @@ describe('evaluator', () => {
     });
 
     it('should filter by human thumbs up', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'thumbs-up' });
+      const result = await evalWithResults.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-up',
+          }),
+        ],
+      });
 
       expect(result.body.length).toBeGreaterThan(0);
       for (const row of result.body) {
@@ -495,7 +504,16 @@ describe('evaluator', () => {
     });
 
     it('should filter by human thumbs down', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'thumbs-down' });
+      const result = await evalWithResults.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-down',
+          }),
+        ],
+      });
 
       expect(result.body.length).toBeGreaterThan(0);
       for (const row of result.body) {
@@ -559,7 +577,16 @@ describe('evaluator', () => {
       const humanFiltered = await evaluation.getTablePage({ filterMode: 'human' });
       expect(humanFiltered.body).toHaveLength(1);
 
-      const thumbsUpFiltered = await evaluation.getTablePage({ filterMode: 'thumbs-up' });
+      const thumbsUpFiltered = await evaluation.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-up',
+          }),
+        ],
+      });
       expect(thumbsUpFiltered.body).toHaveLength(1);
     });
 
@@ -627,6 +654,35 @@ describe('evaluator', () => {
       // Results should satisfy all conditions and respect limit
       expect(result.body.length).toBeLessThanOrEqual(10);
       expect(result.filteredCount).toBeLessThan(result.totalCount);
+    });
+
+    it('should combine human rating filter with other filters', async () => {
+      const result = await evalWithResults.getTablePage({
+        filterMode: 'passes',
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-up',
+          }),
+        ],
+      });
+
+      // Results should satisfy both conditions
+      for (const row of result.body) {
+        // Should have at least one passing output
+        const hasSuccess = row.outputs.some((output) => output.pass === true);
+        expect(hasSuccess).toBe(true);
+
+        // Should have a human thumbs up rating
+        const hasHumanPass = row.outputs.some((output) =>
+          output.gradingResult?.componentResults?.some(
+            (c) => c.assertion?.type === 'human' && c.pass,
+          ),
+        );
+        expect(hasHumanPass).toBe(true);
+      }
     });
 
     it('should be filterable by multiple metrics', async () => {

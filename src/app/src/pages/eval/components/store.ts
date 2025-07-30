@@ -60,7 +60,7 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy';
+export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy' | 'human-rating';
 
 export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
 
@@ -291,6 +291,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
               ) ?? []),
               'basic',
             ],
+            'human-rating': ['thumbs-up', 'thumbs-down'],
           },
         },
       }));
@@ -312,6 +313,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
               ) ?? []),
               'basic',
             ],
+            'human-rating': ['thumbs-up', 'thumbs-down'],
           },
         },
       }));
@@ -409,6 +411,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
                 ) ?? []),
                 'basic',
               ],
+              'human-rating': ['thumbs-up', 'thumbs-down'],
             },
           },
         }));
@@ -433,6 +436,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
       metadata: [],
       plugin: [],
       strategy: [],
+      'human-rating': ['thumbs-up', 'thumbs-down'],
     },
   },
 
