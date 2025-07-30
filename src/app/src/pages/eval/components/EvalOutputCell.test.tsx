@@ -402,6 +402,30 @@ describe('EvalOutputCell', () => {
     });
     global.URL = originalURL;
   });
+
+  it('displays the token usage tooltip with reasoning tokens', () => {
+    const propsWithReasoningTokens: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        tokenUsage: {
+          prompt: 10,
+          completion: 20,
+          total: 35,
+          completionDetails: {
+            reasoning: 5,
+          },
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithReasoningTokens} />);
+
+    const expectedTooltipText =
+      '10 prompt tokens + 20 completion tokens & 5 reasoning tokens = 35 total';
+    const tooltipElement = screen.getByLabelText(expectedTooltipText);
+    expect(tooltipElement).toBeInTheDocument();
+  });
 });
 
 describe('EvalOutputCell highlight toggle functionality', () => {
