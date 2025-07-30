@@ -194,15 +194,27 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           // Parse JSON output
           const scanResults = JSON.parse(jsonMatch[0]);
 
+          // Map 'critical' severity to 'error' for frontend compatibility
+          const mappedIssues = (scanResults.issues || []).map((issue: any) => ({
+            ...issue,
+            severity: issue.severity === 'critical' ? 'error' : issue.severity,
+          }));
+
+          // Extract list of scanned files from assets
+          const scannedFilesList = scanResults.assets
+            ? scanResults.assets.map((asset: any) => asset.path)
+            : undefined;
+
           // Transform the results into our expected format
           const transformedResults = {
             path: resolvedPaths[0], // Primary resolved path
-            issues: scanResults.issues || [],
+            issues: mappedIssues,
             success: true,
             scannedFiles: scanResults.files_scanned || resolvedPaths.length,
             totalFiles: scanResults.files_total || resolvedPaths.length,
             duration: scanResults.scan_duration || null,
             rawOutput: stdout, // Always include raw output for debugging
+            scannedFilesList,
           };
 
           res.json(transformedResults);
@@ -219,6 +231,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
             // Parse lines like: "2025-06-08 20:46:58,090 - modelaudit.scanners - WARNING - [WARNING] (/path/to/file): Message"
             const warningMatch = line.match(/\[WARNING\]\s*\(([^)]+)\):\s*(.+)/);
             const errorMatch = line.match(/\[ERROR\]\s*\(([^)]+)\):\s*(.+)/);
+            const criticalMatch = line.match(/\[CRITICAL\]\s*\(([^)]+)\):\s*(.+)/);
             const infoMatch = line.match(/\[INFO\]\s*\(([^)]+)\):\s*(.+)/);
 
             if (warningMatch) {
@@ -232,6 +245,13 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 severity: 'error',
                 message: errorMatch[2],
                 location: errorMatch[1],
+              });
+            } else if (criticalMatch) {
+              // Map critical to error for frontend compatibility
+              issues.push({
+                severity: 'error',
+                message: criticalMatch[2],
+                location: criticalMatch[1],
               });
             } else if (infoMatch) {
               issues.push({
@@ -257,19 +277,34 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                   message: parts[1],
                 });
               }
+            } else if (line.includes(' - CRITICAL - ')) {
+              // Fallback for other critical formats - map to error
+              const parts = line.split(' - CRITICAL - ');
+              if (parts[1]) {
+                issues.push({
+                  severity: 'error',
+                  message: parts[1],
+                });
+              }
             }
           });
 
-          // Count scanned files from the output
-          const scannedFiles = lines.filter(
-            (line) => line.includes('Scanning file:') || line.includes('Scanning directory:'),
-          ).length;
+          // Extract scanned files from the output
+          const scannedFilesList: string[] = [];
+          lines.forEach((line) => {
+            // Match lines like: "2025-07-29 13:43:03,616 - INFO - Scanning file: /path/to/file"
+            const fileMatch = line.match(/Scanning file:\s*(.+)$/);
+            if (fileMatch && fileMatch[1]) {
+              scannedFilesList.push(fileMatch[1].trim());
+            }
+          });
 
           res.json({
             path: resolvedPaths[0],
             issues,
             success: true,
-            scannedFiles: scannedFiles || resolvedPaths.length,
+            scannedFiles: scannedFilesList.length || resolvedPaths.length,
+            scannedFilesList: scannedFilesList.length > 0 ? scannedFilesList : undefined,
             rawOutput: stdout,
           });
         }
