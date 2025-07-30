@@ -127,6 +127,13 @@ export const evalResultsTable = sqliteTable(
       sql`json_extract(${table.namedScores}, '$')`,
     ),
     metadataIdx: index('eval_result_metadata_idx').on(sql`json_extract(${table.metadata}, '$')`),
+
+    metadataPluginIdIdx: index('eval_result_metadata_plugin_id_idx').on(
+      sql`json_extract(${table.metadata}, '$.pluginId')`,
+    ),
+    metadataStrategyIdIdx: index('eval_result_metadata_strategy_id_idx').on(
+      sql`json_extract(${table.metadata}, '$.strategyId')`,
+    ),
   }),
 );
 

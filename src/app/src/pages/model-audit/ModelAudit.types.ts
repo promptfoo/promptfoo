@@ -13,10 +13,15 @@ export interface ScanOptions {
 }
 
 export interface ScanIssue {
+  // Note: modelaudit scanner outputs 'critical' severity, which is mapped to 'error'
+  // internally. The UI displays 'critical' to users for clarity.
   severity: 'error' | 'warning' | 'info' | 'debug';
   message: string;
   location?: string | null;
-  details?: Record<string, any>;
+  details?: Record<string, any> & {
+    path?: string;
+    files?: string[];
+  };
   timestamp?: number;
 }
 

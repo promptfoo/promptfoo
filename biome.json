@@ -15,7 +15,8 @@
       "**/*.json",
       "**/*.mjs",
       "**/*.cjs",
-      "!src/app/public/scripts/**/*"
+      "!src/app/public/scripts/**/*",
+      "!drizzle/**/*"
     ]
   },
   "formatter": {
