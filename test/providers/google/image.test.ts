@@ -165,10 +165,10 @@ describe('GoogleImageProvider', () => {
     for (const { input, expected } of testCases) {
       const provider = new GoogleImageProvider(input, {
         config: {
-          projectId: 'test-project',  // Ensure Vertex AI is used
+          projectId: 'test-project', // Ensure Vertex AI is used
         },
       });
-      
+
       // Mock the API response to extract the model path from the request
       const mockClient = {
         request: jest.fn().mockResolvedValue({
