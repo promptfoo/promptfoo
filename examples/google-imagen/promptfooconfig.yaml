@@ -8,6 +8,7 @@ providers:
   # Ultra quality - highest detail and quality
   - id: google:image:imagen-4.0-ultra-generate-preview-06-06
     config:
+      # projectId: 'your-project-id'  # Optional: Can be set here or via GOOGLE_PROJECT_ID env var
       aspectRatio: '16:9'
       seed: 42
       safetyFilterLevel: 'block_some'

@@ -46,5 +46,9 @@ npx promptfoo@latest eval
 
 ## Notes
 
-- Imagen requires Vertex AI authentication (not available via API key)
+- **Imagen models are only available through Vertex AI** (Google AI Studio/Gemini API is not supported)
+- Vertex AI requires authentication via `gcloud auth application-default login` (API keys are not supported)
+- You must provide a Google Cloud project ID either via:
+  - `GOOGLE_PROJECT_ID` environment variable
+  - `projectId` in the provider config
 - Seed and watermark parameters are mutually exclusive
