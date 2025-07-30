@@ -418,8 +418,10 @@ export default function SecurityFindings({
         <DialogContent>
           <pre
             style={{
-              backgroundColor: theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50],
-              color: theme.palette.mode === 'dark' ? theme.palette.grey[100] : theme.palette.grey[900],
+              backgroundColor:
+                theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50],
+              color:
+                theme.palette.mode === 'dark' ? theme.palette.grey[100] : theme.palette.grey[900],
               padding: theme.spacing(2),
               borderRadius: theme.shape.borderRadius,
               overflow: 'auto',
