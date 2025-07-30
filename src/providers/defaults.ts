@@ -149,7 +149,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       });
     }
 
-    return providers;
+    return applyGlobalModerationOverride(providers, env);
   }
 
   // If no programmatic overrides, proceed with normal provider selection
@@ -159,11 +159,34 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
 
     if (hasCredentials) {
       logger.debug(`Using ${provider.name} default providers`);
-      return provider.config(env);
+      const providers = await provider.config(env);
+      return applyGlobalModerationOverride(providers, env);
     }
   }
 
   // Fallback to OpenAI if no credentials are available
   logger.debug('No credentials found, falling back to OpenAI providers');
-  return OpenAiProviderConfig(env);
+  const providers = await OpenAiProviderConfig(env);
+  return applyGlobalModerationOverride(providers, env);
+}
+
+/**
+ * Apply global Azure Content Safety moderation if configured
+ */
+async function applyGlobalModerationOverride(
+  providers: DefaultProviders,
+  env?: EnvOverrides,
+): Promise<DefaultProviders> {
+  // Check if Azure Content Safety endpoint is configured
+  const hasAzureContentSafety =
+    isKeySet('AZURE_CONTENT_SAFETY_ENDPOINT', env) || isKeySet('AZURE_CONTENT_SAFETY_API_KEY', env);
+
+  if (hasAzureContentSafety) {
+    logger.debug('Applying global Azure Content Safety moderation');
+    // Dynamically import to avoid circular dependencies
+    const { AzureModerationProvider } = await import('./azure/moderation');
+    providers.moderationProvider = new AzureModerationProvider('text-content-safety', { env });
+  }
+
+  return providers;
 }
