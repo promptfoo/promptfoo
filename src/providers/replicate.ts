@@ -216,7 +216,7 @@ export class ReplicateProvider implements ApiProvider {
     };
   }
 
-  private async pollForCompletion(predictionId: string): Promise<ReplicatePrediction> {
+  protected async pollForCompletion(predictionId: string): Promise<ReplicatePrediction> {
     const maxPolls = 30; // Max 30 seconds of polling
     const pollInterval = 1000; // 1 second
 

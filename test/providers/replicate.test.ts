@@ -30,6 +30,8 @@ describe('ReplicateProvider', () => {
         output: 'test response',
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateProvider('test-model', {
@@ -72,6 +74,8 @@ describe('ReplicateProvider', () => {
         output: 'test response',
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateProvider('test-model', {
@@ -104,6 +108,8 @@ describe('ReplicateProvider', () => {
         output: null,
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     // Second call (polling) returns completed
@@ -114,6 +120,8 @@ describe('ReplicateProvider', () => {
         output: 'test response',
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateProvider('test-model', {
@@ -133,6 +141,8 @@ describe('ReplicateProvider', () => {
         output: ['Hello', ' ', 'World'],
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateProvider('test-model', {
@@ -151,6 +161,8 @@ describe('ReplicateProvider', () => {
         error: 'Model error',
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateProvider('test-model', {
@@ -169,6 +181,8 @@ describe('ReplicateProvider', () => {
         output: 'test response',
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateProvider('test-model:version123', {
@@ -208,6 +222,8 @@ describe('ReplicateModerationProvider', () => {
         output: 'safe\n',
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateModerationProvider('test-model', {
@@ -226,6 +242,8 @@ describe('ReplicateModerationProvider', () => {
         output: 'unsafe\nS1,S3',
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateModerationProvider('test-model', {
@@ -269,6 +287,8 @@ describe('ReplicateModerationProvider', () => {
         output: `unsafe\n${llamaGuard3Categories.join(',')}`,
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateModerationProvider('test-model', {
@@ -308,6 +328,8 @@ describe('ReplicateModerationProvider', () => {
         output: `unsafe\n${allCategories.join(',')}`,
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateModerationProvider('test-model', {
@@ -335,6 +357,8 @@ describe('ReplicateModerationProvider', () => {
         output: null,
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateModerationProvider('test-model', {
@@ -373,6 +397,8 @@ describe('ReplicateImageProvider', () => {
         output: ['https://example.com/image.png'],
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateImageProvider('test-model', {
@@ -391,6 +417,8 @@ describe('ReplicateImageProvider', () => {
         output: ['https://example.com/image.png'],
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateImageProvider('test-model', {
@@ -420,6 +448,8 @@ describe('ReplicateImageProvider', () => {
         error: 'Image generation failed',
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateImageProvider('test-model', {
@@ -438,6 +468,8 @@ describe('ReplicateImageProvider', () => {
         output: ['https://example.com/image.png'],
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateImageProvider('test-model', {

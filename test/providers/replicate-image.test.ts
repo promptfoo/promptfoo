@@ -21,6 +21,8 @@ describe('ReplicateImageProvider Demonstration', () => {
         output: ['https://replicate.delivery/pbxt/flux-ultra-example/beautiful-landscape.webp'],
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateImageProvider('black-forest-labs/flux-1.1-pro-ultra', {
@@ -71,6 +73,8 @@ describe('ReplicateImageProvider Demonstration', () => {
         ],
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateImageProvider('test-model', {
@@ -93,6 +97,8 @@ describe('ReplicateImageProvider Demonstration', () => {
         output: ['https://replicate.delivery/pbxt/flux-raw/photorealistic.png'],
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateImageProvider('black-forest-labs/flux-1.1-pro-ultra', {
@@ -110,8 +116,11 @@ describe('ReplicateImageProvider Demonstration', () => {
 
     // Verify raw parameter was passed (note: raw should be in input)
     const callArgs = mockedFetchWithCache.mock.calls[0];
-    const bodyJson = JSON.parse(callArgs[1].body);
-    expect(bodyJson.input.prompt).toBe('Professional headshot, natural lighting');
+    expect(callArgs).toBeDefined();
+    if (callArgs && callArgs[1] && callArgs[1].body) {
+      const bodyJson = JSON.parse(callArgs[1].body as string);
+      expect(bodyJson.input.prompt).toBe('Professional headshot, natural lighting');
+    }
   });
 
   it('demonstrates error handling', async () => {
@@ -122,6 +131,8 @@ describe('ReplicateImageProvider Demonstration', () => {
         error: 'NSFW content detected',
       },
       cached: false,
+      status: 200,
+      statusText: 'OK',
     });
 
     const provider = new ReplicateImageProvider('test-model', {
