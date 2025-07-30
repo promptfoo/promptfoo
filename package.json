@@ -35,6 +35,9 @@
     "pf": "dist/src/main.js"
   },
   "scripts": {
+    "benchmark:index": "tsx scripts/benchmark-index.ts",
+    "db:backup": "./scripts/backup-database.sh",
+    "migration:indices": "tsx scripts/run-migration.ts",
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
     "bin": "dist/src/main.js",
     "build:app": "npm run build --prefix src/app",
