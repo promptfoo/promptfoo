@@ -9,7 +9,7 @@
     "test": "promptfoo eval"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.15.1"
+    "@modelcontextprotocol/sdk": "^1.17.0"
   },
   "devDependencies": {
     "promptfoo": "*"
