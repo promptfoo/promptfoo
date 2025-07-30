@@ -1,0 +1,3 @@
+[submodule "promptfoo"]
+	path = promptfoo
+	url = https://github.com/promptfoo/promptfoo.git
