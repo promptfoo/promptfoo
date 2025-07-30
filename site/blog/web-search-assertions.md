@@ -2,7 +2,16 @@
 title: 'Why Your LLM Judge Now Needs a Browser'
 description: Promptfoo's new web-search assertions bring live fact-checking to LLM evaluation, preventing hallucinations from reaching production.
 image: /img/blog/web-search-assertions/title.jpg
-keywords: [promptfoo, LLM testing, fact checking, web search, AI accuracy, real-time verification, hallucination detection]
+keywords:
+  [
+    promptfoo,
+    LLM testing,
+    fact checking,
+    web search,
+    AI accuracy,
+    real-time verification,
+    hallucination detection,
+  ]
 date: 2025-07-30
 authors: [steve]
 tags: [feature-announcement, testing, assertions]
@@ -21,6 +30,7 @@ These aren't edge cases. Starting August 2, 2025, the EU AI Act requires "genera
 Traditional `llm-rubric` evaluations score style, tone, and completeness. But they can't open a browser. A weather bot claiming "72°F and sunny" during a documented blizzard will pass because the evaluator has no way to verify current conditions.
 
 Research confirms this blind spot:
+
 - **"No Free Labels: Limitations of LLM-as-Judge"** ([arXiv:2503.05061](https://arxiv.org/html/2503.05061v1)) shows LLM judges struggle without external knowledge
 - **"When Contextual Web Search Results Affect Hallucination Detection"** ([arXiv:2504.01153](https://arxiv.org/html/2504.01153)) demonstrates search snippets improve accuracy
 - **Vectara's hallucination leaderboard** ([Vectara](https://www.vectara.com/blog/cut-the-bull-detecting-hallucinations-in-large-language-models)) tracks which models still fabricate facts
@@ -33,10 +43,11 @@ Promptfoo's new `web-search` assertion brings live fact-checking to evaluation:
 # promptfooconfig.yaml
 assert:
   - type: web-search
-    value: "AAPL stock price today"
+    value: 'AAPL stock price today'
 ```
 
 Under the hood, Promptfoo:
+
 1. Extracts verifiable claims from the output
 2. Chooses a search-enabled grader (Claude, GPT-4o, Gemini 2.5 Flash, Perplexity Sonar) automatically
 3. Runs concurrent web searches
@@ -45,7 +56,7 @@ Under the hood, Promptfoo:
 ## Benchmark Results
 
 | Metric (1,000 factual prompts) | `llm-rubric` | `web-search` |
-|--------------------------------|--------------|--------------|
+| ------------------------------ | ------------ | ------------ |
 | Hallucinations caught          | 12%          | 94%          |
 | False positives                | 3%           | 1%           |
 | Mean latency                   | 0.8s         | 2.3s         |
@@ -55,6 +66,7 @@ The extra 1.5 seconds prevents litigation, regulatory fines, and brand damage.
 ## Why Now?
 
 **1. Tools exist.** All major LLM vendors shipped web search in 2025:
+
 - Anthropic launched web search May 7, 2025 ([Anthropic](https://docs.anthropic.com/en/release-notes/api))
 - OpenAI added `web_search_preview` ([OpenAI Platform](https://platform.openai.com/docs/guides/tools-web-search))
 - Gemini 2.5 Flash GA'd June 17, 2025 with `googleSearch` ([Google Cloud](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash))
@@ -67,7 +79,7 @@ The extra 1.5 seconds prevents litigation, regulatory fines, and brand damage.
 ## When to Use Web Search
 
 | Use case                         | Keep `llm-rubric` | Add `web-search` |
-|----------------------------------|-------------------|------------------|
+| -------------------------------- | ----------------- | ---------------- |
 | Fiction, tone, UX copy           | ✓                 |                  |
 | API docs, math, finance          |                   | ✓                |
 | Real-time data (weather, stocks) |                   | ✓                |
@@ -76,27 +88,30 @@ The extra 1.5 seconds prevents litigation, regulatory fines, and brand damage.
 ## Real Examples
 
 ### Financial Services
+
 ```yaml
 # Verify real-time market data
 assert:
   - type: web-search
-    value: "S&P 500 current value within 1% of live quote"
+    value: 'S&P 500 current value within 1% of live quote'
 ```
 
 ### Legal Tech
+
 ```yaml
 # Confirm case citations exist
 assert:
   - type: web-search
-    value: "Miranda v. Arizona 384 U.S. 436 (1966)"
+    value: 'Miranda v. Arizona 384 U.S. 436 (1966)'
 ```
 
 ### Healthcare
+
 ```yaml
 # Validate FDA approvals
 assert:
   - type: web-search
-    value: "Leqembi FDA approval date January 2023"
+    value: 'Leqembi FDA approval date January 2023'
 ```
 
 ## How to Migrate (30 sec)
@@ -111,17 +126,18 @@ grading:
   provider: openai:responses:o4-mini
   providerOptions:
     config:
-      tools: [{type: web_search_preview}]
+      tools: [{ type: web_search_preview }]
 
 tests:
   - vars:
-      prompt: "Who won the 2024 Nobel Prize in Physics?"
+      prompt: 'Who won the 2024 Nobel Prize in Physics?'
     assert:
       - type: web-search
-        value: "Must list John Hopfield and Geoffrey Hinton"
+        value: 'Must list John Hopfield and Geoffrey Hinton'
 ```
 
 Run:
+
 ```bash
 promptfoo eval
 ```
@@ -142,19 +158,19 @@ Academic review of hallucination mitigation notes similar trade-offs ([MDPI](htt
 providers:
   # Anthropic - built-in web search
   - anthropic:claude-sonnet-4
-  
+
   # OpenAI - requires tool config
   - id: openai:o4-mini
     config:
       tools:
         - type: web_search_preview
-  
+
   # Google - uses googleSearch
   - id: google:gemini-2.5-flash
     config:
       tools:
         - googleSearch
-  
+
   # Perplexity - built-in search
   - perplexity:sonar-large
 ```
@@ -162,28 +178,28 @@ providers:
 ## Best Practices
 
 1. **Be specific with verifiable facts**
+
    ```yaml
    # Good: Specific, verifiable
    - type: web-search
-     value: "Fed funds rate 5.25-5.50% as of July 2025"
-   
+     value: 'Fed funds rate 5.25-5.50% as of July 2025'
+
    # Bad: Vague
    - type: web-search
-     value: "Interest rates are high"
+     value: 'Interest rates are high'
    ```
 
 2. **Handle temporal data**
+
    ```yaml
    # Good: Range tolerant
    - type: web-search
-     value: "Tesla stock within 5% of current NASDAQ quote"
-   
+     value: 'Tesla stock within 5% of current NASDAQ quote'
+
    # Bad: Exact match on volatile data
    - type: web-search
-     value: "TSLA exactly $243.21"
+     value: 'TSLA exactly $243.21'
    ```
-
-
 
 ## Coming Next
 
@@ -194,3 +210,4 @@ providers:
 > **In production, "sounds plausible" is failure. Web search makes sure it's true.**
 
 [Get started →](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded/web-search)
+

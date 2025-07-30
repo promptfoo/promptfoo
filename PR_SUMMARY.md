@@ -36,7 +36,7 @@ This PR adds a new `web-search` assertion type to promptfoo, enabling quick veri
 
 - Updated all model IDs to July 2025 versions
 - OpenAI: Using `o4-mini` as default
-- Anthropic: `claude-sonnet-4`  
+- Anthropic: `claude-sonnet-4`
 - Google: `gemini-2.5-flash`
 
 ## Example Usage
@@ -56,10 +56,10 @@ providers:
 
 tests:
   - vars:
-      query: "What is the current weather in Tokyo?"
+      query: 'What is the current weather in Tokyo?'
     assert:
       - type: web-search
-        value: "Tokyo weather temperature humidity"
+        value: 'Tokyo weather temperature humidity'
 ```
 
 ## Testing

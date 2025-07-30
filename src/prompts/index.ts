@@ -274,4 +274,3 @@ Example JSON:
 
 JSON:
 `;
-

@@ -332,7 +332,7 @@ Web search is included in the OpenAI Responses API pricing:
 - No additional cost beyond standard API usage
 - Each web-search assertion may perform one or more searches
 - Use caching (`--cache`) to avoid redundant searches during development
-:::
+  :::
 
 ### Best Practices
 

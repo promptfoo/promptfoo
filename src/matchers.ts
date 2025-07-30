@@ -1306,9 +1306,9 @@ export async function matchesWebSearch(
 
   // Get a provider with web search capabilities
   let searchProvider =
-    grading.provider || 
-    defaultProviders.webSearchProvider || 
-    defaultProviders.llmRubricProvider || 
+    grading.provider ||
+    defaultProviders.webSearchProvider ||
+    defaultProviders.llmRubricProvider ||
     defaultProviders.gradingProvider;
 
   // Check if current provider has web search, if not try to load one
