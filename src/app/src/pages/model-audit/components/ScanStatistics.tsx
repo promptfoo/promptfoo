@@ -111,9 +111,6 @@ export default function ScanStatistics({
             <Typography variant="body2" color="text.secondary">
               Files Scanned
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.7 }}>
-              Click for details
-            </Typography>
           </StatCard>
         </Tooltip>
       </Grid>
