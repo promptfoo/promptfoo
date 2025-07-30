@@ -5,7 +5,7 @@ This example demonstrates how to use ACP (Agent Communication Protocol) with Pro
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example acp-booksmith
+npx promptfoo@latest init --example ibm-acp
 ```
 
 ## What is ACP?
