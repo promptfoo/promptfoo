@@ -1,93 +1,80 @@
 ---
-title: 'Why LLM Judges Need Web Search: Stop Hallucinations in Production'
-description: Add real-time fact-checking to your LLM tests with Promptfoo's new web-search assertion—catch 94% of hallucinations before they ship.
+title: 'Real-Time Fact Checking for LLM Outputs'
+description: 'Promptfoo now supports web search in assertions, allowing you to verify time-sensitive information like stock prices and weather during testing.'
 image: /img/blog/web-search-assertions/title.jpg
-image_alt: 'Browser icon inspecting AI output for factual errors'
+image_alt: 'Web search assertion verifying current information'
 slug: llm-web-search-assertions
-keywords:
-  [
-    promptfoo,
-    LLM fact checking,
-    AI hallucination detection,
-    web-search assertion,
-    real-time verification,
-    LLM testing,
-  ]
+keywords: [promptfoo, LLM testing, web search, fact checking, real-time verification, assertions]
 date: 2025-07-30
 authors: [steve]
 tags: [feature-announcement, testing, assertions]
 ---
 
-# Why Your LLM Judge Now Needs a Browser
+# Real-Time Fact Checking for LLM Outputs
 
-On July 29, 2025, two U.S. district judges struck their own rulings after lawyers uncovered phantom quotes—fabrications injected by an AI tool that passed every in-house test. Starting August 2, 2025, the EU AI Act will make such oversights a compliance violation. Style-based rubrics can't stop these failures because they don't check facts. Promptfoo's new `web-search` assertions add **LLM fact checking** that opens a browser during grading and rejects outputs that contradict live data.
+On July 29, 2025, two U.S. federal judges withdrew rulings containing AI-generated citations that didn't exist.
 
-> **TL;DR** Promptfoo's `web-search` assertion plugs live search into your evals, catching 8× more hallucinations than style-only rubrics with ~2s extra latency.
+This type of error happens because LLM outputs often include outdated or incorrect information from training data. Traditional assertion types check format and style, but can't verify current facts.
+
+We're releasing web-search assertions that verify time-sensitive information during testing.
 
 <!-- truncate -->
 
-## Stop AI Hallucinations with Real-Time Fact Checking
+## How It Works
 
-**Problem**: Traditional `llm-rubric` evaluations score style, tone, and completeness. But they can't open a browser. A weather bot claiming "72°F and sunny" during a documented blizzard will pass because the evaluator has no way to verify current conditions.
+The web-search assertion verifies LLM outputs against current web data:
 
-**Impact**: Hallucinations appear in 13% of enterprise chat logs according to Gartner (June 2025). These errors lead to legal sanctions, regulatory fines, and brand damage—as seen in the federal judges case.
-
-**Solution**: Promptfoo's `web-search` assertion brings **AI hallucination detection** to your CI pipeline. Research confirms this approach:
-
-- **"No Free Labels: Limitations of LLM-as-Judge"** ([arXiv:2503.05061](https://arxiv.org/html/2503.05061v1)) shows LLM judges struggle without external knowledge
-- **"When Contextual Web Search Results Affect Hallucination Detection"** ([arXiv:2504.01153](https://arxiv.org/html/2504.01153)) demonstrates search snippets improve accuracy
-- **Vectara's hallucination leaderboard** ([Vectara](https://www.vectara.com/blog/cut-the-bull-detecting-hallucinations-in-large-language-models)) tracks which models still fabricate facts
-
-## How the Web-Search Assertion Works Under the Hood
-
-Promptfoo's new **web-search assertion** brings live fact-checking to evaluation:
-
-```yaml title="promptfooconfig.yaml"
-# Add real-time verification to your tests
+```yaml
 assert:
   - type: web-search
     value: 'AAPL stock price today'
 ```
 
-Under the hood, Promptfoo:
+When your LLM outputs a response about Apple's stock price, the assertion:
 
-1. Extracts verifiable claims from the output
-2. Chooses a search-enabled grader (Claude, GPT-4o, Gemini 2.5 Flash, Perplexity Sonar) automatically
-3. Runs concurrent web searches
-4. Returns pass/fail with confidence scores
+1. Extracts the claim from the output
+2. Searches for current information
+3. Compares the output to live data
+4. Returns pass/fail based on accuracy
 
-## Benchmarks: 8× More Hallucinations Caught
+## Example
 
-![Bar chart comparing hallucination catch rates: llm-rubric 12% vs web-search 94%](/img/blog/web-search-assertions/benchmark.png)
+Here's a complete test configuration:
 
-| Metric                | `llm-rubric` | `web-search` |
-| --------------------- | ------------ | ------------ |
-| Hallucinations caught | 12%          | 94%          |
-| False positives       | 3%           | 1%           |
-| Mean latency          | 0.8s         | 2.3s         |
+```yaml title="promptfooconfig.yaml"
+providers:
+  - openai:gpt-4o-mini
 
-_Methodology: 1,000 prompts from the TruthfulQA, FinancialQA, and MMLU-Current-Events subsets, May 2025 snapshot._
+tests:
+  - prompt: "What's the current stock price of Apple?"
+    assert:
+      - type: web-search
+        value: 'AAPL stock price current'
+```
 
-The extra 1.5 seconds prevents litigation, regulatory fines, and brand damage.
+If the model responds with outdated price information from its training data, the test will fail.
 
-## Why Web Search Is Critical Now
+## Use Cases
 
-### 1. Tools exist
+Web-search assertions are useful when testing outputs that contain:
 
-All major LLM vendors shipped web search in 2025:
+- Current stock prices or financial data
+- Today's weather conditions
+- Recent news or events
+- Business hours or availability
+- Real-time statistics
 
-- Anthropic launched web search May 7, 2025 ([Anthropic](https://docs.anthropic.com/en/release-notes/api))
-- OpenAI added `web_search_preview` ([OpenAI Platform](https://platform.openai.com/docs/guides/tools-web-search))
-- Gemini 2.5 Flash GA'd June 17, 2025 with `googleSearch` ([Google Cloud](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash))
-- Perplexity Sonar offers grounded search APIs ([Sonar](https://sonar.perplexity.ai/))
+Traditional assertions can't catch when an LLM confidently states last year's stock price or yesterday's weather.
 
-### 2. Evidence of failure is mounting
+## Supported Providers
 
-Courts sanctioned lawyers for ChatGPT citations in June 2023 ([Reuters](https://www.reuters.com/legal/new-york-lawyers-sanctioned-using-fake-chatgpt-cases-legal-brief-2023-06-22/)). By May 2025, the problem spread to Big Law ([Reuters](https://www.reuters.com/legal/government/trouble-with-ai-hallucinations-spreads-big-law-firms-2025-05-23/)).
+Web search requires a provider with search capabilities. All major providers now support this:
 
-### 3. Research backs it up
-
-Self-Alignment for Factuality ([arXiv:2402.09267](https://arxiv.org/abs/2402.09267)) and [G-Eval](/docs/configuration/expected-outputs/model-graded/g-eval) ([arXiv:2303.16634](https://arxiv.org/abs/2303.16634)) show structured fact-checking boosts accuracy.
+- **Anthropic** (May 2025): Configure with `web_search_20250305` tool
+- **OpenAI**: Use `web_search_preview` tool with responses API
+- **Google/Vertex**: Built-in `googleSearch` tool
+- **Perplexity**: Native web search, no configuration needed
+- **xAI**: Enable with `search_parameters`
 
 ## When to Use Web Search
 
@@ -127,14 +114,19 @@ assert:
     value: 'Leqembi FDA approval date January 2023'
 ```
 
-## Configure in 30 Seconds
+## Configuration
+
+### Basic Setup
 
 ```bash
 npm install -g promptfoo@latest
 ```
 
+### With Grading Provider
+
+Specify a web-search capable provider for grading:
+
 ```yaml title="promptfooconfig.yaml"
-# Enable real-time fact checking in your tests
 grading:
   provider: openai:responses:o4-mini
   providerOptions:
@@ -142,34 +134,34 @@ grading:
       tools: [{ type: web_search_preview }]
 
 tests:
-  - vars:
-      prompt: 'Who won the 2024 Nobel Prize in Physics?'
+  - prompt: "What's the weather in Tokyo?"
     assert:
       - type: web-search
-        value: 'Must list John Hopfield and Geoffrey Hinton'
+        value: 'Tokyo weather temperature current'
 ```
 
-Run:
+### Auto-Detection
+
+If no grading provider is specified, Promptfoo will automatically select one with web search capabilities based on available API keys.
+
+## Performance and Costs
+
+Web search adds approximately 2-3 seconds per assertion.
+
+Pricing varies by provider:
+
+- **OpenAI**: $0.003-0.008 per search
+- **Anthropic**: $10 per 1,000 searches ($0.01 each)
+- **Perplexity**: Varies by model tier
+- **Google**: Included in standard API pricing
+
+For a typical test suite with 50 web-search assertions, expect to pay $0.15-0.50 per run.
+
+To reduce costs during development:
 
 ```bash
-promptfoo eval
+promptfoo eval --cache
 ```
-
-## Costs, Caching, and Compliance Tips
-
-Web search calls pricing:
-
-- **OpenAI**: $0.003-0.008 per search ([Platform docs](https://platform.openai.com/docs/guides/tools-web-search))
-- **Anthropic**: $10 per 1,000 searches ([Pricing](https://www.anthropic.com/pricing))
-- **Perplexity**: Varies by model ([Sonar pricing](https://sonar.perplexity.ai/))
-
-To manage costs:
-
-- Enable [caching](/docs/configuration/caching): `promptfoo eval --cache`
-- Set timeouts: `timeout: 5000` in assertion config
-- Limit to critical paths in CI
-
-Academic review of hallucination mitigation notes similar trade-offs ([MDPI](https://www.mdpi.com/2227-7390/13/5/856)).
 
 ## Provider Configuration
 
@@ -201,69 +193,74 @@ providers:
 
 ## Best Practices
 
-1. **Be specific with verifiable facts**
+**Use specific search queries:**
 
-   ```yaml title="Good vs bad search queries"
-   # Good: Specific, verifiable
-   - type: web-search
-     value: 'Fed funds rate 5.25-5.50% as of July 2025'
+```yaml
+# Good - specific and verifiable
+- type: web-search
+  value: 'Microsoft CEO Satya Nadella'
 
-   # Bad: Vague
-   - type: web-search
-     value: 'Interest rates are high'
-   ```
+# Too vague
+- type: web-search
+  value: 'tech company leadership'
+```
 
-2. **Handle temporal data**
+**Set appropriate thresholds:**
 
-   ```yaml title="Handling volatile data"
-   # Good: Range tolerant
-   - type: web-search
-     value: 'Tesla stock within 5% of current NASDAQ quote'
+```yaml
+# Allow some flexibility for volatile data
+- type: web-search
+  value: 'Bitcoin price USD'
+  threshold: 0.8
+```
 
-   # Bad: Exact match on volatile data
-   - type: web-search
-     value: 'TSLA exactly $243.21'
-   ```
+**Cache during development:**
 
-## FAQ
+```bash
+# Avoid repeated searches while iterating
+promptfoo eval --cache
+```
 
-### How is `web-search` different from RAG?
+## Common Issues
 
-RAG adds retrieval _during_ generation; `web-search` verifies outputs _after_ they are produced, so you can test any model without changing its architecture.
+**"No provider with web search capabilities"**
 
-### Does it work offline?
+Ensure your grading provider has web search configured:
 
-No—`web-search` requires a provider with live search such as GPT-4o Responses or Claude 4.
+```yaml
+grading:
+  provider: openai:responses:o4-mini
+  providerOptions:
+    config:
+      tools: [{ type: web_search_preview }]
+```
 
-### Can I use it with vector databases?
+**Timeouts**
 
-Yes, but `web-search` is designed for real-time web data. For static document verification, consider our [RAG evaluation](/docs/guides/evaluate-rag) features.
+Web searches can be slow. Increase timeout if needed:
 
-## Coming Next
+```yaml
+assert:
+  - type: web-search
+    value: 'complex query'
+    timeout: 10000 # 10 seconds
+```
 
-- Multi-source cross-checks (news + scholarly + internal DBs)
-- Confidence scores in UI
-- Custom search adapters for proprietary data
+## Try It Now
 
-> **In production, "sounds plausible" is failure. Web search makes sure it's true.**
-
-<div className="buttons">
-  <a className="button button--primary button--lg" href="/docs/configuration/expected-outputs/model-graded/web-search">
-    Add live fact-checking to my tests →
-  </a>
-</div>
+See the [documentation](/docs/configuration/expected-outputs/model-graded/web-search) for complete examples and provider configurations.
 
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  "headline": "Why LLM Judges Need Web Search: Stop Hallucinations in Production",
+  "headline": "Real-Time Fact Checking for LLM Outputs",
   "datePublished": "2025-07-30",
   "author": {
     "@type": "Person",
     "name": "Steve"
   },
-  "keywords": "LLM fact checking, AI hallucination detection, web-search assertion, real-time verification",
-  "description": "Add real-time fact-checking to your LLM tests with Promptfoo's new web-search assertion—catch 94% of hallucinations before they ship."
+  "keywords": "LLM testing, web search, fact checking, real-time verification",
+  "description": "Promptfoo now supports web search in assertions, allowing you to verify time-sensitive information like stock prices and weather during testing."
 }
 </script>
