@@ -98,17 +98,13 @@ describe('ModelAudit', () => {
         message: 'Critical security issue found',
         location: '/path/to/model.safetensors',
         timestamp: Date.now(),
-        name: 'untrusted-pickle',
         details: {},
       },
     ],
-    totalCount: 1,
-    errorCount: 1,
-    warningCount: 0,
-    infoCount: 0,
-    debugCount: 0,
-    filesScanned: 3,
-    timestamp: Date.now(),
+    success: true,
+    scannedFiles: 3,
+    totalFiles: 3,
+    duration: 1.5,
     scannedFilesList: ['/path/to/model.safetensors', '/path/to/model2.bin', '/path/to/model3.h5'],
   };
 
@@ -116,7 +112,26 @@ describe('ModelAudit', () => {
     vi.clearAllMocks();
     mockCheckInstallation.mockResolvedValue(undefined);
     mockUseModelAuditStore.mockReturnValue(getDefaultStoreState());
-    mockCallApi.mockResolvedValue(mockScanResults);
+    
+    // Mock successful API responses
+    mockCallApi.mockImplementation(async (path: string) => {
+      if (path.includes('/model-audit/scan')) {
+        return {
+          ok: true,
+          json: () => Promise.resolve(mockScanResults),
+        } as Response;
+      }
+      if (path.includes('/model-audit/check-path')) {
+        return {
+          ok: true,
+          json: () => Promise.resolve({ exists: true, type: 'file', name: 'model.safetensors' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: () => Promise.resolve({}),
+      } as Response;
+    });
   });
 
   it('should display UI immediately without blocking on installation check', async () => {
