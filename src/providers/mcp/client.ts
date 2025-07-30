@@ -1,8 +1,9 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import logger from '../../logger';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import logger from '../../logger';
+
 import type { MCPConfig, MCPServerConfig, MCPTool, MCPToolResult } from './types';
 
 export class MCPClient {
@@ -94,7 +95,9 @@ export class MCPClient {
           await client.connect(transport);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
-          logger.error(`Failed to connect to MCP server ${serverKey}: ${error}`);
+          logger.debug(
+            `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
+          );
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
           transport = new SSEClientTransport(new URL(server.url), options);
           await client.connect(transport);

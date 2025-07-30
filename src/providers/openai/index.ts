@@ -1,5 +1,6 @@
-import type { EnvVarKey } from '../../envars';
 import { getEnvString } from '../../envars';
+
+import type { EnvVarKey } from '../../envars';
 import type {
   ApiProvider,
   CallApiContextParams,

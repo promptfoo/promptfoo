@@ -1,9 +1,8 @@
-import { render, screen, act, fireEvent } from '@testing-library/react';
-import React from 'react';
-import type { AssertionType, GradingResult } from '@promptfoo/types';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import type { AssertionType, GradingResult } from '@promptfoo/types';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({

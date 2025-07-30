@@ -12,12 +12,11 @@ import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
-// Import required Swiper modules
 import { Navigation, Pagination } from 'swiper/modules';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
-import styles from './llm-vulnerability-scanner.module.css';
-// Import Swiper styles
+import { SITE_CONSTANTS } from '../constants';
+import styles from './landing-page.module.css';
 import 'swiper/css';
 
 function HeroSection() {
@@ -32,7 +31,7 @@ function HeroSection() {
         />
         <div className={styles.logoSection}>
           Promptfoo is trusted by teams at...
-          <LogoContainer noBackground noBorder />
+          <LogoContainer noBackground noBorder className={styles.heroLogos} />
         </div>
         <h2>Move beyond fuzzing and canned attacks</h2>
         <p>Our agentic red teamers specifically target your application use case.</p>
@@ -147,8 +146,9 @@ function DifferentiatorsSection() {
             <div className={styles.benefitContent}>
               <h3>Battle-tested with wide industry adoption</h3>
               <p>
-                Used by foundation model labs, Fortune 50 enterprises, and 100,000 open source users
-                - we're the closest thing to an industry standard tool for AI security testing.
+                Used by foundation model labs, Fortune 50 enterprises, and{' '}
+                {SITE_CONSTANTS.USER_COUNT_DISPLAY} open source users - we're the closest thing to
+                an industry standard tool for AI security testing.
               </p>
             </div>
           </div>

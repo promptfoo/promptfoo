@@ -1,11 +1,12 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import process from 'process';
+
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import * as fs from 'fs';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
-import process from 'process';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -18,7 +19,6 @@ import { readPrompts, readProviderPromptMap } from '../../prompts';
 import { loadApiProviders } from '../../providers';
 import telemetry from '../../telemetry';
 import {
-  UnifiedConfigSchema,
   type CommandLineOptions,
   type Prompt,
   type ProviderOptions,
@@ -28,6 +28,7 @@ import {
   type TestCase,
   type TestSuite,
   type UnifiedConfig,
+  UnifiedConfigSchema,
 } from '../../types';
 import { isRunningUnderNpx, readFilters } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -553,7 +554,9 @@ export async function resolveConfigs(
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
-    defaultTest: processedDefaultTest ? await readTest(processedDefaultTest, basePath) : undefined,
+    defaultTest: processedDefaultTest
+      ? await readTest(processedDefaultTest, basePath, true)
+      : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: fileConfig.extensions || defaultConfig.extensions || [],

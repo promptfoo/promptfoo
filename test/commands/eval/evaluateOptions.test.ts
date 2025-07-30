@@ -1,10 +1,12 @@
-import type { Command } from 'commander';
-import dedent from 'dedent';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+
+import dedent from 'dedent';
 import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
+import type { Command } from 'commander';
+
 import type { CommandLineOptions, EvaluateOptions } from '../../../src/types';
 
 jest.mock('../../../src/evaluator', () => ({
@@ -20,7 +22,7 @@ jest.mock('../../../src/logger', () => ({
 }));
 
 jest.mock('../../../src/migrate', () => ({
-  runDbMigrations: jest.fn(),
+  runDbMigrations: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../../../src/telemetry', () => ({

@@ -1,14 +1,5 @@
 import { globSync } from 'glob';
 import logger from '../logger';
-import type {
-  UnifiedConfig,
-  Prompt,
-  PromptFunction,
-  ProviderOptionsMap,
-  TestSuite,
-  ProviderOptions,
-  EvaluateTestSuite,
-} from '../types';
 import { parsePathOrGlob } from '../util';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
@@ -24,6 +15,16 @@ import { processString } from './processors/string';
 import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput } from './utils';
+
+import type {
+  EvaluateTestSuite,
+  Prompt,
+  PromptFunction,
+  ProviderOptions,
+  ProviderOptionsMap,
+  TestSuite,
+  UnifiedConfig,
+} from '../types';
 
 export * from './grading';
 
@@ -89,7 +90,7 @@ export function readProviderPromptMap(
  * @param maxRecursionDepth - Maximum recursion depth for globbing.
  * @returns Promise resolving to an array of processed prompts.
  */
-export async function processPrompt(
+async function processPrompt(
   prompt: Partial<Prompt>,
   basePath: string = '',
   maxRecursionDepth: number = 1,
@@ -129,8 +130,9 @@ export async function processPrompt(
     );
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
+      const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
       const processedPrompts = await processPrompt(
-        { raw: globbedFilePath },
+        { raw: rawPath },
         basePath,
         maxRecursionDepth - 1,
       );

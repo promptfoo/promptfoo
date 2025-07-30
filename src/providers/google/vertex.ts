@@ -1,40 +1,44 @@
-import type { GaxiosError } from 'gaxios';
 import path from 'path';
+
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type {
-  ApiEmbeddingProvider,
-  ApiProvider,
-  CallApiContextParams,
-  ProviderResponse,
-  ProviderEmbeddingResponse,
-  TokenUsage,
-} from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
-import type {
-  GeminiApiResponse,
-  GeminiResponseData,
-  GeminiErrorResponse,
-  GeminiFormat,
-  Palm2ApiResponse,
-} from './util';
 import {
+  formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
   loadFile,
   mergeParts,
-  formatCandidateContents,
 } from './util';
+
+import type {
+  ApiEmbeddingProvider,
+  ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+  TokenUsage,
+} from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
+import type {
+  GeminiApiResponse,
+  GeminiErrorResponse,
+  GeminiFormat,
+  GeminiResponseData,
+  Palm2ApiResponse,
+} from './util';
+
+// Type for Google API errors - using 'any' to avoid gaxios dependency
+type GaxiosError = any;
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
@@ -80,7 +84,13 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.VERTEX_API_KEY || getEnvString('VERTEX_API_KEY');
+    return (
+      this.config.apiKey ||
+      this.env?.GEMINI_API_KEY ||
+      this.env?.VERTEX_API_KEY ||
+      getEnvString('GEMINI_API_KEY') ||
+      getEnvString('VERTEX_API_KEY')
+    );
   }
 
   getRegion(): string {
@@ -371,7 +381,13 @@ export class VertexChatProvider extends VertexGenericProvider {
             const finishReason = 'Content was blocked due to safety settings.';
             if (cliState.config?.redteam) {
               // Refusals are not errors during redteams, they're actually successes.
-              return { output: finishReason };
+              // Calculate token usage even for safety-blocked responses
+              const tokenUsage = {
+                total: datum.usageMetadata?.totalTokenCount || 0,
+                prompt: datum.usageMetadata?.promptTokenCount || 0,
+                completion: datum.usageMetadata?.candidatesTokenCount || 0,
+              };
+              return { output: finishReason, tokenUsage };
             }
             return { error: finishReason };
           } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
@@ -383,7 +399,13 @@ export class VertexChatProvider extends VertexGenericProvider {
             const blockReason = `Content was blocked due to safety settings: ${datum.promptFeedback.blockReason}`;
             if (cliState.config?.redteam) {
               // Refusals are not errors during redteams, they're actually successes.
-              return { output: blockReason };
+              // Calculate token usage even for safety-blocked responses
+              const tokenUsage = {
+                total: datum.usageMetadata?.totalTokenCount || 0,
+                prompt: datum.usageMetadata?.promptTokenCount || 0,
+                completion: datum.usageMetadata?.candidatesTokenCount || 0,
+              };
+              return { output: blockReason, tokenUsage };
             }
             return { error: blockReason };
           } else if (candidate.content?.parts) {
@@ -400,6 +422,13 @@ export class VertexChatProvider extends VertexGenericProvider {
           total: lastData.usageMetadata?.totalTokenCount || 0,
           prompt: lastData.usageMetadata?.promptTokenCount || 0,
           completion: lastData.usageMetadata?.candidatesTokenCount || 0,
+          ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+            completionDetails: {
+              reasoning: lastData.usageMetadata.thoughtsTokenCount,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+            },
+          }),
         };
         response = {
           cached: false,

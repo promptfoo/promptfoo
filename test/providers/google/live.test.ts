@@ -1,6 +1,7 @@
+import path from 'path';
+
 import axios from 'axios';
 import dedent from 'dedent';
-import path from 'path';
 import WebSocket from 'ws';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
@@ -932,7 +933,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should correctly format enableAffectiveDialog configuration', async () => {
-      provider = new GoogleLiveProvider('gemini-2.5-flash-exp-native-audio-thinking-dialog', {
+      provider = new GoogleLiveProvider('gemini-2.5-flash-native-audio-thinking-dialog', {
         config: {
           apiVersion: 'v1alpha',
           generationConfig: {

@@ -1,9 +1,9 @@
 import {
-  ShellInjectionPlugin,
-  ShellInjectionGrader,
-  PLUGIN_ID,
   DEFAULT_EXAMPLES,
+  ShellInjectionGrader,
+  ShellInjectionPlugin,
 } from '../../../src/redteam/plugins/shellInjection';
+
 import type { RedteamObjectConfig } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types';
 
@@ -55,7 +55,7 @@ describe('ShellInjectionPlugin', () => {
 
     expect(assertions).toHaveLength(1);
     expect(assertions[0]).toEqual({
-      type: PLUGIN_ID,
+      type: 'promptfoo:redteam:shell-injection',
       metric: 'ShellInjection',
     });
   });
@@ -67,7 +67,7 @@ describe('ShellInjectionPlugin', () => {
     expect(tests).toHaveLength(2);
     tests.forEach((test) => {
       expect(test.assert).toHaveLength(1);
-      expect(test.assert?.[0].type).toBe(PLUGIN_ID);
+      expect(test.assert?.[0].type).toBe('promptfoo:redteam:shell-injection');
       expect(test.assert?.[0].metric).toBe('ShellInjection');
     });
   });
@@ -131,7 +131,7 @@ describe('ShellInjectionGrader', () => {
   });
 
   it('should have correct ID', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
+    expect(grader.id).toBe('promptfoo:redteam:shell-injection');
   });
 
   it('should have non-empty rubric', () => {

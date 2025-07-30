@@ -1,11 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+
 import { getUserEmail } from '../../../src/globalConfig/accounts';
 import {
-  getAllFiles,
-  generatePoisonedDocument,
-  poisonDocument,
   doPoisonDocuments,
+  generatePoisonedDocument,
+  getAllFiles,
+  poisonDocument,
 } from '../../../src/redteam/commands/poison';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 

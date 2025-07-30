@@ -3,8 +3,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import util from 'util';
+
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
+import { parsePathOrGlob } from '../util';
+import { sha256 } from '../util/createHash';
+import { safeJsonStringify } from '../util/json';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,9 +18,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import { parsePathOrGlob } from '../util';
-import { sha256 } from '../util/createHash';
-import { safeJsonStringify } from '../util/json';
 
 const execAsync = util.promisify(exec);
 

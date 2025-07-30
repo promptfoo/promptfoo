@@ -153,6 +153,9 @@
                             "FAL_KEY": {
                               "type": "string"
                             },
+                            "GITHUB_TOKEN": {
+                              "type": "string"
+                            },
                             "GOOGLE_API_HOST": {
                               "type": "string"
                             },
@@ -160,6 +163,9 @@
                               "type": "string"
                             },
                             "GOOGLE_API_KEY": {
+                              "type": "string"
+                            },
+                            "GEMINI_API_KEY": {
                               "type": "string"
                             },
                             "GROQ_API_KEY": {
@@ -244,6 +250,21 @@
                               "type": "string"
                             },
                             "PROMPTFOO_CA_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_PFX_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_PFX_PASSWORD": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_PASSWORD": {
+                              "type": "string"
+                            },
+                            "PROMPTFOO_JKS_ALIAS": {
                               "type": "string"
                             },
                             "PROMPTFOO_INSECURE_SSL": {
@@ -364,9 +385,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   },
                   {
@@ -386,10 +405,7 @@
                       },
                       "config": {}
                     },
-                    "required": [
-                      "raw",
-                      "label"
-                    ],
+                    "required": ["raw", "label"],
                     "additionalProperties": false
                   }
                 ]
@@ -437,11 +453,7 @@
                             {
                               "type": "array",
                               "items": {
-                                "type": [
-                                  "string",
-                                  "number",
-                                  "boolean"
-                                ]
+                                "type": ["string", "number", "boolean"]
                               }
                             },
                             {
@@ -569,10 +581,7 @@
                                           },
                                           {
                                             "type": "string",
-                                            "enum": [
-                                              "select-best",
-                                              "human"
-                                            ]
+                                            "enum": ["select-best", "human"]
                                           },
                                           {}
                                         ]
@@ -617,10 +626,7 @@
                                   "additionalProperties": {}
                                 }
                               },
-                              "required": [
-                                "type",
-                                "assert"
-                              ],
+                              "required": ["type", "assert"],
                               "additionalProperties": false
                             },
                             {
@@ -694,10 +700,7 @@
                                           "type": "string"
                                         }
                                       },
-                                      "required": [
-                                        "role",
-                                        "content"
-                                      ],
+                                      "required": ["role", "content"],
                                       "additionalProperties": false
                                     }
                                   }
@@ -811,11 +814,7 @@
                             {
                               "type": "array",
                               "items": {
-                                "type": [
-                                  "string",
-                                  "number",
-                                  "boolean"
-                                ]
+                                "type": ["string", "number", "boolean"]
                               }
                             },
                             {
@@ -827,9 +826,7 @@
                         }
                       }
                     },
-                    "required": [
-                      "path"
-                    ],
+                    "required": ["path"],
                     "additionalProperties": false
                   }
                 ]
@@ -896,10 +893,7 @@
                     }
                   }
                 },
-                "required": [
-                  "config",
-                  "tests"
-                ],
+                "required": ["config", "tests"],
                 "additionalProperties": false
               }
             ]
@@ -1019,10 +1013,7 @@
                 ]
               }
             },
-            "required": [
-              "name",
-              "value"
-            ],
+            "required": ["name", "value"],
             "additionalProperties": false
           }
         },
@@ -1174,6 +1165,7 @@
                           "indirect-prompt-injection",
                           "intent",
                           "mcp",
+                          "medical",
                           "medical:anchoring-bias",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
@@ -1267,8 +1259,7 @@
                         ]
                       },
                       {
-                        "type": "string",
-                        "pattern": "^file\\:\\/\\/"
+                        "type": "string"
                       }
                     ],
                     "description": "Name of the plugin or path to custom plugin"
@@ -1359,6 +1350,7 @@
                               "indirect-prompt-injection",
                               "intent",
                               "mcp",
+                              "medical",
                               "medical:anchoring-bias",
                               "medical:hallucination",
                               "medical:incorrect-knowledge",
@@ -1452,8 +1444,7 @@
                             ]
                           },
                           {
-                            "type": "string",
-                            "pattern": "^file\\:\\/\\/"
+                            "type": "string"
                           }
                         ],
                         "description": "Name of the plugin"
@@ -1471,26 +1462,17 @@
                       },
                       "severity": {
                         "type": "string",
-                        "enum": [
-                          "critical",
-                          "high",
-                          "medium",
-                          "low"
-                        ],
+                        "enum": ["critical", "high", "medium", "low"],
                         "description": "Severity level for this plugin"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   }
                 ]
               },
               "description": "Plugins to use for redteam generation",
-              "default": [
-                "default"
-              ]
+              "default": ["default"]
             },
             "strategies": {
               "type": "array",
@@ -1554,17 +1536,13 @@
                         "description": "Strategy-specific configuration"
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": false
                   }
                 ]
               },
               "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
-              "default": [
-                "default"
-              ]
+              "default": ["default"]
             },
             "maxConcurrency": {
               "type": "integer",
@@ -1615,14 +1593,9 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": [
-                          "protobuf",
-                          "json"
-                        ]
+                        "enum": ["protobuf", "json"]
                       },
-                      "default": [
-                        "json"
-                      ]
+                      "default": ["json"]
                     }
                   },
                   "additionalProperties": false
@@ -1649,9 +1622,7 @@
               "properties": {
                 "type": {
                   "type": "string",
-                  "enum": [
-                    "sqlite"
-                  ],
+                  "enum": ["sqlite"],
                   "default": "sqlite"
                 },
                 "retentionDays": {
@@ -1678,9 +1649,7 @@
                   }
                 }
               },
-              "required": [
-                "endpoint"
-              ],
+              "required": ["endpoint"],
               "additionalProperties": false
             }
           },
@@ -1859,9 +1828,7 @@
           "$ref": "#/definitions/PromptfooConfigSchema/properties/providers"
         }
       },
-      "required": [
-        "prompts"
-      ],
+      "required": ["prompts"],
       "additionalProperties": false
     }
   },
