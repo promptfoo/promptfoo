@@ -13,26 +13,31 @@ if (!OPENAI_API_KEY) {
   process.exit(1);
 }
 
-// Parse command line arguments
-const args = process.argv.slice(2);
-let options = {
-  filename: 'blog-image.png',
+// Default options
+const DEFAULT_OPTIONS = {
+  filename: 'blog-image.jpg',
   prompt: '',
   inputImage: null,
-  mask: null,
   size: '1024x1024',
   quality: 'high',
-  format: 'png',
+  format: 'jpeg',
   compression: null,
   background: null,
   n: 1,
 };
 
-// Helper function to encode image to base64
-function encodeImage(imagePath) {
-  const imageBuffer = fs.readFileSync(imagePath);
-  return imageBuffer.toString('base64');
-}
+// Valid sizes for gpt-image-1
+const VALID_SIZES = ['1024x1024', '1024x1792', '1792x1024'];
+
+// Valid formats
+const VALID_FORMATS = ['png', 'jpeg', 'webp'];
+
+// Valid quality levels
+const VALID_QUALITY = ['low', 'medium', 'high', 'auto'];
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+let options = { ...DEFAULT_OPTIONS };
 
 // Parse arguments
 for (let i = 0; i < args.length; i++) {
@@ -44,9 +49,6 @@ for (let i = 0; i < args.length; i++) {
     i++;
   } else if (args[i] === '--input' || args[i] === '-i') {
     options.inputImage = args[i + 1];
-    i++;
-  } else if (args[i] === '--mask' || args[i] === '-m') {
-    options.mask = args[i + 1];
     i++;
   } else if (args[i] === '--size' || args[i] === '-s') {
     options.size = args[i + 1];
@@ -70,17 +72,17 @@ for (let i = 0; i < args.length; i++) {
 Usage: node generate-blog-image.js [options]
 
 Options:
-  -f, --filename <name>     Output filename (default: blog-image.png)
+  -f, --filename <name>     Output filename (default: ${DEFAULT_OPTIONS.filename})
   -p, --prompt <text>       Image generation/editing prompt (required)
   -i, --input <path>        Input image path for editing (optional)
-  -m, --mask <path>         Mask image path for inpainting (optional)
-  -s, --size <size>         Image size: 1024x1024, 1536x1024, 1024x1536, auto (default: 1024x1024)
-  -q, --quality <quality>   Quality: low, medium, high, auto (default: high)
-  --format <format>         Output format: png, jpeg, webp (default: png)
+  -s, --size <size>         Image size: ${VALID_SIZES.join(', ')}, auto (default: ${DEFAULT_OPTIONS.size})
+  -q, --quality <quality>   Quality: ${VALID_QUALITY.join(', ')} (default: ${DEFAULT_OPTIONS.quality})
+  --format <format>         Output format: ${VALID_FORMATS.join(', ')} (default: ${DEFAULT_OPTIONS.format})
   -c, --compression <0-100> Compression level for JPEG/WebP (optional)
   -t, --transparent         Enable transparent background (PNG/WebP only)
-  -n, --number <n>          Number of images to generate (default: 1)
+  -n, --number <n>          Number of images to generate (default: ${DEFAULT_OPTIONS.n})
   -h, --help               Show this help message
+  --mcp-server             Run as an MCP server instead of CLI mode
 
 Examples:
   # Generate a new image
@@ -88,9 +90,6 @@ Examples:
   
   # Edit an existing image
   node generate-blog-image.js -i input.png -f output.png -p "Add a hat to the red panda"
-  
-  # Edit with a mask (inpainting)
-  node generate-blog-image.js -i photo.png -m mask.png -f result.png -p "Replace masked area with flowers"
   
   # Generate with transparency
   node generate-blog-image.js -f sprite.png -p "2D pixel art cat sprite" -t -q high
@@ -102,11 +101,41 @@ Examples:
   }
 }
 
-// Validate required parameters
-if (!options.prompt) {
-  console.error('Please provide a prompt using --prompt or -p');
-  console.log('Use --help for usage information');
-  process.exit(1);
+// Example prompt for system cards blog post:
+/*
+const systemCardsPrompt = `Create a professional hero image for a blog post about LLM System Cards and AI Safety Documentation.
+The image should feature:
+- A cute red panda character (the Promptfoo mascot) in a cybersecurity/tech setting
+- The red panda should be examining or holding system documentation, security reports, or technical papers
+- Include visual elements that suggest security, transparency, and documentation (like shields, locks, checklists, or documents)
+- Modern tech aesthetic with a color palette that includes: deep purples, teals, and orange accents (matching Promptfoo's brand)
+- The style should be professional but approachable, similar to tech blog illustrations
+- Background could include subtle circuit patterns, document icons, or security symbols
+- The red panda should look intelligent and focused, perhaps wearing glasses or holding a magnifying glass
+- Overall mood: trustworthy, technical, but friendly
+Style: Modern tech illustration, clean lines, professional but approachable, suitable for a security-focused blog post`;
+*/
+
+// Only validate parameters if not running as MCP server
+if (!process.argv.includes('--mcp-server')) {
+  // Validate required parameters
+  if (!options.prompt) {
+    console.error('Please provide a prompt using --prompt or -p');
+    console.log('Use --help for usage information');
+    process.exit(1);
+  }
+
+  // Validate filename for security
+  if (options.filename.includes('..') || options.filename.startsWith('/')) {
+    console.error('Invalid filename: Path traversal or absolute paths not allowed');
+    process.exit(1);
+  }
+
+  // Validate size parameter for gpt-image-1
+  if (options.size !== 'auto' && !VALID_SIZES.includes(options.size)) {
+    console.error(`Invalid size: ${options.size}. Valid sizes are: ${VALID_SIZES.join(', ')}, auto`);
+    process.exit(1);
+  }
 }
 
 // Update filename extension based on format
@@ -156,18 +185,6 @@ async function generateOrEditImage() {
     );
     parts.push(imageData);
     parts.push('\r\n');
-
-    // Add the mask if provided
-    if (options.mask) {
-      const maskData = fs.readFileSync(options.mask);
-      parts.push(
-        `--${boundary}\r\n`,
-        `Content-Disposition: form-data; name="mask"; filename="mask.png"\r\n`,
-        `Content-Type: image/png\r\n\r\n`,
-      );
-      parts.push(maskData);
-      parts.push('\r\n');
-    }
 
     // Add other fields
     for (const [key, value] of Object.entries(requestData)) {
@@ -277,10 +294,6 @@ async function main() {
       throw new Error(`Input image not found: ${options.inputImage}`);
     }
 
-    if (options.mask && !fs.existsSync(options.mask)) {
-      throw new Error(`Mask image not found: ${options.mask}`);
-    }
-
     const images = await generateOrEditImage();
 
     for (let i = 0; i < images.length; i++) {
@@ -308,6 +321,12 @@ async function main() {
         outputFilename,
       );
 
+      // Ensure directory exists
+      const outputDir = path.dirname(outputPath);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
       if (imageData.b64_json) {
         // If we get base64 data, save it directly
         const buffer = Buffer.from(imageData.b64_json, 'base64');
@@ -327,4 +346,229 @@ async function main() {
   }
 }
 
-main();
+// Check if running as MCP server
+if (process.argv.includes('--mcp-server')) {
+  // Dynamic imports for MCP server mode
+  Promise.all([
+    import('@modelcontextprotocol/sdk/server/index.js'),
+    import('@modelcontextprotocol/sdk/server/stdio.js')
+  ]).then(([{ Server }, { StdioServerTransport }]) => {
+    // Create MCP server
+    const server = new Server(
+      {
+        name: 'blog-image-generator',
+        version: '1.0.0',
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      },
+    );
+
+    // Define the blog image generation tool
+    const tools = [
+      {
+        name: 'generate_blog_image',
+        description: 'Generate or edit blog images using OpenAI gpt-image-1 API following Promptfoo style guide',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            prompt: {
+              type: 'string',
+              description: `Image generation/editing prompt (required).
+
+Example prompt for a system cards blog post:
+"Create a professional hero image for a blog post about LLM System Cards and AI Safety Documentation.
+The image should feature:
+- A cute red panda character (the Promptfoo mascot) in a cybersecurity/tech setting
+- The red panda should be examining or holding system documentation, security reports, or technical papers
+- Include visual elements that suggest security, transparency, and documentation (like shields, locks, checklists, or documents)
+- Modern tech aesthetic with a color palette that includes: deep purples, teals, and orange accents (matching Promptfoo's brand)
+- The style should be professional but approachable, similar to tech blog illustrations
+- Background could include subtle circuit patterns, document icons, or security symbols
+- The red panda should look intelligent and focused, perhaps wearing glasses or holding a magnifying glass
+- Overall mood: trustworthy, technical, but friendly
+Style: Modern tech illustration, clean lines, professional but approachable, suitable for a security-focused blog post"`,
+            },
+            filename: {
+              type: 'string',
+              description: `Output filename (default: ${DEFAULT_OPTIONS.filename})`,
+              default: DEFAULT_OPTIONS.filename,
+            },
+            inputImage: {
+              type: 'string',
+              description: 'Input image path for editing (optional)',
+            },
+            size: {
+              type: 'string',
+              description: 'Image size',
+              enum: [...VALID_SIZES, 'auto'],
+              default: DEFAULT_OPTIONS.size,
+            },
+            quality: {
+              type: 'string',
+              description: 'Image quality',
+              enum: VALID_QUALITY,
+              default: DEFAULT_OPTIONS.quality,
+            },
+            format: {
+              type: 'string',
+              description: 'Output format',
+              enum: VALID_FORMATS,
+              default: DEFAULT_OPTIONS.format,
+            },
+            numberOfImages: {
+              type: 'integer',
+              description: 'Number of images to generate',
+              minimum: 1,
+              maximum: 10,
+              default: DEFAULT_OPTIONS.n,
+            },
+          },
+          required: ['prompt'],
+        },
+      },
+      {
+        name: 'get_style_guide',
+        description: 'Get the Promptfoo blog image style guide and example prompts',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+    ];
+
+    // Style guide content
+    const styleGuide = `# Promptfoo Blog Image Style Guide
+
+## Brand Colors
+- Deep purples
+- Teals
+- Orange accents
+
+## Style Requirements
+- Modern tech illustration aesthetic
+- Clean lines
+- Professional but approachable
+- Suitable for technical blog posts
+
+## Red Panda Mascot Guidelines
+- Should appear cute and intelligent
+- Often shown in tech/cybersecurity settings
+- Can be wearing glasses or holding tech items
+- Should look focused and engaged
+
+ ## Example Prompt:
+ Create a professional hero image for a blog post about LLM System Cards and AI Safety Documentation.
+ The image should feature:
+ - A cute red panda character (the Promptfoo mascot) in a cybersecurity/tech setting
+ - The red panda should be examining or holding system documentation, security reports, or technical papers
+ - Include visual elements that suggest security, transparency, and documentation (like shields, locks, checklists, or documents)
+ - Modern tech aesthetic with a color palette that includes: deep purples, teals, and orange accents (matching Promptfoo's brand)
+ - The style should be professional but approachable, similar to tech blog illustrations
+ - Background could include subtle circuit patterns, document icons, or security symbols
+ - The red panda should look intelligent and focused, perhaps wearing glasses or holding a magnifying glass
+ - Overall mood: trustworthy, technical, but friendly
+ Style: Modern tech illustration, clean lines, professional but approachable, suitable for a security-focused blog post`;
+
+    // Handle tool listing
+    server.setRequestHandler('tools/list', async () => {
+      return { tools };
+    });
+
+    // Handle tool calls
+    server.setRequestHandler('tools/call', async (request) => {
+      const { name, arguments: args } = request.params;
+
+      try {
+        let result;
+
+        switch (name) {
+          case 'generate_blog_image': {
+                         // Set up options from MCP arguments
+             Object.assign(options, {
+               prompt: args.prompt,
+               filename: args.filename || DEFAULT_OPTIONS.filename,
+               inputImage: args.inputImage,
+               size: args.size || DEFAULT_OPTIONS.size,
+               quality: args.quality || DEFAULT_OPTIONS.quality,
+               format: args.format || DEFAULT_OPTIONS.format,
+               n: args.numberOfImages || DEFAULT_OPTIONS.n,
+             });
+
+             // Update filename extension based on format
+             if (!options.filename.includes('.')) {
+               options.filename += `.${options.format}`;
+             }
+
+             // Validate parameters
+             if (!options.prompt) {
+               throw new Error('Prompt is required');
+             }
+
+             if (options.filename.includes('..') || options.filename.startsWith('/')) {
+               throw new Error('Invalid filename: Path traversal or absolute paths not allowed');
+             }
+
+             if (options.size !== 'auto' && !VALID_SIZES.includes(options.size)) {
+               throw new Error(`Invalid size: ${options.size}. Valid sizes are: ${VALID_SIZES.join(', ')}, auto`);
+             }
+
+            // Run the main image generation function
+            await main();
+            
+            result = `Image generation completed. Check the output directory for: ${options.filename}`;
+            break;
+          }
+
+          case 'get_style_guide': {
+            result = styleGuide;
+            break;
+          }
+
+          default:
+            throw new Error(`Unknown tool: ${name}`);
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: String(result),
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: ${error.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    });
+
+    // Start the MCP server
+    async function startMcpServer() {
+      const transport = new StdioServerTransport();
+      await server.connect(transport);
+      console.error('Blog Image Generator MCP Server running...');
+    }
+
+    startMcpServer().catch((error) => {
+      console.error('MCP Server error:', error);
+      process.exit(1);
+    });
+  }).catch((error) => {
+    console.error('Failed to load MCP dependencies:', error);
+    console.error('Make sure to install: npm install @modelcontextprotocol/sdk');
+    process.exit(1);
+  });
+} else {
+  // Normal CLI mode
+  main();
+}
