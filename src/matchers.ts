@@ -1344,7 +1344,7 @@ export async function matchesSearchRubric(
     return {
       pass: false,
       score: 0,
-      reason: `Web search failed: ${resp.error || 'No output'}`,
+      reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
       tokensUsed: resp.tokenUsage,
       assertion,
     };

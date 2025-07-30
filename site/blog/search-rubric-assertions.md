@@ -12,7 +12,7 @@ tags: [feature-announcement, testing, assertions]
 
 # Real-Time Fact Checking for LLM Outputs
 
-On July 29, 2025, two U.S. federal judges withdrew rulings containing AI-generated citations that didn't exist.
+Two U.S. federal judges recently withdrew rulings containing AI-generated citations that didn't exist.
 
 This type of error happens because LLM outputs often include outdated or incorrect information from training data. Traditional assertion types check format and style, but can't verify current facts.
 
@@ -86,11 +86,11 @@ Web search requires a provider with search capabilities. All major providers now
 ## When to Use Web Search
 
 | Use case                         | Keep `llm-rubric` | Add `search-rubric` |
-| -------------------------------- | ----------------- | ---------------- |
-| Fiction, tone, UX copy           | ✓                 |                  |
-| API docs, math, finance          |                   | ✓                |
-| Real-time data (weather, stocks) |                   | ✓                |
-| Academic citations               |                   | ✓                |
+| -------------------------------- | ----------------- | ------------------- |
+| Fiction, tone, UX copy           | ✓                 |                     |
+| API docs, math, finance          |                   | ✓                   |
+| Real-time data (weather, stocks) |                   | ✓                   |
+| Academic citations               |                   | ✓                   |
 
 ## Real Examples
 

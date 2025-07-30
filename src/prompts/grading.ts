@@ -135,7 +135,7 @@ export const DEFAULT_WEB_SEARCH_PROMPT = JSON.stringify([
 
     <Output>The current CEO of Microsoft is Satya Nadella</Output>
     <Rubric>Contains accurate information about Microsoft's leadership</Rubric>
-    {"reason": "I searched and confirmed Satya Nadella is indeed the current CEO of Microsoft as of 2025", "pass": true, "score": 1.0}
+    {"reason": "I searched and confirmed Satya Nadella is indeed the current CEO of Microsoft", "pass": true, "score": 1.0}
 
     <Output>Bitcoin is trading at $45,000</Output>
     <Rubric>Provides current Bitcoin price within 10% accuracy</Rubric>
