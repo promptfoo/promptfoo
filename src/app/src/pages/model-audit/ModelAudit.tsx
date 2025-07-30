@@ -1,80 +1,80 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+
+import { CheckCircle as CheckCircleIcon, Error as ErrorIcon } from '@mui/icons-material';
+import {
+  Alert,
+  Box,
+  CircularProgress,
+  Container,
+  Fade,
+  Link,
+  Paper,
+  Stack,
+  Tab,
+  Tabs,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 
 import { callApi } from '@app/utils/api';
-import SecurityIcon from '@mui/icons-material/Security';
-import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
-import Container from '@mui/material/Container';
-import Fade from '@mui/material/Fade';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import Typography from '@mui/material/Typography';
+
 import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
 import ConfigurationTab from './components/ConfigurationTab';
-import InstallationCheck from './components/InstallationCheck';
 import ResultsTab from './components/ResultsTab';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
+import type { ScanResult } from './ModelAudit.types';
 import { useModelAuditStore } from './store';
 
-import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types';
-
 export default function ModelAudit() {
-  const [paths, setPaths] = useState<ScanPath[]>([]);
-  const [scanOptions, setScanOptions] = useState<ScanOptions>({
-    blacklist: [],
-    timeout: 300,
-    verbose: false,
-  });
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanResults, setScanResults] = useState<ScanResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [showOptionsDialog, setShowOptionsDialog] = useState(false);
-  const [modelAuditInstalled, setModelAuditInstalled] = useState<boolean | null>(null);
-  const [currentWorkingDir, setCurrentWorkingDir] = useState<string>('');
-  const [activeTab, setActiveTab] = useState(0);
-  const [showFilesDialog, setShowFilesDialog] = useState(false);
+  const {
+    // State
+    paths,
+    scanOptions,
+    isScanning,
+    scanResults,
+    error,
+    installationStatus,
+    activeTab,
+    showFilesDialog,
+    showOptionsDialog,
 
-  const { addRecentScan } = useModelAuditStore();
+    // Actions
+    setPaths,
+    removePath,
+    setScanOptions,
+    setIsScanning,
+    setScanResults,
+    setError,
+    checkInstallation,
+    setActiveTab,
+    setShowFilesDialog,
+    setShowOptionsDialog,
+    addRecentScan,
+  } = useModelAuditStore();
 
   useEffect(() => {
     useModelAuditStore.persist.rehydrate();
   }, []);
 
-  // Check if modelaudit is installed
-  const checkModelAuditInstalled = async () => {
-    try {
-      const response = await callApi('/model-audit/check-installed');
-      const data = await response.json();
-      setModelAuditInstalled(data.installed);
-      setCurrentWorkingDir(data.cwd || '');
-    } catch {
-      setModelAuditInstalled(false);
-    }
-  };
+  // Check on mount and periodically in background
+  useEffect(() => {
+    // Initial check
+    checkInstallation();
 
-  React.useEffect(() => {
-    checkModelAuditInstalled();
-  }, []);
+    // Background check every 5 minutes
+    const interval = setInterval(
+      () => {
+        checkInstallation();
+      },
+      5 * 60 * 1000,
+    );
 
-  const handleAddPath = (path: ScanPath) => {
-    setPaths([...paths, path]);
-  };
-
-  const handleRemovePath = (index: number) => {
-    setPaths(paths.filter((_, i) => i !== index));
-  };
+    return () => clearInterval(interval);
+  }, [checkInstallation]);
 
   const handleScan = async () => {
-    if (paths.length === 0) {
-      setError('Please add at least one path to scan');
-      return;
-    }
-
     setIsScanning(true);
     setError(null);
-    setScanResults(null);
 
     try {
       const response = await callApi('/model-audit/scan', {
@@ -88,116 +88,146 @@ export default function ModelAudit() {
         }),
       });
 
+      const data: ScanResult = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to scan models');
+        const errorData = data as unknown as { error: string };
+        throw new Error(errorData.error || 'Failed to run security scan');
       }
 
-      const data = await response.json();
       setScanResults(data);
-      setActiveTab(1); // Switch to results tab
-
-      // Add to recent scans
-      addRecentScan(paths);
+      setActiveTab(1); // Switch to Results tab
+      addRecentScan(paths); // Add to recent scans
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred during scanning');
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+      setError(errorMessage);
     } finally {
       setIsScanning(false);
     }
   };
 
-  if (modelAuditInstalled === null) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Stack spacing={2} alignItems="center">
-          <CircularProgress />
-          <Typography>Checking ModelAudit installation...</Typography>
-        </Stack>
-      </Container>
-    );
-  }
-
-  if (modelAuditInstalled === false) {
-    return <InstallationCheck />;
-  }
+  const handleRemovePath = (index: number) => {
+    const pathToRemove = paths[index];
+    if (pathToRemove) {
+      removePath(pathToRemove.path);
+    }
+  };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1 }}>
-          <SecurityIcon sx={{ fontSize: 40, color: 'primary.main' }} />
-          <Typography variant="h4" fontWeight={700}>
-            Model Audit
-          </Typography>
-        </Stack>
-        <Typography variant="body1" color="text.secondary" sx={{ ml: 7 }}>
-          Scan model files for security vulnerabilities and potential risks
-        </Typography>
-      </Box>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        bgcolor: (theme) =>
+          theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[50],
+        py: 4,
+      }}
+    >
+      <Container maxWidth="lg">
+        <Paper elevation={0} sx={{ p: 4, mb: 4 }}>
+          <Stack direction="row" alignItems="center" mb={4}>
+            <Box>
+              <Typography variant="h4" gutterBottom fontWeight="bold">
+                Model Audit
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Scan ML models for security vulnerabilities.{' '}
+                <Link href="https://www.promptfoo.dev/docs/model-audit/" target="_blank">
+                  Learn more
+                </Link>
+              </Typography>
+            </Box>
+            <Box sx={{ ml: 'auto' }}>
+              {installationStatus.checking ? (
+                <Tooltip title="Checking ModelAudit installation...">
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <CircularProgress size={16} />
+                    <Typography variant="body2" color="text.secondary">
+                      Checking...
+                    </Typography>
+                  </Stack>
+                </Tooltip>
+              ) : installationStatus.installed === true ? (
+                <Tooltip title="ModelAudit is installed and ready">
+                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                    <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />
+                    <Typography variant="body2" color="success.main">
+                      Ready
+                    </Typography>
+                  </Stack>
+                </Tooltip>
+              ) : installationStatus.installed === false ? (
+                <Tooltip title="ModelAudit is not installed">
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <ErrorIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                    <Typography variant="body2" color="error.main">
+                      Not Installed
+                    </Typography>
+                  </Stack>
+                </Tooltip>
+              ) : null}
+            </Box>
+          </Stack>
 
-      {/* Main Content Card */}
-      <Paper sx={{ overflow: 'hidden' }}>
-        <Tabs
-          value={activeTab}
-          onChange={(_, val) => setActiveTab(val)}
-          sx={{
-            borderBottom: 1,
-            borderColor: 'divider',
-            px: 3,
-            bgcolor: (theme) =>
-              theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[50],
-          }}
-        >
-          <Tab label="Configuration" />
-          <Tab label="Results" disabled={!scanResults} />
-        </Tabs>
+          <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
+            <Tab label="Configuration" />
+            <Tab label="Results" disabled={!scanResults} />
+          </Tabs>
 
-        {/* Configuration Tab */}
-        <Fade in={activeTab === 0}>
-          <Box sx={{ display: activeTab === 0 ? 'block' : 'none', p: 4 }}>
-            <ConfigurationTab
-              paths={paths}
-              onAddPath={handleAddPath}
-              onRemovePath={handleRemovePath}
-              onShowOptions={() => setShowOptionsDialog(true)}
-              onScan={handleScan}
-              isScanning={isScanning}
-              error={error}
-              onClearError={() => setError(null)}
-              currentWorkingDir={currentWorkingDir}
-            />
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+
+          <Box sx={{ mt: 3 }}>
+            <Fade in={activeTab === 0} unmountOnExit>
+              <Box>
+                <ConfigurationTab
+                  paths={paths}
+                  isScanning={isScanning}
+                  onAddPath={(path) => {
+                    setPaths([...paths, path]);
+                  }}
+                  onRemovePath={handleRemovePath}
+                  onShowOptions={() => setShowOptionsDialog(true)}
+                  onScan={handleScan}
+                  error={error}
+                  onClearError={() => setError(null)}
+                  currentWorkingDir={installationStatus.cwd || ''}
+                  installationStatus={installationStatus}
+                />
+              </Box>
+            </Fade>
+
+            <Fade in={activeTab === 1} unmountOnExit>
+              <Box>
+                {scanResults && (
+                  <ResultsTab
+                    scanResults={scanResults}
+                    onShowFilesDialog={() => setShowFilesDialog(true)}
+                  />
+                )}
+              </Box>
+            </Fade>
           </Box>
-        </Fade>
+        </Paper>
 
-        {/* Results Tab */}
-        <Fade in={activeTab === 1}>
-          <Box sx={{ display: activeTab === 1 ? 'block' : 'none', p: 4 }}>
-            {scanResults && (
-              <ResultsTab
-                scanResults={scanResults}
-                onShowFilesDialog={() => setShowFilesDialog(true)}
-              />
-            )}
-          </Box>
-        </Fade>
-      </Paper>
+        <AdvancedOptionsDialog
+          open={showOptionsDialog}
+          onClose={() => setShowOptionsDialog(false)}
+          scanOptions={scanOptions}
+          onOptionsChange={setScanOptions}
+        />
 
-      {/* Advanced Options Dialog */}
-      <AdvancedOptionsDialog
-        open={showOptionsDialog}
-        onClose={() => setShowOptionsDialog(false)}
-        scanOptions={scanOptions}
-        onOptionsChange={setScanOptions}
-      />
-
-      {/* Scanned Files Dialog */}
-      <ScannedFilesDialog
-        open={showFilesDialog}
-        onClose={() => setShowFilesDialog(false)}
-        scanResults={scanResults}
-        paths={paths}
-      />
-    </Container>
+        {scanResults && (
+          <ScannedFilesDialog
+            open={showFilesDialog}
+            onClose={() => setShowFilesDialog(false)}
+            scanResults={scanResults}
+            paths={paths}
+          />
+        )}
+      </Container>
+    </Box>
   );
 }
