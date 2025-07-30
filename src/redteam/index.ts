@@ -15,10 +15,8 @@ import { extractVariablesFromTemplates } from '../util/templates';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
-  FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
-  MEDICAL_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
   Severity,
