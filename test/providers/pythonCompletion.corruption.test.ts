@@ -51,10 +51,11 @@ def call_api(prompt, options, context):
     });
 
     const result = await provider.callApi('Test');
-    expect(result.raw_data.valid_unicode).toBe('Product® Plus™');
-    expect(result.raw_data.high_unicode).toBe('🚀 Emoji test');
-    expect(result.raw_data.chinese).toBe('中文测试');
-    expect(result.raw_data.mixed).toBe('Product® with 中文 and 🚀');
+    const resultAny = result as any;
+    expect(resultAny.raw_data.valid_unicode).toBe('Product® Plus™');
+    expect(resultAny.raw_data.high_unicode).toBe('🚀 Emoji test');
+    expect(resultAny.raw_data.chinese).toBe('中文测试');
+    expect(resultAny.raw_data.mixed).toBe('Product® with 中文 and 🚀');
   });
 
   it('should preserve Unicode through JSON roundtrip', async () => {
@@ -103,7 +104,7 @@ def call_api(prompt, options, context):
 
     const result = await provider.callApi('Test');
     expect(result.output).toBe('Product® Plus™ €100 25°C');
-    expect(result.debug.all_equal).toBe(true);
+    expect((result as any).debug.all_equal).toBe(true);
   });
 
   it('should handle binary data that looks like Unicode', async () => {
@@ -143,9 +144,10 @@ def call_api(prompt, options, context):
     });
 
     const result = await provider.callApi('Test');
+    const resultAny = result as any;
     expect(result.output).toBe('®');
-    expect(result.verify_roundtrip).toBe(true);
-    expect(result.encoding_methods.decoded_utf8).toBe('®');
+    expect(resultAny.verify_roundtrip).toBe(true);
+    expect(resultAny.encoding_methods.decoded_utf8).toBe('®');
   });
 
   it('should detect when ensure_ascii causes issues', async () => {
@@ -186,13 +188,14 @@ def call_api(prompt, options, context):
     });
 
     const result = await provider.callApi('Test');
-    expect(result.both_equal).toBe(true);
-    expect(result.original_preserved).toBe(true);
-    expect(result.ascii_parsed).toBe('Product® Plus™');
-    expect(result.utf8_parsed).toBe('Product® Plus™');
+    const resultAny = result as any;
+    expect(resultAny.both_equal).toBe(true);
+    expect(resultAny.original_preserved).toBe(true);
+    expect(resultAny.ascii_parsed).toBe('Product® Plus™');
+    expect(resultAny.utf8_parsed).toBe('Product® Plus™');
     // ASCII version should have escaped Unicode
-    expect(result.ascii_version).toContain('\\u');
+    expect(resultAny.ascii_version).toContain('\\u');
     // UTF-8 version should have actual Unicode characters
-    expect(result.utf8_version).toContain('®');
+    expect(resultAny.utf8_version).toContain('®');
   });
 });

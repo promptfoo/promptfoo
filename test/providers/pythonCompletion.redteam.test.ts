@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
+import type { CallApiContextParams } from '../../src/types';
 
 describe('PythonProvider red team Unicode scenarios', () => {
   let tempDir: string;
@@ -70,20 +71,21 @@ def call_api(prompt, options, context):
     ];
 
     for (const testCase of testCases) {
-      const context = {
+      const context: CallApiContextParams = {
+        prompt: { raw: 'Test red team scenario', label: 'test' },
         vars: {
           injection: testCase,
         },
       };
 
       const result = await provider.callApi('Test red team scenario', context);
-      
+
       // Verify the Unicode is preserved
       expect(result.output).toBe(`Processing request for ${testCase}`);
-      expect(result.metadata.original_injection).toBe(testCase);
-      expect(result.test_case.product).toBe(testCase);
-      expect(result.metadata.contains_unicode).toBe(true);
-      
+      expect(result.metadata?.original_injection).toBe(testCase);
+      expect((result as any).test_case.product).toBe(testCase);
+      expect(result.metadata?.contains_unicode).toBe(true);
+
       // Ensure no null bytes in the output
       const jsonStr = JSON.stringify(result);
       expect(jsonStr).not.toContain('\u0000');
@@ -145,21 +147,29 @@ def call_api(prompt, options, context):
     });
 
     // First turn
-    let conversation = { messages: [], metadata: {} };
-    const context1 = { vars: { conversation } };
+    const conversation = { messages: [], metadata: {} };
+    const context1: CallApiContextParams = {
+      prompt: { raw: 'Tell me about Product® Plus', label: 'test' },
+      vars: { conversation },
+    };
     const result1 = await provider.callApi('Tell me about Product® Plus', context1);
     expect(result1.output).toContain('Product® Plus is our premium offering');
-    expect(result1.conversation.metadata.products_mentioned).toContain('Product® Plus');
+    const result1Any = result1 as any;
+    expect(result1Any.conversation.metadata.products_mentioned).toContain('Product® Plus');
 
     // Second turn - pass the conversation from first turn
-    const context2 = { vars: { conversation: result1.conversation } };
+    const context2: CallApiContextParams = {
+      prompt: { raw: 'What about Brand™ features?', label: 'test' },
+      vars: { conversation: result1Any.conversation },
+    };
     const result2 = await provider.callApi('What about Brand™ features?', context2);
     expect(result2.output).toContain('Brand™ technology is cutting-edge');
-    expect(result2.turn_number).toBe(2);
+    const result2Any = result2 as any;
+    expect(result2Any.turn_number).toBe(2);
 
     // Verify conversation history maintains Unicode
-    expect(result2.conversation.messages[0].content).toBe('Tell me about Product® Plus');
-    expect(result2.conversation.messages[2].content).toBe('What about Brand™ features?');
+    expect(result2Any.conversation.messages[0].content).toBe('Tell me about Product® Plus');
+    expect(result2Any.conversation.messages[2].content).toBe('What about Brand™ features?');
   });
 
   it('should handle the exact corruption pattern from the bug report', async () => {
@@ -213,8 +223,9 @@ def call_api(prompt, options, context):
     // Test with clean input
     const cleanResult = await provider.callApi('Product® Plus');
     expect(cleanResult.output).toBe('Product® Plus');
-    expect(cleanResult.debug.input_had_corruption).toBe(false);
-    expect(cleanResult.debug.corruption_patterns.has_registered).toBe(true);
+    const cleanResultAny = cleanResult as any;
+    expect(cleanResultAny.debug.input_had_corruption).toBe(false);
+    expect(cleanResultAny.debug.corruption_patterns.has_registered).toBe(true);
 
     // The key insight: the corruption would come from the Node.js side
     // if JSON serialization isn't handling UTF-8 properly

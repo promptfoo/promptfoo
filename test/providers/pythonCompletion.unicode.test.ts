@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
+import type { CallApiContextParams } from '../../src/types';
 
 describe('PythonProvider Unicode handling', () => {
   let tempDir: string;
@@ -48,7 +49,10 @@ def call_api(prompt, options, context):
       { input: 'Price: €100', expected: 'Price: €100' },
       { input: 'Emoji test 🚀', expected: 'Emoji test 🚀' },
       { input: '中文测试', expected: '中文测试' },
-      { input: 'Mixed: Product® Brand™ ©2025 €100 25°C', expected: 'Mixed: Product® Brand™ ©2025 €100 25°C' },
+      {
+        input: 'Mixed: Product® Brand™ ©2025 €100 25°C',
+        expected: 'Mixed: Product® Brand™ ©2025 €100 25°C',
+      },
     ];
 
     for (const { input, expected } of testCases) {
@@ -80,7 +84,8 @@ def call_api(prompt, options, context):
       config: { basePath: tempDir },
     });
 
-    const context = {
+    const context: CallApiContextParams = {
+      prompt: { raw: 'Test prompt', label: 'test' },
       vars: {
         product: 'Product® Plus™',
         company: '© 2025 Company',
@@ -149,11 +154,14 @@ def call_api(prompt, options, context):
     });
 
     const result = await provider.callApi('Test');
-    expect(result.nested.products[0].name).toBe('Product®');
-    expect(result.nested.products[1].name).toBe('Brand™');
-    expect(result.nested.products[2].name).toBe('Item© 2025');
-    expect(result.nested.metadata.temperature).toBe('25°C');
-    expect(result.nested.metadata.description).toBe('Advanced Product® with Brand™ technology ©2025');
+    const resultAny = result as any;
+    expect(resultAny.nested.products[0].name).toBe('Product®');
+    expect(resultAny.nested.products[1].name).toBe('Brand™');
+    expect(resultAny.nested.products[2].name).toBe('Item© 2025');
+    expect(resultAny.nested.metadata.temperature).toBe('25°C');
+    expect(resultAny.nested.metadata.description).toBe(
+      'Advanced Product® with Brand™ technology ©2025',
+    );
   });
 
   it('should detect and report Unicode corruption', async () => {
@@ -184,6 +192,6 @@ def call_api(prompt, options, context):
     const result = await provider.callApi('Product® Plus');
     // The corrupted version should have null byte
     expect(result.output).toContain('\x00\xae');
-    expect(result.debug.original).toBe('Product® Plus');
+    expect((result as any).debug.original).toBe('Product® Plus');
   });
 });

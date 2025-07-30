@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
+import type { CallApiContextParams } from '../../src/types';
 
 describe('PythonProvider Unicode bug #5106 fix verification', () => {
   let tempDir: string;
@@ -60,7 +61,8 @@ def call_api(prompt, options, context):
     });
 
     // Test the exact case from the bug report
-    const context = {
+    const context: CallApiContextParams = {
+      prompt: { raw: 'Initial prompt', label: 'test' },
       vars: {
         injectedContent: 'Product® Plus',
       },
@@ -70,12 +72,14 @@ def call_api(prompt, options, context):
 
     // Verify no corruption occurred
     expect(result.output).toBe('Response to: Product® Plus');
-    expect(result.test_case.vars.product).toBe('Product® Plus');
-    expect(result.response.output).toBe('Model output about Product® Plus');
-    expect(result.grading_result.reason).toBe('Model responded to Product® Plus');
-    expect(result.metadata.product_name).toBe('Product® Plus');
-    expect(result.prompt).toBe('Tell me about Product® Plus');
-    expect(result.named_scores.contains_product).toBe(1.0);
+    // Check nested properties that Python added
+    const resultAny = result as any;
+    expect(resultAny.test_case.vars.product).toBe('Product® Plus');
+    expect(resultAny.response.output).toBe('Model output about Product® Plus');
+    expect(resultAny.grading_result.reason).toBe('Model responded to Product® Plus');
+    expect(result.metadata?.product_name).toBe('Product® Plus');
+    expect(resultAny.prompt).toBe('Tell me about Product® Plus');
+    expect(resultAny.named_scores.contains_product).toBe(1.0);
 
     // Most importantly: ensure no null bytes in the entire JSON
     const jsonStr = JSON.stringify(result);
@@ -116,16 +120,17 @@ def call_api(prompt, options, context):
     const result = await provider.callApi('Test');
 
     // Verify all symbols are preserved
-    expect(result.nested_data.products).toEqual([
+    const resultAny = result as any;
+    expect(resultAny.nested_data.products).toEqual([
       'Product® Plus',
       'Brand™ Solution',
       'Enterprise© 2025',
       'TempControl 25°C',
       'Price €1000',
     ]);
-    expect(result.nested_data.metadata.all_symbols).toBe('® ™ © ° €');
-    expect(result.nested_data.metadata.description).toBe(
-      'Product® with Brand™ technology ©2025 at 25°C for €1000'
+    expect(resultAny.nested_data.metadata.all_symbols).toBe('® ™ © ° €');
+    expect(resultAny.nested_data.metadata.description).toBe(
+      'Product® with Brand™ technology ©2025 at 25°C for €1000',
     );
   });
 });
