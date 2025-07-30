@@ -41,7 +41,7 @@ Create a file named `promptfooconfig.yaml`:
 prompts: file://code_generation_prompt.txt
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1
   - ollama:chat:llama3.3:70b
 
 tests:
