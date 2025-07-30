@@ -4,10 +4,10 @@ import {
   ALL_STRATEGIES,
   DEFAULT_STRATEGIES,
   FRAMEWORK_COMPLIANCE_IDS,
+  isCustomStrategy,
   MULTI_TURN_STRATEGIES,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
-  isCustomStrategy,
 } from '../../../src/redteam/constants/strategies';
 
 describe('strategies constants', () => {

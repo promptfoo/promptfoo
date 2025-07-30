@@ -1,15 +1,17 @@
-import * as fs from 'fs';
 import { createRequire } from 'node:module';
+import * as fs from 'fs';
 import * as path from 'path';
+
 import {
+  collectFileMetadata,
+  extractTextFromPDF,
   renderPrompt,
   resolveVariables,
   runExtensionHook,
-  extractTextFromPDF,
-  collectFileMetadata,
 } from '../src/evaluatorHelpers';
-import type { Prompt, TestSuite, ApiProvider, TestCase } from '../src/types';
 import { transform } from '../src/util/transform';
+
+import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -40,12 +42,16 @@ jest.mock('fs', () => ({
   },
 }));
 
-jest.mock('pdf-parse', () => ({
-  __esModule: true,
-  default: jest
-    .fn()
-    .mockImplementation((buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
-}));
+jest.mock(
+  'pdf-parse',
+  () => ({
+    __esModule: true,
+    default: jest
+      .fn()
+      .mockImplementation((buffer) => Promise.resolve({ text: 'Extracted PDF text' })),
+  }),
+  { virtual: true },
+);
 
 jest.mock('../src/esm');
 jest.mock('../src/database', () => ({

@@ -15,6 +15,7 @@ import {
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  MEDICAL_PLUGINS,
   PII_PLUGINS,
   type Plugin,
 } from '../redteam/constants/plugins';
@@ -25,9 +26,10 @@ import {
   type Strategy,
 } from '../redteam/constants/strategies';
 import { isCustomStrategy } from '../redteam/constants/strategies';
-import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
+
+import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 
 export const pluginOptions: string[] = [
   ...new Set([
@@ -53,8 +55,13 @@ export const RedteamPluginObjectSchema = z.object({
           });
         }
       }),
-      z.string().startsWith('file://', {
-        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      z.string().superRefine((val, ctx) => {
+        if (!val.startsWith('file://')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
+          });
+        }
       }),
     ])
     .describe('Name of the plugin'),
@@ -84,8 +91,13 @@ export const RedteamPluginSchema = z.union([
           });
         }
       }),
-      z.string().startsWith('file://', {
-        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      z.string().superRefine((val, ctx) => {
+        if (!val.startsWith('file://')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
+          });
+        }
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
@@ -284,6 +296,8 @@ export const RedteamConfigSchema = z
         expandCollection(Object.keys(HARM_PLUGINS), config, numTests, severity);
       } else if (id === 'pii') {
         expandCollection([...PII_PLUGINS], config, numTests, severity);
+      } else if (id === 'medical') {
+        expandCollection([...MEDICAL_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {
@@ -405,8 +419,7 @@ export const RedteamConfigSchema = z
   });
 
 // Ensure that schemas match their corresponding types
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function assert<T extends never>() {}
+function assert<_T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
 assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>>();

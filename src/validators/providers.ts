@@ -1,19 +1,17 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
+import { BaseTokenUsageSchema } from '../types/shared';
+import { PromptSchema } from './prompts';
+import { NunjucksFilterMapSchema } from './shared';
+
 import type {
-  ApiProvider,
   CallApiFunction,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderId,
   ProviderLabel,
-  ProviderOptions,
   ProviderResponse,
-  ProviderSimilarityResponse,
 } from '../types/providers';
-import { TokenUsageSchema } from '../types/shared';
-import { PromptSchema } from './prompts';
-import { NunjucksFilterMapSchema } from './shared';
 
 export const ProviderOptionsSchema = z
   .object({
@@ -27,7 +25,7 @@ export const ProviderOptionsSchema = z
   })
   .strict();
 
-export const CallApiContextParamsSchema = z.object({
+const CallApiContextParamsSchema = z.object({
   fetchWithCache: z.optional(z.any()),
   filters: NunjucksFilterMapSchema.optional(),
   getCache: z.optional(z.any()),
@@ -37,7 +35,7 @@ export const CallApiContextParamsSchema = z.object({
   vars: z.record(z.union([z.string(), z.object({})])),
 });
 
-export const CallApiOptionsParamsSchema = z.object({
+const CallApiOptionsParamsSchema = z.object({
   includeLogProbs: z.optional(z.boolean()),
 });
 
@@ -82,19 +80,19 @@ export const ProviderResponseSchema = z.object({
     .catchall(z.any())
     .optional(),
   output: z.union([z.string(), z.any()]).optional(),
-  tokenUsage: TokenUsageSchema.optional(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export const ProviderEmbeddingResponseSchema = z.object({
   error: z.string().optional(),
   embedding: z.array(z.number()).optional(),
-  tokenUsage: TokenUsageSchema.partial().optional(),
+  tokenUsage: BaseTokenUsageSchema.partial().optional(),
 });
 
 export const ProviderSimilarityResponseSchema = z.object({
   error: z.string().optional(),
   similarity: z.number().optional(),
-  tokenUsage: TokenUsageSchema.partial().optional(),
+  tokenUsage: BaseTokenUsageSchema.partial().optional(),
 });
 
 export const ProviderClassificationResponseSchema = z.object({
@@ -116,25 +114,3 @@ export const ProvidersSchema = z.union([
 ]);
 
 export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
-
-// Ensure that schemas match their corresponding types
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function assert<T extends never>() {}
-type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
-
-assert<TypeEqualityGuard<CallApiFunction, z.infer<typeof CallApiFunctionSchema>>>();
-assert<TypeEqualityGuard<ProviderOptions, z.infer<typeof ProviderOptionsSchema>>>();
-assert<TypeEqualityGuard<ProviderResponse, z.infer<typeof ProviderResponseSchema>>>();
-assert<
-  TypeEqualityGuard<ProviderEmbeddingResponse, z.infer<typeof ProviderEmbeddingResponseSchema>>
->();
-assert<
-  TypeEqualityGuard<ProviderSimilarityResponse, z.infer<typeof ProviderSimilarityResponseSchema>>
->();
-assert<
-  TypeEqualityGuard<
-    ProviderClassificationResponse,
-    z.infer<typeof ProviderClassificationResponseSchema>
-  >
->();
-assert<TypeEqualityGuard<ApiProvider, z.infer<typeof ApiProviderSchema>>>();

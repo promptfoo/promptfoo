@@ -1,13 +1,12 @@
-import chalk from 'chalk';
-import type { Command } from 'commander';
 import { createHash } from 'crypto';
-import dedent from 'dedent';
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import chalk from 'chalk';
+import dedent from 'dedent';
+import yaml from 'js-yaml';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
-import { synthesize } from '../';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
@@ -17,7 +16,6 @@ import logger from '../../logger';
 import { getProviderIds } from '../../providers';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
   getCloudDatabaseId,
@@ -28,16 +26,20 @@ import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
+import { synthesize } from '../';
 import type { Severity } from '../constants/metadata';
 import {
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
-  type Plugin,
   REDTEAM_MODEL,
+  type Plugin,
 } from '../constants/plugins';
 import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES } from '../constants/strategies';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import type { Command } from 'commander';
+
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import type {
   RedteamCliGenerateOptions,
   RedteamFileConfig,
@@ -288,7 +290,9 @@ export async function doGenerateRedteam(
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
       redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
-    testGenerationInstructions: redteamConfig?.testGenerationInstructions,
+    ...(redteamConfig?.testGenerationInstructions
+      ? { testGenerationInstructions: redteamConfig.testGenerationInstructions }
+      : {}),
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
@@ -303,7 +307,7 @@ export async function doGenerateRedteam(
 
   // Extract MCP tools information and add to purpose
   let enhancedPurpose = parsedConfig.data.purpose || '';
-  let augmentedTestGenerationInstructions = config.testGenerationInstructions || '';
+  let augmentedTestGenerationInstructions = config.testGenerationInstructions ?? '';
   try {
     const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
     if (mcpToolsInfo) {
@@ -413,20 +417,24 @@ export async function doGenerateRedteam(
     printBorder();
     const relativeOutputPath = path.relative(process.cwd(), options.output);
     logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
-    if (!options.inRedteamRun) {
-      // Provider cleanup step
-      try {
-        const provider = testSuite.providers[0] as ApiProvider;
-        if (provider && typeof provider.cleanup === 'function') {
-          const cleanupResult = provider.cleanup();
-          if (cleanupResult instanceof Promise) {
-            await cleanupResult;
-          }
-        }
-      } catch (cleanupErr) {
-        logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-      }
 
+    // Provider cleanup step. Note that this should always be run,
+    // since the providers are re-initialized when running the red team,
+    // hence it's safe and necessary to clean-up, particularly for MCP servers
+    try {
+      logger.debug('Cleaning up provider');
+      const provider = testSuite.providers[0] as ApiProvider;
+      if (provider && typeof provider.cleanup === 'function') {
+        const cleanupResult = provider.cleanup();
+        if (cleanupResult instanceof Promise) {
+          await cleanupResult;
+        }
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+    }
+
+    if (!options.inRedteamRun) {
       const commandPrefix = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
       logger.info(
         '\n' +

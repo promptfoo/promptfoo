@@ -1,8 +1,9 @@
+import * as fs from 'fs';
+
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import * as fs from 'fs';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
@@ -13,25 +14,26 @@ import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
 import { ALIASED_PLUGIN_MAPPINGS } from './constants/frameworks';
 import { riskCategorySeverityMap, Severity } from './constants/metadata';
-import type { StrategyExemptPlugin } from './constants/plugins';
 import {
+  BIAS_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   STRATEGY_EXEMPT_PLUGINS,
-  BIAS_PLUGINS,
+  type StrategyExemptPlugin,
 } from './constants/plugins';
 import { STRATEGY_COLLECTION_MAPPINGS, STRATEGY_COLLECTIONS } from './constants/strategies';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import { Plugins } from './plugins';
+import { normalizePluginName, Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
-import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 import { extractGoalFromPrompt, getShortPluginId } from './util';
+
+import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -261,9 +263,15 @@ async function applyStrategies(
       const loadedStrategy = await loadStrategy(strategy.id);
       strategyAction = loadedStrategy.action;
     } else {
-      // Handle custom strategy variants (e.g., custom:aggressive)
-      const baseStrategyId = strategy.id.includes(':') ? strategy.id.split(':')[0] : strategy.id;
-      const builtinStrategy = Strategies.find((s) => s.id === baseStrategyId);
+      // First try to find the exact strategy ID (e.g., jailbreak:composite)
+      let builtinStrategy = Strategies.find((s) => s.id === strategy.id);
+
+      // If not found, handle custom strategy variants (e.g., custom:aggressive)
+      if (!builtinStrategy && strategy.id.includes(':')) {
+        const baseStrategyId = strategy.id.split(':')[0];
+        builtinStrategy = Strategies.find((s) => s.id === baseStrategyId);
+      }
+
       if (!builtinStrategy) {
         logger.warn(`Strategy ${strategy.id} not registered, skipping`);
         continue;
@@ -633,7 +641,8 @@ export async function synthesize({
     if (Object.keys(categories).includes(plugin.id)) {
       return false;
     }
-    const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
+    const normalizedPluginId = normalizePluginName(plugin.id);
+    const registeredPlugin = Plugins.find((p) => p.key === normalizedPluginId);
 
     if (!registeredPlugin) {
       if (!plugin.id.startsWith('file://')) {
@@ -644,7 +653,7 @@ export async function synthesize({
         registeredPlugin.validate({
           language,
           modifiers: {
-            testGenerationInstructions,
+            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
             ...(plugin.config?.modifiers || {}),
           },
           ...resolvePluginConfig(plugin.config),
@@ -728,7 +737,8 @@ export async function synthesize({
     } else {
       logger.info(`Generating tests for ${plugin.id}...`);
     }
-    const { action } = Plugins.find((p) => p.key === plugin.id) || {};
+    const normalizedPluginId = normalizePluginName(plugin.id);
+    const { action } = Plugins.find((p) => p.key === normalizedPluginId) || {};
 
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);
@@ -741,7 +751,7 @@ export async function synthesize({
         config: {
           language,
           modifiers: {
-            testGenerationInstructions,
+            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
             ...(plugin.config?.modifiers || {}),
           },
           ...resolvePluginConfig(plugin.config),

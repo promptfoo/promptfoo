@@ -1,13 +1,13 @@
 import { fetchWithCache } from '../../../src/cache';
 import {
-  validateSizeForModel,
-  formatOutput,
-  prepareRequestBody,
   calculateImageCost,
   callOpenAiImageApi,
-  processApiResponse,
   DALLE2_COSTS,
   DALLE3_COSTS,
+  formatOutput,
+  prepareRequestBody,
+  processApiResponse,
+  validateSizeForModel,
 } from '../../../src/providers/openai/image';
 
 jest.mock('../../../src/cache', () => ({

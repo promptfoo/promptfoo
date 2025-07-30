@@ -1,24 +1,27 @@
 import { jest } from '@jest/globals';
-import type { Page } from 'playwright';
 import { BrowserProvider, createTransformResponse } from '../../src/providers/browser';
+import type { Page } from 'playwright';
 
 let mockPage: jest.Mocked<Page>;
+
+const mockBrowser = {
+  contexts: jest.fn(() => []),
+  newContext: jest.fn(() =>
+    Promise.resolve({
+      newPage: jest.fn(() => Promise.resolve(mockPage)),
+      addCookies: jest.fn(),
+      close: jest.fn(),
+    }),
+  ),
+  close: jest.fn(),
+};
 
 jest.mock('playwright-extra', () => ({
   chromium: {
     use: jest.fn(),
-    launch: jest.fn().mockImplementation(() =>
-      Promise.resolve({
-        newContext: jest.fn(() =>
-          Promise.resolve({
-            newPage: jest.fn(() => Promise.resolve(mockPage)),
-            addCookies: jest.fn(),
-            close: jest.fn(),
-          }),
-        ),
-        close: jest.fn(),
-      }),
-    ),
+    launch: jest.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
+    connectOverCDP: jest.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
+    connect: jest.fn().mockImplementation(() => Promise.resolve(mockBrowser)),
   },
 }));
 
@@ -38,6 +41,7 @@ describe('BrowserProvider', () => {
       $$eval: jest.fn(),
       content: jest.fn(),
       press: jest.fn(),
+      close: jest.fn(),
     } as unknown as jest.Mocked<Page>;
   });
 
@@ -353,6 +357,7 @@ describe('BrowserProvider', () => {
     });
 
     mockPage.waitForSelector.mockResolvedValue(null);
+    mockPage.content.mockResolvedValue('<html>page content</html>');
     const result = await provider.callApi('test');
     expect(result.output).toBeDefined();
   });
@@ -371,7 +376,83 @@ describe('BrowserProvider', () => {
 
     mockPage.content.mockResolvedValue('final-html');
     const result = await provider.callApi('test');
-    expect(result.output).toEqual({ output: undefined });
+    expect(result.output).toEqual('final-html');
+  });
+
+  it('should not double-wrap when transformResponse returns a full ProviderResponse', async () => {
+    const transformFn = jest.fn().mockReturnValue({
+      output: 'transformed output',
+      metadata: { custom: 'data' },
+      tokenUsage: { total: 100, prompt: 50, completion: 50 },
+    });
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
+        transformResponse: transformFn,
+      },
+    });
+
+    mockPage.content.mockResolvedValue('<html>test</html>');
+    const result = await provider.callApi('test');
+
+    expect(transformFn).toHaveBeenCalledWith({}, '<html>test</html>');
+    expect(result).toEqual({
+      output: 'transformed output',
+      metadata: { custom: 'data' },
+      tokenUsage: { total: 100, prompt: 50, completion: 50 },
+    });
+  });
+
+  it('should wrap raw string values from transformResponse', async () => {
+    const transformFn = jest.fn().mockReturnValue('just a string');
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
+        transformResponse: transformFn,
+      },
+    });
+
+    mockPage.content.mockResolvedValue('<html>test</html>');
+    const result = await provider.callApi('test');
+
+    expect(result).toEqual({
+      output: 'just a string',
+    });
+  });
+
+  it('should wrap raw array values from transformResponse', async () => {
+    const transformFn = jest.fn().mockReturnValue(['item1', 'item2']);
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
+        transformResponse: transformFn,
+      },
+    });
+
+    mockPage.content.mockResolvedValue('<html>test</html>');
+    const result = await provider.callApi('test');
+
+    expect(result).toEqual({
+      output: ['item1', 'item2'],
+    });
   });
 });
 
@@ -391,6 +472,265 @@ describe('createTransformResponse', () => {
   it('should default to returning finalHtml', () => {
     const tr = createTransformResponse(undefined);
     const result = tr({}, 'baz');
-    expect(result).toEqual({ output: undefined });
+    expect(result).toEqual({ output: 'baz' });
+  });
+});
+
+describe('BrowserProvider - Connect to Existing Session', () => {
+  let mockFetch: ReturnType<typeof jest.spyOn>;
+
+  beforeEach(() => {
+    mockFetch = jest.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        json: () => Promise.resolve({ Browser: 'Chrome/120.0.0.0' }),
+      } as Response),
+    );
+  });
+
+  afterEach(() => {
+    mockFetch.mockRestore();
+  });
+
+  it('should connect via CDP when configured', async () => {
+    const { chromium } = await import('playwright-extra');
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
+      },
+    });
+
+    await provider.callApi('test');
+
+    expect(chromium.connectOverCDP).toHaveBeenCalledWith('http://localhost:9222');
+  });
+
+  it('should connect via WebSocket when configured', async () => {
+    const { chromium } = await import('playwright-extra');
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          mode: 'websocket',
+          wsEndpoint: 'ws://localhost:9222/devtools/browser/123',
+        },
+        steps: [],
+      },
+    });
+
+    await provider.callApi('test');
+
+    expect(chromium.connect).toHaveBeenCalledWith({
+      wsEndpoint: 'ws://localhost:9222/devtools/browser/123',
+    });
+  });
+
+  it('should use existing context when connecting to existing browser', async () => {
+    const mockPage = {
+      goto: jest.fn(),
+      content: jest.fn(() => Promise.resolve('<html></html>')),
+      click: jest.fn(),
+      type: jest.fn(),
+      waitForSelector: jest.fn(),
+      $$: jest.fn(),
+      screenshot: jest.fn(),
+      waitForTimeout: jest.fn(),
+      close: jest.fn(),
+    };
+
+    const mockContext = {
+      newPage: jest.fn(() => Promise.resolve(mockPage)),
+      addCookies: jest.fn(),
+      close: jest.fn(),
+    };
+
+    const mockExistingBrowser = {
+      contexts: jest.fn(() => [
+        {
+          newPage: jest.fn(() => Promise.resolve(mockPage)),
+          addCookies: jest.fn(),
+          close: jest.fn(),
+        },
+      ]),
+      newContext: jest.fn(() => Promise.resolve(mockContext)),
+      close: jest.fn(),
+    };
+
+    const playwrightExtra = await import('playwright-extra');
+    jest
+      .mocked(playwrightExtra.chromium.connectOverCDP)
+      .mockResolvedValueOnce(mockExistingBrowser as any);
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
+
+    await provider.callApi('test');
+
+    expect(mockExistingBrowser.contexts).toHaveBeenCalled();
+    expect(mockExistingBrowser.newContext).not.toHaveBeenCalled();
+  });
+
+  it('should not close browser when connected to existing session', async () => {
+    const { chromium } = await import('playwright-extra');
+    const mockCloseFn = jest.fn();
+    const mockPageClose = jest.fn();
+
+    const mockConnectedBrowser = {
+      contexts: jest.fn(() => [
+        {
+          newPage: jest.fn(() =>
+            Promise.resolve({
+              goto: jest.fn(),
+              content: jest.fn(),
+              close: mockPageClose,
+            }),
+          ),
+          addCookies: jest.fn(),
+          close: jest.fn(),
+        },
+      ]),
+      newContext: jest.fn(),
+      close: mockCloseFn,
+    };
+
+    (chromium.connectOverCDP as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve(mockConnectedBrowser),
+    );
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
+
+    await provider.callApi('test');
+
+    expect(mockPageClose).toHaveBeenCalled();
+    expect(mockCloseFn).not.toHaveBeenCalled();
+  });
+
+  it('should handle connection failures gracefully', async () => {
+    mockFetch.mockRejectedValue(new Error('Connection refused'));
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('Cannot connect to Chrome');
+    expect(result.error).toContain('--remote-debugging-port=9222');
+  });
+
+  it('should handle 404 error when Chrome debugging port is not available', async () => {
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        json: () => Promise.reject(new Error('Not Found')),
+      } as Response),
+    );
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('Cannot connect to Chrome');
+    expect(result.error).toContain('--remote-debugging-port=9222');
+  });
+
+  it('should handle 500 server error from Chrome debugging port', async () => {
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: () => Promise.reject(new Error('Server Error')),
+      } as Response),
+    );
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('Cannot connect to Chrome');
+  });
+
+  it('should handle network timeouts when connecting to Chrome', async () => {
+    // Simulate timeout
+    const timeoutError = new Error('Request timed out after 5000ms');
+    mockFetch.mockRejectedValue(timeoutError);
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('Cannot connect to Chrome');
+    // The error will be wrapped in the standard Chrome connection error message
+    expect(result.error).toContain('Make sure Chrome is running');
+  });
+
+  it('should handle ECONNREFUSED errors specifically', async () => {
+    const connError = new Error('connect ECONNREFUSED 127.0.0.1:9222');
+    (connError as any).code = 'ECONNREFUSED';
+    mockFetch.mockRejectedValue(connError);
+
+    const provider = new BrowserProvider('test', {
+      config: {
+        connectOptions: {
+          debuggingPort: 9222,
+        },
+        steps: [],
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('Cannot connect to Chrome');
+    expect(result.error).toContain('Make sure Chrome is running');
   });
 });

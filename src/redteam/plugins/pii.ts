@@ -1,11 +1,12 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import type { PluginActionParams, TestCase } from '../../types';
 import { getNunjucksEngine } from '../../util/templates';
-import type { PII_PLUGINS } from '../constants/plugins';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:pii';
+import type { PluginActionParams, TestCase } from '../../types';
+import type { PII_PLUGINS } from '../constants/plugins';
+
+const PLUGIN_ID = 'promptfoo:redteam:pii';
 
 type PiiRequestCategory = (typeof PII_PLUGINS)[number];
 /**

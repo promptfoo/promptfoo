@@ -4,14 +4,16 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
 import invariant from '../../util/invariant';
-import type { HarmPlugin } from '../constants/plugins';
 import {
+  BIAS_PLUGINS,
+  LEGACY_DATASET_PLUGINS,
+  PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
+  type HarmPlugin,
+  type LegacyDatasetPlugin,
 } from '../constants/plugins';
-import { BIAS_PLUGINS, PII_PLUGINS } from '../constants/plugins';
 import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
@@ -49,6 +51,19 @@ import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
 
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+
+/**
+ * Normalizes plugin names to handle backwards compatibility with dataset plugins.
+ * Converts legacy dataset plugin names (e.g., 'beavertails') to new format (e.g., 'dataset:beavertails')
+ */
+export function normalizePluginName(pluginName: string): string {
+  if (LEGACY_DATASET_PLUGINS.includes(pluginName as LegacyDatasetPlugin)) {
+    return `dataset:${pluginName}`;
+  }
+  return pluginName;
+}
+
 export interface PluginFactory {
   key: string;
   validate?: (config: PluginConfig) => void;
@@ -67,7 +82,7 @@ async function fetchRemoteTestCases(
   purpose: string,
   injectVar: string,
   n: number,
-  config?: PluginConfig,
+  config: PluginConfig,
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -121,7 +136,7 @@ function createPluginFactory<T extends PluginConfig>(
         logger.debug(`Using local redteam generation for ${key}`);
         return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
       }
-      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config ?? {});
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
@@ -217,7 +232,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.purpose,
         params.injectVar,
         params.n,
-        params.config,
+        params.config ?? {},
       );
       return testCases.map((testCase) => ({
         ...testCase,
@@ -251,6 +266,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.purpose,
       params.injectVar,
       params.n,
+      params.config ?? {},
     );
     return testCases.map((testCase) => ({
       ...testCase,
@@ -273,7 +289,13 @@ function createRemotePlugin<T extends PluginConfig>(
       if (neverGenerateRemote()) {
         throw new Error(`${key} plugin requires remote generation to be enabled`);
       }
-      const testCases: TestCase[] = await fetchRemoteTestCases(key, purpose, injectVar, n, config);
+      const testCases: TestCase[] = await fetchRemoteTestCases(
+        key,
+        purpose,
+        injectVar,
+        n,
+        config ?? {},
+      );
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,
         metadata: {

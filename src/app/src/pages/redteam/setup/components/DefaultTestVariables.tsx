@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -48,7 +48,7 @@ export default function DefaultTestVariables() {
     });
     isUpdatingFromLocal.current = true; // Mark that we're updating from local state
     updateConfig('defaultTest', { ...config.defaultTest, vars });
-  }, [variables, config.defaultTest, updateConfig]);
+  }, [variables, updateConfig]);
 
   // Validate variable names for duplicates
   const validateVariableNames = useCallback((updatedVariables: Variable[]) => {
@@ -125,87 +125,80 @@ export default function DefaultTestVariables() {
   }, [syncToGlobalState]);
 
   return (
-    <>
-      <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-        Test Variables
-      </Typography>
-
-      <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        <Box sx={{ mb: 3 }}>
-          <Box display="flex" alignItems="flex-start" justifyContent="space-between" mb={2}>
-            <Typography
-              variant="body1"
-              color="text.secondary"
-              sx={{ maxWidth: '70%', lineHeight: 1.6 }}
-            >
-              Set default variables that will be available across all test cases. Useful for
-              parameterizing endpoints, API keys, language codes, etc.
-            </Typography>
-            <Button
-              size="small"
-              startIcon={<AddIcon />}
-              onClick={addVariable}
-              variant="outlined"
-              sx={{ flexShrink: 0, ml: 2 }}
-            >
-              Add Variable
-            </Button>
-          </Box>
+    <Box>
+      <Box display="flex" alignItems="flex-start" justifyContent="space-between" mb={3}>
+        <Box sx={{ flex: 1, mr: 2 }}>
+          <Typography variant="subtitle1" gutterBottom fontWeight="medium">
+            Test Variables
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+            Set default variables that will be available across all test cases. Useful for
+            parameterizing endpoints, API keys, language codes, etc.
+          </Typography>
         </Box>
+        <Button
+          size="small"
+          startIcon={<AddIcon />}
+          onClick={addVariable}
+          variant="outlined"
+          sx={{ flexShrink: 0 }}
+        >
+          Add Variable
+        </Button>
+      </Box>
 
-        {variables.length > 0 ? (
-          <Stack spacing={2.5}>
-            {variables.map((variable) => (
-              <Box key={variable.id} display="flex" gap={2} alignItems="flex-start">
-                <TextField
-                  size="small"
-                  label="Variable name"
-                  value={variable.name}
-                  onChange={(e) => updateVariableName(variable.id, e.target.value)}
-                  error={!!variable.nameError}
-                  helperText={variable.nameError}
-                  sx={{ minWidth: 200 }}
-                />
-                <TextField
-                  size="small"
-                  label="Value"
-                  value={variable.value}
-                  onChange={(e) => updateVariableValue(variable.id, e.target.value)}
-                  sx={{ flexGrow: 1 }}
-                />
-                <IconButton
-                  onClick={() => removeVariable(variable.id)}
-                  size="small"
-                  color="error"
-                  aria-label={`Delete variable ${variable.name}`}
-                  sx={{ ml: 1, mt: 1 }}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Box>
-            ))}
-          </Stack>
-        ) : (
-          <Box
-            sx={{
-              textAlign: 'center',
-              py: 6,
-              px: 3,
-              borderRadius: 2,
-              bgcolor: 'grey.50',
-              border: '1px dashed',
-              borderColor: 'grey.300',
-            }}
-          >
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              No test variables configured
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Optional variables that will be added to every test case
-            </Typography>
-          </Box>
-        )}
-      </Paper>
-    </>
+      {variables.length > 0 ? (
+        <Stack spacing={2.5}>
+          {variables.map((variable) => (
+            <Box key={variable.id} display="flex" gap={2} alignItems="flex-start">
+              <TextField
+                size="small"
+                label="Variable name"
+                value={variable.name}
+                onChange={(e) => updateVariableName(variable.id, e.target.value)}
+                error={!!variable.nameError}
+                helperText={variable.nameError}
+                sx={{ minWidth: 200 }}
+              />
+              <TextField
+                size="small"
+                label="Value"
+                value={variable.value}
+                onChange={(e) => updateVariableValue(variable.id, e.target.value)}
+                sx={{ flexGrow: 1 }}
+              />
+              <IconButton
+                onClick={() => removeVariable(variable.id)}
+                size="small"
+                color="error"
+                aria-label={`Delete variable ${variable.name}`}
+                sx={{ ml: 1, mt: 1 }}
+              >
+                <DeleteIcon />
+              </IconButton>
+            </Box>
+          ))}
+        </Stack>
+      ) : (
+        <Box
+          sx={{
+            textAlign: 'center',
+            py: 4,
+            px: 3,
+            borderRadius: 2,
+            bgcolor: 'action.hover',
+            border: '1px dashed',
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            No test variables configured
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Click "Add Variable" to get started
+          </Typography>
+        </Box>
+      )}
+    </Box>
   );
 }

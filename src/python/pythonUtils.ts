@@ -1,12 +1,13 @@
 ﻿import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { Options as PythonShellOptions } from 'python-shell';
+
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { execAsync } from './execAsync';
+import type { Options as PythonShellOptions } from 'python-shell';
 
 export const state: {
   cachedPythonPath: string | null;
@@ -70,7 +71,7 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
   }
 
   // Start new validation and store the promise to prevent concurrent validations
-  state.validationPromise = (async () => {
+  const validationPromise = (async () => {
     try {
       const primaryPath = await tryPath(pythonPath);
       if (primaryPath) {
@@ -104,7 +105,8 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
     }
   })();
 
-  return state.validationPromise;
+  state.validationPromise = validationPromise;
+  return validationPromise;
 }
 
 /**

@@ -2,12 +2,12 @@ import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import {
-  ResultFailureReason,
+  type ApiProvider,
   type AtomicTestCase,
   type EvaluateResult,
   type Prompt,
   type ProviderOptions,
-  type ApiProvider,
+  ResultFailureReason,
 } from '../../src/types';
 
 describe('EvalResult', () => {
@@ -324,6 +324,109 @@ describe('EvalResult', () => {
           },
         }),
       );
+    });
+  });
+
+  describe('pluginId', () => {
+    it('should set pluginId from testCase metadata', () => {
+      const testCaseWithPluginId: AtomicTestCase = {
+        ...mockTestCase,
+        metadata: {
+          pluginId: 'test-plugin-123',
+        },
+      };
+
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: testCaseWithPluginId,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.pluginId).toBe('test-plugin-123');
+    });
+
+    it('should set pluginId to undefined when metadata is missing', () => {
+      const testCaseWithoutMetadata: AtomicTestCase = {
+        ...mockTestCase,
+        metadata: undefined,
+      };
+
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: testCaseWithoutMetadata,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.pluginId).toBeUndefined();
+    });
+
+    it('should set pluginId to undefined when pluginId is not in metadata', () => {
+      const testCaseWithOtherMetadata: AtomicTestCase = {
+        ...mockTestCase,
+        metadata: {
+          otherField: 'value',
+        },
+      };
+
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: testCaseWithOtherMetadata,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.pluginId).toBeUndefined();
+    });
+
+    it('should preserve pluginId when created from EvaluateResult', async () => {
+      const testCaseWithPluginId: AtomicTestCase = {
+        ...mockTestCase,
+        metadata: {
+          pluginId: 'eval-result-plugin',
+        },
+      };
+
+      const evaluateResultWithPlugin: EvaluateResult = {
+        ...mockEvaluateResult,
+        testCase: testCaseWithPluginId,
+      };
+
+      const result = await EvalResult.createFromEvaluateResult(
+        'test-eval-id',
+        evaluateResultWithPlugin,
+        { persist: false },
+      );
+
+      expect(result.pluginId).toBe('eval-result-plugin');
     });
   });
 });

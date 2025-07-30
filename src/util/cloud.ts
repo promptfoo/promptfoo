@@ -4,10 +4,11 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import type { Severity } from '../redteam/constants/metadata';
 import type { Plugin } from '../redteam/constants/plugins';
-import type { UnifiedConfig } from '../types';
-import type { ProviderOptions } from '../types/providers';
 import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
+
+import type { UnifiedConfig } from '../types';
+import type { ProviderOptions } from '../types/providers';
 
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();

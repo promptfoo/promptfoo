@@ -2,7 +2,6 @@ import { AegisGrader } from './plugins/aegis';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
 import { MemoryPoisoningPluginGrader } from './plugins/agentic/memoryPoisoning';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
-import type { RedteamGraderBase } from './plugins/base';
 import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
 import { BiasGrader } from './plugins/bias';
@@ -71,6 +70,8 @@ import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
+
+import type { RedteamGraderBase } from './plugins/base';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {

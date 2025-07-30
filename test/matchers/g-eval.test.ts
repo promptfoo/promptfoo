@@ -134,6 +134,7 @@ describe('matchesGEval', () => {
       completion: 12,
       cached: 0,
       completionDetails: expect.any(Object),
+      numRequests: 0,
     });
   });
 });

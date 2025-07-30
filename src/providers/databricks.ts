@@ -1,6 +1,7 @@
 import { getEnvString } from '../envars';
-import type { ProviderOptions } from '../types/providers';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+
+import type { ProviderOptions } from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 /**
@@ -108,6 +109,3 @@ export class DatabricksMosaicAiChatCompletionProvider extends OpenAiChatCompleti
     return super.getApiUrl();
   }
 }
-
-// Export for backward compatibility
-export { DatabricksMosaicAiChatCompletionProvider as DatabricksProvider };

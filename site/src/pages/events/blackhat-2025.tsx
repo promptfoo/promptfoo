@@ -7,6 +7,7 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import SecurityIcon from '@mui/icons-material/Security';
 import SpeedIcon from '@mui/icons-material/Speed';
 import Layout from '@theme/Layout';
+import { SITE_CONSTANTS } from '../../constants';
 import styles from './blackhat-2025.module.css';
 
 export default function BlackHat2025(): JSX.Element {
@@ -83,7 +84,9 @@ export default function BlackHat2025(): JSX.Element {
               <h1 className={styles.heroTitle}>
                 Security for AI used by
                 <br />
-                <span className={styles.highlight}>100,000 Developers</span>
+                <span className={styles.highlight}>
+                  {SITE_CONSTANTS.USER_COUNT_DISPLAY} Developers
+                </span>
               </h1>
               <p className={styles.heroSubtitle}>
                 Join us at Black Hat USA to see how Promptfoo helps security teams find and fix LLM
@@ -162,27 +165,6 @@ export default function BlackHat2025(): JSX.Element {
                 </div>
               </div>
               <div className={styles.eventDetails} style={{ marginTop: '1rem' }}>
-                <div className={styles.detail}>
-                  <svg
-                    className={styles.icon}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
-                    />
-                  </svg>
-                  <Link
-                    to="https://www.blackhat.com/us-25/ai-summit.html"
-                    style={{ fontWeight: 'bold', color: '#ff6b6b' }}
-                  >
-                    AI Summit Speaker - Aug 6
-                  </Link>
-                </div>
                 <div className={styles.detail}>
                   <svg
                     className={styles.icon}

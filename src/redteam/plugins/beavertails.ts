@@ -1,12 +1,13 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
+import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+
 export const PLUGIN_ID = 'promptfoo:redteam:dataset:beavertails';
 
-export const DATASETS = [
+const DATASETS = [
   // 'huggingface://datasets/PKU-Alignment/BeaverTails-Evaluation',
   'huggingface://datasets/PKU-Alignment/BeaverTails?split=330k_train',
 ];

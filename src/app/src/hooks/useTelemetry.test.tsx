@@ -1,6 +1,6 @@
-import { renderHook, act } from '@testing-library/react';
 import { usePostHog } from '@app/components/PostHogContext';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTelemetry } from './useTelemetry';
 
 vi.mock('@app/components/PostHogContext', () => ({

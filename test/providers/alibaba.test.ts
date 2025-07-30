@@ -5,6 +5,7 @@ import {
 } from '../../src/providers/alibaba';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+
 import type { ProviderOptions } from '../../src/types';
 
 jest.mock('../../src/logger');

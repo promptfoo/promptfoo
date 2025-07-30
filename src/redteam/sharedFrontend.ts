@@ -1,7 +1,7 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
+
 import type { UnifiedConfig, Vars } from '../types';
-import type { Severity } from './constants/metadata';
-import { riskCategorySeverityMap } from './constants/metadata';
+import { riskCategorySeverityMap, type Severity } from './constants/metadata';
 import { type Plugin } from './constants/plugins';
 import { MULTI_TURN_STRATEGIES } from './constants/strategies';
 import type { RedteamPluginObject, SavedRedteamConfig } from './types';

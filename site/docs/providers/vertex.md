@@ -13,7 +13,6 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 - `vertex:gemini-2.5-pro` - Latest stable Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding (2M context)
 - `vertex:gemini-2.5-flash` - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Most cost-efficient and fastest 2.5 model yet, optimized for high-volume, latency-sensitive tasks
-- `vertex:gemini-2.5-flash-preview-04-17` - Previous Flash preview with thinking capabilities for enhanced reasoning
 - `vertex:gemini-2.0-pro` - Strongest model quality, especially for code & world knowledge with 2M context window
 - `vertex:gemini-2.0-flash-thinking-exp` - Enhanced reasoning capabilities with thinking process in responses
 - `vertex:gemini-2.0-flash-001` - Workhorse model for all daily tasks with strong overall performance and real-time streaming
@@ -28,7 +27,6 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 Anthropic's Claude models are available with the following versions:
 
 - `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
-- `vertex:claude-3-sonnet@20240229` - Claude 3 Sonnet
 - `vertex:claude-3-opus@20240229` - Claude 3 Opus (Public Preview)
 - `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku
 - `vertex:claude-3-5-sonnet-v2@20241022` - Claude 3.5 Sonnet
@@ -190,6 +188,8 @@ For quick testing, you can use a temporary access token:
 ```bash
 # Get a temporary access token
 export VERTEX_API_KEY=$(gcloud auth print-access-token)
+# or use GEMINI_API_KEY
+export GEMINI_API_KEY=$(gcloud auth print-access-token)
 export VERTEX_PROJECT_ID="your-project-id"
 ```
 
@@ -205,6 +205,8 @@ VERTEX_PROJECT_ID=your-project-id
 VERTEX_REGION=us-central1
 # Optional: For direct API key authentication
 VERTEX_API_KEY=your-access-token
+# or
+GEMINI_API_KEY=your-access-token
 ```
 
 Remember to add `.env` to your `.gitignore` file to prevent accidentally committing sensitive information.
@@ -220,12 +222,13 @@ The following environment variables can be used to configure the Vertex AI provi
 | `VERTEX_PROJECT_ID`              | Your Google Cloud project ID                             | None           | Yes      |
 | `VERTEX_REGION`                  | The region for Vertex AI resources                       | `us-central1`  | No       |
 | `VERTEX_API_KEY`                 | Direct API token (from `gcloud auth print-access-token`) | None           | No\*     |
+| `GEMINI_API_KEY`                 | Alternative to VERTEX_API_KEY for API authentication     | None           | No\*     |
 | `VERTEX_PUBLISHER`               | Model publisher                                          | `google`       | No       |
 | `VERTEX_API_HOST`                | Override API host (e.g., for proxy)                      | Auto-generated | No       |
 | `VERTEX_API_VERSION`             | API version                                              | `v1`           | No       |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials                      | None           | No\*     |
 
-\*At least one authentication method is required (ADC, service account, or API key)
+\*At least one authentication method is required (ADC, service account, or API key via VERTEX_API_KEY/GEMINI_API_KEY)
 
 ### Region Selection
 
@@ -328,8 +331,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: google-github-actions/auth@v1
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
       - name: Run promptfoo tests
@@ -644,7 +647,7 @@ For models that support thinking capabilities (like Gemini 2.5 Flash), you can c
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-flash-preview-04-17
+  - id: vertex:gemini-2.5-flash
     config:
       generationConfig:
         temperature: 0.7
@@ -688,7 +691,7 @@ You can combine Search grounding with thinking capabilities for better reasoning
 
 ```yaml
 providers:
-  - id: vertex:gemini-2.5-flash-preview-04-17
+  - id: vertex:gemini-2.5-flash
     config:
       generationConfig:
         thinkingConfig:

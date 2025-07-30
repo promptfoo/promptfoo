@@ -1,29 +1,37 @@
 import React from 'react';
+
 import Box from '@mui/material/Box';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
-import type { SelectChangeEvent } from '@mui/material/Select';
 import Select from '@mui/material/Select';
+import { useTableStore } from './store';
+import type { SelectChangeEvent } from '@mui/material/Select';
 
-interface MetricFilterSelectorProps {
-  selectedMetric: string | null;
-  availableMetrics: string[];
-  onChange: (metric: string | null) => void;
-}
+export const MetricFilterSelector: React.FC<{}> = () => {
+  const { filters, addFilter, resetFilters } = useTableStore();
+  const availableMetrics = filters.options.metric;
 
-export const MetricFilterSelector: React.FC<MetricFilterSelectorProps> = ({
-  selectedMetric,
-  availableMetrics,
-  onChange,
-}) => {
-  if (availableMetrics.length === 0) {
-    return null;
-  }
+  const handleChange = React.useCallback(
+    (event: SelectChangeEvent) => {
+      const value = event.target.value;
 
-  const handleChange = (event: SelectChangeEvent) => {
-    onChange(event.target.value === '' ? null : event.target.value);
-  };
+      // Always reset any existing filters.
+      resetFilters();
+
+      if (value) {
+        addFilter({
+          type: 'metric',
+          operator: 'equals',
+          value,
+        });
+      }
+    },
+    [addFilter, resetFilters],
+  );
+
+  const selectedMetric =
+    Object.keys(filters.values).length > 0 ? Object.values(filters.values)[0].value : null;
 
   return (
     <Box>
@@ -32,7 +40,7 @@ export const MetricFilterSelector: React.FC<MetricFilterSelectorProps> = ({
         <Select
           labelId="metric-filter-label"
           id="metric-filter-select"
-          value={selectedMetric || ''}
+          value={selectedMetric ?? ''}
           onChange={handleChange}
           label="Filter by Metric"
         >

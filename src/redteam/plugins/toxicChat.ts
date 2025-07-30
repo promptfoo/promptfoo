@@ -1,7 +1,8 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
-import type { Assertion, TestCase } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
+
+import type { Assertion, TestCase } from '../../types';
 
 export const PLUGIN_ID = 'promptfoo:redteam:dataset:toxic-chat';
 
