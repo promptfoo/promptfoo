@@ -186,7 +186,9 @@ async function interpolateAssertionProperties(
   if (Array.isArray(assertion)) {
     // Handle array of assertions
     return Promise.all(
-      assertion.map((a) => interpolateAssertionProperties(a, vars) as Promise<Assertion | AssertionSet>),
+      assertion.map(
+        (a) => interpolateAssertionProperties(a, vars) as Promise<Assertion | AssertionSet>,
+      ),
     );
   }
 
