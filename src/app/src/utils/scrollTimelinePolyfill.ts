@@ -30,9 +30,9 @@ export async function loadScrollTimelinePolyfill(): Promise<void> {
   try {
     // Dynamically import the polyfill only when needed
     // Vite will handle code splitting automatically
-    // @ts-ignore - This is a third-party polyfill without types
+    // @ts-expect-error - This is a third-party polyfill without types
     await import(
-      /* @vite-ignore */
+      /* @vite-ignore - Dynamic path resolution at runtime for third-party polyfill */
       '../polyfills/scroll-timeline.js'
     );
     console.debug('Scroll-timeline polyfill loaded successfully');
