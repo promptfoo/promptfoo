@@ -48,6 +48,8 @@ import type { RedteamStrategy } from '@promptfoo/types';
 import type { Config, RedteamUITarget } from './types';
 import './page.css';
 
+import TargetsWithPageWrapper from './components/Targets/TargetsWithPageWrapper';
+
 const StyledTabs = styled(Tabs)(({ theme }) => ({
   '& .MuiTabs-indicator': {
     left: 0,
@@ -129,6 +131,7 @@ function CustomTabPanel(props: TabPanelProps) {
       hidden={value !== index}
       id={`vertical-tabpanel-${index}`}
       aria-labelledby={`vertical-tab-${index}`}
+      sx={{ padding: 0 }}
       {...other}
     >
       {value === index && children}
@@ -185,7 +188,6 @@ const TabContent = styled(Box)(({ theme }) => ({
   flexGrow: 1,
   display: 'flex',
   flexDirection: 'column',
-  padding: '24px',
   position: 'relative',
   transition: theme.transitions.create('margin', {
     easing: theme.transitions.easing.sharp,
@@ -681,7 +683,11 @@ export default function RedTeamSetupPage() {
         <TabContent>
           <CustomTabPanel value={value} index={0}>
             <ErrorBoundary name="Targets Page">
-              <Targets onNext={handleNext} onBack={handleBack} setupModalOpen={setupModalOpen} />
+              <TargetsWithPageWrapper
+                onNext={handleNext}
+                onBack={handleBack}
+                setupModalOpen={setupModalOpen}
+              />
             </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>

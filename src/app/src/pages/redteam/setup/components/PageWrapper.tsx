@@ -1,0 +1,180 @@
+import React, { useEffect, useRef, useState } from 'react';
+
+import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import { alpha, styled } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
+
+interface PageWrapperProps {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  onNext?: () => void;
+  onBack?: () => void;
+  nextLabel?: string;
+  backLabel?: string;
+  showNext?: boolean;
+  showBack?: boolean;
+  nextDisabled?: boolean;
+  backDisabled?: boolean;
+}
+
+const Root = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
+  width: '100%',
+  overflow: 'hidden',
+}));
+
+const HeaderContainer = styled(Box, {
+  shouldForwardProp: (prop) => prop !== 'isMinimized',
+})<{ isMinimized: boolean }>(({ theme, isMinimized }) => ({
+  position: 'sticky',
+  top: 0,
+  zIndex: 10,
+  backgroundColor: alpha(theme.palette.background.default, 0.95),
+  backdropFilter: 'blur(8px)',
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  padding: theme.spacing(isMinimized ? 1.5 : 3, 3),
+  transition: theme.transitions.create(['padding'], {
+    duration: theme.transitions.duration.short,
+    easing: theme.transitions.easing.easeInOut,
+  }),
+}));
+
+const TitleTypography = styled(Typography, {
+  shouldForwardProp: (prop) => prop !== 'isMinimized',
+})<{ isMinimized: boolean }>(({ theme, isMinimized }) => ({
+  fontSize: isMinimized ? '1.25rem' : '2rem',
+  fontWeight: 600,
+  color: theme.palette.text.primary,
+  transition: theme.transitions.create(['font-size'], {
+    duration: theme.transitions.duration.short,
+    easing: theme.transitions.easing.easeInOut,
+  }),
+  marginBottom: isMinimized ? 0 : theme.spacing(1),
+}));
+
+const DescriptionTypography = styled(Typography, {
+  shouldForwardProp: (prop) => prop !== 'isVisible',
+})<{ isVisible: boolean }>(({ theme, isVisible }) => ({
+  fontSize: '1rem',
+  color: theme.palette.text.secondary,
+  opacity: isVisible ? 1 : 0,
+  maxHeight: isVisible ? '100px' : 0,
+  overflow: 'hidden',
+  transition: theme.transitions.create(['opacity', 'max-height'], {
+    duration: theme.transitions.duration.short,
+    easing: theme.transitions.easing.easeInOut,
+  }),
+}));
+
+const ContentContainer = styled(Box)({
+  flex: 1,
+  overflow: 'auto',
+  position: 'relative',
+});
+
+const ContentBox = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(0, 3, 3, 3),
+  paddingBottom: '100px', // Space for fixed navigation
+}));
+
+const NavigationContainer = styled(Box)(({ theme }) => ({
+  position: 'fixed',
+  bottom: 0,
+  left: '280px', // Account for sidebar width
+  right: 0,
+  zIndex: 15,
+  backgroundColor: alpha(theme.palette.background.paper, 0.95),
+  backdropFilter: 'blur(8px)',
+  borderTop: `1px solid ${theme.palette.divider}`,
+  padding: theme.spacing(2, 3),
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+}));
+
+export default function PageWrapper({
+  title,
+  description,
+  children,
+  onNext,
+  onBack,
+  nextLabel = 'Next',
+  backLabel = 'Back',
+  showNext = true,
+  showBack = true,
+  nextDisabled = false,
+  backDisabled = false,
+}: PageWrapperProps) {
+  const [isMinimized, setIsMinimized] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (contentRef.current) {
+        const scrollTop = contentRef.current.scrollTop;
+        // Minimize header after scrolling 50px
+        setIsMinimized(scrollTop > 50);
+      }
+    };
+
+    const contentElement = contentRef.current;
+    if (contentElement) {
+      contentElement.addEventListener('scroll', handleScroll);
+      return () => contentElement.removeEventListener('scroll', handleScroll);
+    }
+  }, []);
+
+  return (
+    <Root>
+      <HeaderContainer isMinimized={isMinimized}>
+        <TitleTypography variant="h4" isMinimized={isMinimized}>
+          {title}
+        </TitleTypography>
+        {description && (
+          <DescriptionTypography variant="body1" isVisible={!isMinimized}>
+            {description}
+          </DescriptionTypography>
+        )}
+      </HeaderContainer>
+
+      <ContentContainer ref={contentRef}>
+        <ContentBox>{children}</ContentBox>
+      </ContentContainer>
+
+      <NavigationContainer>
+        <Box>
+          {showBack && onBack && (
+            <Button
+              variant="outlined"
+              onClick={onBack}
+              startIcon={<KeyboardArrowLeftIcon />}
+              disabled={backDisabled}
+              sx={{ px: 4, py: 1 }}
+            >
+              {backLabel}
+            </Button>
+          )}
+        </Box>
+        <Box>
+          {showNext && onNext && (
+            <Button
+              variant="contained"
+              onClick={onNext}
+              endIcon={<KeyboardArrowRightIcon />}
+              disabled={nextDisabled}
+              sx={{ px: 4, py: 1 }}
+            >
+              {nextLabel}
+            </Button>
+          )}
+        </Box>
+      </NavigationContainer>
+    </Root>
+  );
+}

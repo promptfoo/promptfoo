@@ -42,7 +42,6 @@ const StyledAppBar = styled(AppBar)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
   color: theme.palette.text.primary,
   boxShadow: theme.shadows[1],
-  marginBottom: theme.spacing(2),
 }));
 
 const NavToolbar = styled(Toolbar)({
