@@ -36,6 +36,7 @@ import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleLiveProvider } from './google/live';
+import { GoogleImageProvider } from './google/image';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HeliconeGatewayProvider } from './helicone';
@@ -943,6 +944,9 @@ export const providerMap: ProviderFactory[] = [
         if (serviceType === 'live') {
           // This is a Live API request
           return new GoogleLiveProvider(modelName, providerOptions);
+        } else if (serviceType === 'image') {
+          // This is an Image Generation request
+          return new GoogleImageProvider(modelName, providerOptions);
         }
       }
 
