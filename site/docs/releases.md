@@ -23,7 +23,7 @@ This month we focused on expanding **provider support**, enhancing **evaluation 
 - **[Docker Model Runner](/docs/providers/docker/)** - Run models in isolated Docker containers for better security and reproducibility
 - **[MCP (Model Context Protocol)](/docs/providers/mcp/)** - Connect to MCP servers for enhanced AI capabilities
 - **[Google Imagen](/docs/providers/google/#imagen)** - Generate images for multimodal testing scenarios
-- **[AIMLAPI](/docs/providers/aiml-api/)** - Access various AI models through a unified interface
+- **[AIMLAPI](/docs/providers/aimlapi/)** - Access various AI models through a unified interface
 
 ##### New Model Support
 
