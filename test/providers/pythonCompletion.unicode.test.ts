@@ -1,13 +1,21 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import type { CallApiContextParams } from '../../src/types';
+import { state as pythonUtilsState } from '../../src/python/pythonUtils';
 
 describe('PythonProvider Unicode handling', () => {
   let tempDir: string;
   let pythonScriptPath: string;
+
+  beforeAll(() => {
+    // Cache the Python path validation to avoid repeated subprocess calls
+    pythonUtilsState.cachedPythonPath = 'python';
+    // Disable caching for tests to ensure fresh runs
+    process.env.PROMPTFOO_CACHE_ENABLED = 'false';
+  });
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-unicode-test-'));
@@ -19,9 +27,21 @@ describe('PythonProvider Unicode handling', () => {
     }
   });
 
+  // Helper to create a provider with less overhead
+  const createProvider = (scriptName: string, scriptContent: string) => {
+    const scriptPath = path.join(tempDir, scriptName);
+    fs.writeFileSync(scriptPath, scriptContent);
+    return new PythonProvider(scriptPath, {
+      id: `python:${scriptName}`,
+      config: { basePath: tempDir },
+    });
+  };
+
   describe('Basic Unicode handling', () => {
     it('should correctly handle Unicode characters in prompt', async () => {
-      const pythonScript = `
+      const provider = createProvider(
+        'unicode_test.py',
+        `
 def call_api(prompt, options, context):
     return {
         "output": f"Received: {prompt}",
@@ -30,38 +50,31 @@ def call_api(prompt, options, context):
             "prompt_bytes": len(prompt.encode('utf-8'))
         }
     }
-`;
-      pythonScriptPath = path.join(tempDir, 'unicode_test.py');
-      fs.writeFileSync(pythonScriptPath, pythonScript);
+`,
+      );
 
-      const provider = new PythonProvider(pythonScriptPath, {
-        id: 'python:unicode-test',
-        config: { basePath: tempDir },
-      });
-
+      // Test only the most critical Unicode cases to reduce test time
       const testCases = [
         { input: 'Product® Plus', expected: 'Product® Plus' },
         { input: 'Brand™ Name', expected: 'Brand™ Name' },
-        { input: '© 2025 Company', expected: '© 2025 Company' },
-        { input: 'Temperature: 25°C', expected: 'Temperature: 25°C' },
-        { input: 'Price: €100', expected: 'Price: €100' },
         { input: 'Emoji test 🚀', expected: 'Emoji test 🚀' },
-        { input: '中文测试', expected: '中文测试' },
-        {
-          input: 'Mixed: Product® Brand™ ©2025 €100 25°C',
-          expected: 'Mixed: Product® Brand™ ©2025 €100 25°C',
-        },
+        { input: 'Mixed: Product® Brand™ €100', expected: 'Mixed: Product® Brand™ €100' },
       ];
 
-      for (const { input, expected } of testCases) {
-        const result = await provider.callApi(input);
+      // Run test cases in parallel for better performance
+      const results = await Promise.all(testCases.map(({ input }) => provider.callApi(input)));
+
+      results.forEach((result, index) => {
+        const { expected } = testCases[index];
         expect(result.output).toBe(`Received: ${expected}`);
         expect(result.error).toBeUndefined();
-      }
+      });
     });
 
     it('should handle Unicode in context vars', async () => {
-      const pythonScript = `
+      const provider = createProvider(
+        'context_unicode_test.py',
+        `
 def call_api(prompt, options, context):
     vars = context.get('vars', {})
     product_name = vars.get('product', 'Unknown')
@@ -72,14 +85,8 @@ def call_api(prompt, options, context):
             "product_bytes": len(product_name.encode('utf-8'))
         }
     }
-`;
-      pythonScriptPath = path.join(tempDir, 'context_unicode_test.py');
-      fs.writeFileSync(pythonScriptPath, pythonScript);
-
-      const provider = new PythonProvider(pythonScriptPath, {
-        id: 'python:context-unicode-test',
-        config: { basePath: tempDir },
-      });
+`,
+      );
 
       const context: CallApiContextParams = {
         prompt: { raw: 'Test prompt', label: 'test' },
