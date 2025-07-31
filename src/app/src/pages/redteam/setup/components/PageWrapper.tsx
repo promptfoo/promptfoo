@@ -9,7 +9,7 @@ import Typography from '@mui/material/Typography';
 
 interface PageWrapperProps {
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   children: React.ReactNode;
   onNext?: () => void;
   onBack?: () => void;

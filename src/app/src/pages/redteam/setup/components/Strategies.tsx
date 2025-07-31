@@ -21,6 +21,7 @@ import {
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import PageWrapper from './PageWrapper';
 import StrategyConfigDialog from './StrategyConfigDialog';
 import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
@@ -374,186 +375,190 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   // ----------------------------------------------
 
   return (
-    <Box>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
-          Strategy Configuration
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <HelpOutlineIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
-          <Typography variant="body2" color="text.secondary">
-            Strategies modify how prompts are delivered to test different attack vectors.{' '}
-            <Link
-              href="https://www.promptfoo.dev/docs/red-team/strategies/"
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{ color: 'primary.main' }}
-            >
-              Learn more about strategies
-            </Link>
-          </Typography>
+    <PageWrapper
+      title="Strategies"
+      description="Choose the red-team strategies that will guide how attacks are generated and executed."
+      onNext={onNext}
+      onBack={onBack}
+    >
+      <Box>
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <HelpOutlineIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+            <Typography variant="body2" color="text.secondary">
+              Strategies modify how prompts are delivered to test different attack vectors.{' '}
+              <Link
+                href="https://www.promptfoo.dev/docs/red-team/strategies/"
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ color: 'primary.main' }}
+              >
+                Learn more about strategies
+              </Link>
+            </Typography>
+          </Box>
         </Box>
-      </Box>
 
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          mb: 3,
-          p: 2,
-          borderRadius: 1,
-          backgroundColor: theme.palette.background.paper,
-          border: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Typography variant="body1" color="text.secondary">
-            Estimated Probes:
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            mb: 3,
+            p: 2,
+            borderRadius: 1,
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography variant="body1" color="text.secondary">
+              Estimated Probes:
+            </Typography>
+          </Box>
+          <Typography variant="body1" fontWeight="bold" color="primary.main">
+            {getEstimatedProbes(config).toLocaleString()}
           </Typography>
+          <Tooltip title="Probes are the number of requests to target application">
+            <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
+          </Tooltip>
         </Box>
-        <Typography variant="body1" fontWeight="bold" color="primary.main">
-          {getEstimatedProbes(config).toLocaleString()}
-        </Typography>
-        <Tooltip title="Probes are the number of requests to target application">
-          <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
-        </Tooltip>
+
+        {/* Preset Selector */}
+        <PresetSelector
+          presets={Object.values(STRATEGY_PRESETS)}
+          selectedPreset={selectedPreset}
+          onSelect={handlePresetSelect}
+        />
+
+        {/* Recommended-specific options */}
+        {selectedPresetHasAgenticStrategies && (
+          <RecommendedOptions
+            isMultiTurnEnabled={isMultiTurnEnabled}
+            isStatefulValue={isStatefulValue}
+            onMultiTurnChange={handleMultiTurnChange}
+            onStatefulChange={handleStatefulChange}
+          />
+        )}
+
+        {/* Recommended strategies */}
+        {categorizedStrategies.recommended.length > 0 && (
+          <StrategySection
+            title="Recommended Strategies"
+            description="Core strategies that provide comprehensive coverage for most use cases"
+            strategies={categorizedStrategies.recommended}
+            selectedIds={selectedStrategyIds}
+            onToggle={handleStrategyToggle}
+            onConfigClick={handleConfigClick}
+            onSelectNone={handleSelectNoneInSection}
+          />
+        )}
+
+        {/* Agentic strategies */}
+        {categorizedStrategies.agenticSingleTurn.length > 0 && (
+          <StrategySection
+            title="Agentic Strategies (Single-turn)"
+            description="Advanced AI-powered strategies that dynamically adapt their attack patterns"
+            strategies={categorizedStrategies.agenticSingleTurn}
+            selectedIds={selectedStrategyIds}
+            onToggle={handleStrategyToggle}
+            onConfigClick={handleConfigClick}
+            onSelectNone={handleSelectNoneInSection}
+          />
+        )}
+
+        {/* Multi-turn agentic strategies */}
+        {categorizedStrategies.agenticMultiTurn.length > 0 && (
+          <StrategySection
+            title="Agentic Strategies (Multi-turn)"
+            description="AI-powered strategies that evolve across multiple conversation turns"
+            strategies={categorizedStrategies.agenticMultiTurn}
+            selectedIds={selectedStrategyIds}
+            onToggle={handleStrategyToggle}
+            onConfigClick={handleConfigClick}
+            onSelectNone={handleSelectNoneInSection}
+          />
+        )}
+
+        {/* Multi-modal strategies */}
+        {categorizedStrategies.multiModal.length > 0 && (
+          <StrategySection
+            title="Multi-modal Strategies"
+            description="Test handling of non-text content including audio, video, and images"
+            strategies={categorizedStrategies.multiModal}
+            selectedIds={selectedStrategyIds}
+            onToggle={handleStrategyToggle}
+            onConfigClick={handleConfigClick}
+            onSelectNone={handleSelectNoneInSection}
+          />
+        )}
+
+        {/* Other strategies */}
+        {categorizedStrategies.other.length > 0 && (
+          <StrategySection
+            title="Other Strategies"
+            description="Additional specialized strategies for specific attack vectors and edge cases"
+            strategies={categorizedStrategies.other}
+            selectedIds={selectedStrategyIds}
+            onToggle={handleStrategyToggle}
+            onConfigClick={handleConfigClick}
+            onSelectNone={handleSelectNoneInSection}
+          />
+        )}
+
+        {/* Additional system config section, if needed */}
+        {showSystemConfig && !selectedPresetHasAgenticStrategies && (
+          <SystemConfiguration
+            isStatefulValue={isStatefulValue}
+            onStatefulChange={handleStatefulChange}
+          />
+        )}
+
+        {/* Footer Buttons */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+          <Button
+            variant="outlined"
+            onClick={onBack}
+            startIcon={<KeyboardArrowLeftIcon />}
+            sx={{ px: 4, py: 1 }}
+          >
+            Back
+          </Button>
+          <Button
+            variant="contained"
+            onClick={onNext}
+            endIcon={<KeyboardArrowRightIcon />}
+            sx={{ px: 4, py: 1 }}
+          >
+            Next
+          </Button>
+        </Box>
+
+        {/* Config Dialog */}
+        <StrategyConfigDialog
+          open={configDialog.isOpen}
+          strategy={configDialog.selectedStrategy}
+          config={
+            configDialog.selectedStrategy
+              ? ((
+                  config.strategies.find(
+                    (s) => getStrategyId(s) === configDialog.selectedStrategy,
+                  ) as RedteamStrategyObject
+                )?.config ?? {})
+              : {}
+          }
+          onClose={() =>
+            setConfigDialog({
+              isOpen: false,
+              selectedStrategy: null,
+            })
+          }
+          onSave={updateStrategyConfig}
+          strategyData={
+            availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
+          }
+        />
       </Box>
-
-      {/* Preset Selector */}
-      <PresetSelector
-        presets={Object.values(STRATEGY_PRESETS)}
-        selectedPreset={selectedPreset}
-        onSelect={handlePresetSelect}
-      />
-
-      {/* Recommended-specific options */}
-      {selectedPresetHasAgenticStrategies && (
-        <RecommendedOptions
-          isMultiTurnEnabled={isMultiTurnEnabled}
-          isStatefulValue={isStatefulValue}
-          onMultiTurnChange={handleMultiTurnChange}
-          onStatefulChange={handleStatefulChange}
-        />
-      )}
-
-      {/* Recommended strategies */}
-      {categorizedStrategies.recommended.length > 0 && (
-        <StrategySection
-          title="Recommended Strategies"
-          description="Core strategies that provide comprehensive coverage for most use cases"
-          strategies={categorizedStrategies.recommended}
-          selectedIds={selectedStrategyIds}
-          onToggle={handleStrategyToggle}
-          onConfigClick={handleConfigClick}
-          onSelectNone={handleSelectNoneInSection}
-        />
-      )}
-
-      {/* Agentic strategies */}
-      {categorizedStrategies.agenticSingleTurn.length > 0 && (
-        <StrategySection
-          title="Agentic Strategies (Single-turn)"
-          description="Advanced AI-powered strategies that dynamically adapt their attack patterns"
-          strategies={categorizedStrategies.agenticSingleTurn}
-          selectedIds={selectedStrategyIds}
-          onToggle={handleStrategyToggle}
-          onConfigClick={handleConfigClick}
-          onSelectNone={handleSelectNoneInSection}
-        />
-      )}
-
-      {/* Multi-turn agentic strategies */}
-      {categorizedStrategies.agenticMultiTurn.length > 0 && (
-        <StrategySection
-          title="Agentic Strategies (Multi-turn)"
-          description="AI-powered strategies that evolve across multiple conversation turns"
-          strategies={categorizedStrategies.agenticMultiTurn}
-          selectedIds={selectedStrategyIds}
-          onToggle={handleStrategyToggle}
-          onConfigClick={handleConfigClick}
-          onSelectNone={handleSelectNoneInSection}
-        />
-      )}
-
-      {/* Multi-modal strategies */}
-      {categorizedStrategies.multiModal.length > 0 && (
-        <StrategySection
-          title="Multi-modal Strategies"
-          description="Test handling of non-text content including audio, video, and images"
-          strategies={categorizedStrategies.multiModal}
-          selectedIds={selectedStrategyIds}
-          onToggle={handleStrategyToggle}
-          onConfigClick={handleConfigClick}
-          onSelectNone={handleSelectNoneInSection}
-        />
-      )}
-
-      {/* Other strategies */}
-      {categorizedStrategies.other.length > 0 && (
-        <StrategySection
-          title="Other Strategies"
-          description="Additional specialized strategies for specific attack vectors and edge cases"
-          strategies={categorizedStrategies.other}
-          selectedIds={selectedStrategyIds}
-          onToggle={handleStrategyToggle}
-          onConfigClick={handleConfigClick}
-          onSelectNone={handleSelectNoneInSection}
-        />
-      )}
-
-      {/* Additional system config section, if needed */}
-      {showSystemConfig && !selectedPresetHasAgenticStrategies && (
-        <SystemConfiguration
-          isStatefulValue={isStatefulValue}
-          onStatefulChange={handleStatefulChange}
-        />
-      )}
-
-      {/* Footer Buttons */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-        <Button
-          variant="outlined"
-          onClick={onBack}
-          startIcon={<KeyboardArrowLeftIcon />}
-          sx={{ px: 4, py: 1 }}
-        >
-          Back
-        </Button>
-        <Button
-          variant="contained"
-          onClick={onNext}
-          endIcon={<KeyboardArrowRightIcon />}
-          sx={{ px: 4, py: 1 }}
-        >
-          Next
-        </Button>
-      </Box>
-
-      {/* Config Dialog */}
-      <StrategyConfigDialog
-        open={configDialog.isOpen}
-        strategy={configDialog.selectedStrategy}
-        config={
-          configDialog.selectedStrategy
-            ? ((
-                config.strategies.find(
-                  (s) => getStrategyId(s) === configDialog.selectedStrategy,
-                ) as RedteamStrategyObject
-              )?.config ?? {})
-            : {}
-        }
-        onClose={() =>
-          setConfigDialog({
-            isOpen: false,
-            selectedStrategy: null,
-          })
-        }
-        onSave={updateStrategyConfig}
-        strategyData={
-          availableStrategies.find((s) => s.id === configDialog.selectedStrategy) ?? null
-        }
-      />
-    </Box>
+    </PageWrapper>
   );
 }

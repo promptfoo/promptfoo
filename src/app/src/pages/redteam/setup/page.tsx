@@ -48,8 +48,6 @@ import type { RedteamStrategy } from '@promptfoo/types';
 import type { Config, RedteamUITarget } from './types';
 import './page.css';
 
-import TargetsWithPageWrapper from './components/Targets/TargetsWithPageWrapper';
-
 const StyledTabs = styled(Tabs)(({ theme }) => ({
   '& .MuiTabs-indicator': {
     left: 0,
@@ -683,16 +681,12 @@ export default function RedTeamSetupPage() {
         <TabContent>
           <CustomTabPanel value={value} index={0}>
             <ErrorBoundary name="Targets Page">
-              <TargetsWithPageWrapper
-                onNext={handleNext}
-                onBack={handleBack}
-                setupModalOpen={setupModalOpen}
-              />
+              <Targets onNext={handleNext} onBack={handleBack} setupModalOpen={setupModalOpen} />
             </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>
             <ErrorBoundary name="Application Purpose Page">
-              <Purpose onNext={handleNext} />
+              <Purpose onNext={handleNext} onBack={handleBack} />
             </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={2}>
@@ -707,7 +701,7 @@ export default function RedTeamSetupPage() {
           </CustomTabPanel>
           <CustomTabPanel value={value} index={4}>
             <ErrorBoundary name="Review Page">
-              <Review />
+              <Review onBack={handleBack} />
             </ErrorBoundary>
           </CustomTabPanel>
         </TabContent>
