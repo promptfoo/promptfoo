@@ -12,6 +12,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import LoadExampleButton from '../LoadExampleButton';
+import { getProviderType } from './helpers';
 import ProviderTypeSelector from './ProviderTypeSelector';
 
 import type { ProviderOptions } from '../../types';
@@ -32,6 +33,12 @@ export default function TargetTypeSelection({
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
+  const [showTargetTypeSection, setShowTargetTypeSection] = useState(
+    Boolean(config.target?.label && config.target?.id),
+  );
+  const [providerType, setProviderType] = useState<string | undefined>(
+    getProviderType(config.target?.id),
+  );
 
   const { recordEvent } = useTelemetry();
 
@@ -41,10 +48,12 @@ export default function TargetTypeSelection({
 
   useEffect(() => {
     updateConfig('target', selectedTarget);
+    setProviderType(getProviderType(selectedTarget.id));
   }, [selectedTarget, updateConfig]);
 
   const handleProviderChange = (provider: ProviderOptions) => {
     setSelectedTarget(provider);
+    setProviderType(getProviderType(provider.id));
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,
@@ -52,7 +61,17 @@ export default function TargetTypeSelection({
   };
 
   const handleNext = () => {
-    if (isValidSelection()) {
+    // If target type section is not shown yet, show it first
+    if (hasTargetName && !showTargetTypeSection) {
+      setShowTargetTypeSection(true);
+      recordEvent('feature_used', {
+        feature: 'redteam_config_target_type_section_revealed',
+      });
+      return;
+    }
+
+    // If target type section is shown and selection is valid, proceed to next step
+    if (showTargetTypeSection && isValidSelection()) {
       onNext();
     }
   };
@@ -65,32 +84,41 @@ export default function TargetTypeSelection({
     return selectedTarget.id && selectedTarget.id.trim() !== '';
   };
 
+  // Check if user has entered a target name
+  const hasTargetName = selectedTarget?.label?.trim() !== '';
+
+  const getNextButtonText = () => {
+    if (!hasTargetName || !showTargetTypeSection) {
+      return 'Next: Select Target Type';
+    }
+
+    return 'Next: Configure Target';
+  };
+
+  const isNextButtonDisabled = () => {
+    if (!hasTargetName) {
+      return true;
+    }
+    if (hasTargetName && !showTargetTypeSection) {
+      return false;
+    }
+    return !isValidSelection();
+  };
+
   return (
     <Stack direction="column" spacing={3}>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-          Select Target Type
-        </Typography>
-
-        <LoadExampleButton />
-      </Box>
-
-      <Typography variant="body1">
-        Choose the type of target you want to red team. This determines how promptfoo will connect
-        to and test your system. For more information on available targets and how to configure
-        them, please visit our{' '}
-        <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
-          documentation
-        </Link>
-        .
+      <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+        Target Setup
       </Typography>
-
+      <Typography variant="body1">
+        Enter a name for your target. This will be used to identify the target in the UI and in the
+        logs.
+      </Typography>
       {/* Provider Name Field */}
       <TextField
-        fullWidth
-        sx={{ mb: 2 }}
-        label="Target Name"
+        sx={{ mb: 2, width: '360px' }}
         value={selectedTarget?.label ?? ''}
+        label="Target Name"
         placeholder="e.g. 'customer-service-agent'"
         onChange={(e) => {
           if (selectedTarget) {
@@ -105,8 +133,37 @@ export default function TargetTypeSelection({
         }}
       />
 
-      {/* Provider Type Selection */}
-      <ProviderTypeSelector provider={selectedTarget} setProvider={handleProviderChange} />
+      {/* Only show target type selection after user clicks to reveal it */}
+      {showTargetTypeSection && (
+        <>
+          <Box
+            sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          >
+            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+              Select Target Type
+            </Typography>
+
+            <LoadExampleButton />
+          </Box>
+
+          <Typography variant="body1">
+            Choose the type of target you want to red team. This determines how promptfoo will
+            connect to and test your system. For more information on available targets and how to
+            configure them, please visit our{' '}
+            <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
+              documentation
+            </Link>
+            .
+          </Typography>
+
+          {/* Provider Type Selection */}
+          <ProviderTypeSelector
+            provider={selectedTarget}
+            setProvider={handleProviderChange}
+            providerType={providerType}
+          />
+        </>
+      )}
 
       {/* Navigation Buttons */}
       <Box
@@ -133,8 +190,8 @@ export default function TargetTypeSelection({
         <Button
           variant="contained"
           onClick={handleNext}
-          endIcon={<KeyboardArrowRightIcon />}
-          disabled={!isValidSelection()}
+          endIcon={hasTargetName && showTargetTypeSection ? <KeyboardArrowRightIcon /> : null}
+          disabled={isNextButtonDisabled()}
           sx={{
             backgroundColor: theme.palette.primary.main,
             '&:hover': { backgroundColor: theme.palette.primary.dark },
@@ -143,7 +200,7 @@ export default function TargetTypeSelection({
             py: 1,
           }}
         >
-          Next: Configure Target
+          {getNextButtonText()}
         </Button>
       </Box>
     </Stack>

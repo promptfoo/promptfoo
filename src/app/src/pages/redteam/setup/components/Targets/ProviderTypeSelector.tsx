@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import SearchIcon from '@mui/icons-material/Search';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import FormControl from '@mui/material/FormControl';
+import InputAdornment from '@mui/material/InputAdornment';
 import Paper from '@mui/material/Paper';
 import Radio from '@mui/material/Radio';
+import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { getProviderType } from './helpers';
 
@@ -27,6 +32,49 @@ const providerOptions = [
         value: 'websocket',
         label: 'WebSocket Endpoint',
         description: 'Real-time communication with WebSocket APIs',
+      },
+    ],
+  },
+  {
+    category: 'custom',
+    title: 'Code-based Providers',
+    description:
+      'Use custom code or specialized integrations. Recommended for most workflows with agents, MCP clients, and other specialized use cases.',
+    options: [
+      {
+        value: 'javascript',
+        label: 'JavaScript Provider',
+        description: 'Custom JS provider for specialized integrations',
+      },
+      {
+        value: 'python',
+        label: 'Python Provider',
+        description: 'Custom Python provider for specialized integrations',
+      },
+      {
+        value: 'go',
+        label: 'Go Provider',
+        description: 'Custom Go provider for specialized integrations',
+      },
+      {
+        value: 'custom',
+        label: 'Custom Provider',
+        description: 'Other custom providers and implementations',
+      },
+      {
+        value: 'mcp',
+        label: 'MCP Server',
+        description: 'Connect to Model Context Protocol (MCP) servers for direct tool red teaming',
+      },
+      {
+        value: 'browser',
+        label: 'Web Browser',
+        description: 'Automate web browser interactions for testing',
+      },
+      {
+        value: 'exec',
+        label: 'Shell Command',
+        description: 'Execute custom scripts and commands',
       },
     ],
   },
@@ -61,19 +109,9 @@ const providerOptions = [
         description: 'Azure-hosted OpenAI models',
       },
       {
-        value: 'openrouter',
-        label: 'OpenRouter',
-        description: 'Access hundreds of top AI models through a single API',
-      },
-      {
         value: 'mistral',
         label: 'Mistral AI',
         description: "Mistral's language models including Magistral",
-      },
-      {
-        value: 'cohere',
-        label: 'Cohere',
-        description: "Cohere's language models",
       },
       {
         value: 'groq',
@@ -91,9 +129,9 @@ const providerOptions = [
         description: "DeepSeek's language models including R1",
       },
       {
-        value: 'cerebras',
-        label: 'Cerebras',
-        description: 'High-performance inference for Llama models',
+        value: 'xai',
+        label: 'X.AI (Grok)',
+        description: "X.AI's Grok models",
       },
     ],
   },
@@ -123,41 +161,36 @@ const providerOptions = [
         description: "Cloudflare's OpenAI-compatible AI platform",
       },
       {
-        value: 'fireworks',
-        label: 'Fireworks AI',
-        description: 'Various hosted models with fast inference',
-      },
-      {
-        value: 'together',
-        label: 'Together AI',
-        description: 'Various hosted models with competitive pricing',
-      },
-      {
-        value: 'replicate',
-        label: 'Replicate',
-        description: 'Various hosted models including image generation',
-      },
-      {
         value: 'huggingface',
         label: 'Hugging Face',
         description: 'Access thousands of models',
+      },
+      {
+        value: 'helicone',
+        label: 'Helicone AI Gateway',
+        description: 'Self-hosted AI gateway for unified provider access',
+      },
+      {
+        value: 'jfrog',
+        label: 'JFrog ML',
+        description: "JFrog's LLM Model Library",
       },
     ],
   },
   {
     category: 'specialized',
-    title: 'Specialized Providers',
+    title: 'Third-Party Providers',
     description: 'Providers for specific use cases and integrations',
     options: [
+      {
+        value: 'openrouter',
+        label: 'OpenRouter',
+        description: 'Access hundreds of top AI models through a single API',
+      },
       {
         value: 'github',
         label: 'GitHub Models',
         description: "GitHub's hosted models from multiple providers",
-      },
-      {
-        value: 'xai',
-        label: 'X.AI (Grok)',
-        description: "X.AI's Grok models",
       },
       {
         value: 'ai21',
@@ -194,7 +227,7 @@ const providerOptions = [
   {
     category: 'local',
     title: 'Local Models',
-    description: 'Run models locally on your infrastructure',
+    description: 'Models run locally on your hardware or infrastructure',
     options: [
       {
         value: 'ollama',
@@ -228,43 +261,6 @@ const providerOptions = [
       },
     ],
   },
-  {
-    category: 'custom',
-    title: 'Custom Providers',
-    description: 'Use custom code or specialized integrations',
-    options: [
-      {
-        value: 'javascript',
-        label: 'JavaScript Provider',
-        description: 'Custom JS provider for specialized integrations',
-      },
-      {
-        value: 'python',
-        label: 'Python Provider',
-        description: 'Custom Python provider for specialized integrations',
-      },
-      {
-        value: 'custom',
-        label: 'Custom Provider',
-        description: 'Other custom providers and implementations',
-      },
-      {
-        value: 'mcp',
-        label: 'MCP Server',
-        description: 'Connect to Model Context Protocol (MCP) servers for direct tool red teaming',
-      },
-      {
-        value: 'browser',
-        label: 'Web Browser',
-        description: 'Automate web browser interactions for testing',
-      },
-      {
-        value: 'exec',
-        label: 'Shell Command',
-        description: 'Execute custom scripts and commands',
-      },
-    ],
-  },
 ];
 
 interface ProviderTypeSelectorProps {
@@ -286,6 +282,34 @@ export default function ProviderTypeSelector({
   const [selectedProviderType, setSelectedProviderType] = useState<string | undefined>(
     providerType ?? getProviderType(provider?.id),
   );
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+
+  // Category filter options
+  const categoryFilters = [
+    { key: 'endpoint', label: 'API Endpoints' },
+    { key: 'custom', label: 'Custom' },
+    { key: 'model', label: 'Foundation Models' },
+    { key: 'cloud', label: 'Cloud & Enterprise' },
+    { key: 'specialized', label: 'Specialized' },
+    { key: 'local', label: 'Local Models' },
+  ];
+
+  // Handle category filter toggle
+  const handleCategoryToggle = (category: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category],
+    );
+  };
+
+  // Sync selectedProviderType with providerType prop
+  useEffect(() => {
+    if (providerType !== undefined) {
+      setSelectedProviderType(providerType);
+    } else if (provider?.id) {
+      setSelectedProviderType(getProviderType(provider.id));
+    }
+  }, [providerType, provider?.id]);
 
   useEffect(() => {
     if (!provider?.id) {
@@ -383,25 +407,25 @@ export default function ProviderTypeSelector({
       });
     } else if (value === 'openai') {
       setProvider({
-        id: 'openai:gpt-4o',
+        id: 'openai:gpt-4.1',
         config: {},
         label: currentLabel,
       });
     } else if (value === 'anthropic') {
       setProvider({
-        id: 'anthropic:messages:claude-3-5-sonnet-20241022',
+        id: 'anthropic:messages:claude-sonnet-4-20250514',
         config: {},
         label: currentLabel,
       });
     } else if (value === 'google') {
       setProvider({
-        id: 'google:gemini-1.5-pro',
+        id: 'google:gemini-2.5-pro',
         config: {},
         label: currentLabel,
       });
     } else if (value === 'vertex') {
       setProvider({
-        id: 'vertex:gemini-1.5-pro',
+        id: 'vertex:gemini-2.5-pro',
         config: {},
         label: currentLabel,
       });
@@ -465,6 +489,98 @@ export default function ProviderTypeSelector({
         config: {},
         label: currentLabel,
       });
+    } else if (value === 'adaline') {
+      setProvider({
+        id: 'adaline:openai/gpt-4.1',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'cloudera') {
+      setProvider({
+        id: 'cloudera:llama-2-13b-chat',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'f5') {
+      setProvider({
+        id: 'f5:path-name',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'helicone') {
+      setProvider({
+        id: 'helicone:openai/gpt-4.1',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'ibm-bam') {
+      setProvider({
+        id: 'bam:chat:ibm/granite-13b-chat-v2',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'jfrog') {
+      setProvider({
+        id: 'jfrog:llama_3_8b_instruct',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'litellm') {
+      setProvider({
+        id: 'litellm:gpt-4.1',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'openllm') {
+      setProvider({
+        id: 'openllm:llama3',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'watsonx') {
+      setProvider({
+        id: 'watsonx:ibm/granite-13b-chat-v2',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'go') {
+      setProvider({
+        id: 'file:///path/to/your/script.go',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'webhook') {
+      setProvider({
+        id: 'webhook:http://example.com/webhook',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'echo') {
+      setProvider({
+        id: 'echo',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'manual-input') {
+      setProvider({
+        id: 'promptfoo:manual-input',
+        config: {},
+        label: currentLabel,
+      });
+    } else if (value === 'sequence') {
+      setProvider({
+        id: 'sequence',
+        config: {
+          inputs: [],
+        },
+        label: currentLabel,
+      });
+    } else if (value === 'simulated-user') {
+      setProvider({
+        id: 'promptfoo:simulated-user',
+        config: {},
+        label: currentLabel,
+      });
     } else {
       setProvider({
         id: value,
@@ -474,18 +590,71 @@ export default function ProviderTypeSelector({
     }
   };
 
-  // Filter available options if availableProviderIds is provided
+  // Filter available options if availableProviderIds is provided, by search term, and by category
   const filteredProviderOptions = providerOptions
+    .filter((group) => {
+      // Filter by selected categories if any are selected
+      return selectedCategories.length === 0 || selectedCategories.includes(group.category);
+    })
     .map((group) => ({
       ...group,
-      options: group.options.filter(
-        (option) => !availableProviderIds || availableProviderIds.includes(option.value),
-      ),
+      options: group.options.filter((option) => {
+        // Filter by availableProviderIds if provided
+        const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
+
+        // Filter by search term if provided
+        const matchesSearch =
+          !searchTerm ||
+          option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          option.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          group.title.toLowerCase().includes(searchTerm.toLowerCase());
+
+        return isAvailable && matchesSearch;
+      }),
     }))
     .filter((group) => group.options.length > 0);
 
   return (
     <Box>
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+        <TextField
+          variant="outlined"
+          placeholder="Search providers..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ minWidth: 300, flexShrink: 0 }}
+        />
+
+        <Box sx={{ flex: 1 }}>
+          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+            {categoryFilters.map((filter) => (
+              <Chip
+                key={filter.key}
+                label={filter.label}
+                variant={selectedCategories.includes(filter.key) ? 'filled' : 'outlined'}
+                color={selectedCategories.includes(filter.key) ? 'primary' : 'default'}
+                onClick={() => handleCategoryToggle(filter.key)}
+                sx={{
+                  cursor: 'pointer',
+                  '&:hover': {
+                    bgcolor: selectedCategories.includes(filter.key)
+                      ? 'primary.dark'
+                      : 'action.hover',
+                  },
+                }}
+              />
+            ))}
+          </Stack>
+        </Box>
+      </Stack>
+
       <FormControl component="fieldset" sx={{ width: '100%' }}>
         {filteredProviderOptions.map((group) => (
           <Box key={group.category} sx={{ mb: 3 }}>

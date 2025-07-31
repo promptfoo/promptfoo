@@ -723,136 +723,142 @@ export default function RedTeamSetupPage() {
         </TabContent>
       </Content>
 
-      <Setup open={setupModalOpen} onClose={closeSetupModal} />
+      {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
       <CrispChat />
-      <Dialog
-        open={saveDialogOpen}
-        onClose={() => setSaveDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Save Configuration</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Configuration Name"
-            fullWidth
-            value={configName}
-            onChange={(e) => setConfigName(e.target.value)}
-            sx={{ mb: 2 }}
-          />
-          <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={handleDownloadYaml}
+      {saveDialogOpen ? (
+        <Dialog
+          open={saveDialogOpen}
+          onClose={() => setSaveDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Save Configuration</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Configuration Name"
               fullWidth
-            >
-              Export YAML
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<SaveIcon />}
-              onClick={handleSaveConfig}
-              disabled={!configName}
-              fullWidth
-            >
-              Save
-            </Button>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
-        open={loadDialogOpen}
-        onClose={() => setLoadDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Load Configuration</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mb: 2 }}>
-            <input
-              accept=".yml,.yaml"
-              style={{ display: 'none' }}
-              id="yaml-file-upload"
-              type="file"
-              onChange={handleFileUpload}
+              value={configName}
+              onChange={(e) => setConfigName(e.target.value)}
+              sx={{ mb: 2 }}
             />
-            <label htmlFor="yaml-file-upload">
-              <Button variant="outlined" component="span" fullWidth sx={{ mb: 2 }}>
-                Upload YAML File
+            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={handleDownloadYaml}
+                fullWidth
+              >
+                Export YAML
               </Button>
-            </label>
-          </Box>
-          <Typography variant="subtitle2" sx={{ mb: 2 }}>
-            Or choose a saved configuration:
-          </Typography>
-          {savedConfigs.length === 0 ? (
-            <Box sx={{ py: 4, textAlign: 'center' }}>
-              <Typography color="text.secondary">No saved configurations found</Typography>
+              <Button
+                variant="contained"
+                startIcon={<SaveIcon />}
+                onClick={handleSaveConfig}
+                disabled={!configName}
+                fullWidth
+              >
+                Save
+              </Button>
             </Box>
-          ) : (
-            <List>
-              {savedConfigs.map((config) => (
-                <ListItemButton
-                  key={config.id}
-                  onClick={() => handleLoadConfig(config.id)}
-                  sx={{
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                    mb: 0.5,
-                    backgroundColor: 'background.paper',
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                      cursor: 'pointer',
-                    },
-                  }}
-                >
-                  <ListItemText
-                    primary={config.name}
-                    secondary={new Date(config.updatedAt).toLocaleString()}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
-        </DialogActions>
-      </Dialog>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+          </DialogActions>
+        </Dialog>
+      ) : null}
 
-      <Dialog
-        open={resetDialogOpen}
-        onClose={() => setResetDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Reset Configuration</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to reset the configuration to default values? This action cannot
-            be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
-          <Button
-            onClick={() => {
-              handleResetConfig();
-            }}
-            color="error"
-          >
-            Reset
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {loadDialogOpen ? (
+        <Dialog
+          open={loadDialogOpen}
+          onClose={() => setLoadDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Load Configuration</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mb: 2 }}>
+              <input
+                accept=".yml,.yaml"
+                style={{ display: 'none' }}
+                id="yaml-file-upload"
+                type="file"
+                onChange={handleFileUpload}
+              />
+              <label htmlFor="yaml-file-upload">
+                <Button variant="outlined" component="span" fullWidth sx={{ mb: 2 }}>
+                  Upload YAML File
+                </Button>
+              </label>
+            </Box>
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Or choose a saved configuration:
+            </Typography>
+            {savedConfigs.length === 0 ? (
+              <Box sx={{ py: 4, textAlign: 'center' }}>
+                <Typography color="text.secondary">No saved configurations found</Typography>
+              </Box>
+            ) : (
+              <List>
+                {savedConfigs.map((config) => (
+                  <ListItemButton
+                    key={config.id}
+                    onClick={() => handleLoadConfig(config.id)}
+                    sx={{
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      mb: 0.5,
+                      backgroundColor: 'background.paper',
+                      '&:hover': {
+                        backgroundColor: 'action.hover',
+                        cursor: 'pointer',
+                      },
+                    }}
+                  >
+                    <ListItemText
+                      primary={config.name}
+                      secondary={new Date(config.updatedAt).toLocaleString()}
+                    />
+                  </ListItemButton>
+                ))}
+              </List>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
+          </DialogActions>
+        </Dialog>
+      ) : null}
+
+      {resetDialogOpen ? (
+        <Dialog
+          open={resetDialogOpen}
+          onClose={() => setResetDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Reset Configuration</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to reset the configuration to default values? This action cannot
+              be undone.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                handleResetConfig();
+              }}
+              color="error"
+            >
+              Reset
+            </Button>
+          </DialogActions>
+        </Dialog>
+      ) : null}
     </Root>
   );
 }

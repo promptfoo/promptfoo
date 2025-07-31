@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
@@ -9,6 +9,7 @@ import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { getProviderType } from './helpers';
 import ProviderConfigEditor from './ProviderConfigEditor';
 import ProviderTypeSelector from './ProviderTypeSelector';
 
@@ -76,12 +77,25 @@ export default function ProviderEditor({
   const configEditorRef = useRef<ProviderConfigEditorRef>(null);
   const [validationErrors, setValidationErrors] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState<boolean>(false);
-  const providerType = provider?.id?.split(':')[0] ?? availableProviderIds?.[0] ?? 'custom';
+  const [providerType, setProviderType] = useState<string | undefined>(
+    getProviderType(provider?.id) ?? availableProviderIds?.[0],
+  );
+
+  // Sync providerType with provider changes
+  useEffect(() => {
+    setProviderType(getProviderType(provider?.id) ?? availableProviderIds?.[0]);
+  }, [provider?.id, availableProviderIds]);
 
   // Handle errors from child components
   const handleError = (error: string | null) => {
     setValidationErrors(error);
     setError?.(error);
+  };
+
+  // Handle provider changes and update provider type
+  const handleProviderChange = (newProvider: ProviderOptions) => {
+    setProvider(newProvider);
+    setProviderType(getProviderType(newProvider.id));
   };
 
   if (!provider) {
@@ -130,9 +144,10 @@ export default function ProviderEditor({
       {/* Provider Type Selection Section */}
       <ProviderTypeSelector
         provider={provider}
-        setProvider={setProvider}
+        setProvider={handleProviderChange}
         availableProviderIds={availableProviderIds}
         disableModelSelection={disableModelSelection}
+        providerType={providerType}
       />
 
       {/* Provider Configuration Section */}
