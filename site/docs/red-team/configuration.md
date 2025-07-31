@@ -586,7 +586,7 @@ A local model via [ollama](/docs/providers/ollama/) would look similar:
 
 ```yaml
 redteam:
-  provider: ollama:chat:llama3.1
+  provider: ollama:chat:llama3.3
 ```
 
 :::warning

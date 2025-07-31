@@ -31,13 +31,29 @@ If you're using GitHub Actions, check out our [dedicated GitHub Actions guide](/
 
 For other platforms, here's a basic example:
 
-```bash
+````bash
 # Run eval (no global install required)
 npx promptfoo@latest eval -c promptfooconfig.yaml -o results.json
 
 # Run security scan (red teaming)
 npx promptfoo@latest redteam run
-```
+```typescript
+interface OutputFile {
+  evalId?: string;
+  results: EvaluateSummary;
+  config: Partial<UnifiedConfig>;
+  shareableUrl: string | null;
+  metadata?: {
+    promptfooVersion: string;
+    nodeVersion: string;
+    platform: string;
+    arch: string;
+    exportedAt: string;
+    evaluationCreatedAt?: string;
+    author?: string;
+  };
+}
+````
 
 ## Prerequisites
 
