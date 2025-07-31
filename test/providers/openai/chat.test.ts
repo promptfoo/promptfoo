@@ -375,16 +375,14 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
     });
 
-    it('should handle Gemini reasoning field correctly when both reasoning and content are present', async () => {
+    it('should handle responses with both reasoning and content fields', async () => {
       const mockResponse = {
         data: {
           choices: [
             {
               message: {
-                content:
-                  '<transcript>The sentence is a pangram containing all alphabet letters.</transcript>\n<confidence>green</confidence>',
-                reasoning:
-                  'I need to analyze the given text and provide a summary in the requested format. The text states that "The quick brown fox jumps over the lazy dog" is a pangram that contains all letters of the alphabet. Let me format this according to the XML structure requested.',
+                content: 'This is the actual response content',
+                reasoning: 'This is the reasoning process',
               },
             },
           ],
@@ -396,27 +394,26 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       };
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const provider = new OpenAiChatCompletionProvider('gemini-2.5-pro', {
-        config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: {},
       });
-      const result = await provider.callApi('Analyze text and provide summary with XML tags');
+      const result = await provider.callApi('Test prompt');
 
-      // Should include both thinking and content when showThinking is true (default)
-      const expectedOutput = `Thinking: I need to analyze the given text and provide a summary in the requested format. The text states that "The quick brown fox jumps over the lazy dog" is a pangram that contains all letters of the alphabet. Let me format this according to the XML structure requested.\n\n<transcript>The sentence is a pangram containing all alphabet letters.</transcript>\n<confidence>green</confidence>`;
+      // When both reasoning and content exist, content should be used as output
+      // and reasoning should be prepended as thinking when showThinking is true (default)
+      const expectedOutput = `Thinking: This is the reasoning process\n\nThis is the actual response content`;
       expect(result.output).toBe(expectedOutput);
       expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
     });
 
-    it('should hide Gemini reasoning when showThinking is false', async () => {
+    it('should hide reasoning content when showThinking is false', async () => {
       const mockResponse = {
         data: {
           choices: [
             {
               message: {
-                content:
-                  '<transcript>The sentence is a pangram containing all alphabet letters.</transcript>\n<confidence>green</confidence>',
-                reasoning:
-                  'I need to analyze the given text and provide a summary in the requested format.',
+                content: 'This is the actual response content',
+                reasoning: 'This is the reasoning process',
               },
             },
           ],
@@ -428,15 +425,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       };
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const provider = new OpenAiChatCompletionProvider('gemini-2.5-pro', {
-        config: { apiBaseUrl: 'https://openrouter.ai/api/v1', showThinking: false },
+      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: { showThinking: false },
       });
-      const result = await provider.callApi('Analyze text and provide summary with XML tags');
+      const result = await provider.callApi('Test prompt');
 
       // Should only show content, not reasoning
-      expect(result.output).toBe(
-        '<transcript>The sentence is a pangram containing all alphabet letters.</transcript>\n<confidence>green</confidence>',
-      );
+      expect(result.output).toBe('This is the actual response content');
       expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
     });
 
