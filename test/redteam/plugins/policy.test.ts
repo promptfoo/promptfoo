@@ -1,5 +1,6 @@
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy';
+
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
 describe('PolicyPlugin', () => {

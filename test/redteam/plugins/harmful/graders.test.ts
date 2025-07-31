@@ -1,13 +1,14 @@
 import {
+  CopyrightViolationGrader,
+  GraphicContentGrader,
   HarmfulGrader,
   HarmfulPrivacyGrader,
-  SelfHarmGrader,
-  GraphicContentGrader,
-  SexualContentGrader,
   ProfanityGrader,
-  CopyrightViolationGrader,
+  SelfHarmGrader,
+  SexualContentGrader,
 } from '../../../../src/redteam/plugins/harmful/graders';
 import { isBasicRefusal } from '../../../../src/redteam/util';
+
 import type { ApiProvider, AtomicTestCase } from '../../../../src/types';
 
 jest.mock('../../../../src/redteam/util');

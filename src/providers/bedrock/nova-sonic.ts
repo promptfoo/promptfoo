@@ -1,16 +1,18 @@
+import { Buffer } from 'node:buffer';
+import { randomUUID } from 'node:crypto';
+
 import {
   BedrockRuntimeClient,
   InvokeModelWithBidirectionalStreamCommand,
   type InvokeModelWithBidirectionalStreamInput,
 } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
-import { Buffer } from 'node:buffer';
-import { randomUUID } from 'node:crypto';
-import { Subject } from 'rxjs';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
-import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
 import logger from '../../logger';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -420,8 +422,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       return {
         output: assistantTranscript || '[No response received from API]',
         ...audioOutput,
-        // TODO: Add token usage
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        // TODO: Add proper token usage tracking
+        tokenUsage: createEmptyTokenUsage(),
         cached: false,
         metadata: {
           ...audioOutput,

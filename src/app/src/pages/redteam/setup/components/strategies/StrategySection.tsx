@@ -1,7 +1,9 @@
-import React from 'react';
-import { Typography, Box, Button } from '@mui/material';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import { alpha } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import { StrategyItem } from './StrategyItem';
+
 import type { StrategyCardData } from './types';
 
 interface StrategySectionProps {

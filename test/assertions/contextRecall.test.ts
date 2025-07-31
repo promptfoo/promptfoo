@@ -1,7 +1,8 @@
 import { handleContextRecall } from '../../src/assertions/contextRecall';
 import * as contextUtils from '../../src/assertions/contextUtils';
 import * as matchers from '../../src/matchers';
-import type { AssertionParams, ApiProvider, ProviderResponse } from '../../src/types';
+
+import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/assertions/contextUtils');
@@ -49,6 +50,8 @@ describe('handleContextRecall', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.9);
     expect(result.reason).toBe('Context contains expected information');
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.context).toBe('test context');
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
       'Expected fact',
@@ -94,6 +97,8 @@ describe('handleContextRecall', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0.3);
     expect(result.reason).toBe('Context missing expected information');
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.context).toBe('test context');
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
       'Missing fact',
@@ -134,8 +139,10 @@ describe('handleContextRecall', () => {
       providerResponse: {} as ProviderResponse,
     };
 
-    await handleContextRecall(params);
+    const result = await handleContextRecall(params);
 
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.context).toBe('test context');
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
       'test value',
@@ -176,8 +183,10 @@ describe('handleContextRecall', () => {
       providerResponse: {} as ProviderResponse,
     };
 
-    await handleContextRecall(params);
+    const result = await handleContextRecall(params);
 
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.context).toBe('test prompt');
     expect(contextUtils.resolveContext).toHaveBeenCalledWith(
       params.assertion,
       params.test,
@@ -217,8 +226,10 @@ describe('handleContextRecall', () => {
       providerResponse: {} as ProviderResponse,
     };
 
-    await handleContextRecall(params);
+    const result = await handleContextRecall(params);
 
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.context).toBe('ctx');
     expect(contextUtils.resolveContext).toHaveBeenCalledWith(
       params.assertion,
       params.test,

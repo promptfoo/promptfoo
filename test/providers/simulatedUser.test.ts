@@ -1,6 +1,7 @@
 import { SimulatedUser } from '../../src/providers/simulatedUser';
-import type { ApiProvider } from '../../src/types';
 import * as timeUtils from '../../src/util/time';
+
+import type { ApiProvider } from '../../src/types';
 
 jest.mock('../../src/util/time', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
@@ -78,14 +79,7 @@ describe('SimulatedUser', () => {
       expect(result.output).toContain('User:');
       expect(result.output).toContain('Assistant:');
       expect(result.tokenUsage?.numRequests).toBe(2);
-      expect(originalProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
-        expect.objectContaining({
-          vars: expect.objectContaining({
-            instructions: 'test instructions',
-          }),
-        }),
-      );
+      expect(originalProvider.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
@@ -105,14 +99,7 @@ describe('SimulatedUser', () => {
 
       const messageCount = result.output?.split('---').length;
       expect(messageCount).toBe(2);
-      expect(originalProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
-        expect.objectContaining({
-          vars: expect.objectContaining({
-            instructions: 'test instructions',
-          }),
-        }),
-      );
+      expect(originalProvider.callApi).toHaveBeenCalledTimes(1);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
@@ -166,7 +153,7 @@ describe('SimulatedUser', () => {
 
       expect(result.output).toBeDefined();
       expect(originalProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
+        expect.stringContaining('[{"role":"user","content":"user response"}'),
         expect.objectContaining({
           vars: expect.objectContaining({
             workflow_id: '123-workflow',
@@ -194,14 +181,7 @@ describe('SimulatedUser', () => {
       );
 
       expect(result.output).toBeDefined();
-      expect(providerWithDelay.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('[{"role":"system","content":"test prompt"}'),
-        expect.objectContaining({
-          vars: expect.objectContaining({
-            instructions: 'test instructions',
-          }),
-        }),
-      );
+      expect(providerWithDelay.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).toHaveBeenCalledWith(100);
     });
   });

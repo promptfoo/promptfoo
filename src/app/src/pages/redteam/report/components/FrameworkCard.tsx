@@ -1,4 +1,5 @@
 import React from 'react';
+
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
@@ -15,18 +16,18 @@ import Typography from '@mui/material/Typography';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_NAMES,
-  OWASP_LLM_TOP_10_NAMES,
   OWASP_API_TOP_10_NAMES,
+  OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
 import {
   type CategoryStats,
-  expandPluginCollections,
   categorizePlugins,
+  expandPluginCollections,
+  FRAMEWORK_DESCRIPTIONS,
   getPluginDisplayName,
   getSeverityColor,
-  FRAMEWORK_DESCRIPTIONS,
 } from './FrameworkComplianceUtils';
 
 interface FrameworkCardProps {

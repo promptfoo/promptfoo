@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Imagen image generation comparison
+
+prompts:
+  - 'Create a {{quality}} image of {{subject}} with {{style}} aesthetic'
+
+providers:
+  # Ultra quality - highest detail and quality
+  - id: google:image:imagen-4.0-ultra-generate-preview-06-06
+    config:
+      # projectId: 'your-project-id'  # Optional: Can be set here or via GOOGLE_PROJECT_ID env var
+      aspectRatio: '16:9'
+      # seed: 42  # Note: seed is only supported in Vertex AI, not Google AI Studio
+      # safetyFilterLevel: 'block_some'  # Note: Google AI Studio only supports 'block_low_and_above'
+      # addWatermark: false  # Note: addWatermark is only supported in Vertex AI
+
+  # Standard quality - balanced quality and speed
+  - id: google:image:imagen-4.0-generate-preview-06-06
+    config:
+      aspectRatio: '16:9'
+      # seed: 42  # Note: seed is only supported in Vertex AI
+      # safetyFilterLevel: 'block_some'  # Note: Google AI Studio only supports 'block_low_and_above'
+      # addWatermark: false  # Note: addWatermark is only supported in Vertex AI
+
+  # Fast generation - optimized for speed
+  - id: google:image:imagen-4.0-fast-generate-preview-06-06
+    config:
+      aspectRatio: '16:9'
+      # seed: 42  # Note: seed is only supported in Vertex AI
+      # safetyFilterLevel: 'block_some'  # Note: Google AI Studio only supports 'block_low_and_above'
+      # addWatermark: false  # Note: addWatermark is only supported in Vertex AI
+
+  # Previous generation for comparison
+  - id: google:image:imagen-3.0-generate-002
+    config:
+      aspectRatio: '16:9'
+      # seed: 42  # Note: seed is only supported in Vertex AI
+      # safetyFilterLevel: 'block_some'  # Note: Google AI Studio only supports 'block_low_and_above'
+      # addWatermark: false  # Note: addWatermark is only supported in Vertex AI
+
+tests:
+  - vars:
+      quality: 'photorealistic'
+      subject: 'a futuristic spacecraft'
+      style: 'cinematic sci-fi'
+
+  - vars:
+      quality: 'highly detailed'
+      subject: 'starry night over a cyberpunk city'
+      style: 'Van Gogh painting'
+
+  - vars:
+      quality: 'minimalist'
+      subject: 'a zen garden at sunrise'
+      style: 'Japanese ink wash'
+
+  - vars:
+      quality: 'vibrant'
+      subject: 'tropical birds in a rainforest'
+      style: 'watercolor illustration'
+
+  - vars:
+      quality: 'dramatic'
+      subject: 'a medieval castle during a thunderstorm'
+      style: 'fantasy art'

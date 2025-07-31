@@ -1,15 +1,17 @@
 import { Severity } from '../../src/redteam/constants';
+
 import type {
-  RedteamPluginObject,
-  RedteamPlugin,
-  RedteamStrategyObject,
+  BaseRedteamMetadata,
   PluginActionParams,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
-  SynthesizeOptions,
+  RedteamGenerateOptions,
+  RedteamPlugin,
+  RedteamPluginObject,
   RedteamRunOptions,
+  RedteamStrategyObject,
   SavedRedteamConfig,
-  BaseRedteamMetadata,
+  SynthesizeOptions,
 } from '../../src/redteam/types';
 import type { ApiProvider } from '../../src/types/providers';
 
@@ -225,5 +227,34 @@ describe('redteam types', () => {
     expect(metadata.redteamFinalPrompt).toBe('final prompt');
     expect(metadata.messages).toHaveLength(1);
     expect(metadata.stopReason).toBe('complete');
+  });
+
+  it('should create valid RedteamGenerateOptions', () => {
+    const emptyOptions: RedteamGenerateOptions = {};
+    const partialOptions: RedteamGenerateOptions = {
+      cache: true,
+      plugins: [
+        {
+          id: 'test-plugin',
+          numTests: 5,
+        },
+      ],
+      maxConcurrency: 3,
+      injectVar: 'test_var',
+      language: 'en',
+      purpose: 'test purpose',
+      remote: false,
+      sharing: true,
+      testGenerationInstructions: 'test instructions',
+    };
+
+    expect(emptyOptions).toBeDefined();
+    expect(partialOptions.cache).toBe(true);
+    expect(partialOptions.plugins?.length).toBe(1);
+    expect(partialOptions.maxConcurrency).toBe(3);
+    expect(partialOptions.language).toBe('en');
+    expect(partialOptions.remote).toBe(false);
+    expect(partialOptions.sharing).toBe(true);
+    expect(partialOptions.testGenerationInstructions).toBe('test instructions');
   });
 });

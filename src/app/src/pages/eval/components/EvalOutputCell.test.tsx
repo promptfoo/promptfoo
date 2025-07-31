@@ -1,14 +1,15 @@
-import { render, screen } from '@testing-library/react';
 import {
-  ResultFailureReason,
   type AssertionType,
   type EvaluateTableOutput,
+  ResultFailureReason,
 } from '@promptfoo/types';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
-import type { EvalOutputCellProps } from './EvalOutputCell';
 import EvalOutputCell from './EvalOutputCell';
+
+import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
@@ -400,6 +401,30 @@ describe('EvalOutputCell', () => {
       writable: true,
     });
     global.URL = originalURL;
+  });
+
+  it('displays the token usage tooltip with reasoning tokens', () => {
+    const propsWithReasoningTokens: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        tokenUsage: {
+          prompt: 10,
+          completion: 20,
+          total: 35,
+          completionDetails: {
+            reasoning: 5,
+          },
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithReasoningTokens} />);
+
+    const expectedTooltipText =
+      '10 prompt tokens + 20 completion tokens & 5 reasoning tokens = 35 total';
+    const tooltipElement = screen.getByLabelText(expectedTooltipText);
+    expect(tooltipElement).toBeInTheDocument();
   });
 });
 

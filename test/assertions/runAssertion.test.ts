@@ -1,17 +1,19 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { runAssertion } from '../../src/assertions';
 import { fetchWithRetries } from '../../src/fetch';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
-import type {
-  Assertion,
-  ApiProvider,
-  AtomicTestCase,
-  ProviderResponse,
-  GradingResult,
-} from '../../src/types';
 import { TestGrader } from '../util/utils';
+
+import type {
+  ApiProvider,
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+} from '../../src/types';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
@@ -2652,6 +2654,9 @@ describe('runAssertion', () => {
         score: 1,
         reason: 'Mocked reason',
         assertion,
+        metadata: {
+          context: 'Paris is the capital of France.',
+        },
       });
     });
 
@@ -2740,6 +2745,9 @@ describe('runAssertion', () => {
         score: 1,
         reason: 'Mocked reason',
         assertion,
+        metadata: {
+          context: 'Paris is the capital of France.',
+        },
       });
     });
 

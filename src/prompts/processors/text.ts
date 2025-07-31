@@ -1,6 +1,8 @@
 import * as fs from 'fs';
-import type { Prompt } from '../../types';
+
 import { PROMPT_DELIMITER } from '../constants';
+
+import type { Prompt } from '../../types';
 
 /**
  * Processes a text file to extract prompts, splitting by a delimiter.

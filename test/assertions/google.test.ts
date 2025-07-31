@@ -1,11 +1,13 @@
 import fs from 'fs';
 import path from 'path';
+
 import { runAssertion } from '../../src/assertions';
-import type { Tool } from '../../src/providers/google//types';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleLiveProvider } from '../../src/providers/google/live';
 import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
+
+import type { Tool } from '../../src/providers/google//types';
 import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types';
 
 jest.mock('fs');

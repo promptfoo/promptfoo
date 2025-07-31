@@ -1,7 +1,8 @@
-import async from 'async';
 import fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import async from 'async';
+import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import logger from '../logger';
@@ -20,13 +21,6 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import type {
-  AssertionParams,
-  AssertionValueFunctionContext,
-  BaseAssertionTypes,
-  ProviderResponse,
-  ScoringFunction,
-} from '../types';
 import {
   type ApiProvider,
   type Assertion,
@@ -85,6 +79,14 @@ import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
+
+import type {
+  AssertionParams,
+  AssertionValueFunctionContext,
+  BaseAssertionTypes,
+  ProviderResponse,
+  ScoringFunction,
+} from '../types';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -320,6 +322,11 @@ export async function runAssertion({
     pi: handlePiScorer,
   };
 
+  // Check for redteam assertions first
+  if (baseType.startsWith('promptfoo:redteam:')) {
+    return handleRedteam(assertionParams);
+  }
+
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
   if (handler) {
     const result = await handler(assertionParams);
@@ -335,9 +342,6 @@ export async function runAssertion({
     return result;
   }
 
-  if (baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
-  }
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
@@ -400,8 +404,8 @@ export async function runAssertions({
     asserts,
     ASSERTIONS_MAX_CONCURRENCY,
     async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-')) {
-        // Select-type assertions are handled separately because they depend on multiple outputs.
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
         return;
       }
 

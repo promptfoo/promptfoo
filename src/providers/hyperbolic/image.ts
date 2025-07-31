@@ -1,10 +1,11 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../shared';
+
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider } from '../../types/providers';
-import { REQUEST_TIMEOUT_MS } from '../shared';
 
 export type HyperbolicImageOptions = {
   apiKey?: string;
@@ -32,7 +33,7 @@ export type HyperbolicImageOptions = {
   response_format?: 'url' | 'b64_json';
 };
 
-export const HYPERBOLIC_IMAGE_MODELS = [
+const HYPERBOLIC_IMAGE_MODELS = [
   {
     id: 'Flux.1-dev',
     aliases: ['flux-dev', 'flux.1-dev', 'FLUX.1-dev'],

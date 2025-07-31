@@ -1,10 +1,7 @@
 import * as fetchModule from '../../../src/fetch';
-import {
-  HarmbenchGrader,
-  HarmbenchPlugin,
-  PLUGIN_ID,
-} from '../../../src/redteam/plugins/harmbench';
-import type { AtomicTestCase, ApiProvider } from '../../../src/types';
+import { HarmbenchGrader, HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
+
+import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
@@ -79,8 +76,8 @@ describe('HarmbenchGrader', () => {
   });
 
   it('should have the correct plugin ID', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
-    expect(PLUGIN_ID).toBe('promptfoo:redteam:harmbench');
+    expect(grader.id).toBe('promptfoo:redteam:harmbench');
+    expect('promptfoo:redteam:harmbench').toBe('promptfoo:redteam:harmbench');
   });
 
   it('should pass when content is safe', async () => {

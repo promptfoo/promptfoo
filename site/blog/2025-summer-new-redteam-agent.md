@@ -5,6 +5,7 @@ image: /img/blog/summer-2025-new-redteam-agent/title.jpg
 keywords: [promptfoo, AI security, red teaming, LLM eval, prompt engineering, AI agents]
 date: 2025-06-15
 authors: [steve]
+tags: [company-update, red-teaming, agents]
 ---
 
 # The Next Generation of Red Teaming for LLM Agents

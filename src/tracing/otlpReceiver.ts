@@ -348,7 +348,7 @@ export class OTLPReceiver {
 // Singleton instance
 let otlpReceiver: OTLPReceiver | null = null;
 
-export function getOTLPReceiver(): OTLPReceiver {
+function getOTLPReceiver(): OTLPReceiver {
   if (!otlpReceiver) {
     otlpReceiver = new OTLPReceiver();
   }

@@ -1,7 +1,10 @@
+import path from 'path';
+
 import { filterTests } from '../../../src/commands/eval/filterTests';
 import Eval from '../../../src/models/eval';
-import type { TestSuite, TestCase } from '../../../src/types';
 import { ResultFailureReason } from '../../../src/types';
+
+import type { TestCase, TestSuite } from '../../../src/types';
 
 jest.mock('../../../src/models/eval', () => ({
   findById: jest.fn(),
@@ -122,6 +125,62 @@ describe('filterTests', () => {
       const result = await filterTests(mockTestSuite, { failing: 'eval-123' });
       expect(result).toHaveLength(2);
       expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
+    });
+
+    it('should match failing tests when provider paths differ', async () => {
+      jest.resetAllMocks();
+      const absPath = path.join(process.cwd(), 'provider.js');
+      const mockEval = {
+        id: 'eval-123',
+        createdAt: new Date().getTime(),
+        config: {},
+        results: [],
+        resultsCount: 0,
+        prompts: [],
+        persisted: true,
+        toEvaluateSummary: jest.fn().mockResolvedValue({
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: [
+            {
+              vars: { var1: 'test1' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              provider: { id: `file://${absPath}` },
+              testCase: mockTestSuite.tests![0],
+            },
+          ],
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 0,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+            },
+          },
+        }),
+      };
+
+      jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+
+      const testSuite = {
+        ...mockTestSuite,
+        tests: [
+          {
+            ...mockTestSuite.tests![0],
+            provider: `file://./provider.js`,
+          },
+        ],
+      } as TestSuite;
+
+      const result = await filterTests(testSuite, { failing: 'eval-123' });
+      expect(result).toHaveLength(1);
     });
   });
 

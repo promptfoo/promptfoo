@@ -21,11 +21,11 @@ const response = await fetch('/api/traces/evaluation/123');
 - `npm run build` - Build the project
 - `npm run build:clean` - Clean the dist directory
 - `npm run build:watch` - Watch for changes and rebuild TypeScript files
-- `npm run lint` - Run ESLint (max 0 warnings)
-- `npm run lint:src` - Run ESLint on src directory
-- `npm run lint:tests` - Run ESLint on test directory
-- `npm run lint:site` - Run ESLint on site directory
-- `npm run format` - Format with Prettier
+- `npm run lint` - Run Biome linter (alias for lint:src)
+- `npm run lint:src` - Run Biome linter on src directory
+- `npm run lint:tests` - Run Biome linter on test directory
+- `npm run lint:site` - Run Biome linter on site directory
+- `npm run format` - Format with Biome (JS/TS) and Prettier (CSS/HTML/Markdown)
 - `npm run format:check` - Check formatting without making changes
 - `npm run f` - Format only changed files
 - `npm run l` - Lint only changed files
@@ -44,6 +44,29 @@ const response = await fetch('/api/traces/evaluation/123');
 - `npm run jsonSchema:generate` - Generate JSON schema for configuration
 - `npm run citation:generate` - Generate citation file
 
+## Style Checks
+
+When the CI style check is failing, run these commands to fix style issues:
+
+1. **Fix all style issues automatically**:
+
+   ```bash
+   # Fix linting issues for changed files
+   npm run l
+
+   # Fix formatting issues for changed files
+   npm run f
+
+   # Or fix all files (not just changed ones)
+   npm run format
+   ```
+
+2. **Before committing**, always run:
+
+   ```bash
+   npm run l && npm run f
+   ```
+
 ## CLI Commands
 
 - `promptfoo` or `pf` - Access the CLI tool
@@ -51,7 +74,7 @@ const response = await fetch('/api/traces/evaluation/123');
 ## Code Style Guidelines
 
 - Use TypeScript with strict type checking
-- Follow established import order with @trivago/prettier-plugin-sort-imports
+- Follow consistent import order (Biome will handle import sorting)
 - Use consistent curly braces for all control statements
 - Prefer const over let; avoid var
 - Use object shorthand syntax whenever possible

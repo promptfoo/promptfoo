@@ -16,6 +16,7 @@ keywords:
   ]
 date: 2024-12-22
 authors: [ian]
+tags: [research-analysis]
 ---
 
 # Red Team Your LLM with BeaverTails
@@ -95,7 +96,8 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - openai:chat:gpt-4.1-mini
+  - openai:gpt-4.1-mini
+  - ollama:chat:llama3.3
   # Add other providers as needed
 
 defaultTest:
@@ -128,7 +130,7 @@ providers:
 ```yaml
 providers:
   - anthropic:claude-3-opus
-  - anthropic:claude-3-sonnet
+  - anthropic:claude-3-5-sonnet-latest
     config:
       temperature: 0.1
 ```
@@ -188,7 +190,7 @@ You can test multiple providers simultaneously to compare their safety performan
 providers:
   - openai:chat:gpt-4
   - anthropic:claude-3-opus
-  - ollama:llama2
+  - ollama:chat:llama3.3
   - bedrock:anthropic.claude-3
     config:
       temperature: 0.1

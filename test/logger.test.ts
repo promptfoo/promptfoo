@@ -77,16 +77,16 @@ describe('logger', () => {
 
   describe('logger methods', () => {
     it('should log messages at different levels', () => {
-      logger.logger.error('test error');
+      logger.default.error('test error');
       expect(mockLogger.error).toHaveBeenCalledWith({ message: 'test error', location: '' });
 
-      logger.logger.warn('test warning');
+      logger.default.warn('test warning');
       expect(mockLogger.warn).toHaveBeenCalledWith({ message: 'test warning', location: '' });
 
-      logger.logger.info('test info');
+      logger.default.info('test info');
       expect(mockLogger.info).toHaveBeenCalledWith({ message: 'test info', location: '' });
 
-      logger.logger.debug('test debug');
+      logger.default.debug('test debug');
       expect(mockLogger.debug).toHaveBeenCalledWith({
         message: 'test debug',
         location: expect.any(String),
@@ -106,7 +106,7 @@ describe('logger', () => {
       Object.defineProperty(mockError, 'stack', { value: mockStack });
       jest.spyOn(global, 'Error').mockImplementation(() => mockError);
 
-      logger.logger.debug('debug message');
+      logger.default.debug('debug message');
       expect(mockLogger.debug).toHaveBeenCalledWith({
         message: 'debug message',
         location: '[logger.test.ts:123]',
@@ -408,7 +408,7 @@ describe('logger', () => {
 
     it('should not create error log file when disabled', () => {
       process.env.PROMPTFOO_DISABLE_ERROR_LOG = 'true';
-      logger.logger.error('test error');
+      logger.default.error('test error');
       const winston = jest.requireMock('winston');
       expect(winston.transports.File).not.toHaveBeenCalled();
     });
@@ -428,16 +428,16 @@ describe('logger', () => {
 
   describe('logger methods with empty strings', () => {
     it('should correctly log empty strings', () => {
-      logger.logger.info('');
+      logger.default.info('');
       expect(mockLogger.info).toHaveBeenCalledWith({ message: '', location: '' });
 
-      logger.logger.error('');
+      logger.default.error('');
       expect(mockLogger.error).toHaveBeenCalledWith({ message: '', location: '' });
 
-      logger.logger.warn('');
+      logger.default.warn('');
       expect(mockLogger.warn).toHaveBeenCalledWith({ message: '', location: '' });
 
-      logger.logger.debug('');
+      logger.default.debug('');
       expect(mockLogger.debug).toHaveBeenCalledWith({
         message: '',
         location: expect.any(String),
@@ -489,7 +489,7 @@ describe('logger', () => {
       logger.setLogLevel('debug');
 
       // Log with info level, should include location because debug is enabled
-      logger.logger.info('test info with debug enabled');
+      logger.default.info('test info with debug enabled');
 
       // Verify location is included in the call to the underlying logger
       expect(mockLogger.info).toHaveBeenCalledWith({
@@ -502,27 +502,27 @@ describe('logger', () => {
   describe('logger instance', () => {
     it('should have properly bound add and remove methods', () => {
       // Testing line 207-208: Test that the methods are correctly bound
-      expect(typeof logger.logger.add).toBe('function');
-      expect(typeof logger.logger.remove).toBe('function');
+      expect(typeof logger.default.add).toBe('function');
+      expect(typeof logger.default.remove).toBe('function');
 
       // Test that the methods are bound to winstonLogger
       const addSpy = jest.spyOn(mockLogger, 'add');
       const removeSpy = jest.spyOn(mockLogger, 'remove');
 
       const transport = { name: 'test' } as any;
-      logger.logger.add(transport);
+      logger.default.add(transport);
       expect(addSpy).toHaveBeenCalledWith(transport);
 
-      logger.logger.remove(transport);
+      logger.default.remove(transport);
       expect(removeSpy).toHaveBeenCalledWith(transport);
     });
 
     it('should expose transports property', () => {
       // Test the transports property is correctly assigned (line 207-208)
-      expect(logger.logger.transports).toBe(mockLogger.transports);
+      expect(logger.default.transports).toBe(mockLogger.transports);
 
       // Verify we can access the transports array
-      expect(Array.isArray(logger.logger.transports)).toBe(true);
+      expect(Array.isArray(logger.default.transports)).toBe(true);
     });
   });
 });

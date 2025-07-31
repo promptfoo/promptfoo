@@ -4,6 +4,7 @@ import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
+
 import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 describe('matchesAnswerRelevance', () => {
@@ -59,6 +60,7 @@ describe('matchesAnswerRelevance', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
@@ -106,6 +108,7 @@ describe('matchesAnswerRelevance', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(

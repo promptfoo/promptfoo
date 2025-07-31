@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+
 import CrispChat from '@app/components/CrispChat';
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { usePageMeta } from '@app/hooks/usePageMeta';
@@ -24,27 +24,28 @@ import DialogTitle from '@mui/material/DialogTitle';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
+import { styled } from '@mui/material/styles';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { styled } from '@mui/material/styles';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import type { RedteamStrategy } from '@promptfoo/types';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { customTargetOption, predefinedTargets } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
 import Review from './components/Review';
 import Setup from './components/Setup';
 import Strategies from './components/Strategies';
 import Targets from './components/Targets';
-import { predefinedTargets, customTargetOption } from './components/constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
-import type { RedteamUITarget } from './types';
-import type { Config } from './types';
 import { generateOrderedYaml } from './utils/yamlHelpers';
+import type { RedteamStrategy } from '@promptfoo/types';
+
+import type { Config, RedteamUITarget } from './types';
 import './page.css';
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
@@ -284,6 +285,15 @@ export default function RedTeamSetupPage() {
 
   const lastSavedConfig = useRef<string>('');
 
+  // Track funnel on initial load
+  useEffect(() => {
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_setup_started',
+      source: 'webui',
+    });
+  }, []);
+
   // Handle browser back/forward
   useEffect(() => {
     const hash = location.hash.replace('#', '');
@@ -327,6 +337,16 @@ export default function RedTeamSetupPage() {
     updateHash(newValue);
     setValue(newValue);
     window.scrollTo({ top: 0 });
+
+    // Track funnel progress
+    const steps = ['targets', 'purpose', 'plugins', 'strategies', 'review'];
+    if (newValue < steps.length) {
+      recordEvent('funnel', {
+        type: 'redteam',
+        step: `webui_setup_${steps[newValue]}_viewed`,
+        source: 'webui',
+      });
+    }
   };
 
   const closeSetupModal = () => {
@@ -341,6 +361,17 @@ export default function RedTeamSetupPage() {
       numStrategies: config.strategies.length,
       targetType: config.target.id,
     });
+
+    // Track funnel milestone
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_setup_configured',
+      source: 'webui',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+
     try {
       const response = await callApi('/configs', {
         method: 'POST',

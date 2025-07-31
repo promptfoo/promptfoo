@@ -1,11 +1,11 @@
 import path from 'path';
+
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
-import { getEnvString, getEnvBool } from './envars';
+import { getEnvBool, getEnvString } from './envars';
 import logger from './logger';
 import {
   ANSWER_RELEVANCY_GENERATE,
-  SELECT_BEST_PROMPT,
   CONTEXT_FAITHFULNESS_LONGFORM,
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
@@ -13,10 +13,11 @@ import {
   CONTEXT_RELEVANCE,
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
+  GEVAL_PROMPT_EVALUATE,
+  GEVAL_PROMPT_STEPS,
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
-  GEVAL_PROMPT_STEPS,
-  GEVAL_PROMPT_EVALUATE,
+  SELECT_BEST_PROMPT,
 } from './prompts';
 import { loadApiProvider } from './providers';
 import { getDefaultProviders } from './providers/defaults';
@@ -24,6 +25,12 @@ import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
+import { maybeLoadFromExternalFile } from './util/file';
+import { isJavascriptFile } from './util/fileExtensions';
+import invariant from './util/invariant';
+import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { getNunjucksEngine } from './util/templates';
+
 import type {
   ApiClassificationProvider,
   ApiEmbeddingProvider,
@@ -38,11 +45,7 @@ import type {
   ProviderTypeMap,
   TokenUsage,
 } from './types';
-import { maybeLoadFromExternalFile } from './util/file';
-import { isJavascriptFile } from './util/fileExtensions';
-import invariant from './util/invariant';
-import { extractJsonObjects, extractFirstJsonObject } from './util/json';
-import { getNunjucksEngine } from './util/templates';
+import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -172,38 +175,14 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
       prompt: tokensUsed?.prompt || 0,
       completion: tokensUsed?.completion || 0,
       cached: tokensUsed?.cached || 0,
+      numRequests: tokensUsed?.numRequests || 0,
       completionDetails: tokensUsed?.completionDetails,
     },
   };
 }
 
-function accumulateTokens(target: Partial<TokenUsage>, update?: Partial<TokenUsage>) {
-  if (!update || !target) {
-    return;
-  }
-
-  target.total = (target.total || 0) + (update.total || 0);
-  target.prompt = (target.prompt || 0) + (update.prompt || 0);
-  target.completion = (target.completion || 0) + (update.completion || 0);
-  target.cached = (target.cached || 0) + (update.cached || 0);
-
-  if (update.completionDetails) {
-    if (!target.completionDetails) {
-      target.completionDetails = {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      };
-    }
-    target.completionDetails.reasoning =
-      (target.completionDetails.reasoning || 0) + (update.completionDetails.reasoning || 0);
-    target.completionDetails.acceptedPrediction =
-      (target.completionDetails.acceptedPrediction || 0) +
-      (update.completionDetails.acceptedPrediction || 0);
-    target.completionDetails.rejectedPrediction =
-      (target.completionDetails.rejectedPrediction || 0) +
-      (update.completionDetails.rejectedPrediction || 0);
-  }
+function accumulateTokens(target: TokenUsage, update?: Partial<TokenUsage>) {
+  accumulateTokenUsage(target, update);
 }
 
 export async function matchesSimilarity(
@@ -227,10 +206,11 @@ export async function matchesSimilarity(
     }
   }
 
+  const defaults = await getDefaultProviders();
   const finalProvider = (await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    (await getDefaultProviders()).embeddingProvider,
+    defaults.embeddingProvider,
     'similarity check',
   )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
@@ -240,6 +220,7 @@ export async function matchesSimilarity(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -253,6 +234,7 @@ export async function matchesSimilarity(
     tokensUsed.prompt = similarityResp.tokenUsage?.prompt || 0;
     tokensUsed.completion = similarityResp.tokenUsage?.completion || 0;
     tokensUsed.cached = similarityResp.tokenUsage?.cached || 0;
+    tokensUsed.numRequests = similarityResp.tokenUsage?.numRequests || 0;
     tokensUsed.completionDetails = similarityResp.tokenUsage?.completionDetails;
     if (similarityResp.error) {
       return fail(similarityResp.error, tokensUsed);
@@ -274,6 +256,9 @@ export async function matchesSimilarity(
       (outputEmbedding.tokenUsage?.completion || 0);
     tokensUsed.cached =
       (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0);
+    tokensUsed.numRequests =
+      (expectedEmbedding.tokenUsage?.numRequests || 0) +
+      (outputEmbedding.tokenUsage?.numRequests || 0);
     tokensUsed.completionDetails = {
       reasoning:
         (expectedEmbedding.tokenUsage?.completionDetails?.reasoning || 0) +
@@ -537,13 +522,27 @@ export async function matchesLlmRubric(
     jsonObjects = [resp.output];
   } else {
     return fail(
-      'llm-rubric produced malformed response - output must be string or object',
+      `llm-rubric produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
+      resp.tokenUsage,
+    );
+  }
+
+  if (!Array.isArray(jsonObjects) || jsonObjects.length === 0) {
+    return fail(
+      `llm-rubric produced malformed response - We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
       resp.tokenUsage,
     );
   }
 
   // expects properties pass, score, and reason
   const parsed = jsonObjects[0] as Partial<GradingResult>;
+
+  if (typeof parsed !== 'object' || parsed === null || parsed === undefined) {
+    return fail(
+      `llm-rubric produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
+      resp.tokenUsage,
+    );
+  }
 
   let pass = parsed.pass ?? true;
   if (typeof pass !== 'boolean') {
@@ -574,6 +573,7 @@ export async function matchesLlmRubric(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: parsed.tokensUsed?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -698,6 +698,7 @@ export async function matchesFactuality(
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -749,6 +750,7 @@ export async function matchesFactuality(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: resp.tokenUsage?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -795,7 +797,7 @@ export async function matchesClosedQa(
     const pass = resp.output.trimEnd().endsWith('Y');
     let reason;
     if (pass) {
-      reason = 'The submission meets the criterion';
+      reason = `The submission meets the criterion:\n${resp.output}`;
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
@@ -810,6 +812,7 @@ export async function matchesClosedQa(
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
         cached: resp.tokenUsage?.cached || 0,
+        numRequests: resp.tokenUsage?.numRequests || 0,
         completionDetails: resp.tokenUsage?.completionDetails || {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -846,6 +849,7 @@ export async function matchesGEval(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -935,6 +939,7 @@ export async function matchesAnswerRelevance(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -1049,6 +1054,7 @@ export async function matchesContextRecall(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: resp.tokenUsage?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -1101,6 +1107,7 @@ export async function matchesContextRelevance(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: resp.tokenUsage?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -1130,6 +1137,7 @@ export async function matchesContextFaithfulness(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -1245,6 +1253,7 @@ export async function matchesSelectBest(
     prompt: resp.tokenUsage?.prompt || 0,
     completion: resp.tokenUsage?.completion || 0,
     cached: resp.tokenUsage?.cached || 0,
+    numRequests: resp.tokenUsage?.numRequests || 0,
     completionDetails: resp.tokenUsage?.completionDetails || {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -1267,6 +1276,115 @@ export async function matchesSelectBest(
         tokensUsed,
       };
     }
+  });
+}
+
+export async function selectMaxScore(
+  outputs: string[],
+  resultsWithGradingResults: Array<{
+    gradingResult?: { componentResults?: GradingResult[] } | null;
+  }>,
+  assertion: Assertion,
+): Promise<Omit<GradingResult, 'assertion'>[]> {
+  invariant(
+    outputs.length >= 2,
+    'max-score assertion must have at least two outputs to compare between',
+  );
+
+  // Parse options from assertion value
+  const value = assertion.value || {};
+  const options = {
+    method: (typeof value === 'object' && 'method' in value ? value.method : 'average') as
+      | 'average'
+      | 'sum',
+    weights: (typeof value === 'object' && 'weights' in value ? value.weights : {}) as Record<
+      string,
+      number
+    >,
+    threshold:
+      typeof value === 'object' && 'threshold' in value ? (value.threshold as number) : undefined,
+  };
+
+  // Calculate aggregate score for each output
+  const scores = resultsWithGradingResults.map((result, index) => {
+    // Get component results from gradingResult if available
+    const componentResults = result.gradingResult?.componentResults || [];
+
+    // Filter out max-score and select-best assertions
+    const relevantResults = componentResults.filter(
+      (r: GradingResult) =>
+        r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
+    );
+
+    if (relevantResults.length === 0) {
+      throw new Error(
+        'max-score requires at least one other assertion (besides max-score or select-best) to aggregate scores from',
+      );
+    }
+
+    // Calculate weighted scores for each assertion
+    let totalWeightedScore = 0;
+    let totalWeight = 0;
+
+    relevantResults.forEach((componentResult: GradingResult) => {
+      const assertionType = componentResult.assertion?.type || 'unknown';
+      const weight =
+        options.weights[assertionType] !== undefined ? options.weights[assertionType] : 1.0; // Default weight is 1
+
+      const score = componentResult.score || 0;
+      totalWeightedScore += score * weight;
+      totalWeight += weight;
+    });
+
+    // Calculate aggregate score based on method
+    let aggregateScore: number;
+    if (options.method === 'sum') {
+      aggregateScore = totalWeightedScore;
+    } else {
+      // Average method (default)
+      aggregateScore = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
+    }
+
+    return {
+      index,
+      score: aggregateScore,
+      componentCount: relevantResults.length,
+      totalWeight,
+    };
+  });
+
+  // Find max score (with deterministic tie-breaking by index)
+  let maxScore = -Infinity;
+  let winnerIndex = 0;
+
+  for (let i = 0; i < scores.length; i++) {
+    if (scores[i].score > maxScore) {
+      maxScore = scores[i].score;
+      winnerIndex = i;
+    }
+  }
+
+  // Apply threshold if specified
+  const meetsThreshold = !options.threshold || maxScore >= options.threshold;
+
+  // Return results for each output
+  return scores.map(({ index, score, componentCount, totalWeight }) => {
+    const isWinner = index === winnerIndex && meetsThreshold;
+
+    return {
+      pass: isWinner,
+      score: isWinner ? 1 : 0,
+      reason: isWinner
+        ? `Selected as highest scoring output (score: ${score.toFixed(3)})`
+        : score === maxScore && !meetsThreshold
+          ? `Not selected - score ${score.toFixed(3)} below threshold ${options.threshold}`
+          : `Not selected (score: ${score.toFixed(3)}, max: ${maxScore.toFixed(3)})`,
+      namedScores: {
+        maxScore: score,
+        assertionCount: componentCount,
+        totalWeight,
+      },
+    };
   });
 }
 

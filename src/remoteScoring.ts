@@ -2,6 +2,7 @@ import { fetchWithCache } from './cache';
 import { getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
+
 import type { GradingResult } from './types';
 
 type PiQuestion = {
@@ -14,7 +15,7 @@ type RemotePiScoringPayload = {
   scoring_spec: PiScoringSpec;
 };
 
-export function getWithPiApiKey(): string | undefined {
+function getWithPiApiKey(): string | undefined {
   // Check env var first
   const withPiApiKey = getEnvString('WITHPI_API_KEY');
   if (withPiApiKey) {

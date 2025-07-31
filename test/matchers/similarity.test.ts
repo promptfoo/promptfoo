@@ -1,7 +1,8 @@
 import { matchesSimilarity } from '../../src/matchers';
-import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+
+import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import type { GradingConfig } from '../../src/types';
 
 describe('matchesSimilarity', () => {
@@ -41,6 +42,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -60,6 +62,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -81,6 +84,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -102,6 +106,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -140,6 +145,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith('Expected output');
