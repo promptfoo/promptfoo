@@ -5,12 +5,18 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { normalizeFinishReason } from '../util/finishReason';
 
-import type { ApiProvider, ProviderOptions, ProviderResponse, CallApiContextParams, CallApiOptionsParams } from '../types/providers';
+import type {
+  ApiProvider,
+  ProviderOptions,
+  ProviderResponse,
+  CallApiContextParams,
+  CallApiOptionsParams,
+} from '../types/providers';
 
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
  * for models like Gemini that include thinking/reasoning tokens.
- * 
+ *
  * For Gemini models, the base OpenAI provider incorrectly prioritizes the reasoning
  * field over content. This provider ensures content is the primary output with
  * reasoning shown as thinking content when showThinking is enabled.
@@ -66,13 +72,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     if (this.modelName.includes('gemini')) {
       // Get the request body and config
       const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
-      
+
       // Make the API call directly
       logger.debug(`Calling OpenRouter API for Gemini model: ${JSON.stringify(body)}`);
-      
+
       let data, status, statusText;
       let cached = false;
-      
+
       try {
         ({ data, cached, status, statusText } = await fetchWithCache(
           `${this.getApiUrl()}/chat/completions`,
@@ -112,12 +118,12 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       // Process the response with special handling for Gemini
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
-      
+
       // For Gemini, prioritize content over reasoning
       let output = '';
       if (message.content) {
         output = message.content;
-        
+
         // Add reasoning as thinking content if present and showThinking is enabled
         if (message.reasoning && (this.config.showThinking ?? true)) {
           output = `Thinking: ${message.reasoning}\n\n${output}`;
@@ -128,7 +134,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       } else if (message.function_call || message.tool_calls) {
         output = message.function_call || message.tool_calls;
       }
-      
+
       return {
         output,
         tokenUsage: getTokenUsage(data, cached),
@@ -142,7 +148,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         ...(finishReason && { finishReason }),
       };
     }
-    
+
     // For non-Gemini models, use the parent implementation
     return super.callApi(prompt, context, callApiOptions);
   }
@@ -158,6 +164,6 @@ export function createOpenRouterProvider(
 ): ApiProvider {
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
-  
+
   return new OpenRouterProvider(modelName, options.config || {});
 }

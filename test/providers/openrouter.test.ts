@@ -120,7 +120,9 @@ describe('OpenRouter', () => {
         });
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
-        const result = await providerWithoutThinking.callApi('Analyze text and provide summary with XML tags');
+        const result = await providerWithoutThinking.callApi(
+          'Analyze text and provide summary with XML tags',
+        );
 
         // Should only show content, not reasoning
         expect(result.output).toBe(
@@ -260,9 +262,12 @@ describe('OpenRouter', () => {
           throw new Error('Expected fetch to have been called');
         }
         const requestBody = JSON.parse((lastCall[1] as { body: string }).body);
-        
+
         expect(requestBody.transforms).toEqual(['strip-xml-tags']);
-        expect(requestBody.models).toEqual(['google/gemini-2.5-pro', 'anthropic/claude-3.5-sonnet']);
+        expect(requestBody.models).toEqual([
+          'google/gemini-2.5-pro',
+          'anthropic/claude-3.5-sonnet',
+        ]);
         expect(requestBody.route).toBe('fallback');
         expect(requestBody.provider).toEqual({ order: ['google', 'anthropic'] });
       });
