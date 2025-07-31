@@ -146,8 +146,8 @@ export class ExtraInformationGrader extends RedteamGraderBase {
       provider: await redteamProviderManager.getProvider({
         provider:
           cliState.config?.defaultTest?.provider ||
-          cliState.config?.defaultTest?.options?.provider?.text ||
-          cliState.config?.defaultTest?.options?.provider,
+          (typeof cliState.config?.defaultTest?.options?.provider === 'object' ? cliState.config?.defaultTest?.options?.provider?.text : undefined) ||
+          (typeof cliState.config?.defaultTest?.options?.provider === 'object' ? cliState.config?.defaultTest?.options?.provider : undefined),
         jsonOnly: true,
       }),
     });
