@@ -7,7 +7,7 @@ sidebar_label: Moderation
 
 Use the `moderation` assert type to ensure that LLM outputs are safe.
 
-Currently, this supports [OpenAI's moderation model](https://platform.openai.com/docs/guides/moderation), [Meta's LlamaGuard 3 model](https://llama.meta.com/docs/model-cards-and-prompt-formats/meta-llama-guard-3/) via [Replicate](https://replicate.com/meta/llama-guard-3-8b), and [Azure Content Safety API](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/overview).
+Currently, this supports [OpenAI's moderation model](https://platform.openai.com/docs/guides/moderation), Meta's LlamaGuard models (LlamaGuard 3 and 4) via [Replicate](https://replicate.com/meta/llama-guard-3-8b), and [Azure Content Safety API](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/overview).
 
 In general, we encourage the use of Meta's LlamaGuard as it substantially outperforms OpenAI's moderation API as well as GPT-4. [See benchmarks](https://github.com/meta-llama/PurpleLlama/blob/main/Llama-Guard2/MODEL_CARD.md#model-performance).
 
@@ -73,6 +73,21 @@ tests:
         provider: 'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8'
 ```
 
+:::tip
+LlamaGuard 4 is the default moderation provider on Replicate, featuring enhanced capabilities and an additional category (S14: Code Interpreter Abuse). You can explicitly specify it:
+
+```yaml
+provider: 'replicate:moderation:meta/llama-guard-4-12b'
+```
+
+For compatibility or specific use cases, you can use LlamaGuard 3:
+
+```yaml
+provider: 'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8'
+```
+
+:::
+
 LlamaGuard monitors the following categories:
 
 | Category               | Description                                                                                                      | Code |
@@ -90,6 +105,7 @@ LlamaGuard monitors the following categories:
 | Self-Harm              | Content that enables, encourages, or excuses acts of intentional self-harm (e.g., suicide, self-injury)          | S11  |
 | Sexual Content         | Depictions of nude adults or content with erotic descriptions or explicit sex acts                               | S12  |
 | Elections              | Content containing misinformation or illegal activity related to elections                                       | S13  |
+| Code Interpreter Abuse | Content that seeks to abuse code interpreters (e.g., denial of service, container escapes) - LlamaGuard 4 only   | S14  |
 
 ### Check specific categories
 

@@ -235,7 +235,7 @@ In this example, we use the Ollama provider to test two versions of Meta's Llama
 prompts:
   - file://prompt1.txt
 providers:
-  - ollama:llama2
+  - ollama:chat:llama3.3
   - ollama:llama2-uncensored
 tests:
   - vars:

@@ -36,6 +36,7 @@ import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleLiveProvider } from './google/live';
+import { GoogleImageProvider } from './google/image';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HeliconeGatewayProvider } from './helicone';
@@ -840,6 +841,20 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('docker:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createDockerProvider } = await import('./docker');
+      return createDockerProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('vertex:'),
     create: async (
       providerPath: string,
@@ -943,6 +958,9 @@ export const providerMap: ProviderFactory[] = [
         if (serviceType === 'live') {
           // This is a Live API request
           return new GoogleLiveProvider(modelName, providerOptions);
+        } else if (serviceType === 'image') {
+          // This is an Image Generation request
+          return new GoogleImageProvider(modelName, providerOptions);
         }
       }
 

@@ -65,14 +65,14 @@ Promptfoo has built-in support for a wide variety of models such as those from O
 First, start your Ollama server and pull the model you want to test:
 
 ```bash
-ollama pull llama3.1:8b
+ollama pull llama3.3:8b
 ```
 
 Then configure Promptfoo to use it:
 
 ```yaml
 targets:
-  - ollama:llama3.1:8b
+  - ollama:chat:llama3.3:8b
 ```
 
 ### Your application
