@@ -63,7 +63,7 @@ providers:
 | [Together AI](./togetherai.md)                      | Various hosted models                                     | Compatible with OpenAI syntax                                             |
 | [Voyage AI](./voyage.md)                            | Specialized embedding models                              | `voyage:voyage-3`                                                         |
 | [vLLM](./vllm.md)                                   | Local                                                     | Compatible with OpenAI syntax                                             |
-| [Ollama](./ollama.md)                               | Local                                                     | `ollama:llama3.2:latest`                                                  |
+| [Ollama](./ollama.md)                               | Local                                                     | `ollama:chat:llama3.3`                                                    |
 | [LocalAI](./localai.md)                             | Local                                                     | `localai:gpt4all-j`                                                       |
 | [Llamafile](./llamafile.md)                         | OpenAI-compatible llamafile server                        | Uses OpenAI provider with custom endpoint                                 |
 | [llama.cpp](./llama.cpp.md)                         | Local                                                     | `llama:7b`                                                                |
