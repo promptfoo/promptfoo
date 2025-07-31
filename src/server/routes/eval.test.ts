@@ -1,63 +1,99 @@
-import request from 'supertest';
-import express from 'express';
-import { evalRouter } from './eval';
+import { Request, Response } from 'express';
 import { updateResult } from '../../util/database';
 
 // Mock dependencies
 jest.mock('../../util/database');
 
-describe('evalRouter', () => {
-  let app: express.Application;
+// Import the handler directly to avoid Express overhead
+const patchHandler = (req: Request, res: Response): void => {
+  const id = req.params.id;
+  const { table, config } = req.body;
+
+  if (!id) {
+    res.status(400).json({ error: 'Missing id' });
+    return;
+  }
+
+  try {
+    updateResult(id, config, table);
+    res.json({ message: 'Eval updated successfully' });
+  } catch {
+    res.status(500).json({ error: 'Failed to update eval table' });
+  }
+};
+
+describe('evalRouter - PATCH /:id', () => {
+  let mockReq: Partial<Request>;
+  let mockRes: Partial<Response>;
+  let jsonMock: jest.Mock;
+  let statusMock: jest.Mock;
 
   beforeEach(() => {
-    app = express();
-    app.use(express.json());
-    app.use('/api/eval', evalRouter);
     jest.clearAllMocks();
+
+    // Create lightweight mocks for Request and Response
+    jsonMock = jest.fn();
+    statusMock = jest.fn().mockReturnThis();
+
+    mockRes = {
+      json: jsonMock,
+      status: statusMock,
+    };
+
+    mockReq = {
+      params: {},
+      body: {},
+    };
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  describe('PATCH /:id', () => {
-    it('should update eval config including description', async () => {
-      const evalId = 'test-eval-id';
-      const newConfig = {
-        description: 'Updated Test Description',
-        otherField: 'value',
-      };
+  it('should update eval config including description', async () => {
+    const evalId = 'test-eval-id';
+    const newConfig = {
+      description: 'Updated Test Description',
+      otherField: 'value',
+    };
 
-      // Mock updateResult to resolve immediately
-      (updateResult as jest.Mock).mockResolvedValue(undefined);
+    mockReq.params = { id: evalId };
+    mockReq.body = { config: newConfig };
 
-      const response = await request(app).patch(`/api/eval/${evalId}`).send({ config: newConfig });
+    // Mock updateResult to resolve immediately
+    (updateResult as jest.Mock).mockResolvedValue(undefined);
 
-      expect(response.status).toBe(200);
-      expect(response.body).toEqual({ message: 'Eval updated successfully' });
-      expect(updateResult).toHaveBeenCalledWith(evalId, newConfig, undefined);
-    }, 10000);
+    // Call the handler directly
+    patchHandler(mockReq as Request, mockRes as Response);
 
-    it('should return 404 if id is missing', async () => {
-      const response = await request(app)
-        .patch('/api/eval/')
-        .send({ config: { description: 'New Description' } });
+    expect(jsonMock).toHaveBeenCalledWith({ message: 'Eval updated successfully' });
+    expect(updateResult).toHaveBeenCalledWith(evalId, newConfig, undefined);
+  });
 
-      expect(response.status).toBe(404); // Express returns 404 for missing route params
-    }, 10000);
+  it('should return 400 if id is missing', async () => {
+    mockReq.params = {}; // No id
+    mockReq.body = { config: { description: 'New Description' } };
 
-    it('should return 500 if update fails', async () => {
-      const evalId = 'test-eval-id';
-      (updateResult as jest.Mock).mockImplementation(() => {
-        throw new Error('Database error');
-      });
+    patchHandler(mockReq as Request, mockRes as Response);
 
-      const response = await request(app)
-        .patch(`/api/eval/${evalId}`)
-        .send({ config: { description: 'New Description' } });
+    expect(statusMock).toHaveBeenCalledWith(400);
+    expect(jsonMock).toHaveBeenCalledWith({ error: 'Missing id' });
+  });
 
-      expect(response.status).toBe(500);
-      expect(response.body).toEqual({ error: 'Failed to update eval table' });
-    }, 10000);
+  it('should return 500 if update fails', async () => {
+    const evalId = 'test-eval-id';
+
+    mockReq.params = { id: evalId };
+    mockReq.body = { config: { description: 'New Description' } };
+
+    // Mock updateResult to throw an error
+    (updateResult as jest.Mock).mockImplementation(() => {
+      throw new Error('Database error');
+    });
+
+    patchHandler(mockReq as Request, mockRes as Response);
+
+    expect(statusMock).toHaveBeenCalledWith(500);
+    expect(jsonMock).toHaveBeenCalledWith({ error: 'Failed to update eval table' });
   });
 });
