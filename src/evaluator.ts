@@ -15,6 +15,7 @@ import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
+import { selectMaxScore } from './matchers';
 import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
@@ -840,6 +841,7 @@ class Evaluator {
     const prompts: CompletedPrompt[] = [];
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
+    const rowsWithMaxScoreAssertion = new Set<number>();
 
     const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
       suite: testSuite,
@@ -1212,6 +1214,9 @@ class Evaluator {
         if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
           rowsWithSelectBestAssertion.add(row.testIdx);
         }
+        if (evalStep.test.assert?.some((a) => a.type === 'max-score')) {
+          rowsWithMaxScoreAssertion.add(row.testIdx);
+        }
         for (const assert of evalStep.test.assert || []) {
           if (assert.type) {
             assertionTypes.add(assert.type);
@@ -1503,7 +1508,7 @@ class Evaluator {
     }
 
     // Do we have to run comparisons between row outputs?
-    const compareRowsCount = rowsWithSelectBestAssertion.size;
+    const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
 
     // Mark concurrent phase as complete
     if (this.options.showProgressBar) {
@@ -1603,6 +1608,78 @@ class Evaluator {
           progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
         } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
+        }
+      }
+    }
+
+    // Process max-score assertions
+    const maxScoreRowsCount = rowsWithMaxScoreAssertion.size;
+    if (maxScoreRowsCount > 0) {
+      logger.info(`Processing ${maxScoreRowsCount} max-score assertions...`);
+
+      for (const testIdx of rowsWithMaxScoreAssertion) {
+        const resultsToCompare = this.evalRecord.persisted
+          ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
+          : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+
+        if (resultsToCompare.length === 0) {
+          logger.warn(`Expected results to be found for test index ${testIdx}`);
+          continue;
+        }
+
+        const maxScoreAssertion = resultsToCompare[0].testCase.assert?.find(
+          (a) => a.type === 'max-score',
+        ) as Assertion;
+
+        if (maxScoreAssertion) {
+          const outputs = resultsToCompare.map((r) => r.response?.output || '');
+
+          // Pass the results with their grading results to selectMaxScore
+          const maxScoreGradingResults = await selectMaxScore(
+            outputs,
+            resultsToCompare,
+            maxScoreAssertion,
+          );
+
+          // Update progress bar
+          if (this.options.showProgressBar) {
+            progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+          } else if (!isWebUI) {
+            logger.debug(`Max-score assertion for test #${testIdx} complete`);
+          }
+
+          // Update results with max-score outcomes
+          for (let index = 0; index < resultsToCompare.length; index++) {
+            const result = resultsToCompare[index];
+            const maxScoreGradingResult = {
+              ...maxScoreGradingResults[index],
+              assertion: maxScoreAssertion,
+            };
+
+            // Preserve existing gradingResult data and add max-score result to componentResults
+            const existingComponentResults = result.gradingResult?.componentResults || [];
+            const existingGradingResult = result.gradingResult;
+
+            result.gradingResult = {
+              pass: maxScoreGradingResult.pass,
+              score: maxScoreGradingResult.score,
+              reason: maxScoreGradingResult.reason,
+              componentResults: [...existingComponentResults, maxScoreGradingResult],
+              namedScores: {
+                ...(existingGradingResult?.namedScores || {}),
+                ...maxScoreGradingResult.namedScores,
+              },
+              tokensUsed: existingGradingResult?.tokensUsed || maxScoreGradingResult.tokensUsed,
+              assertion: maxScoreAssertion,
+            };
+
+            // Don't overwrite overall success/score - max-score is just another assertion
+            // The overall result should be determined by all assertions, not just max-score
+
+            if (this.evalRecord.persisted) {
+              await result.save();
+            }
+          }
         }
       }
     }
