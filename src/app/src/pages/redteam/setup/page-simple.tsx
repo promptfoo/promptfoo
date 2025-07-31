@@ -6,12 +6,8 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
-import DownloadIcon from '@mui/icons-material/Download';
-import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import SaveIcon from '@mui/icons-material/Save';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -38,66 +34,56 @@ import Targets from './components/Targets';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import { generateOrderedYaml } from './utils/yamlHelpers';
+import type { RedteamStrategy } from '@promptfoo/types';
 
 import type { Config, RedteamUITarget } from './types';
 import './page.css';
 
 const Root = styled(Box)(({ theme }) => ({
-  display: 'flex',
   backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
   minHeight: '100vh',
+  display: 'flex',
+  flexDirection: 'column',
 }));
 
-// Clean sidebar - fixed 200px width
-const Sidebar = styled(Box)(({ theme }) => ({
-  width: 200,
+const Header = styled(Box)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
-  borderRight: `1px solid ${theme.palette.divider}`,
-  display: 'flex',
-  flexDirection: 'column',
-}));
-
-const SidebarHeader = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(2),
   borderBottom: `1px solid ${theme.palette.divider}`,
-}));
-
-const SidebarTabs = styled(Tabs)(({ theme }) => ({
-  '& .MuiTabs-indicator': {
-    left: 0,
-    width: 3,
-  },
-}));
-
-const SidebarTab = styled(Tab)(({ theme }) => ({
-  textTransform: 'none',
-  justifyContent: 'flex-start',
-  minHeight: 48,
-  padding: theme.spacing(1.5, 2),
-  fontSize: '0.875rem',
-  fontWeight: 400,
-  '&.Mui-selected': {
-    fontWeight: 500,
-  },
-}));
-
-const SidebarActions = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(2),
+  padding: theme.spacing(0, 3),
   display: 'flex',
-  flexDirection: 'column',
-  gap: theme.spacing(1),
-  marginTop: 'auto',
+  alignItems: 'center',
+  minHeight: 56,
+}));
+
+const StyledTabs = styled(Tabs)(({ theme }) => ({
+  flex: 1,
+  '& .MuiTabs-indicator': {
+    height: 3,
+  },
+}));
+
+const StyledTab = styled(Tab)(({ theme }) => ({
+  textTransform: 'none',
+  minHeight: 56,
+  fontWeight: theme.typography.fontWeightRegular,
+  fontSize: '0.9375rem',
+  '&.Mui-selected': {
+    fontWeight: theme.typography.fontWeightMedium,
+  },
+}));
+
+const HeaderActions = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  gap: theme.spacing(2),
+  marginLeft: theme.spacing(3),
 }));
 
 const Content = styled(Box)(({ theme }) => ({
   flex: 1,
   padding: theme.spacing(3),
-  overflowY: 'auto',
-}));
-
-const StatusChip = styled(Chip)(({ theme }) => ({
-  height: 24,
-  fontSize: '0.75rem',
+  maxWidth: 1200,
+  margin: '0 auto',
+  width: '100%',
 }));
 
 interface SavedConfig {
@@ -115,11 +101,11 @@ const readFileAsText = (file: File): Promise<string> => {
   });
 };
 
-export default function RedTeamSetupPage() {
+export default function RedTeamSetupPageSimple() {
   usePageMeta({ title: 'Red team setup', description: 'Configure red team testing' });
   const location = useLocation();
   const navigate = useNavigate();
-  useTelemetry();
+  const { recordEvent } = useTelemetry();
 
   const [value, setValue] = useState(() => {
     const hash = location.hash.replace('#', '');
@@ -140,7 +126,6 @@ export default function RedTeamSetupPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const lastSavedConfig = useRef<string>('');
 
-  // Handle browser navigation
   useEffect(() => {
     const hash = location.hash.replace('#', '');
     if (hash) {
@@ -174,16 +159,17 @@ export default function RedTeamSetupPage() {
         body: JSON.stringify({ name: configName, type: 'redteam', config }),
       });
       const data = await response.json();
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      if (data.error) throw new Error(data.error);
 
-      toast.showToast('Configuration saved', 'success');
+      toast.showToast('Configuration saved successfully', 'success');
       setSaveDialogOpen(false);
       lastSavedConfig.current = JSON.stringify(config);
       setHasUnsavedChanges(false);
-    } catch (_error) {
-      toast.showToast('Failed to save', 'error');
+    } catch (error) {
+      toast.showToast(
+        error instanceof Error ? error.message : 'Failed to save configuration',
+        'error',
+      );
     }
   };
 
@@ -191,17 +177,15 @@ export default function RedTeamSetupPage() {
     try {
       const response = await callApi('/configs?type=redteam');
       const data = await response.json();
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
+      if (data.error) throw new Error(data.error);
       setSavedConfigs(
         data.configs.sort(
           (a: SavedConfig, b: SavedConfig) =>
             new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
         ),
       );
-    } catch (_error) {
+    } catch (error) {
+      toast.showToast('Failed to load configurations', 'error');
       setSavedConfigs([]);
     }
   };
@@ -210,71 +194,18 @@ export default function RedTeamSetupPage() {
     try {
       const response = await callApi(`/configs/redteam/${id}`);
       const data = await response.json();
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      if (data.error) throw new Error(data.error);
 
       setFullConfig(data.config);
       setConfigName(data.name);
       lastSavedConfig.current = JSON.stringify(data.config);
       setHasUnsavedChanges(false);
+      toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
       window.location.reload();
-    } catch (_error) {
-      toast.showToast('Failed to load', 'error');
+    } catch (error) {
+      toast.showToast('Failed to load configuration', 'error');
     }
-  };
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    try {
-      const content = await readFileAsText(file);
-      const yamlConfig = yaml.load(content) as any;
-
-      const strategies = yamlConfig?.redteam?.strategies || [];
-      let target = yamlConfig.targets?.[0] || yamlConfig.providers?.[0] || DEFAULT_HTTP_TARGET;
-
-      if (typeof target === 'string') {
-        const targetType = predefinedTargets.find((t: RedteamUITarget) => t.value === target);
-        target = ProviderOptionsSchema.parse({
-          id: targetType ? targetType.value : customTargetOption.value,
-          label: target,
-        });
-      }
-
-      const mappedConfig: Config = {
-        description: yamlConfig.description || 'My Red Team Configuration',
-        prompts: yamlConfig.prompts || ['{{prompt}}'],
-        target,
-        plugins: yamlConfig.redteam?.plugins || ['default'],
-        strategies,
-        purpose: yamlConfig.redteam?.purpose || '',
-        entities: yamlConfig.redteam?.entities || [],
-        numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
-        maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
-        applicationDefinition: {
-          purpose: yamlConfig.redteam?.purpose || '',
-          redteamUser: '',
-          accessToData: '',
-          forbiddenData: '',
-          accessToActions: '',
-          forbiddenActions: '',
-          connectedSystems: '',
-        },
-      };
-
-      setFullConfig(mappedConfig);
-      toast.showToast('Configuration loaded', 'success');
-      setLoadDialogOpen(false);
-    } catch (_error) {
-      toast.showToast('Failed to load file', 'error');
-    }
-
-    event.target.value = '';
   };
 
   const handleDownloadYaml = () => {
@@ -294,10 +225,9 @@ export default function RedTeamSetupPage() {
     lastSavedConfig.current = '';
     setHasUnsavedChanges(false);
     setResetDialogOpen(false);
-    toast.showToast('Reset to defaults', 'success');
+    toast.showToast('Configuration reset to defaults', 'success');
   };
 
-  // Track unsaved changes
   useEffect(() => {
     if (!configName) {
       setHasUnsavedChanges(false);
@@ -308,60 +238,24 @@ export default function RedTeamSetupPage() {
     setHasUnsavedChanges(hasChanges);
   }, [config, configName]);
 
-  const sections = [
-    { label: 'Target', count: config.target ? 1 : 0 },
-    { label: 'Context', count: config.purpose ? 1 : 0 },
-    { label: 'Plugins', count: config.plugins?.filter((p) => p !== 'default').length || 0 },
-    { label: 'Strategies', count: config.strategies?.length || 0 },
-    { label: 'Review' },
-  ];
+  const sections = ['Target', 'Context', 'Plugins', 'Strategies', 'Review'];
 
   return (
     <Root>
-      <Sidebar>
-        <SidebarHeader>
-          <Typography variant="subtitle2" fontWeight={500}>
-            {configName || 'New Configuration'}
-          </Typography>
-          {hasUnsavedChanges && <StatusChip label="Unsaved" size="small" color="warning" />}
-        </SidebarHeader>
-
-        <SidebarTabs orientation="vertical" value={value} onChange={handleChange}>
-          {sections.map((section, index) => (
-            <SidebarTab
-              key={index}
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                  <span>{section.label}</span>
-                  {section.count !== undefined && section.count > 0 && (
-                    <Chip
-                      label={section.count}
-                      size="small"
-                      sx={{ height: 20, fontSize: '0.75rem' }}
-                    />
-                  )}
-                </Box>
-              }
-            />
+      <Header>
+        <StyledTabs value={value} onChange={handleChange}>
+          {sections.map((label, index) => (
+            <StyledTab key={index} label={label} />
           ))}
-        </SidebarTabs>
+        </StyledTabs>
 
-        <SidebarActions>
+        <HeaderActions>
           {hasUnsavedChanges && (
-            <Button
-              fullWidth
-              variant="contained"
-              size="small"
-              startIcon={<SaveIcon />}
-              onClick={handleSaveConfig}
-            >
+            <Button variant="contained" onClick={handleSaveConfig}>
               Save
             </Button>
           )}
           <Button
-            fullWidth
-            size="small"
-            startIcon={<FolderOpenIcon />}
             onClick={() => {
               loadConfigs();
               setLoadDialogOpen(true);
@@ -369,28 +263,24 @@ export default function RedTeamSetupPage() {
           >
             Load
           </Button>
-          <Button fullWidth size="small" startIcon={<DownloadIcon />} onClick={handleDownloadYaml}>
-            Export
-          </Button>
-        </SidebarActions>
-      </Sidebar>
+          <Button onClick={handleDownloadYaml}>Export</Button>
+        </HeaderActions>
+      </Header>
 
       <Content>
-        <ErrorBoundary name={`${sections[value].label} Page`}>
-          {value === 0 && (
-            <Targets onNext={() => setValue(1)} onBack={() => {}} setupModalOpen={setupModalOpen} />
-          )}
-          {value === 1 && <Purpose onNext={() => setValue(2)} />}
-          {value === 2 && <Plugins onNext={() => setValue(3)} onBack={() => setValue(1)} />}
-          {value === 3 && <Strategies onNext={() => setValue(4)} onBack={() => setValue(2)} />}
-          {value === 4 && <Review />}
-        </ErrorBoundary>
+        {value === 0 && (
+          <Targets onNext={() => setValue(1)} onBack={() => {}} setupModalOpen={setupModalOpen} />
+        )}
+        {value === 1 && <Purpose onNext={() => setValue(2)} />}
+        {value === 2 && <Plugins onNext={() => setValue(3)} onBack={() => setValue(1)} />}
+        {value === 3 && <Strategies onNext={() => setValue(4)} onBack={() => setValue(2)} />}
+        {value === 4 && <Review />}
       </Content>
 
       <Setup open={setupModalOpen} onClose={closeSetupModal} />
       <CrispChat />
 
-      {/* Dialogs */}
+      {/* Save Dialog */}
       <Dialog
         open={saveDialogOpen}
         onClose={() => setSaveDialogOpen(false)}
@@ -416,6 +306,7 @@ export default function RedTeamSetupPage() {
         </DialogActions>
       </Dialog>
 
+      {/* Load Dialog */}
       <Dialog
         open={loadDialogOpen}
         onClose={() => setLoadDialogOpen(false)}
@@ -424,46 +315,21 @@ export default function RedTeamSetupPage() {
       >
         <DialogTitle>Load Configuration</DialogTitle>
         <DialogContent>
-          <Box sx={{ mb: 2 }}>
-            <input
-              accept=".yml,.yaml"
-              style={{ display: 'none' }}
-              id="yaml-file-upload"
-              type="file"
-              onChange={handleFileUpload}
-            />
-            <label htmlFor="yaml-file-upload">
-              <Button variant="outlined" component="span" fullWidth>
-                Upload YAML File
-              </Button>
-            </label>
-          </Box>
-
-          {savedConfigs.length > 0 && (
-            <>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Or choose a saved configuration:
-              </Typography>
-              <List>
-                {savedConfigs.map((config) => (
-                  <ListItemButton
-                    key={config.id}
-                    onClick={() => handleLoadConfig(config.id)}
-                    sx={{
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                      mb: 0.5,
-                    }}
-                  >
-                    <ListItemText
-                      primary={config.name}
-                      secondary={new Date(config.updatedAt).toLocaleString()}
-                    />
-                  </ListItemButton>
-                ))}
-              </List>
-            </>
+          {savedConfigs.length === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+              No saved configurations found
+            </Typography>
+          ) : (
+            <List>
+              {savedConfigs.map((config) => (
+                <ListItemButton key={config.id} onClick={() => handleLoadConfig(config.id)}>
+                  <ListItemText
+                    primary={config.name}
+                    secondary={new Date(config.updatedAt).toLocaleString()}
+                  />
+                </ListItemButton>
+              ))}
+            </List>
           )}
         </DialogContent>
         <DialogActions>
@@ -471,10 +337,13 @@ export default function RedTeamSetupPage() {
         </DialogActions>
       </Dialog>
 
+      {/* Reset Dialog */}
       <Dialog open={resetDialogOpen} onClose={() => setResetDialogOpen(false)}>
         <DialogTitle>Reset Configuration</DialogTitle>
         <DialogContent>
-          <Typography>Reset to default values?</Typography>
+          <Typography>
+            Are you sure you want to reset the configuration to default values?
+          </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>

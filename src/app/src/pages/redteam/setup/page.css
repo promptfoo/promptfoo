@@ -3,3 +3,21 @@
   padding: 0;
   margin-top: -15px;
 }
+
+/* Smooth scrolling for the entire page */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus styles for better accessibility */
+*:focus-visible {
+  outline: 2px solid #2196f3;
+  outline-offset: 2px;
+}
+
+/* Improved transitions for theme changes */
+* {
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
