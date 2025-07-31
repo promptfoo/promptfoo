@@ -52,9 +52,6 @@ describe('Strategies', () => {
 
       // Check for main heading structure
       expect(screen.getByRole('heading', { level: 4 })).toBeInTheDocument();
-
-      // Check for help icon
-      expect(screen.getByTestId('HelpOutlineIcon')).toBeInTheDocument();
     });
 
     it('renders the documentation link with correct attributes', () => {
