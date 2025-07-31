@@ -75,7 +75,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
-      config.plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)) as Plugin[],
+      config.plugins
+        .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
+        .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
     );
   });
   const [searchTerm, setSearchTerm] = useState('');
@@ -296,6 +298,35 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
     return true;
   }, [selectedPlugins, pluginConfig]);
+
+  const hasAnyPluginsConfigured = useCallback(() => {
+    // Check regular plugins
+    if (selectedPlugins.size > 0) {
+      return true;
+    }
+
+    // Check custom policies with actual content
+    const hasPolicies = config.plugins.some(
+      (p) =>
+        typeof p === 'object' &&
+        p.id === 'policy' &&
+        p.config?.policy &&
+        typeof p.config.policy === 'string' &&
+        p.config.policy.trim().length > 0,
+    );
+
+    // Check custom intents with actual content
+    const hasIntents = config.plugins.some(
+      (p) =>
+        typeof p === 'object' &&
+        p.id === 'intent' &&
+        p.config?.intent &&
+        Array.isArray(p.config.intent) &&
+        p.config.intent.length > 0,
+    );
+
+    return hasPolicies || hasIntents;
+  }, [selectedPlugins, config.plugins]);
 
   const handleConfigClick = (plugin: Plugin) => {
     setSelectedConfigPlugin(plugin);
@@ -761,16 +792,17 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             Back
           </Button>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {selectedPlugins.size === 0 && (
+            {!hasAnyPluginsConfigured() && (
               <Typography variant="body2" color="text.secondary">
-                Select at least one plugin to continue.
+                Select at least one plugin, add custom policies, or create custom prompts to
+                continue.
               </Typography>
             )}
             <Button
               variant="contained"
               onClick={onNext}
               endIcon={<KeyboardArrowRightIcon />}
-              disabled={!isConfigValid() || selectedPlugins.size === 0}
+              disabled={!isConfigValid() || !hasAnyPluginsConfigured()}
               sx={{
                 px: 4,
                 py: 1,
