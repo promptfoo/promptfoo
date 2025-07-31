@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
 
-import { CheckCircle as CheckCircleIcon, Error as ErrorIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+import {
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Refresh as RefreshIcon,
+} from '@mui/icons-material';
 import {
   Alert,
   Box,
@@ -143,7 +147,7 @@ export default function ModelAudit() {
                   </Stack>
                 </Tooltip>
               ) : installationStatus.installed === false ? (
-                <Tooltip title={installationStatus.error || "ModelAudit is not installed"}>
+                <Tooltip title={installationStatus.error || 'ModelAudit is not installed'}>
                   <Stack direction="row" spacing={0.5} alignItems="center">
                     <ErrorIcon sx={{ fontSize: 16, color: 'error.main' }} />
                     <Typography variant="body2" color="error.main">
