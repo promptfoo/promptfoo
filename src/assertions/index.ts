@@ -66,7 +66,7 @@ import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
-import { formatPythonAssertionError, validatePythonAssertionFile } from './pythonValidation';
+import { formatPythonError, validatePythonFile } from '../python/pythonError';
 import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
@@ -190,7 +190,7 @@ export async function runAssertion({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         // Basic file validation
-        const validationResult = await validatePythonAssertionFile(filePath);
+        const validationResult = await validatePythonFile(filePath);
         if (!validationResult.isValid) {
           return {
             pass: false,
@@ -208,10 +208,11 @@ export async function runAssertion({
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          const formattedError = formatPythonAssertionError(
+          const formattedError = formatPythonError(
             error as Error,
             filePath,
             functionName || 'get_assert',
+            'assertion',
           );
           return {
             pass: false,

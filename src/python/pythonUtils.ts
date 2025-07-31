@@ -7,6 +7,7 @@ import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { execAsync } from './execAsync';
+import { formatPythonError } from './pythonError';
 import type { Options as PythonShellOptions } from 'python-shell';
 
 export const state: {
@@ -200,18 +201,35 @@ export async function runPython(
 
     return result.data;
   } catch (error) {
-    logger.error(
-      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-        'No Python traceback available'
-      }`,
-    );
-    throw new Error(
-      `Error running Python script: ${(error as Error).message}\nStack Trace: ${
-        (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
-        'No Python traceback available'
-      }`,
-    );
+    const err = error as Error;
+
+    // Determine context based on method name
+    let context: 'assertion' | 'provider' | 'test' | 'transform' | 'prompt' = 'assertion';
+    if (method === 'get_assert') {
+      context = 'assertion';
+    } else if (method.startsWith('call_') && method.includes('api')) {
+      context = 'provider';
+    } else if (method === 'generate_tests') {
+      context = 'test';
+    } else if (method === 'get_transform') {
+      context = 'transform';
+    } else {
+      context = 'prompt';
+    }
+
+    // Use the formatter for better error messages
+    const formattedError = formatPythonError(err, scriptPath, method, context);
+
+    logger.error(formattedError);
+
+    // Create new error with formatted message but preserve the original stack trace
+    const newError = new Error(formattedError);
+    if (err.stack) {
+      // Preserve the Python traceback in the stack
+      newError.stack = err.stack.replace('--- Python Traceback ---', 'Python Traceback: ');
+    }
+
+    throw newError;
   } finally {
     await Promise.all(
       [tempJsonPath, outputPath].map((file) => {
