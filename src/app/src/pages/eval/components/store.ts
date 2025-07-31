@@ -111,6 +111,8 @@ interface TableState {
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
 
+  shouldHighlightSearchText: boolean;
+
   /**
    * Adds a new filter to the filters array.
    * @param filter - The filter to add.
@@ -329,6 +331,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
   isFetching: false,
 
+  shouldHighlightSearchText: false,
+
   fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
     const {
       pageIndex = 0,
@@ -341,7 +345,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
     const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
-    set({ isFetching: true });
+    set({ isFetching: true, shouldHighlightSearchText: false });
 
     try {
       console.log(`Fetching data for eval ${id} with options:`, options);
@@ -397,6 +401,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           author: data.author,
           evalId: skipSettingEvalId ? get().evalId : id,
           isFetching: false,
+          shouldHighlightSearchText: searchText !== '',
           filters: {
             ...prevState.filters,
             options: {
