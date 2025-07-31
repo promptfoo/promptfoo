@@ -33,6 +33,9 @@ vi.mock('./store', () => ({
     maxImageWidth: 256,
     maxImageHeight: 256,
   }),
+  useTableStore: () => ({
+    shouldHighlightSearchText: false,
+  }),
 }));
 
 vi.mock('../../../hooks/useShiftKey', () => ({
