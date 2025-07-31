@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: BERTScore semantic similarity evaluation
+
+prompts:
+  - 'Paraphrase: {{text}}'
+
+providers:
+  - openai:gpt-4.1-nano
+
+tests:
+  - vars:
+      text: 'The quick brown fox jumps over the lazy dog'
+      reference: 'A fast brown fox leaps over a sleepy dog'
+    assert:
+      - type: python
+        value: file://bertscore_check.py
+        threshold: 0.75
+
+  - vars:
+      text: 'Hello, how are you?'
+      reference: "Hi, how's it going?"
+    assert:
+      - type: python
+        value: file://bertscore_check.py
+        threshold: 0.7

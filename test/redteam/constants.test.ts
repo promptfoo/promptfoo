@@ -48,9 +48,7 @@ describe('constants', () => {
 
   it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
     expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBeDefined();
-    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe(
-      'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
-    );
+    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe('replicate:moderation:meta/llama-guard-4-12b');
   });
 
   it('LLAMA_GUARD_ENABLED_CATEGORIES should contain expected categories', () => {

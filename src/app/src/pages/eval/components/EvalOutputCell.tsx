@@ -350,7 +350,7 @@ function EvalOutputCell({
 
       tokenUsageDisplay = (
         <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total & ${reasoningTokens} reasoning tokens`}
+          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`}
         >
           <span>
             {totalTokens}
