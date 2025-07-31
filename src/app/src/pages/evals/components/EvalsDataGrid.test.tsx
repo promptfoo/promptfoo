@@ -144,7 +144,13 @@ describe('EvalsDataGrid', () => {
     );
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith('/results', { cache: 'no-store' });
+      expect(callApi).toHaveBeenCalledWith(
+        '/results',
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
     });
 
     await waitFor(() => {
@@ -332,7 +338,13 @@ describe('EvalsDataGrid', () => {
     );
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith('/results', { cache: 'no-store' });
+      expect(callApi).toHaveBeenCalledWith(
+        '/results',
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
     });
 
     await waitFor(() => {
@@ -356,7 +368,13 @@ describe('EvalsDataGrid', () => {
     );
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith('/results', { cache: 'no-store' });
+      expect(callApi).toHaveBeenCalledWith(
+        '/results',
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
     });
 
     await waitFor(() => {
@@ -378,7 +396,13 @@ describe('EvalsDataGrid', () => {
     );
 
     await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith('/results', { cache: 'no-store' });
+      expect(callApi).toHaveBeenCalledWith(
+        '/results',
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
     });
 
     await waitFor(() => {
@@ -443,5 +467,114 @@ describe('EvalsDataGrid', () => {
     await waitFor(() => {
       expect(screen.getByTestId('eval-eval-1')).toHaveTextContent('Original Description');
     });
+  });
+
+  it('should handle race conditions by aborting previous requests on rapid navigation', async () => {
+    let callCount = 0;
+    let resolveSecondRequest: any;
+
+    // Mock callApi to simulate delayed responses
+    vi.mocked(callApi).mockImplementation(async (path, options) => {
+      callCount++;
+
+      if (callCount === 1) {
+        // First request - will be aborted
+        return new Promise((resolve) => {
+          // Check if request was aborted
+          options?.signal?.addEventListener('abort', () => {
+            resolve({
+              ok: false,
+              json: () =>
+                Promise.reject(new DOMException('The operation was aborted', 'AbortError')),
+            } as any);
+          });
+        });
+      }
+
+      // Second request - should complete normally
+      return new Promise((resolve) => {
+        resolveSecondRequest = resolve;
+        setTimeout(() => {
+          resolve({
+            ok: true,
+            json: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  ...mockEvals[0],
+                  description: 'Updated after navigation',
+                },
+                mockEvals[1],
+              ],
+            }),
+          } as any);
+        }, 10);
+      });
+    });
+
+    const NavigationWrapper = () => {
+      const navigate = useNavigate();
+
+      React.useEffect(() => {
+        // Trigger rapid navigation changes
+        const timer1 = setTimeout(() => {
+          navigate('/evals?filter=1');
+        }, 50);
+        const timer2 = setTimeout(() => {
+          navigate('/evals?filter=2');
+        }, 100);
+
+        return () => {
+          clearTimeout(timer1);
+          clearTimeout(timer2);
+        };
+      }, [navigate]);
+
+      return <EvalsDataGrid onEvalSelected={vi.fn()} />;
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/evals']}>
+        <Routes>
+          <Route path="/evals" element={<NavigationWrapper />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Wait for initial request
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledTimes(1);
+    });
+
+    // Wait for rapid navigations to trigger more requests
+    await waitFor(
+      () => {
+        expect(callApi).toHaveBeenCalledTimes(3);
+      },
+      { timeout: 3000 },
+    );
+
+    // Resolve the second request
+    if (resolveSecondRequest) {
+      resolveSecondRequest({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          data: [
+            {
+              ...mockEvals[0],
+              description: 'Updated after navigation',
+            },
+            mockEvals[1],
+          ],
+        }),
+      });
+    }
+
+    // Verify that only the latest request's data is displayed
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toHaveTextContent('Updated after navigation');
+    });
+
+    // The first request should have been aborted and not display "Original Description"
+    expect(screen.queryByText('Original Description')).not.toBeInTheDocument();
   });
 });

@@ -136,10 +136,10 @@ export default function EvalsDataGrid({
   /**
    * Fetch evals from the API.
    */
-  const fetchEvals = async () => {
+  const fetchEvals = async (signal: AbortSignal) => {
     try {
       setIsLoading(true);
-      const response = await callApi('/results', { cache: 'no-store' });
+      const response = await callApi('/results', { cache: 'no-store', signal });
       if (!response.ok) {
         throw new Error('Failed to fetch evals');
       }
@@ -147,9 +147,15 @@ export default function EvalsDataGrid({
       setEvals(body.data);
       setError(null);
     } catch (error) {
-      setError(error as Error);
+      // Don't set error state if the request was aborted
+      if ((error as Error).name !== 'AbortError') {
+        setError(error as Error);
+      }
     } finally {
-      setIsLoading(false);
+      // Don't set loading to false if the request was aborted
+      if (signal && !signal.aborted) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -157,8 +163,16 @@ export default function EvalsDataGrid({
   const location = useLocation();
 
   useEffect(() => {
+    // Create AbortController for this fetch
+    const abortController = new AbortController();
+
     // Fetch evals whenever we navigate to this page
-    fetchEvals();
+    fetchEvals(abortController.signal);
+
+    // Cleanup: abort any in-flight request when location changes or component unmounts
+    return () => {
+      abortController.abort();
+    };
   }, [location.pathname, location.search]); // Refetch when the pathname or query params change
 
   /**
