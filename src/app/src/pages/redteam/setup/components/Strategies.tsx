@@ -1,13 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Link from '@mui/material/Link';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -20,6 +15,7 @@ import {
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
+import { Link as RouterLink } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
 import StrategyConfigDialog from './StrategyConfigDialog';
@@ -377,28 +373,29 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   return (
     <PageWrapper
       title="Strategies"
-      description="Choose the red-team strategies that will guide how attacks are generated and executed."
+      description={
+        <Box sx={{ maxWidth: '1200px' }}>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Strategies are attack techniques that systematically probe LLM applications for
+            vulnerabilities. While plugins generate adversarial inputs, strategies determine how
+            these inputs are delivered to maximize attack success rates.{' '}
+            <RouterLink
+              style={{ textDecoration: 'underline' }}
+              to="https://www.promptfoo.dev/docs/red-team/strategies/"
+              target="_blank"
+            >
+              Learn More
+            </RouterLink>
+          </Typography>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Choose the red team strategies that will guide how attacks are generated and executed.
+          </Typography>
+        </Box>
+      }
       onNext={onNext}
       onBack={onBack}
     >
       <Box>
-        <Box sx={{ mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <HelpOutlineIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">
-              Strategies modify how prompts are delivered to test different attack vectors.{' '}
-              <Link
-                href="https://www.promptfoo.dev/docs/red-team/strategies/"
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{ color: 'primary.main' }}
-              >
-                Learn more about strategies
-              </Link>
-            </Typography>
-          </Box>
-        </Box>
-
         <Box
           sx={{
             display: 'flex',
@@ -513,26 +510,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             onStatefulChange={handleStatefulChange}
           />
         )}
-
-        {/* Footer Buttons */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-          <Button
-            variant="outlined"
-            onClick={onBack}
-            startIcon={<KeyboardArrowLeftIcon />}
-            sx={{ px: 4, py: 1 }}
-          >
-            Back
-          </Button>
-          <Button
-            variant="contained"
-            onClick={onNext}
-            endIcon={<KeyboardArrowRightIcon />}
-            sx={{ px: 4, py: 1 }}
-          >
-            Next
-          </Button>
-        </Box>
 
         {/* Config Dialog */}
         <StrategyConfigDialog

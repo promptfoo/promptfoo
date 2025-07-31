@@ -8,7 +8,6 @@ import { formatToolsAsJSDocs } from '@app/utils/discovery';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -286,11 +285,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
 
   return (
     <PageWrapper
-      title="Usage Details"
-      description="Define your application's purpose and intended use to help tailor the red-team evaluation."
+      title="Application Details"
+      description="Define your application's purpose and constraints to help tailor the red team test generation and evaluation."
       onNext={onNext}
       onBack={onBack}
-      showBack={!!onBack}
+      nextDisabled={testMode === 'application' && !isPurposePresent}
     >
       <Box sx={{ maxWidth: '1200px', width: '100%', px: 3 }}>
         <Stack direction="column" spacing={4}>
@@ -1141,31 +1140,6 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
               </Alert>
             </Box>
           )}
-
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              alignItems: 'center',
-              mt: 4,
-            }}
-          >
-            <Button
-              variant="contained"
-              endIcon={<KeyboardArrowRightIcon />}
-              onClick={onNext}
-              disabled={testMode === 'application' && !isPurposePresent}
-              sx={{
-                backgroundColor: theme.palette.primary.main,
-                '&:hover': { backgroundColor: theme.palette.primary.dark },
-                '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
-                px: 4,
-                py: 1,
-              }}
-            >
-              Next
-            </Button>
-          </Box>
         </Stack>
       </Box>
     </PageWrapper>

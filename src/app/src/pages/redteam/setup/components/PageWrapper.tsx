@@ -106,8 +106,6 @@ export default function PageWrapper({
   onBack,
   nextLabel = 'Next',
   backLabel = 'Back',
-  showNext = true,
-  showBack = true,
   nextDisabled = false,
   backDisabled = false,
 }: PageWrapperProps) {
@@ -147,34 +145,36 @@ export default function PageWrapper({
         <ContentBox>{children}</ContentBox>
       </ContentContainer>
 
-      <NavigationContainer>
-        <Box>
-          {showBack && onBack && (
-            <Button
-              variant="outlined"
-              onClick={onBack}
-              startIcon={<KeyboardArrowLeftIcon />}
-              disabled={backDisabled}
-              sx={{ px: 4, py: 1 }}
-            >
-              {backLabel}
-            </Button>
-          )}
-        </Box>
-        <Box>
-          {showNext && onNext && (
-            <Button
-              variant="contained"
-              onClick={onNext}
-              endIcon={<KeyboardArrowRightIcon />}
-              disabled={nextDisabled}
-              sx={{ px: 4, py: 1 }}
-            >
-              {nextLabel}
-            </Button>
-          )}
-        </Box>
-      </NavigationContainer>
+      {onBack || onNext ? (
+        <NavigationContainer>
+          <Box>
+            {onBack && (
+              <Button
+                variant="outlined"
+                onClick={onBack}
+                startIcon={<KeyboardArrowLeftIcon />}
+                disabled={backDisabled}
+                sx={{ px: 4, py: 1 }}
+              >
+                {backLabel}
+              </Button>
+            )}
+          </Box>
+          <Box>
+            {onNext && (
+              <Button
+                variant="contained"
+                onClick={onNext}
+                endIcon={<KeyboardArrowRightIcon />}
+                disabled={nextDisabled}
+                sx={{ px: 4, py: 1, mr: '72px' }}
+              >
+                {nextLabel}
+              </Button>
+            )}
+          </Box>
+        </NavigationContainer>
+      ) : null}
     </Root>
   );
 }

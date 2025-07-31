@@ -383,7 +383,7 @@ export default function Review({ onBack }: ReviewProps) {
       showBack={!!onBack}
       showNext={false}
     >
-      <Box maxWidth="lg" mx="auto">
+      <Box>
         <TextField
           fullWidth
           label="Configuration Description"

@@ -2,15 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
@@ -41,6 +38,7 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { ErrorBoundary } from 'react-error-boundary';
+import { Link } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import CustomIntentSection from './CustomIntentPluginSection';
@@ -571,9 +569,29 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   return (
     <PageWrapper
       title="Plugins"
-      description="Select the red-team plugins that align with your security testing objectives."
+      description={
+        <Box sx={{ maxWidth: '1200px' }}>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Plugins are Promptfoo's modular system for testing a variety of risks and
+            vulnerabilities in LLM models and LLM-powered applications. Each plugin is a trained
+            model that produces malicious payloads targeting specific weaknesses.{' '}
+            <Link
+              style={{ textDecoration: 'underline' }}
+              to="https://www.promptfoo.dev/docs/red-team/plugins/"
+              target="_blank"
+            >
+              Learn More
+            </Link>
+          </Typography>
+
+          <Typography variant="body1">
+            Select the red-team plugins that align with your security testing objectives.
+          </Typography>
+        </Box>
+      }
       onNext={onNext}
       onBack={onBack}
+      nextDisabled={!isConfigValid() || selectedPlugins.size === 0}
     >
       <ErrorBoundary FallbackComponent={ErrorFallback}>
         <Box>
@@ -749,39 +767,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 <CustomPoliciesSection />
               </AccordionDetails>
             </Accordion>
-          </Box>
-
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-            <Button
-              variant="outlined"
-              onClick={onBack}
-              startIcon={<KeyboardArrowLeftIcon />}
-              sx={{
-                px: 4,
-                py: 1,
-              }}
-            >
-              Back
-            </Button>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              {selectedPlugins.size === 0 && (
-                <Typography variant="body2" color="text.secondary">
-                  Select at least one plugin to continue.
-                </Typography>
-              )}
-              <Button
-                variant="contained"
-                onClick={onNext}
-                endIcon={<KeyboardArrowRightIcon />}
-                disabled={!isConfigValid() || selectedPlugins.size === 0}
-                sx={{
-                  px: 4,
-                  py: 1,
-                }}
-              >
-                Next
-              </Button>
-            </Box>
           </Box>
 
           <PluginConfigDialog

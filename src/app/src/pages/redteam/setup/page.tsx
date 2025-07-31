@@ -624,7 +624,7 @@ export default function RedTeamSetupPage() {
                 <StyledTab
                   icon={<AppIcon />}
                   iconPosition="start"
-                  label="Usage Details"
+                  label="Application Details"
                   {...a11yProps(1)}
                 />
                 <StyledTab
@@ -701,7 +701,7 @@ export default function RedTeamSetupPage() {
           </CustomTabPanel>
           <CustomTabPanel value={value} index={4}>
             <ErrorBoundary name="Review Page">
-              <Review onBack={handleBack} />
+              <Review />
             </ErrorBoundary>
           </CustomTabPanel>
         </TabContent>
