@@ -348,10 +348,20 @@ export async function doGenerateRedteam(
     return null;
   }
 
+  // Check if basic strategy was applied but not explicitly in the strategies list
+  const hasBasicTestCases = redteamTests.some(
+    (testCase) => testCase.metadata?.strategyId === 'basic',
+  );
+  const hasBasicInStrategies = strategyObjs.some((strategy) => strategy.id === 'basic');
+
+  // If basic strategy was applied but not in the strategies list, add it
+  const finalStrategyObjs =
+    hasBasicTestCases && !hasBasicInStrategies ? [{ id: 'basic' }, ...strategyObjs] : strategyObjs;
+
   const updatedRedteamConfig = {
     purpose,
     entities,
-    strategies: strategyObjs || [],
+    strategies: finalStrategyObjs || [],
     plugins: plugins || [],
     sharing: config.sharing,
   };
@@ -411,7 +421,7 @@ export async function doGenerateRedteam(
       cloudHost,
       testCasesCount: redteamTests.length,
       plugins,
-      strategies: strategyObjs,
+      strategies: finalStrategyObjs,
     });
 
     ret = writePromptfooConfig(updatedYaml, options.output, headerComments);
@@ -485,7 +495,7 @@ export async function doGenerateRedteam(
       cloudHost,
       testCasesCount: redteamTests.length,
       plugins,
-      strategies: strategyObjs,
+      strategies: finalStrategyObjs,
       isUpdate: true,
     });
 
@@ -509,7 +519,7 @@ export async function doGenerateRedteam(
       cloudHost,
       testCasesCount: redteamTests.length,
       plugins,
-      strategies: strategyObjs,
+      strategies: finalStrategyObjs,
     });
 
     ret = writePromptfooConfig({ tests: redteamTests }, 'redteam.yaml', headerComments);
