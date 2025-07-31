@@ -150,14 +150,10 @@ def call_api(prompt, options, context):
       pythonScriptPath = path.join(tempDir, 'nested_unicode_test.py');
       fs.writeFileSync(pythonScriptPath, pythonScript);
 
-      const provider = new PythonProvider(
-        pythonScriptPath,
-        {
-          id: 'python:nested-unicode-test',
-          config: { basePath: tempDir },
-        },
-        10000,
-      );
+      const provider = new PythonProvider(pythonScriptPath, {
+        id: 'python:nested-unicode-test',
+        config: { basePath: tempDir },
+      });
 
       const result = await provider.callApi('Test');
       const resultAny = result as any;
@@ -189,14 +185,10 @@ def call_api(prompt, options, context):
       pythonScriptPath = path.join(tempDir, 'corruption_test.py');
       fs.writeFileSync(pythonScriptPath, pythonScript);
 
-      const provider = new PythonProvider(
-        pythonScriptPath,
-        {
-          id: 'python:corruption-test',
-          config: { basePath: tempDir },
-        },
-        10000,
-      );
+      const provider = new PythonProvider(pythonScriptPath, {
+        id: 'python:corruption-test',
+        config: { basePath: tempDir },
+      });
 
       const result = await provider.callApi('Product® Plus');
       // The corrupted version should have null byte
@@ -243,14 +235,10 @@ def call_api(prompt, options, context):
       const scriptPath = path.join(tempDir, 'bug5106_test.py');
       fs.writeFileSync(scriptPath, pythonScript);
 
-      const provider = new PythonProvider(
-        scriptPath,
-        {
-          id: 'python:bug5106-test',
-          config: { basePath: tempDir },
-        },
-        10000,
-      );
+      const provider = new PythonProvider(scriptPath, {
+        id: 'python:bug5106-test',
+        config: { basePath: tempDir },
+      });
 
       // Test the exact case from the bug report
       const context: CallApiContextParams = {
@@ -304,14 +292,10 @@ def call_api(prompt, options, context):
       const scriptPath = path.join(tempDir, 'all_unicode_test.py');
       fs.writeFileSync(scriptPath, pythonScript);
 
-      const provider = new PythonProvider(
-        scriptPath,
-        {
-          id: 'python:all-unicode-test',
-          config: { basePath: tempDir },
-        },
-        10000,
-      );
+      const provider = new PythonProvider(scriptPath, {
+        id: 'python:all-unicode-test',
+        config: { basePath: tempDir },
+      });
 
       const result = await provider.callApi('Test');
 
@@ -359,14 +343,10 @@ def call_api(prompt, options, context):
       pythonScriptPath = path.join(tempDir, 'malformed_test.py');
       fs.writeFileSync(pythonScriptPath, pythonScript);
 
-      const provider = new PythonProvider(
-        pythonScriptPath,
-        {
-          id: 'python:malformed-test',
-          config: { basePath: tempDir },
-        },
-        10000,
-      );
+      const provider = new PythonProvider(pythonScriptPath, {
+        id: 'python:malformed-test',
+        config: { basePath: tempDir },
+      });
 
       const result = await provider.callApi('Test');
       const resultAny = result as any;
@@ -415,14 +395,10 @@ def call_api(prompt, options, context):
       pythonScriptPath = path.join(tempDir, 'roundtrip_test.py');
       fs.writeFileSync(pythonScriptPath, pythonScript);
 
-      const provider = new PythonProvider(
-        pythonScriptPath,
-        {
-          id: 'python:roundtrip-test',
-          config: { basePath: tempDir },
-        },
-        10000,
-      );
+      const provider = new PythonProvider(pythonScriptPath, {
+        id: 'python:roundtrip-test',
+        config: { basePath: tempDir },
+      });
 
       const result = await provider.callApi('Test');
       expect(result.output).toBe('Product® Plus™ €100 25°C');
@@ -460,14 +436,10 @@ def call_api(prompt, options, context):
       pythonScriptPath = path.join(tempDir, 'binary_test.py');
       fs.writeFileSync(pythonScriptPath, pythonScript);
 
-      const provider = new PythonProvider(
-        pythonScriptPath,
-        {
-          id: 'python:binary-test',
-          config: { basePath: tempDir },
-        },
-        10000,
-      );
+      const provider = new PythonProvider(pythonScriptPath, {
+        id: 'python:binary-test',
+        config: { basePath: tempDir },
+      });
 
       const result = await provider.callApi('Test');
       const resultAny = result as any;
@@ -508,14 +480,10 @@ def call_api(prompt, options, context):
       pythonScriptPath = path.join(tempDir, 'ensure_ascii_test.py');
       fs.writeFileSync(pythonScriptPath, pythonScript);
 
-      const provider = new PythonProvider(
-        pythonScriptPath,
-        {
-          id: 'python:ensure-ascii-test',
-          config: { basePath: tempDir },
-        },
-        10000,
-      );
+      const provider = new PythonProvider(pythonScriptPath, {
+        id: 'python:ensure-ascii-test',
+        config: { basePath: tempDir },
+      });
 
       const result = await provider.callApi('Test');
       const resultAny = result as any;
@@ -567,14 +535,10 @@ def call_api(prompt, options, context):
       pythonScriptPath = path.join(tempDir, 'redteam_provider.py');
       fs.writeFileSync(pythonScriptPath, pythonScript);
 
-      const provider = new PythonProvider(
-        pythonScriptPath,
-        {
-          id: 'python:redteam-test',
-          config: { basePath: tempDir },
-        },
-        10000,
-      );
+      const provider = new PythonProvider(pythonScriptPath, {
+        id: 'python:redteam-test',
+        config: { basePath: tempDir },
+      });
 
       // Test with various Unicode patterns that appear in the bug report
       const testCases = [
@@ -657,14 +621,10 @@ def call_api(prompt, options, context):
       pythonScriptPath = path.join(tempDir, 'conversation_provider.py');
       fs.writeFileSync(pythonScriptPath, pythonScript);
 
-      const provider = new PythonProvider(
-        pythonScriptPath,
-        {
-          id: 'python:conversation-test',
-          config: { basePath: tempDir },
-        },
-        10000,
-      );
+      const provider = new PythonProvider(pythonScriptPath, {
+        id: 'python:conversation-test',
+        config: { basePath: tempDir },
+      });
 
       // First turn
       const conversation = { messages: [], metadata: {} };
