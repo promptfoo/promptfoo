@@ -210,11 +210,11 @@ describe('TestCaseForm', () => {
     );
 
     // Get the last call since it was re-rendered with new props
-    expect(mockVarsForm.mock.lastCall[0]).toMatchObject({
+    expect(mockVarsForm.mock.lastCall?.[0]).toMatchObject({
       initialValues: initialValues2.vars,
     });
 
-    expect(mockAssertsForm.mock.lastCall[0]).toMatchObject({
+    expect(mockAssertsForm.mock.lastCall?.[0]).toMatchObject({
       initialValues: initialValues2.assert,
     });
   });

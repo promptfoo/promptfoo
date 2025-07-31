@@ -29,6 +29,9 @@ vi.mock('./SecurityFindings', () => ({
   )),
 }));
 
+const MockedScanStatistics = vi.mocked(ScanStatistics);
+const MockedSecurityFindings = vi.mocked(SecurityFindings);
+
 const theme = createTheme();
 
 describe('ResultsTab', () => {
@@ -55,16 +58,16 @@ describe('ResultsTab', () => {
       </ThemeProvider>,
     );
 
-    expect(ScanStatistics).toHaveBeenCalledTimes(1);
-    expect(ScanStatistics.mock.calls[0][0]).toMatchObject({
+    expect(MockedScanStatistics).toHaveBeenCalledTimes(1);
+    expect(MockedScanStatistics.mock.calls[0][0]).toMatchObject({
       scanResults: mockScanResults,
       selectedSeverity: null,
       onSeverityClick: expect.any(Function),
       onFilesClick: mockOnShowFilesDialog,
     });
 
-    expect(SecurityFindings).toHaveBeenCalledTimes(1);
-    expect(SecurityFindings.mock.calls[0][0]).toMatchObject({
+    expect(MockedSecurityFindings).toHaveBeenCalledTimes(1);
+    expect(MockedSecurityFindings.mock.calls[0][0]).toMatchObject({
       scanResults: mockScanResults,
       selectedSeverity: null,
       onSeverityChange: expect.any(Function),
@@ -93,8 +96,8 @@ describe('ResultsTab', () => {
     const severityButton = screen.getByTestId('severity-button');
     await user.click(severityButton);
 
-    expect(SecurityFindings).toHaveBeenCalledTimes(2);
-    expect(SecurityFindings.mock.lastCall[0]).toMatchObject({
+    expect(MockedSecurityFindings).toHaveBeenCalledTimes(2);
+    expect(MockedSecurityFindings.mock.lastCall?.[0]).toMatchObject({
       scanResults: mockScanResults,
       selectedSeverity: 'error',
       onSeverityChange: expect.any(Function),
@@ -123,8 +126,8 @@ describe('ResultsTab', () => {
     const toggleButton = screen.getByTestId('toggle-raw-output');
     await user.click(toggleButton);
 
-    expect(SecurityFindings).toHaveBeenCalledTimes(2);
-    expect(SecurityFindings.mock.lastCall[0]).toMatchObject({
+    expect(MockedSecurityFindings).toHaveBeenCalledTimes(2);
+    expect(MockedSecurityFindings.mock.lastCall?.[0]).toMatchObject({
       scanResults: mockScanResults,
       selectedSeverity: null,
       onSeverityChange: expect.any(Function),
@@ -193,7 +196,7 @@ describe('ResultsTab', () => {
 
     await userEvent.click(severityButton);
 
-    expect(ScanStatistics.mock.lastCall[0]).toMatchObject({
+    expect(MockedScanStatistics.mock.lastCall?.[0]).toMatchObject({
       scanResults: mockScanResults,
       selectedSeverity: null,
       onSeverityClick: expect.any(Function),
