@@ -20,6 +20,7 @@ import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
+import { upgradeCommand } from './commands/upgrade';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
 import logger, { setLogLevel } from './logger';
@@ -109,8 +110,9 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
-  validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
+  upgradeCommand(program);
+  validateCommand(program, defaultConfig, defaultConfigPath);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
@@ -142,3 +144,5 @@ if (require.main === module) {
   checkNodeVersion();
   main();
 }
+
+export { main };
