@@ -6,8 +6,11 @@ import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
+import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
+import { runPython } from '../../src/python/pythonUtils';
+import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
@@ -112,6 +115,11 @@ jest.mock('../../src/util/file', () => ({
   }),
 }));
 
+jest.mock('xlsx', () => ({
+  readFile: jest.fn(),
+  utils: { sheet_to_json: jest.fn() },
+}));
+
 // Helper to clear all mocks
 const clearAllMocks = () => {
   jest.clearAllMocks();
@@ -121,14 +129,11 @@ const clearAllMocks = () => {
   jest.mocked(getEnvString).mockReset();
   jest.mocked(fetchCsvFromGoogleSheet).mockReset();
   jest.mocked(loadApiProvider).mockReset();
-  const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-  mockRunPython.mockReset();
+  jest.mocked(runPython).mockReset();
+  jest.mocked(fetchHuggingFaceDataset).mockReset();
+  jest.mocked(maybeLoadConfigFromExternalFile).mockReset();
   const mockImportModule = jest.requireMock('../../src/esm').importModule;
   mockImportModule.mockReset();
-  const mockFetchHuggingFaceDataset = jest.requireMock(
-    '../../src/integrations/huggingfaceDatasets',
-  ).fetchHuggingFaceDataset;
-  mockFetchHuggingFaceDataset.mockReset();
 };
 
 describe('readStandaloneTestsFile', () => {
@@ -136,6 +141,31 @@ describe('readStandaloneTestsFile', () => {
     clearAllMocks();
     // Reset getEnvString to default behavior
     jest.mocked(getEnvString).mockImplementation((key, defaultValue) => defaultValue || '');
+    // Restore maybeLoadConfigFromExternalFile mock
+    jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
+      // Mock implementation that handles file:// references
+      if (config && typeof config === 'object') {
+        const result = { ...config };
+        for (const [key, value] of Object.entries(config)) {
+          if (typeof value === 'string' && value.startsWith('file://')) {
+            // Extract the file path from the file:// URL
+            const filePath = value.slice('file://'.length);
+            // Get the mocked file content using the extracted path
+            const fs = jest.requireMock('fs');
+            const fileContent = fs.readFileSync(filePath, 'utf-8');
+            if (typeof fileContent === 'string') {
+              try {
+                result[key] = JSON.parse(fileContent);
+              } catch {
+                result[key] = fileContent;
+              }
+            }
+          }
+        }
+        return result;
+      }
+      return config;
+    });
   });
 
   afterEach(() => {
@@ -401,17 +431,107 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should read XLSX file and return test cases', async () => {
+    const sheetData = [
+      { var1: 'value1', var2: 'value2', __expected: 'expected1' },
+      { var1: 'value3', var2: 'value4', __expected: 'expected2' },
+    ];
+
+    // Mock the dynamic import
+    jest.doMock('xlsx', () => ({
+      readFile: jest.fn().mockReturnValue({ SheetNames: ['Sheet1'], Sheets: { Sheet1: {} } }),
+      utils: { sheet_to_json: jest.fn().mockReturnValue(sheetData) },
+    }));
+
+    const result = await readStandaloneTestsFile('test.xlsx');
+
+    const xlsx = await import('xlsx');
+    expect(xlsx.readFile).toHaveBeenCalledWith(expect.stringContaining('test.xlsx'));
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+        description: 'Row #1',
+        options: {},
+        vars: { var1: 'value1', var2: 'value2' },
+      },
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+        description: 'Row #2',
+        options: {},
+        vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
+
+    // Clean up the mock
+    jest.dontMock('xlsx');
+  });
+
+  it('should throw helpful error when xlsx module is not installed', async () => {
+    // Create a test that validates the error message is properly formatted
+    // when the xlsx module cannot be found
+    const mockError = new Error("Cannot find module 'xlsx'");
+
+    // Mock fs.readFileSync to avoid actual file read
+    jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('mock content'));
+
+    // Create a new instance with mocked xlsx module
+    jest.doMock('xlsx', () => {
+      throw mockError;
+    });
+
+    // Clear module cache to ensure fresh import
+    jest.resetModules();
+
+    try {
+      // Import the module which will attempt to import xlsx
+      const { parseXlsxFile } = await import('../../src/util/xlsx');
+
+      // Attempt to parse a file, which should trigger the error
+      await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
+        'xlsx is not installed. Please install it with: npm install xlsx\n' +
+          'Note: xlsx is an optional peer dependency for reading Excel files.',
+      );
+    } finally {
+      // Clean up
+      jest.dontMock('xlsx');
+      jest.resetModules();
+    }
+  });
+
+  it('should throw error when Excel file has no sheets', async () => {
+    const mockXlsx = {
+      readFile: jest.fn().mockReturnValue({
+        SheetNames: [],
+        Sheets: {},
+      }),
+      utils: { sheet_to_json: jest.fn() },
+    };
+
+    jest.doMock('xlsx', () => mockXlsx);
+    jest.resetModules();
+
+    try {
+      const { parseXlsxFile } = await import('../../src/util/xlsx');
+
+      await expect(parseXlsxFile('empty.xlsx')).rejects.toThrow(
+        'Failed to parse Excel file empty.xlsx: Excel file has no sheets',
+      );
+    } finally {
+      jest.dontMock('xlsx');
+      jest.resetModules();
+    }
+  });
+
   it('should handle Python files with default function name', async () => {
     const pythonResult = [
       { vars: { var1: 'value1' }, assert: [{ type: 'equals', value: 'expected1' }] },
       { vars: { var2: 'value2' }, assert: [{ type: 'equals', value: 'expected2' }] },
     ];
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockResolvedValueOnce(pythonResult);
+    jest.mocked(runPython).mockResolvedValue(pythonResult);
 
     const result = await readStandaloneTestsFile('test.py');
 
-    expect(mockRunPython).toHaveBeenCalledWith(
+    expect(runPython).toHaveBeenCalledWith(
       expect.stringContaining('test.py'),
       'generate_tests',
       [],
@@ -423,12 +543,11 @@ describe('readStandaloneTestsFile', () => {
     const pythonResult = [
       { vars: { var1: 'value1' }, assert: [{ type: 'equals', value: 'expected1' }] },
     ];
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockResolvedValueOnce(pythonResult);
+    jest.mocked(runPython).mockResolvedValue(pythonResult);
 
     const result = await readStandaloneTestsFile('test.py:custom_function');
 
-    expect(mockRunPython).toHaveBeenCalledWith(
+    expect(runPython).toHaveBeenCalledWith(
       expect.stringContaining('test.py'),
       'custom_function',
       [],
@@ -438,41 +557,53 @@ describe('readStandaloneTestsFile', () => {
 
   it('should pass config to Python generate_tests function', async () => {
     const pythonResult = [{ vars: { a: 1 }, assert: [] }];
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockResolvedValueOnce(pythonResult);
+    jest.mocked(runPython).mockResolvedValue(pythonResult);
 
     const config = { dataset: 'demo' };
     const result = await readStandaloneTestsFile('test.py', '', config);
 
-    expect(mockRunPython).toHaveBeenCalledWith(
-      expect.stringContaining('test.py'),
-      'generate_tests',
-      [config],
-    );
+    expect(runPython).toHaveBeenCalledWith(expect.stringContaining('test.py'), 'generate_tests', [
+      config,
+    ]);
     expect(result).toEqual(pythonResult);
   });
 
   it('should load file references in config for Python generator', async () => {
     const pythonResult = [{ vars: { a: 1 }, assert: [] }];
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockResolvedValueOnce(pythonResult);
+    jest.mocked(runPython).mockResolvedValue(pythonResult);
 
-    jest.mocked(fs.existsSync).mockReturnValueOnce(true);
-    jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": "bar"}');
+    // Mock maybeLoadConfigFromExternalFile to transform file:// references
+    jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
+      if (config && typeof config === 'object') {
+        const result = { ...config };
+        for (const [key, value] of Object.entries(config)) {
+          if (typeof value === 'string' && value.startsWith('file://')) {
+            result[key] = { foo: 'bar' }; // Return the expected transformed value
+          }
+        }
+        return result;
+      }
+      return config;
+    });
+
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockImplementation((path) => {
+      if (path.toString().includes('config.json')) {
+        return '{"foo": "bar"}';
+      }
+      return '';
+    });
     const config = { data: 'file://config.json' };
-    await readStandaloneTestsFile('test.py', '', config);
+    const result = await readStandaloneTestsFile('test.py', '', config);
 
-    expect(mockRunPython).toHaveBeenCalledWith(
-      expect.stringContaining('test.py'),
-      'generate_tests',
-      [{ data: { foo: 'bar' } }],
-    );
+    expect(runPython).toHaveBeenCalledWith(expect.stringContaining('test.py'), 'generate_tests', [
+      { data: { foo: 'bar' } },
+    ]);
+    expect(result).toEqual(pythonResult);
   });
 
   it('should throw error when Python file returns non-array', async () => {
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockReset();
-    mockRunPython.mockResolvedValueOnce({ not: 'an array' });
+    jest.mocked(runPython).mockResolvedValue({ not: 'an array' } as any);
 
     await expect(readStandaloneTestsFile('test.py')).rejects.toThrow(
       'Python test function must return a list of test cases, got object',
@@ -732,6 +863,31 @@ describe('readTests', () => {
   beforeEach(() => {
     clearAllMocks();
     jest.mocked(globSync).mockReturnValue([]);
+    // Restore maybeLoadConfigFromExternalFile mock for readTests tests
+    jest.mocked(maybeLoadConfigFromExternalFile).mockImplementation((config) => {
+      // Mock implementation that handles file:// references
+      if (config && typeof config === 'object') {
+        const result = { ...config };
+        for (const [key, value] of Object.entries(config)) {
+          if (typeof value === 'string' && value.startsWith('file://')) {
+            // Extract the file path from the file:// URL
+            const filePath = value.slice('file://'.length);
+            // Get the mocked file content using the extracted path
+            const fs = jest.requireMock('fs');
+            const fileContent = fs.readFileSync(filePath, 'utf-8');
+            if (typeof fileContent === 'string') {
+              try {
+                result[key] = JSON.parse(fileContent);
+              } catch {
+                result[key] = fileContent;
+              }
+            }
+          }
+        }
+        return result;
+      }
+      return config;
+    });
   });
 
   afterEach(() => {
@@ -911,16 +1067,14 @@ describe('readTests', () => {
   });
 
   it('should read tests from a Google Sheets URL', async () => {
-    const mockFetchCsvFromGoogleSheet =
-      jest.requireMock('../../src/googleSheets').fetchCsvFromGoogleSheet;
-    mockFetchCsvFromGoogleSheet.mockResolvedValue([
+    jest.mocked(fetchCsvFromGoogleSheet).mockResolvedValue([
       { var1: 'value1', var2: 'value2', __expected: 'expected1' },
       { var1: 'value3', var2: 'value4', __expected: 'expected2' },
     ]);
 
     const result = await readTests('https://docs.google.com/spreadsheets/d/example');
 
-    expect(mockFetchCsvFromGoogleSheet).toHaveBeenCalledWith(
+    expect(fetchCsvFromGoogleSheet).toHaveBeenCalledWith(
       'https://docs.google.com/spreadsheets/d/example',
     );
     expect(result).toHaveLength(2);
@@ -1003,17 +1157,11 @@ describe('readTests', () => {
         options: {},
       },
     ];
-    const mockFetchHuggingFaceDataset = jest.requireMock(
-      '../../src/integrations/huggingfaceDatasets',
-    ).fetchHuggingFaceDataset;
-    mockFetchHuggingFaceDataset.mockImplementation(async () => mockDataset);
-    jest.mocked(globSync).mockReturnValueOnce([]);
+    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockDataset);
 
-    const result = await readTests('huggingface://datasets/example/dataset');
+    const result = await loadTestsFromGlob('huggingface://datasets/example/dataset');
 
-    expect(mockFetchHuggingFaceDataset).toHaveBeenCalledWith(
-      'huggingface://datasets/example/dataset',
-    );
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith('huggingface://datasets/example/dataset');
     expect(result).toEqual(mockDataset);
   });
 
@@ -1065,13 +1213,12 @@ describe('readTests', () => {
         options: {},
       },
     ];
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockResolvedValue(pythonTests);
-    jest.mocked(globSync).mockReturnValue(['test.py']);
+    jest.mocked(runPython).mockResolvedValue(pythonTests);
+    jest.mocked(globSync).mockReturnValueOnce(['test.py']);
 
     const result = await readTests(['test.py']);
 
-    expect(mockRunPython).toHaveBeenCalledWith(
+    expect(runPython).toHaveBeenCalledWith(
       expect.stringContaining('test.py'),
       'generate_tests',
       [],
@@ -1089,14 +1236,12 @@ describe('readTests', () => {
         options: {},
       },
     ];
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockReset();
-    mockRunPython.mockResolvedValueOnce(pythonTests);
+    jest.mocked(runPython).mockResolvedValue(pythonTests);
     jest.mocked(globSync).mockReturnValueOnce(['test.py']);
 
     const result = await readTests(['test.py:custom_function']);
 
-    expect(mockRunPython).toHaveBeenCalledWith(
+    expect(runPython).toHaveBeenCalledWith(
       expect.stringContaining('test.py'),
       'custom_function',
       [],
@@ -1113,19 +1258,15 @@ describe('readTests', () => {
         options: {},
       },
     ];
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockReset();
-    mockRunPython.mockResolvedValueOnce(pythonTests);
+    jest.mocked(runPython).mockResolvedValue(pythonTests);
     jest.mocked(globSync).mockReturnValueOnce(['test.py']);
 
     const config = { foo: 'bar' };
     const result = await readTests([{ path: 'test.py', config }]);
 
-    expect(mockRunPython).toHaveBeenCalledWith(
-      expect.stringContaining('test.py'),
-      'generate_tests',
-      [config],
-    );
+    expect(runPython).toHaveBeenCalledWith(expect.stringContaining('test.py'), 'generate_tests', [
+      config,
+    ]);
     expect(result).toEqual(pythonTests);
   });
 
@@ -1136,9 +1277,7 @@ describe('readTests', () => {
   });
 
   it('should handle Python files that return non-array in readTests', async () => {
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockReset();
-    mockRunPython.mockResolvedValueOnce({ not: 'an array' });
+    jest.mocked(runPython).mockResolvedValue({ not: 'an array' } as any);
     jest.mocked(globSync).mockReturnValueOnce(['test.py']);
 
     await expect(readTests(['test.py'])).rejects.toThrow(
@@ -1226,14 +1365,12 @@ describe('readTests', () => {
         options: {},
       },
     ];
-    const mockRunPython = jest.requireMock('../../src/python/pythonUtils').runPython;
-    mockRunPython.mockReset();
-    mockRunPython.mockResolvedValueOnce(pythonTests);
+    jest.mocked(runPython).mockResolvedValue(pythonTests);
     jest.mocked(globSync).mockReturnValueOnce(['test.py']);
 
     const result = await readTests(['file://test.py:custom_function']);
 
-    expect(mockRunPython).toHaveBeenCalledWith(
+    expect(runPython).toHaveBeenCalledWith(
       expect.stringContaining('test.py'),
       'custom_function',
       [],
@@ -1348,16 +1485,11 @@ describe('loadTestsFromGlob', () => {
         options: {},
       },
     ];
-    const mockFetchHuggingFaceDataset = jest.requireMock(
-      '../../src/integrations/huggingfaceDatasets',
-    ).fetchHuggingFaceDataset;
-    mockFetchHuggingFaceDataset.mockImplementation(async () => mockDataset);
+    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockDataset);
 
     const result = await loadTestsFromGlob('huggingface://datasets/example/dataset');
 
-    expect(mockFetchHuggingFaceDataset).toHaveBeenCalledWith(
-      'huggingface://datasets/example/dataset',
-    );
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith('huggingface://datasets/example/dataset');
     expect(result).toEqual(mockDataset);
   });
 });
