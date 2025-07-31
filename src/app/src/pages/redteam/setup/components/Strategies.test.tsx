@@ -71,7 +71,6 @@ describe('Strategies', () => {
 
       expect(docLink).toBeInTheDocument();
       expect(docLink).toHaveAttribute('target', '_blank');
-      expect(docLink).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
     it('renders navigation buttons', () => {

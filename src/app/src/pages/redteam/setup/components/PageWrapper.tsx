@@ -15,8 +15,6 @@ interface PageWrapperProps {
   onBack?: () => void;
   nextLabel?: string;
   backLabel?: string;
-  showNext?: boolean;
-  showBack?: boolean;
   nextDisabled?: boolean;
   backDisabled?: boolean;
 }

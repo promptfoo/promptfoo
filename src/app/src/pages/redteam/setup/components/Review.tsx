@@ -380,8 +380,6 @@ export default function Review({ onBack }: ReviewProps) {
       title="Review & Run"
       description="Review your configuration and run the red-team evaluation to identify potential vulnerabilities."
       onBack={onBack}
-      showBack={!!onBack}
-      showNext={false}
     >
       <Box>
         <TextField

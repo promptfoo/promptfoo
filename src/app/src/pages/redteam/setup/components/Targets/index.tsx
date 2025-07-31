@@ -375,7 +375,6 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       }
       onNext={onNext}
       onBack={onBack}
-      showBack={!!onBack}
       nextDisabled={missingFields.length > 0}
     >
       <Stack direction="column" spacing={3}>
