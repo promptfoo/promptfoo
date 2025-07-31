@@ -4,7 +4,9 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
 import invariant from '../../util/invariant';
+import type { HarmPlugin } from '../constants';
 import {
   BIAS_PLUGINS,
   PII_PLUGINS,
@@ -47,9 +49,6 @@ import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { XSTestPlugin } from './xstest';
-
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
-import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
   key: string;
@@ -110,6 +109,35 @@ async function fetchRemoteTestCases(
   }
 }
 
+/**
+ * Truncates string values in an object to prevent database bloat.
+ * Recursively processes nested objects and arrays.
+ */
+function truncatePluginConfig(config: any, maxLength: number = 100): any {
+  if (config === null || config === undefined) {
+    return config;
+  }
+
+  if (typeof config === 'string') {
+    return config.length > maxLength ? `${config.substring(0, maxLength)}...` : config;
+  }
+
+  if (Array.isArray(config)) {
+    return config.map((item) => truncatePluginConfig(item, maxLength));
+  }
+
+  if (typeof config === 'object') {
+    const truncated: Record<string, any> = {};
+    for (const [key, value] of Object.entries(config)) {
+      truncated[key] = truncatePluginConfig(value, maxLength);
+    }
+    return truncated;
+  }
+
+  // Numbers, booleans, etc. - return as-is
+  return config;
+}
+
 function createPluginFactory<T extends PluginConfig>(
   PluginClass: PluginClass<T>,
   key: string,
@@ -119,9 +147,22 @@ function createPluginFactory<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
+      validate?.(config as T);
       if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
         logger.debug(`Using local redteam generation for ${key}`);
-        return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
+        const plugin = new PluginClass(provider, purpose, injectVar, config as T);
+        const testCases = await plugin.generateTests(n, delayMs);
+        return testCases.map((testCase) => ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            pluginId: getShortPluginId(key),
+            // Only add truncated pluginConfig if not already explicitly set
+            ...(testCase.metadata?.pluginConfig === undefined && {
+              pluginConfig: truncatePluginConfig(config),
+            }),
+          },
+        }));
       }
       const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config ?? {});
       return testCases.map((testCase) => ({
@@ -129,6 +170,10 @@ function createPluginFactory<T extends PluginConfig>(
         metadata: {
           ...testCase.metadata,
           pluginId: getShortPluginId(key),
+          // Only add truncated pluginConfig if not already explicitly set
+          ...(testCase.metadata?.pluginConfig === undefined && {
+            pluginConfig: truncatePluginConfig(config),
+          }),
         },
       }));
     },
