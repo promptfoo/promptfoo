@@ -25,9 +25,11 @@ export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({
   onChange,
   showDifferentOption = true,
 }) => {
-  const options = showDifferentOption
-    ? BASE_OPTIONS
-    : BASE_OPTIONS.filter((o) => o.value !== 'different');
+  const options = React.useMemo(
+    () =>
+      showDifferentOption ? BASE_OPTIONS : BASE_OPTIONS.filter((o) => o.value !== 'different'),
+    [showDifferentOption],
+  );
   return (
     <FormControl sx={{ minWidth: 180 }} size="small">
       <InputLabel id="filter-mode-label">Display</InputLabel>

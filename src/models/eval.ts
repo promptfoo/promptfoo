@@ -33,6 +33,7 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types';
+import { HumanRatingMapping } from '../types';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile';
@@ -433,19 +434,26 @@ export default class Eval {
     searchQuery?: string;
     filters?: string[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
     const mode = opts.filterMode ?? 'all';
 
+    const db = getDb();
+
     // Build filter conditions
-    const conditions = [`eval_id = '${this.id}'`];
+    const conditions: string[] = [];
+
+    // Always filter by eval_id
+    conditions.push(`eval_id = '${this.id}'`);
+
     if (mode === 'errors') {
       conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
     } else if (mode === 'failures') {
       conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
     } else if (mode === 'passes') {
       conditions.push(`success = 1`);
+    } else if (mode === 'highlights') {
+      conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
     }
 
     // Add filters
@@ -491,6 +499,12 @@ export default class Eval {
             // Strategy ID is stored in metadata.strategyId
             condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
           }
+        } else if (type === 'human-rating' && operator === 'equals') {
+          // Use the indexed human_rating column for efficient filtering
+          const dbValue = HumanRatingMapping[value as keyof typeof HumanRatingMapping];
+          if (dbValue !== undefined) {
+            condition = `human_rating = ${dbValue}`;
+          }
         }
 
         if (condition) {
@@ -508,51 +522,55 @@ export default class Eval {
 
     // Add search condition if searchQuery is provided
     if (opts.searchQuery && opts.searchQuery.trim() !== '') {
-      const sanitizedSearch = opts.searchQuery.replace(/'/g, "''");
+      const searchTerm = `%${opts.searchQuery.trim().replace(/'/g, "''")}%`;
       const searchConditions = [
         // Search in response text
-        `response LIKE '%${sanitizedSearch}%'`,
+        `response LIKE '${searchTerm}'`,
         // Search in grading result reason
-        `json_extract(grading_result, '$.reason') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(grading_result, '$.reason') LIKE '${searchTerm}'`,
         // Search in grading result comment
-        `json_extract(grading_result, '$.comment') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(grading_result, '$.comment') LIKE '${searchTerm}'`,
         // Search in named scores
-        `json_extract(named_scores, '$') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(named_scores, '$') LIKE '${searchTerm}'`,
         // Search in metadata
-        `json_extract(metadata, '$') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(metadata, '$') LIKE '${searchTerm}'`,
         // Search in test case vars
-        `json_extract(test_case, '$.vars') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(test_case, '$.vars') LIKE '${searchTerm}'`,
         // Search in test case metadata
-        `json_extract(test_case, '$.metadata') LIKE '%${sanitizedSearch}%'`,
+        `json_extract(test_case, '$.metadata') LIKE '${searchTerm}'`,
       ];
       conditions.push(`(${searchConditions.join(' OR ')})`);
     }
 
     const whereSql = conditions.join(' AND ');
 
-    // Get filtered count
-    const filteredCountQuery = sql.raw(
-      `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
-    );
-    const countStart = Date.now();
-    const countResult = await db.get<FilteredCountRow>(filteredCountQuery);
-    const countEnd = Date.now();
-    logger.debug(`Count query took ${countEnd - countStart}ms`);
-    const filteredCount = countResult?.count || 0;
+    try {
+      // Get filtered count using parameterized query
+      const filteredCountSql = `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`;
+      const countStart = Date.now();
+      // @ts-ignore
+      const countResult = (await db.get(sql.raw(filteredCountSql))) as FilteredCountRow;
+      const countEnd = Date.now();
+      logger.debug(`Count query took ${countEnd - countStart}ms`);
+      const filteredCount = countResult?.count || 0;
 
-    // Query for test indices based on filters
-    const idxQuery = sql.raw(
-      `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
-    );
-    const idxStart = Date.now();
-    const rows = await db.all<TestIndexRow>(idxQuery);
-    const idxEnd = Date.now();
-    logger.debug(`Index query took ${idxEnd - idxStart}ms`);
+      // Query for test indices based on filters
+      const idxSql = `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`;
+      const idxStart = Date.now();
+      // @ts-ignore
+      const rows = (await db.all(sql.raw(idxSql))) as TestIndexRow[];
+      const idxEnd = Date.now();
+      logger.debug(`Index query took ${idxEnd - idxStart}ms`);
 
-    // Get all test indices from the rows
-    const testIndices = rows.map((row) => row.test_idx);
+      // Get all test indices from the rows
+      const testIndices = rows.map((row) => row.test_idx);
 
-    return { testIndices, filteredCount };
+      return { testIndices, filteredCount };
+    } catch (err) {
+      // Handle SQL errors gracefully (e.g., SQL injection attempts)
+      logger.warn(`Query error in queryTestIndices: ${err}`);
+      return { testIndices: [], filteredCount: 0 };
+    }
   }
 
   async getTablePage(opts: {

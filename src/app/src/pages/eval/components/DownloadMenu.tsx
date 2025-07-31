@@ -16,7 +16,8 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import useTheme from '@mui/material/styles/useTheme';
 import Typography from '@mui/material/Typography';
-import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
+import { ResultFailureReason, type EvaluateTableOutput } from '@promptfoo/types';
+import { getHumanRating } from '@promptfoo/util/humanRatingHelpers';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
@@ -192,37 +193,40 @@ function DownloadMenu() {
   };
 
   const downloadHumanEvalTestCases = () => {
-    if (!table) {
-      showToast('No table data', 'error');
+    if (!table || !evalId) {
       return;
     }
 
     const humanEvalCases = table.body
-      .filter((row) => row.outputs.some((output) => output != null))
-      .map((row) => ({
-        vars: {
-          ...row.test.vars,
-          output: row.outputs[0]?.text.includes('---')
-            ? row.outputs[0]!.text.split('---\n')[1]
-            : (row.outputs[0]?.text ?? ''),
-          redteamFinalPrompt: row.outputs[0]?.metadata?.redteamFinalPrompt,
-          ...(row.outputs[0]?.gradingResult?.comment
-            ? { comment: row.outputs[0]!.gradingResult!.comment }
-            : {}),
-        },
-        assert: [
-          {
-            type: 'javascript',
-            value: `${row.outputs[0]?.pass ? '' : '!'}JSON.parse(output).pass`,
-          },
-        ],
-        metadata: row.test.metadata,
-      }));
+      .filter((row) => row.outputs.some((output) => getHumanRating(output.gradingResult) !== null))
+      .map((row) => {
+        // Find the human-rated output
+        const humanRatedOutput = row.outputs.find(
+          (output) => getHumanRating(output.gradingResult) !== null,
+        );
+
+        const humanRating = humanRatedOutput
+          ? getHumanRating(humanRatedOutput.gradingResult)
+          : null;
+
+        return {
+          description: row.description,
+          vars: row.test.vars,
+          assert: humanRating
+            ? [
+                {
+                  type: 'is-json' as const,
+                  value: humanRating.pass ? 'pass' : 'fail',
+                  comment: humanRating.comment,
+                },
+              ]
+            : [],
+        };
+      });
 
     const yamlContent = yaml.dump(humanEvalCases);
-    const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
+    const blob = new Blob([yamlContent], { type: 'text/yaml' });
     openDownloadDialog(blob, `${evalId}-human-eval-cases.yaml`);
-    handleClose();
   };
 
   const downloadBurpPayloads = () => {

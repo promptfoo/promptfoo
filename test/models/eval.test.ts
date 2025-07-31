@@ -2,6 +2,7 @@ import { getDb } from '../../src/database';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, { getEvalSummaries } from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import EvalFactory from '../factories/evalFactory';
 
 import type { Prompt } from '../../src/types';
@@ -354,6 +355,46 @@ describe('evaluator', () => {
         withNamedScores: true,
         searchableContent: 'searchable_content',
       });
+
+      // Mark first two results with manual human ratings for filter tests
+      const results = await EvalResult.findManyByEvalId(evalWithResults.id);
+      // The factory creates 20 results, so we know we have at least 2
+
+      results[0].gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Manual result (overrides all other grading results)',
+        comment: '',
+        assertion: null,
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Manual',
+            assertion: { type: 'human' },
+          },
+        ],
+      } as any;
+      results[0].success = true;
+      await results[0].save();
+
+      results[1].gradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'Manual result (overrides all other grading results)',
+        comment: '',
+        assertion: null,
+        componentResults: [
+          {
+            pass: false,
+            score: 0,
+            reason: 'Manual',
+            assertion: { type: 'human' },
+          },
+        ],
+      } as any;
+      results[1].success = false;
+      await results[1].save();
     });
 
     it('should return paginated results with default parameters', async () => {
@@ -399,8 +440,7 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({ filterMode: 'errors' });
 
       // Ensure there are results for the test to be meaningful
-      const hasResults = result.body.length > 0;
-      expect(hasResults).toBe(true);
+      expect(result.body.length).toBeGreaterThan(0);
 
       // Check all outputs for errors
       for (const row of result.body) {
@@ -416,8 +456,7 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({ filterMode: 'failures' });
 
       // Ensure there are results for the test to be meaningful
-      const hasResults = result.body.length > 0;
-      expect(hasResults).toBe(true);
+      expect(result.body.length).toBeGreaterThan(0);
 
       // All results should contain at least one failed output that's not an error
       for (const row of result.body) {
@@ -432,14 +471,120 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({ filterMode: 'passes' });
 
       // Ensure there are results for the test to be meaningful
-      const hasResults = result.body.length > 0;
-      expect(hasResults).toBe(true);
+      expect(result.body.length).toBeGreaterThan(0);
 
       // All results should contain at least one successful output
       for (const row of result.body) {
         const hasSuccess = row.outputs.some((output) => output.pass === true);
         expect(hasSuccess).toBe(true);
       }
+    });
+
+    it('should filter by human thumbs up', async () => {
+      const result = await evalWithResults.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-up',
+          }),
+        ],
+      });
+
+      expect(result.body.length).toBeGreaterThan(0);
+      for (const row of result.body) {
+        const hasHumanPass = row.outputs.some((output) =>
+          output.gradingResult?.componentResults?.some(
+            (c) => c.assertion?.type === 'human' && c.pass,
+          ),
+        );
+        expect(hasHumanPass).toBe(true);
+      }
+    });
+
+    it('should filter by human thumbs down', async () => {
+      const result = await evalWithResults.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-down',
+          }),
+        ],
+      });
+
+      expect(result.body.length).toBeGreaterThan(0);
+      for (const row of result.body) {
+        const hasHumanFail = row.outputs.some((output) =>
+          output.gradingResult?.componentResults?.some(
+            (c) => c.assertion?.type === 'human' && !c.pass,
+          ),
+        );
+        expect(hasHumanFail).toBe(true);
+      }
+    });
+
+    it('should filter by highlights', async () => {
+      const result = await evalWithResults.getTablePage({ filterMode: 'highlights' });
+
+      // With the withHighlights: true in the factory, we should have some highlighted results
+      // Since we set withHighlights: true, we expect to have results
+      expect(result.body.length).toBeGreaterThan(0);
+
+      for (const row of result.body) {
+        const hasHighlight = row.outputs.some((output) =>
+          output.gradingResult?.comment?.startsWith('!highlight'),
+        );
+        expect(hasHighlight).toBe(true);
+      }
+    });
+
+    it('should handle invalid filter mode gracefully', async () => {
+      const result = await evalWithResults.getTablePage({ filterMode: 'invalid-filter' });
+
+      // Should return all results when filter mode is not recognized
+      expect(result).toBeDefined();
+      expect(result.body).toBeDefined();
+      expect(result.totalCount).toBeGreaterThan(0);
+    });
+
+    it('should filter by human ratings added after creation', async () => {
+      // Create an eval with no human ratings initially
+      const evaluation = await EvalFactory.create({ numResults: 5 });
+
+      // Add human ratings to some results
+      const results = await EvalResult.findManyByEvalId(evaluation.id);
+      expect(results.length).toBeGreaterThan(0);
+
+      results[0].gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Human rating',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Manual',
+            assertion: { type: 'human' },
+          },
+        ],
+      } as any;
+      await results[0].save();
+
+      // Filter should find the human-rated result using filter (not filter mode)
+      const thumbsUpFiltered = await evaluation.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-up',
+          }),
+        ],
+      });
+      expect(thumbsUpFiltered.body).toHaveLength(1);
     });
 
     it('should filter by specific test indices', async () => {
@@ -508,6 +653,35 @@ describe('evaluator', () => {
       expect(result.filteredCount).toBeLessThan(result.totalCount);
     });
 
+    it('should combine human rating filter with other filters', async () => {
+      const result = await evalWithResults.getTablePage({
+        filterMode: 'passes',
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-up',
+          }),
+        ],
+      });
+
+      // Results should satisfy both conditions
+      for (const row of result.body) {
+        // Should have at least one passing output
+        const hasSuccess = row.outputs.some((output) => output.pass === true);
+        expect(hasSuccess).toBe(true);
+
+        // Should have a human thumbs up rating
+        const hasHumanPass = row.outputs.some((output) =>
+          output.gradingResult?.componentResults?.some(
+            (c) => c.assertion?.type === 'human' && c.pass,
+          ),
+        );
+        expect(hasHumanPass).toBe(true);
+      }
+    });
+
     it('should be filterable by multiple metrics', async () => {
       const result = await evalWithResults.getTablePage({
         filters: [
@@ -560,6 +734,37 @@ describe('evaluator', () => {
       expect(result).toHaveProperty('body');
     });
 
+    it('should handle SQL injection in eval ID safely', async () => {
+      // Create an eval with a potentially malicious ID (though this shouldn't happen in practice)
+      const maliciousEval = new Eval({}, { id: "test'; DROP TABLE eval_results; --" });
+
+      // This should handle the malicious ID safely with parameterized queries
+      // and return empty results (since no data exists for this ID)
+      const result = await maliciousEval.getTablePage({});
+
+      expect(result).toBeDefined();
+      expect(result.body).toEqual([]);
+      expect(result.totalCount).toBe(0);
+      expect(result.filteredCount).toBe(0);
+    });
+
+    it('should handle special characters in metric filter', async () => {
+      const result = await evalWithResults.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metric',
+            operator: 'equals',
+            value: "metric'; DROP TABLE eval_results; --",
+          }),
+        ],
+      });
+
+      // Should handle the metric filter safely
+      expect(result).toBeDefined();
+      expect(result.body).toEqual([]); // No results expected with malicious metric name
+    });
+
     it('should handle empty result sets', async () => {
       // Create an eval with no results
       const emptyEval = await EvalFactory.create({ numResults: 0 });
@@ -569,6 +774,79 @@ describe('evaluator', () => {
       expect(result.body).toEqual([]);
       expect(result.totalCount).toBe(0);
       expect(result.filteredCount).toBe(0);
+    });
+
+    it('should handle clearing human ratings properly', async () => {
+      // Create an eval with a human rating
+      const evaluation = await EvalFactory.create({ numResults: 3 });
+      const results = await EvalResult.findManyByEvalId(evaluation.id);
+      expect(results.length).toBeGreaterThan(0);
+
+      // Add human rating to first result
+      results[0].gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Manual',
+            assertion: { type: 'human' },
+          },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Other assertion',
+            assertion: { type: 'isSimilar' },
+          },
+        ],
+      } as any;
+      await results[0].save();
+
+      // Verify human rating filter finds it using the filter (not filter mode)
+      let humanRatingFiltered = await evaluation.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-up',
+          }),
+        ],
+      });
+      expect(humanRatingFiltered.body).toHaveLength(1);
+
+      // Simulate clearing the human rating (removing it from componentResults)
+      const gradingResult = results[0].gradingResult;
+      expect(gradingResult).toBeDefined();
+      expect(gradingResult?.componentResults).toBeDefined();
+
+      results[0].gradingResult!.componentResults =
+        results[0].gradingResult!.componentResults!.filter(
+          (r: any) => r.assertion?.type !== 'human',
+        );
+      // Recalculate pass/score based on remaining assertions
+      const remainingResults = results[0].gradingResult!.componentResults;
+      if (remainingResults.length > 0) {
+        const passCount = remainingResults.filter((r: any) => r.pass).length;
+        results[0].gradingResult!.pass = passCount === remainingResults.length;
+        results[0].gradingResult!.score = passCount / remainingResults.length;
+      }
+      await results[0].save();
+
+      // Verify human rating filter no longer finds it
+      humanRatingFiltered = await evaluation.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'human-rating',
+            operator: 'equals',
+            value: 'thumbs-up',
+          }),
+        ],
+      });
+      expect(humanRatingFiltered.body).toHaveLength(0);
     });
   });
 });

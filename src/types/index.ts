@@ -260,6 +260,23 @@ export enum ResultFailureReason {
   ERROR = 2,
 }
 
+export enum HumanRatingValue {
+  THUMBS_DOWN = 0,
+  THUMBS_UP = 1,
+}
+
+// Mapping for UI filter values to DB values
+export const HumanRatingMapping = {
+  'thumbs-up': HumanRatingValue.THUMBS_UP,
+  'thumbs-down': HumanRatingValue.THUMBS_DOWN,
+} as const;
+
+// Reverse mapping for DB values to UI filter values
+export const HumanRatingReverseMapping = {
+  [HumanRatingValue.THUMBS_UP]: 'thumbs-up',
+  [HumanRatingValue.THUMBS_DOWN]: 'thumbs-down',
+} as const;
+
 export interface EvaluateResult {
   id?: string; // on the new version 2, this is stored per-result
   description?: string; // on the new version 2, this is stored per-result // FIXME(ian): The EvalResult model doesn't pass this through, but that's ok since we can use testCase.description?

@@ -58,6 +58,7 @@ describe('useTableStore', () => {
             metadata: [],
             plugin: [],
             strategy: [],
+            'human-rating': ['thumbs-up', 'thumbs-down'],
           },
         },
       });
@@ -306,6 +307,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              'human-rating': ['thumbs-up', 'thumbs-down'],
             },
           },
         });
@@ -354,6 +356,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              'human-rating': ['thumbs-up', 'thumbs-down'],
             },
           },
         });
@@ -416,6 +419,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              'human-rating': ['thumbs-up', 'thumbs-down'],
             },
           },
         });
@@ -460,6 +464,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              'human-rating': ['thumbs-up', 'thumbs-down'],
             },
           },
         });
@@ -499,6 +504,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              'human-rating': ['thumbs-up', 'thumbs-down'],
             },
           },
         });
