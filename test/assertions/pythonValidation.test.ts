@@ -73,6 +73,7 @@ describe('formatPythonAssertionError', () => {
     expect(formatted).toContain(
       'Make sure your function accepts two parameters: (output, context)',
     );
+    expect(formatted).toContain('https://promptfoo.dev/docs/configuration/expected-outputs#python');
   });
 
   it('should provide helpful message for ModuleNotFoundError', () => {
@@ -97,6 +98,7 @@ describe('formatPythonAssertionError', () => {
 
     expect(formatted).toContain('Invalid return value');
     expect(formatted).toContain('bool (True/False)');
+    expect(formatted).toContain('https://promptfoo.dev/docs/configuration/expected-outputs#python');
     expect(formatted).toContain('float (0.0 to 1.0 for score)');
     expect(formatted).toContain('dict with keys');
   });

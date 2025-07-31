@@ -52,7 +52,7 @@ export function formatPythonAssertionError(
     errorMessage.includes('missing') &&
     errorMessage.includes('required positional argument')
   ) {
-    return `Python assertion error: Function signature mismatch\n${errorMessage}\n\nMake sure your function accepts two parameters: (output, context)`;
+    return `Python assertion error: Function signature mismatch\n${errorMessage}\n\nMake sure your function accepts two parameters: (output, context)\n\nSee https://promptfoo.dev/docs/configuration/expected-outputs#python for documentation.`;
   }
 
   if (errorMessage.includes('ModuleNotFoundError') || errorMessage.includes('ImportError')) {
@@ -69,7 +69,7 @@ export function formatPythonAssertionError(
   }
 
   if (errorMessage.includes('Invalid JSON') && errorMessage.includes('when parsing result')) {
-    return `Python assertion error: Invalid return value\n\nYour function must return one of:\n  - bool (True/False)\n  - float (0.0 to 1.0 for score)\n  - dict with keys: {"pass": bool, "score": float, "reason": str}`;
+    return `Python assertion error: Invalid return value\n\nYour function must return one of:\n  - bool (True/False)\n  - float (0.0 to 1.0 for score)\n  - dict with keys: {"pass": bool, "score": float, "reason": str}\n\nSee https://promptfoo.dev/docs/configuration/expected-outputs#python for documentation.`;
   }
 
   // For other errors, just enhance with file/function context

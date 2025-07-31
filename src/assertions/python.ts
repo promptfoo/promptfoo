@@ -3,6 +3,7 @@ import { type GradingResult, isGradingResult } from '../types';
 import invariant from '../util/invariant';
 
 import type { AssertionParams } from '../types';
+import { formatPythonAssertionError } from './pythonValidation';
 
 // Recursively map snake_case keys to camelCase for Python dataclass compatibility
 function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string, any> {
@@ -143,28 +144,15 @@ ${
     }
   } catch (err) {
     const error = err as Error;
-    let reason = 'Python code execution failed';
 
-    // Provide more helpful error messages based on the error type
+    // Check for syntax errors that might indicate a missing file:// prefix
+    let reason: string;
     if (
-      error.message.includes('TypeError') &&
-      error.message.includes('required positional argument')
+      error.message.includes('SyntaxError') &&
+      typeof assertion.value === 'string' &&
+      assertion.value.includes('.py:')
     ) {
-      reason = `Python assertion error: Function signature mismatch. ${error.message}\n\nMake sure your function accepts (output, context) as parameters.`;
-    } else if (
-      error.message.includes('ModuleNotFoundError') ||
-      error.message.includes('ImportError')
-    ) {
-      const moduleMatch = error.message.match(/No module named ['"]([^'"]+)['"]/);
-      const moduleName = moduleMatch ? moduleMatch[1] : 'required module';
-      reason = `Python assertion error: Missing module '${moduleName}'.\n\nInstall it with: pip install ${moduleName}`;
-    } else if (error.message.includes('SyntaxError')) {
-      // Check if it looks like a file path with function name
-      if (typeof assertion.value === 'string' && assertion.value.includes('.py:')) {
-        reason = `Python syntax error in assertion:\n${error.message}\n\nDid you mean to use 'file://${assertion.value}' to reference an external Python file with a specific function?`;
-      } else {
-        reason = `Python syntax error in assertion:\n${error.message}`;
-      }
+      reason = `Python syntax error in assertion:\n${error.message}\n\nDid you mean to use 'file://${assertion.value}' to reference an external Python file with a specific function?`;
     } else if (
       error.message.includes('NameError') &&
       typeof assertion.value === 'string' &&
@@ -175,10 +163,10 @@ ${
         ? 'to reference an external Python file with a specific function'
         : 'to reference an external Python file';
       reason = `Python assertion error: ${error.message}\n\nDid you mean to use 'file://${assertion.value}' ${suggestion}?`;
-    } else if (error.message.includes('returned non-zero exit status')) {
-      reason = `Python assertion crashed. Check the assertion code for errors.\n${error.message}`;
     } else {
-      reason = `Python assertion error: ${error.message}`;
+      // For all other errors, use the formatting function
+      // Use a placeholder file/function name for inline assertions
+      reason = formatPythonAssertionError(error, '<inline>', 'assertion');
     }
 
     return {
