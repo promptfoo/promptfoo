@@ -24,7 +24,7 @@ export default function DefaultTestVariables() {
   const [variables, setVariables] = useState<Variable[]>([]);
   const isUpdatingFromLocal = useRef(false);
 
-  // Initialize local state from global config, but not when we're the source of the change
+  // // Initialize local state from global config, but not when we're the source of the change
   useEffect(() => {
     if (!isUpdatingFromLocal.current) {
       const configVars = config.defaultTest?.vars || {};

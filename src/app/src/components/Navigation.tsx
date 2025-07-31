@@ -167,7 +167,7 @@ export default function Navigation({
 
   return (
     <>
-      <StyledAppBar position="static" elevation={0}>
+      <StyledAppBar sx={{ mb: 0 }} position="static" elevation={0}>
         <NavToolbar>
           <NavSection>
             <Logo />
