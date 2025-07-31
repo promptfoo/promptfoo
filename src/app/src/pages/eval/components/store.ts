@@ -41,6 +41,13 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   return Array.from(metrics).sort();
 }
 
+function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
+  const strategyIds =
+    strategies?.map((strategy) => (typeof strategy === 'string' ? strategy : strategy.id)) ?? [];
+
+  return Array.from(new Set([...strategyIds, 'basic']));
+}
+
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
@@ -285,14 +292,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metric: computeAvailableMetrics(table),
             metadata: [],
             plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-            strategy: Array.from(
-              new Set([
-                ...(resultsFile.config?.redteam?.strategies?.map((strategy) =>
-                  typeof strategy === 'string' ? strategy : strategy.id,
-                ) ?? []),
-                'basic',
-              ]),
-            ),
+            strategy: extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies),
           },
         },
       }));
@@ -308,14 +308,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metric: computeAvailableMetrics(results.table),
             metadata: [],
             plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-            strategy: Array.from(
-              new Set([
-                ...(resultsFile.config?.redteam?.strategies?.map((strategy) =>
-                  typeof strategy === 'string' ? strategy : strategy.id,
-                ) ?? []),
-                'basic',
-              ]),
-            ),
+            strategy: extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies),
           },
         },
       }));
@@ -407,14 +400,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
               metric: computeAvailableMetrics(data.table),
               metadata: [],
               plugin: data.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-              strategy: Array.from(
-                new Set([
-                  ...(data.config?.redteam?.strategies?.map((strategy) =>
-                    typeof strategy === 'string' ? strategy : strategy.id,
-                  ) ?? []),
-                  'basic',
-                ]),
-              ),
+              strategy: extractUniqueStrategyIds(data.config?.redteam?.strategies),
             },
           },
         }));
