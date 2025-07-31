@@ -107,10 +107,11 @@ Some models like Gemini 2.5 Pro include thinking tokens in their responses. You 
 providers:
   - id: openrouter:google/gemini-2.5-pro
     config:
-      showThinking: false  # Hide thinking content from output (default: true)
+      showThinking: false # Hide thinking content from output (default: true)
 ```
 
 When `showThinking` is true (default), the output includes thinking content:
+
 ```
 Thinking: <reasoning process>
 
