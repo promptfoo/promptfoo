@@ -22,19 +22,19 @@ This month we focused on expanding **provider support**, enhancing **evaluation 
 
 - **[Docker Model Runner](/docs/providers/docker/)** - Run models in isolated Docker containers for better security and reproducibility
 - **[MCP (Model Context Protocol)](/docs/providers/mcp/)** - Connect to MCP servers for enhanced AI capabilities
-- **[Google Imagen](/docs/providers/google/#imagen)** - Generate images for multimodal testing scenarios
+- **[Google Imagen](/docs/providers/google/#image-generation-models)** - Generate images for multimodal testing scenarios
 - **[AIMLAPI](/docs/providers/aimlapi/)** - Access various AI models through a unified interface
 
 ##### New Model Support
 
 - **[Grok-4](/docs/providers/xai/)** - Advanced reasoning capabilities from xAI
-- **OpenAI Deep Research Models** - [o3-deep-research and o4-mini-deep-research](/docs/providers/openai/#deep-research-models) for complex problem solving
-- **Enhanced Azure Provider** - Added [system prompt support](/docs/providers/azure/#system-prompts) for better control
+- **OpenAI Deep Research Models** - [o3-deep-research and o4-mini-deep-research](/docs/providers/openai/#deep-research-models-responses-api-only) for complex problem solving
+- **Enhanced Azure Provider** - Added system prompt support for better control
 
 ##### Enhanced Capabilities
 
-- **[LiteLLM Embeddings](/docs/providers/litellm/#embeddings)** - Similarity testing and semantic search
-- **[Google Vision](/docs/providers/google/#vision)** - Image understanding for multimodal evaluations
+- **[LiteLLM Embeddings](/docs/providers/litellm/#embedding-configuration)** - Similarity testing and semantic search
+- **[Google Vision](/docs/providers/google/#chat-and-multimodal-models)** - Image understanding for multimodal evaluations
 - **HTTP Provider Enhancements** - Added support for [JKS](/docs/providers/http/#jks-java-keystore-certificates) and [PFX](/docs/providers/http/#pfx-personal-information-exchange-certificates) client certificates.
 - **[Browser Provider](/docs/providers/browser/)** - Connect to existing Chrome browser sessions via Chrome DevTools Protocol (CDP) for testing OAuth-authenticated applications
 
@@ -97,7 +97,7 @@ Both strategies leverage AI agents to conduct intelligent, adaptive conversation
 
 ### See Also {#july-2025-see-also}
 
-- [All Release Notes](#release-notes)
+- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
 - [Tracing](/docs/tracing/)
 - [Red Team Strategies](/docs/red-team/strategies/)
 - [Provider Configuration](/docs/providers/)
@@ -250,7 +250,7 @@ A new [System Prompt Override plugin](/docs/red-team/plugins/system-prompt-overr
 
 ### See Also {#june-2025-see-also}
 
-- [All Release Notes](#release-notes)
+- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
 - [OpenTelemetry Tracing](/docs/tracing/)
 - [Medical & Financial Plugins](/docs/red-team/plugins/)
 - [Model Audit](/docs/model-audit/)
@@ -273,7 +273,7 @@ Real attacks rarely succeed in a single message. We've enhanced our attack strat
 
 ### See Also {#june-2025-see-also}
 
-- [All Release Notes](#release-notes)
+- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
 - [OpenTelemetry Tracing](/docs/tracing/)
 - [Medical & Financial Plugins](/docs/red-team/plugins/)
 - [Model Audit](/docs/model-audit/)
