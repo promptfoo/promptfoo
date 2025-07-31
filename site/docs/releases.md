@@ -9,6 +9,42 @@ keywords: [Promptfoo releases, changelog, updates, features, monthly summaries]
 
 Full release history for Promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
 
+## July 2025 Release Highlights
+
+### Red teaming
+
+* Use natural language instructions to create your own red teaming strategies. [Custom Strategies](/docs/red-team/strategies/custom-strategy/).    
+* [Mischievous user strategy](/docs/red-team/strategies/mischievous-user/): simulate a multi-turn conversation between an innocently mischievous user playing subtle games with an agent.  
+* HTTP Target test button improved with better error surfacing plus smart suggestions for fixing issues.
+
+### Enterprise
+
+* Regrade your red team scans. After adding grading rules, you can now re-grade existing scans instead of having to re-run them. Grading systems are nuanced; once you’ve made changes to a grading system (pass/fail criteria, reasoning, etc) you can re-grade existing eval results to quickly determine the performance of grading criteria changes.  
+* Map teams and roles from your Identity Provider \- Use your identity provider to assign teams and roles automatically.  
+* MCP Proxy \- Enterprise grade security for MCP servers. Lock down access to only approved MCP servers and monitor traffic for sensitive data.
+
+### Evals
+
+* Tracing and [OpenTelemetry Support](/docs/tracing/) \- No more need for another tracing observability tool. Send your traces to promptfoo to collect detailed performance metrics and debug complex provider implementations.
+
+![Tracing and OpenTelemetry Support](/img/docs/jul_release_notes_tracing.png)
+
+* Assertion Improvements:  
+  * Context Transforms: Extract additional data from provider responses to use in assertions:  [context-based assertions](/docs/configuration/expected-outputs/model-graded/#dynamically-via-context-transform). These are especially useful for evaluating RAG systems.  
+  * Use [finish-reason](/docs/configuration/expected-outputs/deterministic/#finish-reason) as an option in assertions to validate how AI model responses are terminated. This is useful for checking if the model completed naturally, hit token limits, triggered content filters, or made tool calls as expected.  
+  * Tracing assertions: Use your tracing and telemetry data in assertions: [trace-span-count](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [trace-span-duration](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), and [trace-error-spans](/docs/configuration/expected-outputs/deterministic/#trace-error-spans)  
+* Client certificate support for the HTTP Provider: The HTTP provider supports [JKS](/docs/providers/http/#jks-java-keystore-certificates) and [PFX](/docs/providers/http/#pfx-personal-information-exchange-certificates) certificates.  
+* defaultTest can load external files.  
+* New Providers Added: : MCP, Grok-4, AIMLAPI, OpenAI’s deep research models (o3-deep-research, o4-mini-deep-research), system prompts for Azure, image understanding for Google providers, embeddings for LiteLLM.
+
+### Developer experience
+
+* Debug easier using import pdb; pdb.set\_trace() in executed 3rd party Python scripts.  
+* Added comprehensive metadata filtering to search results: use search operators (equals, contains, not contains) along with persistent button actions.  
+* Connect to existing Chrome browser sessions via the Chrome DevTools Protocol (CDP). This enables testing of OAuth-authenticated applications without having to automate the login flow.
+
+---
+
 ## June 2025 Release Highlights
 
 This month we focused on enhancing **observability**, expanding **provider support**, and strengthening **red team capabilities** to help you build more reliable and secure AI applications.
