@@ -30,9 +30,12 @@ For an eval comparing several models with `llm-rubric` and `similar` assertions 
 ```
 docker:chat:<model_name>
 docker:completion:<model_name>
-docker:embedding:<model_name>
-docker:<model_name>
+docker:embeddings:<model_name>
+docker:embedding:<model_name>  # Alias for embeddings
+docker:<model_name>            # Defaults to chat
 ```
+
+Note: Both `docker:embedding:` and `docker:embeddings:` prefixes are supported for embedding models and will work identically.
 
 For a list of curated models on Docker Hub, visit the [Docker Hub Models page](https://hub.docker.com/u/ai).
 
@@ -43,8 +46,9 @@ Docker Model Runner can pull supported models from Hugging Face (i.e. models in 
 ```
 docker:chat:hf.co/<model_name>
 docker:completion:hf.co/<model_name>
-docker:embedding:hf.co/<model_name>
-docker:hf.co/<model_name>
+docker:embeddings:hf.co/<model_name>
+docker:embedding:hf.co/<model_name>  # Alias for embeddings
+docker:hf.co/<model_name>             # Defaults to chat
 ```
 
 ## Configuration
@@ -63,7 +67,7 @@ providers:
 
 Supported environment variables:
 
-- `DOCKER_MODEL_RUNNER_BASE_URL` - (optional) protocol, host name, and port. Defaults to `http://localhost:1234`. Set to `http://model-runner.docker.internal` when running within a container.
+- `DOCKER_MODEL_RUNNER_BASE_URL` - (optional) protocol, host name, and port. Defaults to `http://localhost:12434`. Set to `http://model-runner.docker.internal` when running within a container.
 - `DOCKER_MODEL_RUNNER_API_KEY` - (optional) api key that is passed as the Bearer token in the Authorization Header when calling the API. Defaults to `dmr` to satisfy OpenAI API validation (not used by Docker Model Runner).
 
 Standard OpenAI parameters are supported:

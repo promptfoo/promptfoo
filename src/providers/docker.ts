@@ -65,6 +65,8 @@ export function parseProviderPath(providerPath: string): {
         model: splits.slice(2).join(':'),
       };
     case 'embedding':
+      // Map 'embedding' to 'embeddings' for compatibility with the OpenAI API
+      // This allows users to use either 'docker:embedding:model' or 'docker:embeddings:model'
       return {
         type: 'embeddings',
         model: splits.slice(2).join(':'),
