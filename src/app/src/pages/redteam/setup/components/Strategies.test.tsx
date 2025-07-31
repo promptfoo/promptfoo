@@ -1,11 +1,10 @@
-import { render, screen } from '@testing-library/react';
-import React from 'react';
-import { MemoryRouter } from 'react-router-dom';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Strategies from './Strategies';
-import { MULTI_MODAL_STRATEGIES } from './strategies/constants';
 
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
@@ -120,7 +119,7 @@ describe('Strategies', () => {
   describe('MULTI_MODAL_STRATEGIES export', () => {
     it('exports MULTI_MODAL_STRATEGIES constant with expected values', () => {
       expect(MULTI_MODAL_STRATEGIES).toBeDefined();
-      expect(MULTI_MODAL_STRATEGIES).toEqual(['audio', 'video', 'image']);
+      expect(MULTI_MODAL_STRATEGIES).toEqual(['audio', 'image', 'video']);
     });
 
     it('contains expected multi-modal strategy identifiers', () => {

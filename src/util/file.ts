@@ -1,7 +1,8 @@
 import { parse as csvParse } from 'csv-parse/sync';
-import { access, readFile } from 'node:fs/promises';
+import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
+import { access, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import cliState from '../cliState';
 
@@ -53,7 +54,65 @@ export async function maybeLoadFromExternalFile(filePath: string | object | Func
   // Render the file path using Nunjucks
   const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
 
-  const finalPath = path.resolve(cliState.basePath || '', renderedFilePath.slice('file://'.length));
+  const pathWithoutProtocol = renderedFilePath.slice('file://'.length);
+  const resolvedPath = path.resolve(cliState.basePath || '', pathWithoutProtocol);
+
+  // Check if the path contains glob patterns
+  if (
+    pathWithoutProtocol.includes('*') ||
+    pathWithoutProtocol.includes('?') ||
+    pathWithoutProtocol.includes('[')
+  ) {
+    // Use globSync to expand the pattern
+    const matchedFiles = globSync(resolvedPath, {
+      windowsPathsNoEscape: true,
+    });
+
+    if (matchedFiles.length === 0) {
+      throw new Error(`No files found matching pattern: ${resolvedPath}`);
+    }
+
+    // Load all matched files and combine their contents
+    const allContents: any[] = [];
+    for (const matchedFile of matchedFiles) {
+      const contents = await readFile(matchedFile, 'utf8');
+      if (matchedFile.endsWith('.json')) {
+        const parsed = JSON.parse(contents);
+        if (Array.isArray(parsed)) {
+          allContents.push(...parsed);
+        } else {
+          allContents.push(parsed);
+        }
+      } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
+        const parsed = yaml.load(contents);
+        if (parsed === null || parsed === undefined) {
+          continue; // Skip empty files
+        }
+        if (Array.isArray(parsed)) {
+          allContents.push(...parsed);
+        } else {
+          allContents.push(parsed);
+        }
+      } else if (matchedFile.endsWith('.csv')) {
+        const records = csvParse(contents, { columns: true });
+        // If single column, return array of values to match single file behavior
+        if (records.length > 0 && Object.keys(records[0]).length === 1) {
+          allContents.push(
+            ...records.map((record: Record<string, string>) => Object.values(record)[0]),
+          );
+        } else {
+          allContents.push(...records);
+        }
+      } else {
+        allContents.push(contents);
+      }
+    }
+
+    return allContents;
+  }
+
+  // Original single file logic
+  const finalPath = resolvedPath;
   try {
     await access(finalPath);
   } catch {

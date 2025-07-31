@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 import logger from '../../logger';
+
 import type { Prompt } from '../../types';
 
 /**

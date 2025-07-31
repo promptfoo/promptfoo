@@ -250,6 +250,7 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 - `pii`: Includes all available PII plugins
 - `toxicity`: Includes all available plugins related to toxicity
 - `bias`: Includes all available plugins related to bias
+- `medical`: Includes all available medical AI safety plugins
 - `misinformation`: Includes all available plugins related to misinformation
 - `illegal-activity`: Includes all available plugins related to illegal activity
 
@@ -259,6 +260,7 @@ Example usage:
 plugins:
   - toxicity
   - bias
+  - medical
 ```
 
 ### Standards
@@ -594,6 +596,10 @@ Some providers such as Anthropic may disable your account for generating harmful
 ### Remote Generation
 
 By default, promptfoo uses a remote service for generating adversarial certain inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+
+:::info Cloud Users
+If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
+:::
 
 :::warning
 Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.

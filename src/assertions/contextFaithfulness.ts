@@ -1,7 +1,8 @@
 import { matchesContextFaithfulness } from '../matchers';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
+
+import type { AssertionParams, GradingResult } from '../types';
 
 /**
  * Handles context-faithfulness assertions by evaluating whether the LLM output
@@ -48,5 +49,8 @@ export async function handleContextFaithfulness({
       assertion.threshold ?? 0,
       test.options,
     )),
+    metadata: {
+      context,
+    },
   };
 }

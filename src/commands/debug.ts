@@ -1,13 +1,14 @@
+import { access } from 'node:fs/promises';
+import * as os from 'node:os';
+
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { access } from 'node:fs/promises';
-import * as os from 'os';
 import { version } from '../../package.json';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { UnifiedConfig } from '../types';
 import { printBorder } from '../util';
 import { resolveConfigs } from '../util/config/load';
+import type { UnifiedConfig } from '../types';
 
 interface DebugOptions {
   config?: string;

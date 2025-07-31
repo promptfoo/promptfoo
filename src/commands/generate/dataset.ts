@@ -1,6 +1,7 @@
+import { readFile, writeFile } from 'node:fs/promises';
+
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { readFile, writeFile } from 'node:fs/promises';
 import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
 import { serializeObjectArrayAsCSV } from '../../csv';

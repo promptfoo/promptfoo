@@ -80,9 +80,12 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   return (
     <div style={{ position: 'relative' }}>
       <div
+        // TODO: Element IDs should be unique; these aren't.
+        id="eval-output-cell-text"
         style={{
           cursor: isOverLength ? 'pointer' : 'normal',
           position: 'relative',
+          marginBottom: '8px',
         }}
         onClick={isOverLength ? toggleTruncate : undefined}
       >

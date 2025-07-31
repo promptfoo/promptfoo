@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import nunjucks from 'nunjucks';
 import type { Prompt } from '../../types';
 
 /**

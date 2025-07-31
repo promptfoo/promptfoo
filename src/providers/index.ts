@@ -1,17 +1,19 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
-import path from 'node:path';
 import cliState from '../cliState';
 import logger from '../logger';
-import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
+
+import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
+import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(

@@ -1,10 +1,11 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
 import confirm from '@inquirer/confirm';
 import select from '@inquirer/select';
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import type { Command } from 'commander';
 import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
@@ -100,7 +101,7 @@ export async function getExamplesList(): Promise<string[]> {
   }
 }
 
-export async function selectExample(): Promise<string> {
+async function selectExample(): Promise<string> {
   const examples = await getExamplesList();
   const choices = [
     { name: 'None (initialize with dummy files)', value: '' },

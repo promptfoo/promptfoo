@@ -1,8 +1,8 @@
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import {
-  PerplexityProvider,
   calculatePerplexityCost,
   createPerplexityProvider,
+  PerplexityProvider,
 } from '../../src/providers/perplexity';
 
 jest.mock('../../src/providers/openai/chat');

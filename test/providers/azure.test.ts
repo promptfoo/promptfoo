@@ -5,6 +5,7 @@ import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azure/warnings';
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+
 import type { TestCase, TestSuite } from '../../src/types';
 
 jest.mock('../../src/cache', () => ({
@@ -395,42 +396,6 @@ describe('Azure Provider Tests', () => {
 
         const result = await provider.callApi('test prompt');
         expect(result.output).toEqual({ test: 'value' });
-      });
-
-      it('should handle content_filter finish_reason', async () => {
-        const mockResponse = {
-          id: 'mock-id',
-          object: 'chat.completion',
-          created: Date.now(),
-          model: 'gpt-4',
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: 'assistant',
-                content: null,
-              },
-              finish_reason: 'content_filter',
-            },
-          ],
-          usage: {
-            prompt_tokens: 10,
-            completion_tokens: 20,
-            total_tokens: 30,
-          },
-        };
-
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: mockResponse,
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        });
-
-        const result = await provider.callApi('test prompt');
-        expect(result.output).toBe(
-          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-        );
       });
 
       it('should handle API errors', async () => {

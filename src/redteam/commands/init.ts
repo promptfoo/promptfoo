@@ -1,15 +1,14 @@
-import checkbox from '@inquirer/checkbox';
-import { Separator } from '@inquirer/checkbox';
+import fs from 'fs';
+import * as path from 'path';
+
+import checkbox, { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
-import fs from 'fs';
-import * as path from 'path';
 import { getDefaultPort } from '../../constants';
 import { getEnvString } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
@@ -17,22 +16,23 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/g
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
-import type { ProviderOptions, RedteamPluginObject } from '../../types';
-import { setupEnv, isRunningUnderNpx } from '../../util';
-import { BrowserBehavior } from '../../util/server';
-import { checkServerRunning, openBrowser } from '../../util/server';
+import { isRunningUnderNpx, setupEnv } from '../../util';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
-  type Plugin,
   ADDITIONAL_STRATEGIES,
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
+  HARM_PLUGINS,
+  type Plugin,
   type Strategy,
   subCategoryDescriptions,
-  HARM_PLUGINS,
 } from '../constants';
 import { doGenerateRedteam } from './generate';
+import type { Command } from 'commander';
+
+import type { ProviderOptions, RedteamPluginObject } from '../../types';
 
 const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
@@ -324,7 +324,10 @@ export async function redteamInit(directory: string | undefined) {
         name: 'anthropic:claude-3-7-sonnet-20250219',
         value: 'anthropic:messages:claude-3-7-sonnet-20250219',
       },
-      { name: 'vertex:gemini-2.5-pro-preview-03-25', value: 'vertex:gemini-2.5-pro-preview-03-25' },
+      {
+        name: 'Google Vertex Gemini 2.5 Pro',
+        value: 'vertex:gemini-2.5-pro',
+      },
     ];
 
     const selectedProvider = await select({

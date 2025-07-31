@@ -9,6 +9,11 @@ export const ApiSchemas = {
         email: EmailSchema.nullable(),
       }),
     },
+    GetId: {
+      Response: z.object({
+        id: z.string(),
+      }),
+    },
     Update: {
       Request: z.object({
         email: EmailSchema,

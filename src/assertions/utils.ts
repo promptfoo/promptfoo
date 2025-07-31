@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
-import yaml from 'js-yaml';
 import path from 'node:path';
+
+import yaml from 'js-yaml';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';

@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Databricks vision model example
+
+prompts:
+  # Vision models require structured JSON prompts
+  - file://vision-prompt.json
+
+providers:
+  - id: databricks:databricks-claude-3-7-sonnet
+    config:
+      isPayPerToken: true
+      temperature: 0.1
+      max_tokens: 300
+      # Replace with your workspace URL
+      workspaceUrl: https://your-workspace.cloud.databricks.com
+
+tests:
+  - description: 'Identify what is in the nature image'
+    vars:
+      question: 'What do you see in this image? Be brief.'
+      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/320px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
+    assert:
+      - type: contains-any
+        value: ['boardwalk', 'nature', 'path', 'wooden', 'trees']
+      - type: max-length
+        value: 500

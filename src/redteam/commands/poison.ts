@@ -1,14 +1,14 @@
-import chalk from 'chalk';
-import type { Command } from 'commander';
-import dedent from 'dedent';
 import { readdirSync, statSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import * as path from 'node:path';
+
+import chalk from 'chalk';
 import yaml from 'js-yaml';
-import * as path from 'path';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
+import type { Command } from 'commander';
 
 interface PoisonOptions {
   documents: string[];

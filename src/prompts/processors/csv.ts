@@ -1,6 +1,8 @@
-import { parse } from 'csv-parse/sync';
 import { readFileSync } from 'node:fs';
+
+import { parse } from 'csv-parse/sync';
 import { getEnvBool, getEnvString } from '../../envars';
+
 import type { Prompt } from '../../types';
 
 /**

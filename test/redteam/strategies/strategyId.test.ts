@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES } from '../../../src/redteam/constants';
 
 describe('Strategy IDs', () => {
@@ -87,6 +88,7 @@ describe('Strategy IDs', () => {
       audio: 'simpleAudio.ts',
       leetspeak: 'leetspeak.ts',
       'math-prompt': 'mathPrompt.ts',
+      'mischievous-user': 'mischievousUser.ts',
       morse: 'otherEncodings.ts',
       multilingual: 'multilingual.ts',
       pandamonium: 'pandamonium.ts',

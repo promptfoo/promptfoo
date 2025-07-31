@@ -3,6 +3,7 @@ description: 'Compare Promptfoo and Garak for LLM security testing. Learn how dy
 image: /img/blog/garak/promptfoo-vs-garak.jpg
 date: 2025-06-26
 authors: [ian]
+tags: [tool-comparison, red-teaming, garak]
 ---
 
 # Promptfoo vs Garak: Choosing the Right LLM Red Teaming Tool
@@ -138,6 +139,10 @@ The enterprise version also includes a web-based dashboard where teams can:
 - Track vulnerability trends across releases
 - Generate executive-ready compliance reports
 - Set up automated alerts for failed security tests
+
+:::info
+Promptfoo offers ISO 27001 compliance and enterprise support. Garak is pure open-source with community support.
+:::
 
 ## Making the Right Choice
 

@@ -1,5 +1,6 @@
-import type { Command } from 'commander';
 import { readFile } from 'node:fs/promises';
+
+import type { Command } from 'commander';
 import { getDb } from '../database';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';

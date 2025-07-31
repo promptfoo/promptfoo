@@ -29,7 +29,7 @@ Here is the main structure of the promptfoo configuration file:
 | providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](#provideroptions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use                                                                                                                                                              |
 | prompts                         | string \| string[]                                                                               | Yes      | One or more prompts to load                                                                                                                                                                                 |
 | tests                           | string \| [Test Case](#test-case)[]                                                              | Yes      | Path to a test file, OR list of LLM prompt variations (aka "test case")                                                                                                                                     |
-| defaultTest                     | Partial [Test Case](#test-case)                                                                  | No       | Sets the default properties for each test case. Useful for setting an assertion, on all test cases, for example.                                                                                            |
+| defaultTest                     | string \| Partial [Test Case](#test-case)                                                        | No       | Sets the default properties for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                                                  |
 | outputPath                      | string                                                                                           | No       | Where to write output. Writes to console/web viewer if not set.                                                                                                                                             |
 | evaluateOptions.maxConcurrency  | number                                                                                           | No       | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                        |
 | evaluateOptions.repeat          | number                                                                                           | No       | Number of times to run each test case . Defaults to 1                                                                                                                                                       |
@@ -64,14 +64,14 @@ A test case represents a single example input that is fed into all prompts and p
 
 More details on using assertions, including examples [here](/docs/configuration/expected-outputs).
 
-| Property         | Type   | Required | Description                                                                                                                                                                                                                                 |
-| ---------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| type             | string | Yes      | Type of assertion                                                                                                                                                                                                                           |
-| value            | string | No       | The expected value, if applicable                                                                                                                                                                                                           |
-| threshold        | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                     |
-| provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                    |
-| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                                                                                                    |
-| contextTransform | string | No       | JavaScript expression to extract context from provider output for context-based assertions. Alternative to providing context as a test variable. Supports expressions like `output.context` or `output.docs.map(d => d.content).join('\n')` |
+| Property         | Type   | Required | Description                                                                                                                                                                                                                                                                            |
+| ---------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string | Yes      | Type of assertion                                                                                                                                                                                                                                                                      |
+| value            | string | No       | The expected value, if applicable                                                                                                                                                                                                                                                      |
+| threshold        | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                                                |
+| provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                               |
+| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                                                                                                                                               |
+| contextTransform | string | No       | Javascript expression to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
 
 ### AssertionValueFunctionContext
 
@@ -122,6 +122,66 @@ Promptfoo supports extension hooks that allow you to run custom code that modifi
 | afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` |
 | beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
 | afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
+
+#### Session Management in Hooks
+
+For multi-turn conversations or stateful interactions, the `sessionId` is made available in the `afterEach` hook context at:
+
+```javascript
+context.result.metadata.sessionId;
+```
+
+This sessionId comes from either:
+
+1. The provider's response (`response.sessionId`) - takes priority
+2. The test variables (`vars.sessionId`) - used as fallback for client-generated session IDs
+
+**Note:** The provider's `response.sessionId` takes precedence over `vars.sessionId`. The session ID from vars is only used if the provider doesn't return one.
+
+Example usage in an extension:
+
+```javascript
+async function extensionHook(hookName, context) {
+  if (hookName === 'afterEach') {
+    const sessionId = context.result.metadata.sessionId;
+    if (sessionId) {
+      console.log(`Test completed with session: ${sessionId}`);
+      // You can use this sessionId for tracking, logging, or cleanup
+    }
+  }
+}
+```
+
+For iterative red team strategies (e.g., jailbreak, tree search), the `sessionIds` array is made available in the `afterEach` hook context at:
+
+```javascript
+context.result.metadata.sessionIds;
+```
+
+This is an array containing all session IDs from the iterative exploration process. Each iteration may have its own session ID, allowing you to track the full conversation history across multiple attempts.
+
+Example usage for iterative providers:
+
+```javascript
+async function extensionHook(hookName, context) {
+  if (hookName === 'afterEach') {
+    // For regular providers - single session ID
+    const sessionId = context.result.metadata.sessionId;
+
+    // For iterative providers (jailbreak, tree search) - array of session IDs
+    const sessionIds = context.result.metadata.sessionIds;
+    if (sessionIds && Array.isArray(sessionIds)) {
+      console.log(`Jailbreak completed with ${sessionIds.length} iterations`);
+      sessionIds.forEach((id, index) => {
+        console.log(`  Iteration ${index + 1}: session ${id}`);
+      });
+      // You can use these sessionIds for detailed tracking of the attack path
+    }
+  }
+}
+```
+
+Note: The `sessionIds` array only contains defined session IDs - any iterations without a session ID are filtered out.
 
 ### Implementing Hooks
 
@@ -243,16 +303,16 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 
 #### beforeAll
 
-| Property                          | Type                       | Description                            |
-| --------------------------------- | -------------------------- | -------------------------------------- |
-| `context.suite.prompts`           | `Prompt[]`                 | The prompts to be evaluated.           |
-| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to prompts.      |
-| `context.suite.tests`             | `TestCase[]`               | The test cases to be evaluated.        |
-| `context.suite.scenarios`         | `Scenario[]`               | The scenarios to be evaluated.         |
-| `context.suite.defaultTest`       | `TestCase`                 | The default test case to be evaluated. |
-| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of Nunjucks filters.             |
-| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of derived metrics.              |
-| `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.          |
+| Property                          | Type                       | Description                                                                                |
+| --------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
+| `context.suite.prompts`           | `Prompt[]`                 | The prompts to be evaluated.                                                               |
+| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to prompts.                                                          |
+| `context.suite.tests`             | `TestCase[]`               | The test cases to be evaluated.                                                            |
+| `context.suite.scenarios`         | `Scenario[]`               | The scenarios to be evaluated.                                                             |
+| `context.suite.defaultTest`       | `TestCase`                 | The default test case to be evaluated.                                                     |
+| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of Nunjucks filters.                                                                 |
+| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
+| `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.                                                              |
 
 #### beforeEach
 
@@ -317,6 +377,7 @@ ProviderResponse is an object that represents the response from a provider. It i
 interface ProviderResponse {
   error?: string;
   output?: string | object;
+  metadata?: object;
   tokenUsage?: Partial<{
     total: number;
     prompt: number;
@@ -545,6 +606,7 @@ interface EvaluateResult {
   score: number;
   latencyMs: number;
   gradingResult?: GradingResult;
+  metadata?: Record<string, any>;
 }
 ```
 

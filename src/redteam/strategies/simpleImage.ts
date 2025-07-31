@@ -1,8 +1,9 @@
-import { SingleBar, Presets } from 'cli-progress';
+import { Presets, SingleBar } from 'cli-progress';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
+
+import type { TestCase } from '../../types';
 
 // Helper function to escape XML special characters for SVG
 function escapeXml(unsafe: string): string {
@@ -41,7 +42,7 @@ async function importSharp() {
  * Converts text to an image and then to base64 encoded string
  * using the sharp library which has better cross-platform support than canvas
  */
-export async function textToImage(text: string): Promise<string> {
+async function textToImage(text: string): Promise<string> {
   // Special case for test environment - avoids actually loading Sharp
   if (getEnvString('NODE_ENV') === 'test' || getEnvString('JEST_WORKER_ID')) {
     return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
