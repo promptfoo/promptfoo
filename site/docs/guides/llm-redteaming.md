@@ -166,7 +166,7 @@ You should choose at least one target. If desired, set multiple in order to comp
 targets:
   - openai:gpt-4.1
   - anthropic:messages:claude-3-5-sonnet-20241022
-  - ollama:chat:llama3.1:70b
+  - ollama:chat:llama3.3:70b
 ```
 
 To learn more, find your preferred LLM provider [here](/docs/providers).
@@ -230,7 +230,7 @@ You can override the grader by adding a provider override for `defaultTest`, whi
 ```yaml
 defaultTest:
   options:
-    provider: 'ollama:chat:llama3:70b'
+    provider: 'ollama:chat:llama3.3:70b'
 ```
 
 And in this example, we use [Azure OpenAI](/docs/providers/azure/#model-graded-tests) as a grader:

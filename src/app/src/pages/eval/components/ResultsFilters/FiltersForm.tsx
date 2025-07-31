@@ -16,12 +16,16 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { useDebounce } from 'use-debounce';
 import { type ResultsFilter, useTableStore } from '../store';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   metric: 'Metric',
   metadata: 'Metadata',
+  plugin: 'Plugin',
+  strategy: 'Strategy',
 };
 
 const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
@@ -42,7 +46,7 @@ function Dropdown({
 }: {
   id: string;
   label?: string;
-  values: { label: string; value: string }[];
+  values: { label: string | React.ReactNode; value: string }[];
   value: string;
   onChange: (value: string) => void;
   width?: number | string;
@@ -66,13 +70,15 @@ function Dropdown({
           },
         }}
       >
-        {values
-          .filter((item) => !disabledValues.includes(item.value))
-          .map((item) => (
-            <MenuItem key={item.value} value={item.value}>
-              {item.label}
-            </MenuItem>
-          ))}
+        {values.map((item) => (
+          <MenuItem
+            key={item.value}
+            value={item.value}
+            disabled={disabledValues.includes(item.value)}
+          >
+            {item.label}
+          </MenuItem>
+        ))}
       </Select>
     </FormControl>
   );
@@ -129,11 +135,22 @@ function Filter({
   totalFilters: number;
   onClose: () => void;
 }) {
+  const theme = useTheme();
   const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
   const selectedMetricValues = Object.values(filters.values)
     .filter((filter) => filter.id !== value.id && filter.type === 'metric' && filter.value)
+    .map((filter) => filter.value);
+
+  // Compute selected plugin values (excluding current filter)
+  const selectedPluginValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'plugin' && filter.value)
+    .map((filter) => filter.value);
+
+  // Compute selected strategy values (excluding current filter)
+  const selectedStrategyValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'strategy' && filter.value)
     .map((filter) => filter.value);
 
   /**
@@ -158,8 +175,16 @@ function Filter({
       if (filterType !== 'metadata') {
         updatedFilter.field = undefined;
       }
-      // Reset operator to 'equals' when changing types since metric only supports 'equals'
-      if (filterType === 'metric' && value.operator !== 'equals') {
+      // Clear value when switching between different filter types
+      // This prevents inheriting incompatible values (e.g., plugin value for strategy filter)
+      if (value.type !== filterType) {
+        updatedFilter.value = '';
+      }
+      // Reset operator to 'equals' when changing to types that only support 'equals'
+      if (
+        (filterType === 'metric' || filterType === 'plugin' || filterType === 'strategy') &&
+        value.operator !== 'equals'
+      ) {
         updatedFilter.operator = 'equals';
       }
       updateFilter(updatedFilter);
@@ -279,6 +304,13 @@ function Filter({
               ? [{ label: TYPE_LABELS_BY_TYPE.metric, value: 'metric' }]
               : []),
             { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' },
+            // Show plugin and strategy filters if there are any options available i.e. these are redteam eval results.
+            ...(filters.options.plugin.length > 0
+              ? [{ label: TYPE_LABELS_BY_TYPE.plugin, value: 'plugin' }]
+              : []),
+            ...(filters.options.strategy.length > 0
+              ? [{ label: TYPE_LABELS_BY_TYPE.strategy, value: 'strategy' }]
+              : []),
           ]}
           value={value.type}
           onChange={(e) => handleTypeChange(e as ResultsFilter['type'])}
@@ -302,7 +334,7 @@ function Filter({
           id={`${index}-operator-select`}
           label="Operator"
           values={
-            value.type === 'metric'
+            value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy'
               ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
               : [
                   { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
@@ -316,18 +348,61 @@ function Filter({
         />
 
         <Box sx={{ flex: 1, minWidth: 250 }}>
-          {value.type === 'metric' ? (
+          {value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy' ? (
             <Dropdown
               id={`${index}-value-select`}
               label={TYPE_LABELS_BY_TYPE[value.type]}
-              values={(filters.options[value.type] ?? []).map((value) => ({
-                label: value,
-                value,
-              }))}
+              values={(filters.options[value.type] ?? [])
+                .map((optionValue) => {
+                  let label: string | React.ReactNode = optionValue;
+                  let displayName: string | null = null;
+                  if (value.type === 'plugin' || value.type === 'strategy') {
+                    displayName = displayNameOverrides[
+                      optionValue as keyof typeof displayNameOverrides
+                    ] as string;
+                    if (displayName) {
+                      label = (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            width: '100%',
+                            gap: 16,
+                          }}
+                        >
+                          {displayName}
+                          <code
+                            style={{
+                              fontSize: '0.8em',
+                              color: theme.palette.text.secondary,
+                            }}
+                          >
+                            {optionValue}
+                          </code>
+                        </div>
+                      );
+                    }
+                  }
+                  return { label, value: optionValue, sortValue: displayName ?? optionValue };
+                })
+                .sort((a, b) => {
+                  // Sort by the option value since label might be a React element
+                  return a.sortValue.localeCompare(b.sortValue);
+                })} // Sort by value
               value={value.value}
               onChange={(e) => handleValueChange(e)}
               width="100%"
-              disabledValues={selectedMetricValues}
+              disabledValues={
+                value.type === 'metric'
+                  ? selectedMetricValues
+                  : value.type === 'plugin'
+                    ? selectedPluginValues
+                    : value.type === 'strategy'
+                      ? selectedStrategyValues
+                      : []
+              }
             />
           ) : (
             <DebouncedTextField
@@ -361,14 +436,24 @@ export default function FiltersForm({
    * Adds a new filter with default values.
    */
   const handleAddFilter = useCallback(() => {
+    // Determine the default filter type based on available options
+    let defaultType: ResultsFilter['type'] = 'metadata';
+    if (filters.options.metric.length > 0) {
+      defaultType = 'metric';
+    } else if (filters.options.plugin.length > 1) {
+      defaultType = 'plugin';
+    } else if (filters.options.strategy.length > 1) {
+      defaultType = 'strategy';
+    }
+
     addFilter({
-      type: filters.options.metric.length > 0 ? 'metric' : 'metadata',
+      type: defaultType,
       operator: 'equals',
       // By default, the value is empty, which means the filter is not applied.
       // In other words, the filter is not applied until the user selects a value.
       value: '',
     });
-  }, [addFilter, filters.options.metric.length]);
+  }, [addFilter, filters.options]);
 
   /**
    * Removes all filters and closes the popover.

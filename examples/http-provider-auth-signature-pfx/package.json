@@ -9,8 +9,8 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "pem": "^1.14.8",
-    "promptfoo": "^0.116.7"
+    "pem": "^1.15.1",
+    "promptfoo": "^0.117.4"
   },
   "keywords": [
     "promptfoo",

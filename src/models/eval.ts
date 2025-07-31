@@ -18,6 +18,7 @@ import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
+import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -469,6 +470,26 @@ export default class Eval {
             condition = `json_extract(metadata, '$."${sanitizedField}"') LIKE '%${sanitizedValue}%'`;
           } else if (operator === 'not_contains') {
             condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
+          }
+        } else if (type === 'plugin' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          // Is the value a category? e.g. `harmful` or `bias`
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
+
+          // Plugin ID is stored in metadata.pluginId
+          if (isCategory) {
+            condition = `json_extract(metadata, '$.pluginId') LIKE '${sanitizedValue}:%'`;
+          } else {
+            condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+          }
+        } else if (type === 'strategy' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          if (sanitizedValue === 'basic') {
+            // Basic is represented by NULL in the metadata.strategyId field
+            condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
+          } else {
+            // Strategy ID is stored in metadata.strategyId
+            condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
           }
         }
 
