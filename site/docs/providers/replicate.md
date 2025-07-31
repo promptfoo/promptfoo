@@ -6,11 +6,23 @@ sidebar_label: Replicate
 
 Replicate is an API for machine learning models. It currently hosts models like [Llama v2](https://replicate.com/replicate/llama70b-v2-chat), [Gemma](https://replicate.com/google-deepmind/gemma-7b-it), and [Mistral/Mixtral](https://replicate.com/mistralai/mixtral-8x7b-instruct-v0.1).
 
-To run a model, specify the Replicate model name and version, like so:
+:::info
+The Replicate provider in promptfoo uses direct HTTP requests to the Replicate API, so no additional SDK installation is required.
+:::
+
+To run a model, specify the Replicate model name and optionally the version:
 
 ```
+# With specific version (recommended for consistency)
 replicate:replicate/llama70b-v2-chat:e951f18578850b652510200860fc4ea62b3b16fac280f83ff32282f87bbd2e48
+
+# Without version (uses latest)
+replicate:meta/meta-llama-3-8b-instruct
 ```
+
+:::tip
+For production use, always specify the version to ensure consistent results. You can find version IDs on the model's page on Replicate.
+:::
 
 ## Examples
 
@@ -121,3 +133,95 @@ Supported environment variables for images:
 
 - `REPLICATE_API_TOKEN` - Your Replicate API key.
 - `REPLICATE_API_KEY` - An alternative to `REPLICATE_API_TOKEN` for your API key.
+
+:::warning
+**Important:** Replicate image URLs are temporary and typically expire after 24 hours. If you need to preserve generated images, download them immediately or use the automated download hook described below.
+:::
+
+## Downloading Generated Images
+
+Since Replicate image URLs expire, you may want to automatically download and save images during evaluation. You can use an `afterEach` hook for this purpose:
+
+Create a file `save-images.js`:
+
+```javascript
+const fs = require('fs');
+const path = require('path');
+
+// For Node >= 18, fetch is available globally
+const { fetch } = globalThis;
+
+/**
+ * Downloads and saves Replicate generated images after each test
+ */
+module.exports = {
+  async hook(hookName, context) {
+    // Only run for afterEach hook and when we have an output
+    if (hookName !== 'afterEach') {
+      return;
+    }
+
+    // Extract URL from markdown image format
+    const output = context.result?.response?.output;
+    if (!output || typeof output !== 'string') {
+      return;
+    }
+
+    const match = output.match(/!\[.*?\]\((.*?)\)/);
+    const imageUrl = match?.[1];
+    if (!imageUrl || !imageUrl.includes('replicate.delivery')) {
+      return;
+    }
+
+    try {
+      // Create images directory if it doesn't exist
+      const imagesDir = path.join(__dirname, 'images');
+      await fs.promises.mkdir(imagesDir, { recursive: true });
+
+      // Generate filename from test description and timestamp
+      const testDesc = context.test.description || 'unnamed';
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const sanitizedName = testDesc
+        .replace(/[^a-z0-9\s-]/gi, '')
+        .trim()
+        .replace(/\s+/g, '-')
+        .toLowerCase();
+      const filename = `${sanitizedName}-${timestamp}.png`;
+      const filepath = path.join(imagesDir, filename);
+
+      // Download and save the image
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+
+      const buffer = await response.arrayBuffer();
+      await fs.promises.writeFile(filepath, Buffer.from(buffer));
+
+      console.log(`✓ Saved image: ${filename}`);
+    } catch (error) {
+      console.error(`❌ Failed to save image: ${error.message}`);
+    }
+  },
+};
+```
+
+Then reference it in your promptfoo configuration:
+
+```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+extensions:
+  - file://save-images.js:hook
+
+prompts:
+  - 'Generate an image: {{subject}}'
+
+providers:
+  - replicate:image:black-forest-labs/flux-dev
+
+tests:
+  - vars:
+      subject: a beautiful sunset over mountains
+```
+
+This hook will automatically download all generated images to an `images/` directory with descriptive filenames based on the test description and timestamp.

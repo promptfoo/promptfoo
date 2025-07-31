@@ -24,6 +24,7 @@ import {
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
+  createOutputMetadata,
 } from '../../src/util';
 import { TestGrader } from './utils';
 
@@ -960,5 +961,94 @@ describe('renderVarsInObject', () => {
         metadata: { value: '{{ meta }}' },
       },
     });
+  });
+});
+
+describe('createOutputMetadata', () => {
+  it('should create metadata with all fields when evalRecord has all data', () => {
+    const evalRecord = {
+      createdAt: new Date('2025-01-01T12:00:00.000Z').getTime(),
+      author: 'test-author',
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: '2025-01-01T12:00:00.000Z',
+      author: 'test-author',
+    });
+  });
+
+  it('should handle missing createdAt gracefully', () => {
+    const evalRecord = {
+      author: 'test-author',
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: undefined,
+      author: 'test-author',
+    });
+  });
+
+  it('should handle missing author', () => {
+    const evalRecord = {
+      createdAt: new Date('2025-01-01T12:00:00.000Z').getTime(),
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: '2025-01-01T12:00:00.000Z',
+      author: undefined,
+    });
+  });
+
+  it('should handle invalid date in createdAt', () => {
+    const evalRecord = {
+      createdAt: 'invalid-date',
+      author: 'test-author',
+    } as any as Eval;
+
+    const metadata = createOutputMetadata(evalRecord);
+
+    // When new Date() is given invalid input, it returns "Invalid Date"
+    expect(metadata).toMatchObject({
+      promptfooVersion: expect.any(String),
+      nodeVersion: expect.stringMatching(/^v\d+\.\d+\.\d+/),
+      platform: expect.any(String),
+      arch: expect.any(String),
+      exportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      evaluationCreatedAt: undefined,
+      author: 'test-author',
+    });
+  });
+
+  it('should create consistent exportedAt timestamps', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2025-01-15T10:30:00.000Z'));
+
+    const evalRecord = {} as any as Eval;
+    const metadata = createOutputMetadata(evalRecord);
+
+    expect(metadata.exportedAt).toBe('2025-01-15T10:30:00.000Z');
+
+    jest.useRealTimers();
   });
 });

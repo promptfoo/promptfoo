@@ -171,6 +171,15 @@
                             "GOOGLE_API_KEY": {
                               "type": "string"
                             },
+                            "GOOGLE_PROJECT_ID": {
+                              "type": "string"
+                            },
+                            "GOOGLE_LOCATION": {
+                              "type": "string"
+                            },
+                            "GOOGLE_GENERATIVE_AI_API_KEY": {
+                              "type": "string"
+                            },
                             "GEMINI_API_KEY": {
                               "type": "string"
                             },
