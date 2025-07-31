@@ -885,8 +885,26 @@ export async function synthesize({
 
   Object.assign(strategyResults, otherStrategyResults);
 
+  // Handle basic strategy explicitly
+  let basicTestCases: TestCaseWithPlugin[] = [];
+  if (includeBasicTests) {
+    // Add strategyId to plugin test cases when basic strategy is enabled
+    basicTestCases = pluginTestCases.map((testCase) => ({
+      ...testCase,
+      metadata: {
+        ...testCase.metadata,
+        strategyId: 'basic',
+      },
+    }));
+    // Record basic strategy results
+    strategyResults['basic'] = {
+      requested: pluginTestCases.length,
+      generated: pluginTestCases.length,
+    };
+  }
+
   // Combine test cases based on basic strategy setting
-  const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
+  const finalTestCases = [...basicTestCases, ...strategyTestCases];
 
   // Check for abort signal or apply multilingual strategy to all test cases
   checkAbort();
