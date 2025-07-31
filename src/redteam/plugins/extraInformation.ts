@@ -1,10 +1,5 @@
 import dedent from 'dedent';
-import type {
-  Assertion,
-  AssertionValue,
-  ResultSuggestion,
-  AtomicTestCase,
-} from '../../types';
+import type { Assertion, AssertionValue, ResultSuggestion, AtomicTestCase } from '../../types';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 export const PLUGIN_ID = 'promptfoo:redteam:extra-information';

@@ -400,7 +400,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'extra-information',
     'mcp',
 
-
     // Data protection
     'cross-session-leak',
     'divergent-repetition',
