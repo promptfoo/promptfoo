@@ -14,7 +14,7 @@ const testimonials = [
   },
 ];
 
-export default function Testimonials(): JSX.Element {
+export default function Testimonials(): React.ReactElement {
   return (
     <section className={styles.section}>
       <div className={styles.container}>

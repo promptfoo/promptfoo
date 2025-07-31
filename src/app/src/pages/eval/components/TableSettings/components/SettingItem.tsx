@@ -17,7 +17,7 @@ interface SettingItemProps {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
-  icon?: JSX.Element | null;
+  icon?: React.ReactElement | null;
   tooltipText?: string;
   disabled?: boolean;
   component?: 'checkbox' | 'switch';
@@ -123,7 +123,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
               width: '100%',
             }}
           >
-            {icon && (
+            {icon ? (
               <Box
                 sx={{
                   color: theme.palette.primary.main,
@@ -138,7 +138,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
               >
                 {icon}
               </Box>
-            )}
+            ) : null}
             <Typography
               variant="body2"
               id={labelId}

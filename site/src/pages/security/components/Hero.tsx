@@ -2,7 +2,7 @@ import React from 'react';
 import Link from '@docusaurus/Link';
 import styles from '../styles.module.css';
 
-export default function Hero(): JSX.Element {
+export default function Hero(): React.ReactElement {
   return (
     <section className={styles.hero}>
       <div className={styles.container}>

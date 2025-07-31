@@ -97,7 +97,7 @@ const UnicodePlayground: React.FC = () => {
 
       setCopyStatus('Copied!');
       setTimeout(() => setCopyStatus(''), 2000);
-    } catch (err) {
+    } catch (_err) {
       setCopyStatus('Failed to copy');
       setTimeout(() => setCopyStatus(''), 2000);
     }

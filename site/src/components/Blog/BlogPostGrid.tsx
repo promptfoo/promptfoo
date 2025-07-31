@@ -11,7 +11,7 @@ interface BlogPostGridProps {
 export default function BlogPostGrid({
   posts,
   title = 'Latest Posts',
-}: BlogPostGridProps): JSX.Element {
+}: BlogPostGridProps): React.ReactElement {
   // Check if this is an archive page
   const isArchivePage = title.includes('Archive');
 

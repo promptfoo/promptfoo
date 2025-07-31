@@ -14,7 +14,7 @@ interface HttpConfigGeneratorProps {
   className?: string;
 }
 
-export function HttpConfigGenerator({ className }: HttpConfigGeneratorProps): JSX.Element {
+export function HttpConfigGenerator({ className }: HttpConfigGeneratorProps): React.ReactElement {
   const [request, setRequest] = useState(
     `POST /v1/weather HTTP/1.1
 Host: api.weather-example.com
