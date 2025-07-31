@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import Container from '@mui/material/Container';
 import { useNavigate } from 'react-router-dom';
-import EvalsDataGrid from './components/EvalsDataGrid';
+import EvalsDataGridOptimized from './components/EvalsDataGridOptimized';
 
 export default function EvalsIndexPage() {
   const navigate = useNavigate();
@@ -29,7 +29,10 @@ export default function EvalsIndexPage() {
       }}
       ref={containerRef}
     >
-      <EvalsDataGrid onEvalSelected={(evalId) => navigate(`/eval/${evalId}`)} showUtilityButtons />
+      <EvalsDataGridOptimized
+        onEvalSelected={(evalId) => navigate(`/eval/${evalId}`)}
+        showUtilityButtons
+      />
     </Container>
   );
 }

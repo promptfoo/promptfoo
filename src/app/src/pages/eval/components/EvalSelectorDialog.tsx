@@ -4,7 +4,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import EvalsDataGrid from '../../evals/components/EvalsDataGrid';
+import EvalsDataGridOptimized from '../../evals/components/EvalsDataGridOptimized';
 
 type Props = {
   open: boolean;
@@ -33,7 +33,7 @@ const EvalSelectorDialog: React.FC<Props> = ({
       <DialogContent>
         {description ? <Box sx={{ mb: 4 }}>{description}</Box> : null}
         <Box sx={{ width: '100%', mt: 2 }}>
-          <EvalsDataGrid
+          <EvalsDataGridOptimized
             onEvalSelected={onEvalSelected}
             focusedEvalId={focusedEvalId}
             filterByDatasetId={filterByDatasetId}

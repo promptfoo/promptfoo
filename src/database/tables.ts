@@ -62,6 +62,12 @@ export const evalsTable = sqliteTable(
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
     vars: text('vars', { mode: 'json' }).$type<string[]>(),
+    // Denormalized statistics columns
+    testCount: integer('test_count').default(0),
+    passCount: integer('pass_count').default(0),
+    failCount: integer('fail_count').default(0),
+    errorCount: integer('error_count').default(0),
+    passRate: real('pass_rate').default(0),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
@@ -104,6 +110,11 @@ export const evalResultsTable = sqliteTable(
 
     // Metadata fields
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, string>>(),
+
+    // Generated columns for fast filtering (added via migration)
+    // Note: Drizzle doesn't support GENERATED columns syntax yet, so these are managed by migrations
+    // pluginId: text('plugin_id'), // Generated from json_extract(metadata, '$.pluginId')
+    // strategyId: text('strategy_id'), // Generated from json_extract(metadata, '$.strategyId')
   },
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),

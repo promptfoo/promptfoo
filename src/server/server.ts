@@ -109,15 +109,48 @@ export function createApp() {
 
   /**
    * Fetches summaries of all evals, optionally for a given dataset.
+   * Supports pagination and optimized queries.
    */
   app.get(
     '/api/results',
     async (
-      req: Request<{}, {}, {}, { datasetId?: string }>,
-      res: Response<{ data: EvalSummary[] }>,
+      req: Request<
+        {},
+        {},
+        {},
+        {
+          datasetId?: string;
+          limit?: string;
+          offset?: string;
+          legacy?: string;
+        }
+      >,
+      res: Response<{ data: EvalSummary[]; total?: number }>,
     ): Promise<void> => {
-      const previousResults = await getEvalSummaries(req.query.datasetId);
-      res.json({ data: previousResults });
+      // Use legacy implementation if requested (for backward compatibility)
+      if (req.query.legacy === 'true') {
+        const previousResults = await getEvalSummaries(req.query.datasetId);
+        res.json({ data: previousResults });
+        return;
+      }
+
+      // Use optimized implementation
+      const { getEvalSummariesOptimized } = await import('../models/evalQueries');
+      const limit = req.query.limit ? parseInt(req.query.limit, 10) : 100;
+      const offset = req.query.offset ? parseInt(req.query.offset, 10) : 0;
+
+      const { data, total } = await getEvalSummariesOptimized({
+        datasetId: req.query.datasetId,
+        limit,
+        offset,
+      });
+
+      // Add pagination headers
+      res.setHeader('X-Total-Count', total.toString());
+      res.setHeader('X-Page-Size', limit.toString());
+      res.setHeader('X-Page-Offset', offset.toString());
+
+      res.json({ data, total });
     },
   );
 

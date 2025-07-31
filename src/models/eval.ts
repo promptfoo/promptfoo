@@ -424,8 +424,9 @@ export default class Eval {
 
   /**
    * Private helper method to build filter conditions and query for test indices
+   * @deprecated Use queryTestIndicesSafe for security
    */
-  private async queryTestIndices(opts: {
+  private async queryTestIndicesUnsafe(opts: {
     offset?: number;
     limit?: number;
     filterMode?: string;
@@ -574,7 +575,9 @@ export default class Eval {
       filteredCount = testIndices.length;
     } else {
       // Query for test indices based on filters
-      const queryResult = await this.queryTestIndices({
+      // Use safe parameterized query
+      const { queryTestIndicesSafe } = await import('./evalQueries.safe');
+      const queryResult = await queryTestIndicesSafe(this.id, {
         offset: opts.offset,
         limit: opts.limit,
         filterMode: opts.filterMode,
@@ -648,6 +651,10 @@ export default class Eval {
     if (this.persisted) {
       const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
+
+      // Update denormalized stats after inserting results
+      const { updateEvalStats } = await import('./evalHelpers');
+      await updateEvalStats(this.id);
     }
     this._resultsLoaded = true;
   }
