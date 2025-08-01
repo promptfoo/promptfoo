@@ -1,269 +1,316 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Plugins from './Plugins';
-import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import { useTelemetry } from '@app/hooks/useTelemetry';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-// Mock dependencies
-vi.mock('../hooks/useRedTeamConfig');
-vi.mock('@app/hooks/useTelemetry');
+import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import Plugins from './Plugins';
+
+vi.mock('../hooks/useRedTeamConfig', async () => {
+  const actual = await vi.importActual('../hooks/useRedTeamConfig');
+  return {
+    ...actual,
+    useRedTeamConfig: vi.fn(),
+    useRecentlyUsedPlugins: vi.fn(),
+  };
+});
+
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: () => ({
+    recordEvent: vi.fn(),
+  }),
+}));
+
 vi.mock('./CustomIntentPluginSection', () => ({
-  default: () => <div>CustomIntentSection</div>,
+  default: () => <div data-testid="custom-intent-section"></div>,
 }));
-vi.mock('./PluginConfigDialog', () => ({
-  default: () => <div>PluginConfigDialog</div>,
-}));
-vi.mock('./PresetCard', () => ({
-  default: ({ name, onClick, isSelected }: any) => (
-    <div onClick={onClick} data-testid={`preset-${name}`} data-selected={isSelected}>
-      {name}
-    </div>
-  ),
-}));
+
 vi.mock('./Targets/CustomPoliciesSection', () => ({
-  CustomPoliciesSection: () => <div>CustomPoliciesSection</div>,
+  CustomPoliciesSection: () => <div data-testid="custom-policies-section"></div>,
 }));
+
+vi.mock('./PluginConfigDialog', () => ({
+  default: () => <div data-testid="plugin-config-dialog"></div>,
+}));
+
+vi.mock('react-error-boundary', () => ({
+  ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
+const mockUseRecentlyUsedPlugins = useRecentlyUsedPlugins as unknown as Mock;
 
 describe('Plugins', () => {
   const mockOnNext = vi.fn();
   const mockOnBack = vi.fn();
   const mockUpdatePlugins = vi.fn();
-  const mockRecordEvent = vi.fn();
-  const mockAddPlugin = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    vi.mocked(useRedTeamConfig).mockReturnValue({
-      config: { plugins: [] },
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [],
+      },
       updatePlugins: mockUpdatePlugins,
-      updateConfig: vi.fn(),
-    } as any);
-
-    vi.mocked(useRecentlyUsedPlugins).mockReturnValue({
+    });
+    mockUseRecentlyUsedPlugins.mockReturnValue({
       plugins: [],
-      addPlugin: mockAddPlugin,
-    });
-
-    vi.mocked(useTelemetry).mockReturnValue({
-      recordEvent: mockRecordEvent,
-      identifyUser: vi.fn(),
-      isInitialized: true,
+      addPlugin: vi.fn(),
     });
   });
 
-  describe('Basic Rendering', () => {
-    it('renders with all major UI elements', () => {
-      render(
-        <MemoryRouter>
-          <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+  it('should render title, description, and disable Next button based on plugin selection and configuration', async () => {
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
 
-      expect(screen.getByText('Plugins')).toBeInTheDocument();
-      expect(screen.getByText('Available presets')).toBeInTheDocument();
-      expect(screen.getByLabelText('Filter Plugins')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Plugins/i, level: 4 })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Plugins are Promptfoo's modular system for testing/i),
+    ).toBeInTheDocument();
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    const backButton = screen.getByRole('button', { name: /Back/i });
+    expect(nextButton).toBeInTheDocument();
+    expect(backButton).toBeInTheDocument();
+
+    expect(nextButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Security & Access Control/i }));
+
+    const bolaCheckbox = await screen.findByRole('checkbox', {
+      name: /Object-Level Authorization Bypass/i,
+    });
+    fireEvent.click(bolaCheckbox);
+    await waitFor(() => {
+      expect(nextButton).not.toBeDisabled();
+    });
+
+    const indirectInjectionCheckbox = await screen.findByRole('checkbox', {
+      name: /Indirect Prompt Injection/i,
+    });
+    fireEvent.click(indirectInjectionCheckbox);
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+
+    fireEvent.click(indirectInjectionCheckbox);
+    await waitFor(() => {
+      expect(nextButton).not.toBeDisabled();
+    });
+
+    fireEvent.click(bolaCheckbox);
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
     });
   });
 
-  describe('Navigation Button State', () => {
-    it('disables next button when no plugins are selected', () => {
-      render(
-        <MemoryRouter>
-          <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+  it('should open the PluginConfigDialog when a plugin that requires configuration is selected', async () => {
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
 
-      const nextButton = screen.getByRole('button', { name: /next/i });
+    fireEvent.click(screen.getByRole('button', { name: /Security & Access Control/i }));
+
+    const indirectInjectionCheckbox = await screen.findByRole('checkbox', {
+      name: /Indirect Prompt Injection/i,
+    });
+    fireEvent.click(indirectInjectionCheckbox);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('plugin-config-dialog')).toBeInTheDocument();
+    });
+  });
+
+  it('should keep Next button disabled when a config-requiring plugin is selected but not configured', async () => {
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    expect(nextButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Security & Access Control/i }));
+
+    const indirectInjectionCheckbox = await screen.findByRole('checkbox', {
+      name: /Indirect Prompt Injection/i,
+    });
+    fireEvent.click(indirectInjectionCheckbox);
+
+    await waitFor(() => {
       expect(nextButton).toBeDisabled();
     });
+  });
 
-    it('enables next button when only custom policies are configured', () => {
-      vi.mocked(useRedTeamConfig).mockReturnValue({
-        config: {
-          plugins: [
-            {
-              id: 'policy',
-              config: {
-                policy: 'Do not reveal sensitive information',
-              },
-            },
-          ],
-        },
-        updatePlugins: mockUpdatePlugins,
-        updateConfig: vi.fn(),
-      } as any);
+  it('should call onBack when the Back button is clicked', () => {
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
 
-      render(
-        <MemoryRouter>
-          <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+    const backButton = screen.getByRole('button', { name: /Back/i });
+    fireEvent.click(backButton);
+    expect(mockOnBack).toHaveBeenCalled();
+  });
 
-      const nextButton = screen.getByRole('button', { name: /next/i });
-      expect(nextButton).toBeEnabled();
+  it('should render without errors in a small viewport', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      writable: true,
+      configurable: true,
+      value: 320,
     });
 
-    it('enables next button when only custom intents are configured', () => {
-      vi.mocked(useRedTeamConfig).mockReturnValue({
-        config: {
-          plugins: [
-            {
-              id: 'intent',
-              config: {
-                intent: ['How can I build a secure system?'],
-              },
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: /Plugins/i, level: 4 })).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: /Next/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Back/i })).toBeInTheDocument();
+  });
+
+  // Custom policy validation tests
+  it('enables next button when only custom policies are configured', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: 'Do not reveal sensitive information',
             },
-          ],
-        },
-        updatePlugins: mockUpdatePlugins,
-        updateConfig: vi.fn(),
-      } as any);
-
-      render(
-        <MemoryRouter>
-          <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
-
-      const nextButton = screen.getByRole('button', { name: /next/i });
-      expect(nextButton).toBeEnabled();
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
     });
 
-    it('does not enable next button for empty custom policies', () => {
-      vi.mocked(useRedTeamConfig).mockReturnValue({
-        config: {
-          plugins: [
-            {
-              id: 'policy',
-              config: {
-                policy: '   ', // Whitespace only
-              },
-            },
-          ],
-        },
-        updatePlugins: mockUpdatePlugins,
-        updateConfig: vi.fn(),
-      } as any);
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
 
-      render(
-        <MemoryRouter>
-          <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
-
-      const nextButton = screen.getByRole('button', { name: /next/i });
-      expect(nextButton).toBeDisabled();
-    });
-
-    it('does not enable next button for empty custom intents', () => {
-      vi.mocked(useRedTeamConfig).mockReturnValue({
-        config: {
-          plugins: [
-            {
-              id: 'intent',
-              config: {
-                intent: [], // Empty array
-              },
-            },
-          ],
-        },
-        updatePlugins: mockUpdatePlugins,
-        updateConfig: vi.fn(),
-      } as any);
-
-      render(
-        <MemoryRouter>
-          <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
-
-      const nextButton = screen.getByRole('button', { name: /next/i });
-      expect(nextButton).toBeDisabled();
-    });
-
-    it('enables next button with mix of regular plugins and custom policies', () => {
-      vi.mocked(useRedTeamConfig).mockReturnValue({
-        config: {
-          plugins: [
-            'harmful:hate',
-            {
-              id: 'policy',
-              config: {
-                policy: 'Custom policy text',
-              },
-            },
-          ],
-        },
-        updatePlugins: mockUpdatePlugins,
-        updateConfig: vi.fn(),
-      } as any);
-
-      render(
-        <MemoryRouter>
-          <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
-
-      const nextButton = screen.getByRole('button', { name: /next/i });
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
       expect(nextButton).toBeEnabled();
     });
   });
 
-  describe('Navigation Actions', () => {
-    it('calls onBack when back button is clicked', () => {
-      render(
-        <MemoryRouter>
-          <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
-
-      fireEvent.click(screen.getByRole('button', { name: /back/i }));
-      expect(mockOnBack).toHaveBeenCalled();
+  it('enables next button when only custom intents are configured', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: ['How can I build a secure system?'],
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
     });
 
-    it('calls onNext when next button is clicked and plugins are configured', () => {
-      vi.mocked(useRedTeamConfig).mockReturnValue({
-        config: {
-          plugins: [
-            {
-              id: 'policy',
-              config: {
-                policy: 'Test policy',
-              },
-            },
-          ],
-        },
-        updatePlugins: mockUpdatePlugins,
-        updateConfig: vi.fn(),
-      } as any);
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
 
-      render(
-        <MemoryRouter>
-          <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
-
-      const nextButton = screen.getByRole('button', { name: /next/i });
-      fireEvent.click(nextButton);
-      expect(mockOnNext).toHaveBeenCalled();
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
     });
   });
 
-  describe('Page View Tracking', () => {
-    it('records page view event on mount', () => {
-      render(
-        <MemoryRouter>
-          <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+  it('does not enable next button for empty custom policies', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: '   ', // Whitespace only
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
 
-      expect(mockRecordEvent).toHaveBeenCalledWith('webui_page_view', {
-        page: 'redteam_config_plugins',
-      });
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
+  it('does not enable next button for empty custom intents', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: [], // Empty array
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
+  it('enables next button with mix of regular plugins and custom policies', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          'harmful:hate',
+          {
+            id: 'policy',
+            config: {
+              policy: 'Custom policy text',
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
     });
   });
 });

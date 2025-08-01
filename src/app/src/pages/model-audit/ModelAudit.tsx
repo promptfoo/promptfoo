@@ -1,12 +1,17 @@
 import { useEffect } from 'react';
 
-import { CheckCircle as CheckCircleIcon, Error as ErrorIcon } from '@mui/icons-material';
+import {
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Refresh as RefreshIcon,
+} from '@mui/icons-material';
 import {
   Alert,
   Box,
   CircularProgress,
   Container,
   Fade,
+  IconButton,
   Link,
   Paper,
   Stack,
@@ -54,23 +59,9 @@ export default function ModelAudit() {
 
   useEffect(() => {
     useModelAuditStore.persist.rehydrate();
-  }, []);
-
-  // Check on mount and periodically in background
-  useEffect(() => {
-    // Initial check
+    // Check installation status immediately after rehydration
     checkInstallation();
-
-    // Background check every 5 minutes
-    const interval = setInterval(
-      () => {
-        checkInstallation();
-      },
-      5 * 60 * 1000,
-    );
-
-    return () => clearInterval(interval);
-  }, [checkInstallation]);
+  }, []); // Remove checkInstallation dependency to avoid potential issues
 
   const handleScan = async () => {
     setIsScanning(true);
@@ -156,12 +147,15 @@ export default function ModelAudit() {
                   </Stack>
                 </Tooltip>
               ) : installationStatus.installed === false ? (
-                <Tooltip title="ModelAudit is not installed">
+                <Tooltip title={installationStatus.error || 'ModelAudit is not installed'}>
                   <Stack direction="row" spacing={0.5} alignItems="center">
                     <ErrorIcon sx={{ fontSize: 16, color: 'error.main' }} />
                     <Typography variant="body2" color="error.main">
                       Not Installed
                     </Typography>
+                    <IconButton size="small" onClick={() => checkInstallation()} sx={{ p: 0.5 }}>
+                      <RefreshIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
                   </Stack>
                 </Tooltip>
               ) : null}
