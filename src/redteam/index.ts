@@ -390,12 +390,12 @@ export function calculateTotalTests(
   const retryStrategy = strategies.find((s) => s.id === 'retry');
   const basicStrategy = strategies.find((s) => s.id === 'basic');
 
-  const basicStrategyExists = basicStrategy !== undefined;
+  const isBasicStrategyDefined = basicStrategy !== undefined;
   const includeBasicTests = basicStrategy?.config?.enabled ?? true;
 
   let effectiveStrategyCount: number;
 
-  if (basicStrategyExists) {
+  if (isBasicStrategyDefined) {
     if (includeBasicTests) {
       effectiveStrategyCount = strategies.length;
     } else {
@@ -410,20 +410,6 @@ export function calculateTotalTests(
   }
 
   const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
-
-  // When there are no strategies, or only a disabled basic strategy
-  if (
-    strategies.length === 0 ||
-    (strategies.length === 1 && basicStrategyExists && !includeBasicTests)
-  ) {
-    return {
-      effectiveStrategyCount: 0,
-      includeBasicTests: strategies.length === 0 ? true : includeBasicTests,
-      multilingualStrategy: undefined,
-      totalPluginTests,
-      totalTests: includeBasicTests ? totalPluginTests : 0,
-    };
-  }
 
   // Start with base test count from basic strategy
   let totalTests = includeBasicTests ? totalPluginTests : 0;
