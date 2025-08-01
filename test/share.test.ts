@@ -19,7 +19,10 @@ function buildMockEval(): Partial<Eval> {
   return {
     config: {},
     author: 'test@example.com',
-    prompts: ['prompt1', 'prompt2'],
+    prompts: [
+      { provider: 'openai:gpt-4', raw: 'prompt1', label: 'prompt1' },
+      { provider: 'openai:gpt-4', raw: 'prompt2', label: 'prompt2' },
+    ],
     useOldResults: jest.fn().mockReturnValue(false),
     loadResults: jest.fn().mockResolvedValue(undefined),
     results: [{ id: '1' }, { id: '2' }] as EvalResult[],
