@@ -129,6 +129,7 @@ function CustomTabPanel(props: TabPanelProps) {
       hidden={value !== index}
       id={`vertical-tabpanel-${index}`}
       aria-labelledby={`vertical-tab-${index}`}
+      sx={{ padding: 0 }}
       {...other}
     >
       {value === index && children}
@@ -146,8 +147,7 @@ function a11yProps(index: number) {
 const Root = styled(Box)(({ theme }) => ({
   display: 'flex',
   backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
-  minHeight: '100vh',
-  position: 'relative',
+  position: 'fixed',
 }));
 
 const OuterSidebarContainer = styled(Box)(({ theme }) => ({
@@ -185,7 +185,6 @@ const TabContent = styled(Box)(({ theme }) => ({
   flexGrow: 1,
   display: 'flex',
   flexDirection: 'column',
-  padding: '24px',
   position: 'relative',
   transition: theme.transitions.create('margin', {
     easing: theme.transitions.easing.sharp,
@@ -624,7 +623,7 @@ export default function RedTeamSetupPage() {
                 <StyledTab
                   icon={<AppIcon />}
                   iconPosition="start"
-                  label="Usage Details"
+                  label="Application Details"
                   {...a11yProps(1)}
                 />
                 <StyledTab
@@ -681,12 +680,12 @@ export default function RedTeamSetupPage() {
         <TabContent>
           <CustomTabPanel value={value} index={0}>
             <ErrorBoundary name="Targets Page">
-              <Targets onNext={handleNext} onBack={handleBack} setupModalOpen={setupModalOpen} />
+              <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
             </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>
             <ErrorBoundary name="Application Purpose Page">
-              <Purpose onNext={handleNext} />
+              <Purpose onNext={handleNext} onBack={handleBack} />
             </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={2}>

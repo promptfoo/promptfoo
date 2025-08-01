@@ -19,6 +19,7 @@
 }
 
 #results-view-container {
+  padding-top: 16px;
   timeline-scope: --collapseTimeline;
 }
 

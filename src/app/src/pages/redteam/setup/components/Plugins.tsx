@@ -2,15 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
@@ -41,9 +38,11 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { ErrorBoundary } from 'react-error-boundary';
+import { Link } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import CustomIntentSection from './CustomIntentPluginSection';
+import PageWrapper from './PageWrapper';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
@@ -599,233 +598,222 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   );
 
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <Box>
-        <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-          Plugin Configuration
-        </Typography>
-
-        <Box sx={{ mb: 4 }}>
-          <Typography
-            variant="h5"
-            sx={{
-              mb: 3,
-              fontWeight: 500,
-              color: 'text.primary',
-            }}
-          >
-            Available presets
+    <PageWrapper
+      title="Plugins"
+      description={
+        <Box sx={{ maxWidth: '1200px' }}>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Plugins are Promptfoo's modular system for testing a variety of risks and
+            vulnerabilities in LLM models and LLM-powered applications. Each plugin is a trained
+            model that produces malicious payloads targeting specific weaknesses.{' '}
+            <Link
+              style={{ textDecoration: 'underline' }}
+              to="https://www.promptfoo.dev/docs/red-team/plugins/"
+              target="_blank"
+            >
+              Learn More
+            </Link>
           </Typography>
 
-          <Box>
-            <Grid
-              container
-              spacing={3}
+          <Typography variant="body1">
+            Select the red-team plugins that align with your security testing objectives.
+          </Typography>
+        </Box>
+      }
+      onNext={onNext}
+      onBack={onBack}
+      nextDisabled={!isConfigValid() || !hasAnyPluginsConfigured()}
+    >
+      <ErrorBoundary FallbackComponent={ErrorFallback}>
+        <Box>
+          <Box sx={{ mb: 4 }}>
+            <Typography
+              variant="h5"
               sx={{
-                mb: 4,
-                justifyContent: {
-                  xs: 'center',
-                  sm: 'flex-start',
-                },
+                mb: 3,
+                fontWeight: 500,
+                color: 'text.primary',
               }}
             >
-              {presets.map((preset) => {
-                const isSelected =
-                  preset.name === 'Custom'
-                    ? isCustomMode
-                    : preset.name === currentlySelectedPreset?.name;
-                return (
-                  <Grid
-                    item
-                    xs={12}
-                    sm={6}
-                    md={4}
-                    lg={3}
-                    key={preset.name}
-                    sx={{
-                      minWidth: { xs: '280px', sm: '320px' },
-                      maxWidth: { xs: '100%', sm: '380px' },
-                    }}
-                  >
-                    <PresetCard
-                      name={preset.name}
-                      description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
-                      isSelected={isSelected}
-                      onClick={() => handlePresetSelect(preset)}
-                    />
-                  </Grid>
-                );
-              })}
-            </Grid>
+              Available presets
+            </Typography>
+
+            <Box>
+              <Grid
+                container
+                spacing={3}
+                sx={{
+                  mb: 4,
+                  justifyContent: {
+                    xs: 'center',
+                    sm: 'flex-start',
+                  },
+                }}
+              >
+                {presets.map((preset) => {
+                  const isSelected =
+                    preset.name === 'Custom'
+                      ? isCustomMode
+                      : preset.name === currentlySelectedPreset?.name;
+                  return (
+                    <Grid
+                      item
+                      xs={12}
+                      sm={6}
+                      md={4}
+                      lg={3}
+                      key={preset.name}
+                      sx={{
+                        minWidth: { xs: '280px', sm: '320px' },
+                        maxWidth: { xs: '100%', sm: '380px' },
+                      }}
+                    >
+                      <PresetCard
+                        name={preset.name}
+                        description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
+                        isSelected={isSelected}
+                        onClick={() => handlePresetSelect(preset)}
+                      />
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            </Box>
           </Box>
-        </Box>
 
-        <TextField
-          fullWidth
-          variant="outlined"
-          label="Filter Plugins"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: <SearchIcon />,
-          }}
-          sx={{ mb: 3 }}
-        />
-
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 2,
-            mb: 2,
-            '& > *': {
-              color: 'primary.main',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              textDecoration: 'none',
-              '&:hover': {
-                textDecoration: 'underline',
-              },
-            },
-          }}
-        >
-          <Box
-            component="span"
-            onClick={() => {
-              filteredPlugins.forEach((plugin) => {
-                if (!selectedPlugins.has(plugin)) {
-                  handlePluginToggle(plugin);
-                }
-              });
-            }}
-          >
-            Select all
-          </Box>
-          <Box
-            component="span"
-            onClick={() => {
-              filteredPlugins.forEach((plugin) => {
-                if (selectedPlugins.has(plugin)) {
-                  handlePluginToggle(plugin);
-                }
-              });
-            }}
-          >
-            Select none
-          </Box>
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          {recentlyUsedSnapshot.length > 0 &&
-            renderPluginCategory('Recently Used', recentlyUsedSnapshot)}
-          {Object.entries(riskCategories).map(([category, plugins]) =>
-            renderPluginCategory(category, plugins),
-          )}
-
-          <Accordion
-            expanded={expandedCategories.has('Custom Prompts')}
-            onChange={(event, expanded) => {
-              setExpandedCategories((prev) => {
-                const newSet = new Set(prev);
-                if (expanded) {
-                  newSet.add('Custom Prompts');
-                } else {
-                  newSet.delete('Custom Prompts');
-                }
-                return newSet;
-              });
-            }}
-          >
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-                Custom Prompts (
-                {config.plugins.filter(
-                  (p): p is { id: string; config: any } =>
-                    typeof p === 'object' && 'id' in p && p.id === 'intent' && 'config' in p,
-                )[0]?.config?.intent?.length || 0}
-                )
-              </Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <CustomIntentSection />
-            </AccordionDetails>
-          </Accordion>
-          <Accordion
-            expanded={expandedCategories.has('Custom Policies')}
-            onChange={(event, expanded) => {
-              setExpandedCategories((prev) => {
-                const newSet = new Set(prev);
-                if (expanded) {
-                  newSet.add('Custom Policies');
-                } else {
-                  newSet.delete('Custom Policies');
-                }
-                return newSet;
-              });
-            }}
-          >
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-                Custom Policies (
-                {config.plugins.filter(
-                  (p) => typeof p === 'object' && 'id' in p && p.id === 'policy',
-                ).length || 0}
-                )
-              </Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <CustomPoliciesSection />
-            </AccordionDetails>
-          </Accordion>
-        </Box>
-
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
-          <Button
+          <TextField
+            fullWidth
             variant="outlined"
-            onClick={onBack}
-            startIcon={<KeyboardArrowLeftIcon />}
+            label="Filter Plugins"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            InputProps={{
+              startAdornment: <SearchIcon />,
+            }}
+            sx={{ mb: 3 }}
+          />
+
+          <Box
             sx={{
-              px: 4,
-              py: 1,
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 2,
+              mb: 2,
+              '& > *': {
+                color: 'primary.main',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                textDecoration: 'none',
+                '&:hover': {
+                  textDecoration: 'underline',
+                },
+              },
             }}
           >
-            Back
-          </Button>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {!hasAnyPluginsConfigured() && (
-              <Typography variant="body2" color="text.secondary">
-                Select at least one plugin, add custom policies, or create custom prompts to
-                continue.
-              </Typography>
-            )}
-            <Button
-              variant="contained"
-              onClick={onNext}
-              endIcon={<KeyboardArrowRightIcon />}
-              disabled={!isConfigValid() || !hasAnyPluginsConfigured()}
-              sx={{
-                px: 4,
-                py: 1,
+            <Box
+              component="span"
+              onClick={() => {
+                filteredPlugins.forEach((plugin) => {
+                  if (!selectedPlugins.has(plugin)) {
+                    handlePluginToggle(plugin);
+                  }
+                });
               }}
             >
-              Next
-            </Button>
+              Select all
+            </Box>
+            <Box
+              component="span"
+              onClick={() => {
+                filteredPlugins.forEach((plugin) => {
+                  if (selectedPlugins.has(plugin)) {
+                    handlePluginToggle(plugin);
+                  }
+                });
+              }}
+            >
+              Select none
+            </Box>
           </Box>
-        </Box>
 
-        <PluginConfigDialog
-          open={configDialogOpen}
-          plugin={selectedConfigPlugin}
-          config={selectedConfigPlugin ? pluginConfig[selectedConfigPlugin] || {} : {}}
-          onClose={() => {
-            setConfigDialogOpen(false);
-            setSelectedConfigPlugin(null);
-          }}
-          onSave={(plugin, newConfig) => {
-            updatePluginConfig(plugin, newConfig);
-          }}
-        />
-      </Box>
-    </ErrorBoundary>
+          <Box sx={{ mb: 3 }}>
+            {recentlyUsedSnapshot.length > 0 &&
+              renderPluginCategory('Recently Used', recentlyUsedSnapshot)}
+            {Object.entries(riskCategories).map(([category, plugins]) =>
+              renderPluginCategory(category, plugins),
+            )}
+
+            <Accordion
+              expanded={expandedCategories.has('Custom Prompts')}
+              onChange={(event, expanded) => {
+                setExpandedCategories((prev) => {
+                  const newSet = new Set(prev);
+                  if (expanded) {
+                    newSet.add('Custom Prompts');
+                  } else {
+                    newSet.delete('Custom Prompts');
+                  }
+                  return newSet;
+                });
+              }}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+                  Custom Prompts (
+                  {config.plugins.filter(
+                    (p): p is { id: string; config: any } =>
+                      typeof p === 'object' && 'id' in p && p.id === 'intent' && 'config' in p,
+                  )[0]?.config?.intent?.length || 0}
+                  )
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <CustomIntentSection />
+              </AccordionDetails>
+            </Accordion>
+            <Accordion
+              expanded={expandedCategories.has('Custom Policies')}
+              onChange={(event, expanded) => {
+                setExpandedCategories((prev) => {
+                  const newSet = new Set(prev);
+                  if (expanded) {
+                    newSet.add('Custom Policies');
+                  } else {
+                    newSet.delete('Custom Policies');
+                  }
+                  return newSet;
+                });
+              }}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+                  Custom Policies (
+                  {config.plugins.filter(
+                    (p) => typeof p === 'object' && 'id' in p && p.id === 'policy',
+                  ).length || 0}
+                  )
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <CustomPoliciesSection />
+              </AccordionDetails>
+            </Accordion>
+          </Box>
+
+          <PluginConfigDialog
+            open={configDialogOpen}
+            plugin={selectedConfigPlugin}
+            config={selectedConfigPlugin ? pluginConfig[selectedConfigPlugin] || {} : {}}
+            onClose={() => {
+              setConfigDialogOpen(false);
+              setSelectedConfigPlugin(null);
+            }}
+            onSave={(plugin, newConfig) => {
+              updatePluginConfig(plugin, newConfig);
+            }}
+          />
+        </Box>
+      </ErrorBoundary>
+    </PageWrapper>
   );
 }
