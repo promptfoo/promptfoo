@@ -68,6 +68,7 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { createOpenRouterProvider } from './openrouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
 import { PortkeyChatCompletionProvider } from './portkey';
@@ -732,26 +733,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://openrouter.ai/api/v1',
-          apiKeyEnvar: 'OPENROUTER_API_KEY',
-          passthrough: {
-            // Pass through OpenRouter-specific options
-            // https://openrouter.ai/docs/requests
-            ...(providerOptions.config.transforms && {
-              transforms: providerOptions.config.transforms,
-            }),
-            ...(providerOptions.config.models && { models: providerOptions.config.models }),
-            ...(providerOptions.config.route && { route: providerOptions.config.route }),
-            ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
-            ...(providerOptions.config.passthrough || {}),
-          },
-        },
+      return createOpenRouterProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
