@@ -322,6 +322,11 @@ export async function runAssertion({
     pi: handlePiScorer,
   };
 
+  // Check for redteam assertions first
+  if (baseType.startsWith('promptfoo:redteam:')) {
+    return handleRedteam(assertionParams);
+  }
+
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
   if (handler) {
     const result = await handler(assertionParams);
@@ -337,9 +342,6 @@ export async function runAssertion({
     return result;
   }
 
-  if (baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
-  }
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
@@ -402,8 +404,8 @@ export async function runAssertions({
     asserts,
     ASSERTIONS_MAX_CONCURRENCY,
     async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-')) {
-        // Select-type assertions are handled separately because they depend on multiple outputs.
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
         return;
       }
 

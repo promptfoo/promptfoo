@@ -150,6 +150,12 @@
                             "DATABRICKS_WORKSPACE_URL": {
                               "type": "string"
                             },
+                            "DOCKER_MODEL_RUNNER_BASE_URL": {
+                              "type": "string"
+                            },
+                            "DOCKER_MODEL_RUNNER_API_KEY": {
+                              "type": "string"
+                            },
                             "FAL_KEY": {
                               "type": "string"
                             },
@@ -163,6 +169,15 @@
                               "type": "string"
                             },
                             "GOOGLE_API_KEY": {
+                              "type": "string"
+                            },
+                            "GOOGLE_PROJECT_ID": {
+                              "type": "string"
+                            },
+                            "GOOGLE_LOCATION": {
+                              "type": "string"
+                            },
+                            "GOOGLE_GENERATIVE_AI_API_KEY": {
                               "type": "string"
                             },
                             "GEMINI_API_KEY": {
@@ -580,7 +595,7 @@
                                           },
                                           {
                                             "type": "string",
-                                            "enum": ["select-best", "human"]
+                                            "enum": ["select-best", "human", "max-score"]
                                           },
                                           {}
                                         ]

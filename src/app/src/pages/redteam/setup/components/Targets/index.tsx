@@ -2,23 +2,19 @@ import { useEffect, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { customTargetOption, predefinedTargets } from '../constants';
 import LoadExampleButton from '../LoadExampleButton';
+import PageWrapper from '../PageWrapper';
 import Prompts from '../Prompts';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
@@ -32,9 +28,9 @@ import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 import type { ProviderOptions } from '../../types';
 
 interface TargetsProps {
-  onNext: () => void;
-  onBack: () => void;
-  setupModalOpen: boolean;
+  onNext?: () => void;
+  onBack?: () => void;
+  setupModalOpen?: boolean;
 }
 
 const selectOptions = [...predefinedTargets, customTargetOption];
@@ -63,7 +59,6 @@ const requiresPrompt = (target: ProviderOptions) => {
 
 export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
-  const theme = useTheme();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
@@ -360,233 +355,187 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   };
 
   return (
-    <Stack direction="column" spacing={3}>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-          Select Red Team Target
-        </Typography>
-
-        <LoadExampleButton />
-      </Box>
-
-      <Typography variant="body1">
-        A target is the specific LLM or endpoint you want to evaluate in your red teaming process.
-        In Promptfoo targets are also known as providers. You can configure additional targets
-        later.
-      </Typography>
-
-      <Typography variant="body1">
-        For more information on available providers and how to configure them, please visit our{' '}
-        <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
-          provider documentation
-        </Link>
-        .
-      </Typography>
-
-      <Box mb={4}>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3 }}>
-          Select a Target
-        </Typography>
-        <Box sx={{ mt: 2, mb: 2 }}>
-          <FormControl fullWidth>
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-              <Box sx={{ flex: 1 }}>
-                <InputLabel id="predefined-target-label">Target Type</InputLabel>
-                <Select
-                  labelId="predefined-target-label"
-                  value={selectedTarget.id}
-                  onChange={handleTargetChange}
-                  label="Target Type"
-                  fullWidth
-                >
-                  {selectOptions.map((target) => (
-                    <MenuItem key={target.value} value={target.value}>
-                      {target.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </Box>
-            </Box>
-          </FormControl>
+    <PageWrapper
+      title="Target Configuration"
+      description={
+        <>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            A target is the specific LLM or endpoint you want to evaluate in your red teaming
+            process. In Promptfoo targets are also known as providers. You can configure additional
+            targets later.
+          </Typography>
+          <Typography variant="body1">
+            For more information on available providers and how to configure them, please visit our{' '}
+            <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
+              provider documentation
+            </Link>
+            .
+          </Typography>
+        </>
+      }
+      onNext={onNext}
+      onBack={onBack}
+      nextDisabled={missingFields.length > 0}
+    >
+      <Stack direction="column" spacing={3}>
+        <Box sx={{ mb: 4, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+          <LoadExampleButton />
         </Box>
 
-        <TextField
-          fullWidth
-          sx={{ mb: 2 }}
-          label="Target Name"
-          value={selectedTarget.label}
-          placeholder="e.g. 'customer-service-agent'"
-          onChange={(e) => updateCustomTarget('label', e.target.value)}
-          margin="normal"
-          required
-          autoFocus
-          InputLabelProps={{
-            shrink: true,
-          }}
-        />
+        <Box mb={4}>
+          <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium', mb: 3 }}>
+            Select a Target
+          </Typography>
+          <Box sx={{ mt: 2, mb: 2 }}>
+            <FormControl fullWidth>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                <Box sx={{ flex: 1 }}>
+                  <InputLabel id="predefined-target-label">Target Type</InputLabel>
+                  <Select
+                    labelId="predefined-target-label"
+                    value={selectedTarget.id}
+                    onChange={handleTargetChange}
+                    label="Target Type"
+                    fullWidth
+                  >
+                    {selectOptions.map((target) => (
+                      <MenuItem key={target.value} value={target.value}>
+                        {target.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </Box>
+              </Box>
+            </FormControl>
+          </Box>
 
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
-          The target name will be used to report vulnerabilities. Make sure it's meaningful and
-          re-use it when generating new red team configs for the same target. Eg:
-          'customer-service-agent', 'compliance-bot'
-        </Typography>
-
-        {(selectedTarget.id.startsWith('javascript') || selectedTarget.id.startsWith('python')) && (
           <TextField
             fullWidth
-            label="Custom Target"
-            value={selectedTarget.id}
-            onChange={(e) => updateCustomTarget('id', e.target.value)}
+            sx={{ mb: 2 }}
+            label="Target Name"
+            value={selectedTarget.label}
+            placeholder="e.g. 'customer-service-agent'"
+            onChange={(e) => updateCustomTarget('label', e.target.value)}
             margin="normal"
-          />
-        )}
-        {selectedTarget.id.startsWith('file://') && (
-          <>
-            {selectedTarget.id.endsWith('.js') && (
-              <Typography variant="body1" sx={{ mt: 1 }}>
-                Learn how to set up a custom JavaScript provider{' '}
-                <Link
-                  href="https://www.promptfoo.dev/docs/providers/custom-api/"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  here
-                </Link>
-                .
-              </Typography>
-            )}
-            {selectedTarget.id.endsWith('.py') && (
-              <Typography variant="body1" sx={{ mt: 1 }}>
-                Learn how to set up a custom Python provider{' '}
-                <Link
-                  href="https://www.promptfoo.dev/docs/providers/python/"
-                  target="_blank"
-                  rel="noopener"
-                >
-                  here
-                </Link>
-                .
-              </Typography>
-            )}
-          </>
-        )}
-        {(selectedTarget.id === 'custom' || !knownTargetIds.includes(selectedTarget.id)) && (
-          <CustomTargetConfiguration
-            selectedTarget={selectedTarget}
-            updateCustomTarget={updateCustomTarget}
-            rawConfigJson={rawConfigJson}
-            setRawConfigJson={setRawConfigJson}
-            bodyError={bodyError}
-          />
-        )}
-
-        {selectedTarget.id.startsWith('http') && (
-          <HttpEndpointConfiguration
-            selectedTarget={selectedTarget}
-            updateCustomTarget={updateCustomTarget}
-            bodyError={bodyError}
-            setBodyError={setBodyError}
-            urlError={urlError}
-            setUrlError={setUrlError}
-            updateFullTarget={setSelectedTarget}
-          />
-        )}
-
-        {selectedTarget.id.startsWith('websocket') && (
-          <WebSocketEndpointConfiguration
-            selectedTarget={selectedTarget}
-            updateWebSocketTarget={updateWebSocketTarget}
-            urlError={urlError}
-          />
-        )}
-
-        {selectedTarget.id.startsWith('browser') && (
-          <BrowserAutomationConfiguration
-            selectedTarget={selectedTarget}
-            updateCustomTarget={updateCustomTarget}
-          />
-        )}
-      </Box>
-
-      <Typography variant="h6" gutterBottom>
-        Additional Configuration
-      </Typography>
-      <CommonConfigurationOptions
-        selectedTarget={selectedTarget}
-        updateCustomTarget={updateCustomTarget}
-        extensions={config.extensions}
-        onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
-        onValidationChange={(hasErrors) => {
-          setMissingFields((prev) =>
-            hasErrors
-              ? [...prev.filter((f) => f !== 'Extensions'), 'Extensions']
-              : prev.filter((f) => f !== 'Extensions'),
-          );
-        }}
-      />
-
-      {testingEnabled && (
-        <TestTargetConfiguration
-          testingTarget={testingTarget}
-          handleTestTarget={handleTestTarget}
-          selectedTarget={selectedTarget}
-          testResult={testResult}
-        />
-      )}
-
-      {promptRequired && <Prompts />}
-
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 2,
-          mt: 4,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        {missingFields.length > 0 && (
-          <Alert
-            severity="error"
-            sx={{
-              flexGrow: 1,
-              mr: 2,
-              '& .MuiAlert-message': {
-                display: 'flex',
-                alignItems: 'center',
-              },
+            required
+            autoFocus
+            InputLabelProps={{
+              shrink: true,
             }}
-          >
-            <Typography variant="body2">
-              Missing required fields: {missingFields.join(', ')}
-            </Typography>
-          </Alert>
-        )}
-        <Button
-          variant="outlined"
-          startIcon={<KeyboardArrowLeftIcon />}
-          onClick={onBack}
-          sx={{ px: 4, py: 1 }}
-        >
-          Back
-        </Button>
-        <Button
-          variant="contained"
-          onClick={onNext}
-          endIcon={<KeyboardArrowRightIcon />}
-          disabled={missingFields.length > 0}
-          sx={{
-            backgroundColor: theme.palette.primary.main,
-            '&:hover': { backgroundColor: theme.palette.primary.dark },
-            '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
-            px: 4,
-            py: 1,
+          />
+
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
+            The target name will be used to report vulnerabilities. Make sure it's meaningful and
+            re-use it when generating new red team configs for the same target. Eg:
+            'customer-service-agent', 'compliance-bot'
+          </Typography>
+
+          {(selectedTarget.id.startsWith('javascript') ||
+            selectedTarget.id.startsWith('python')) && (
+            <TextField
+              fullWidth
+              label="Custom Target"
+              value={selectedTarget.id}
+              onChange={(e) => updateCustomTarget('id', e.target.value)}
+              margin="normal"
+            />
+          )}
+          {selectedTarget.id.startsWith('file://') && (
+            <>
+              {selectedTarget.id.endsWith('.js') && (
+                <Typography variant="body1" sx={{ mt: 1 }}>
+                  Learn how to set up a custom JavaScript provider{' '}
+                  <Link
+                    href="https://www.promptfoo.dev/docs/providers/custom-api/"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    here
+                  </Link>
+                  .
+                </Typography>
+              )}
+              {selectedTarget.id.endsWith('.py') && (
+                <Typography variant="body1" sx={{ mt: 1 }}>
+                  Learn how to set up a custom Python provider{' '}
+                  <Link
+                    href="https://www.promptfoo.dev/docs/providers/python/"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    here
+                  </Link>
+                  .
+                </Typography>
+              )}
+            </>
+          )}
+          {(selectedTarget.id === 'custom' || !knownTargetIds.includes(selectedTarget.id)) && (
+            <CustomTargetConfiguration
+              selectedTarget={selectedTarget}
+              updateCustomTarget={updateCustomTarget}
+              rawConfigJson={rawConfigJson}
+              setRawConfigJson={setRawConfigJson}
+              bodyError={bodyError}
+            />
+          )}
+
+          {selectedTarget.id.startsWith('http') && (
+            <HttpEndpointConfiguration
+              selectedTarget={selectedTarget}
+              updateCustomTarget={updateCustomTarget}
+              bodyError={bodyError}
+              setBodyError={setBodyError}
+              urlError={urlError}
+              setUrlError={setUrlError}
+              updateFullTarget={setSelectedTarget}
+            />
+          )}
+
+          {selectedTarget.id.startsWith('websocket') && (
+            <WebSocketEndpointConfiguration
+              selectedTarget={selectedTarget}
+              updateWebSocketTarget={updateWebSocketTarget}
+              urlError={urlError}
+            />
+          )}
+
+          {selectedTarget.id.startsWith('browser') && (
+            <BrowserAutomationConfiguration
+              selectedTarget={selectedTarget}
+              updateCustomTarget={updateCustomTarget}
+            />
+          )}
+        </Box>
+
+        <Typography variant="h6" gutterBottom>
+          Additional Configuration
+        </Typography>
+        <CommonConfigurationOptions
+          selectedTarget={selectedTarget}
+          updateCustomTarget={updateCustomTarget}
+          extensions={config.extensions}
+          onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
+          onValidationChange={(hasErrors) => {
+            setMissingFields((prev) =>
+              hasErrors
+                ? [...prev.filter((f) => f !== 'Extensions'), 'Extensions']
+                : prev.filter((f) => f !== 'Extensions'),
+            );
           }}
-        >
-          Next
-        </Button>
-      </Box>
-    </Stack>
+        />
+
+        {testingEnabled && (
+          <TestTargetConfiguration
+            testingTarget={testingTarget}
+            handleTestTarget={handleTestTarget}
+            selectedTarget={selectedTarget}
+            testResult={testResult}
+          />
+        )}
+
+        {promptRequired && <Prompts />}
+      </Stack>
+    </PageWrapper>
   );
 }

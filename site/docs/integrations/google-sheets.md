@@ -118,7 +118,7 @@ defaultTest:
   options:
     provider:
       text:
-        id: ollama:llama3.1:70b
+        id: ollama:chat:llama3.3:70b
       embedding:
         id: ollama:embeddings:mxbai-embed-large
 ```
