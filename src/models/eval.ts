@@ -205,7 +205,7 @@ export default class Eval {
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
     await db.transaction(async (tx) => {
-      tx.insert(evalsTable)
+      await tx.insert(evalsTable)
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
@@ -220,14 +220,14 @@ export default class Eval {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
 
-        tx.insert(promptsTable)
+        await tx.insert(promptsTable)
           .values({
             id: promptId,
             prompt: label,
           })
           .onConflictDoNothing();
 
-        tx.insert(evalsToPromptsTable)
+        await tx.insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
@@ -244,14 +244,14 @@ export default class Eval {
         logger.debug(`Inserted eval results`);
       }
 
-      tx.insert(datasetsTable)
+      await tx.insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
         })
         .onConflictDoNothing();
 
-      tx.insert(evalsToDatasetsTable)
+      await tx.insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
@@ -264,7 +264,7 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          tx.insert(tagsTable)
+          await tx.insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -272,7 +272,7 @@ export default class Eval {
             })
             .onConflictDoNothing();
 
-          tx.insert(evalsToTagsTable)
+          await tx.insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,
@@ -735,11 +735,11 @@ export default class Eval {
   async delete() {
     const db = getDb();
     await db.transaction(async (tx) => {
-      tx.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id));
-      tx.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id));
-      tx.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id));
-      tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id));
-      tx.delete(evalsTable).where(eq(evalsTable.id, this.id));
+      await tx.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id));
+      await tx.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id));
+      await tx.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id));
+      await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id));
+      await tx.delete(evalsTable).where(eq(evalsTable.id, this.id));
     });
   }
 }
