@@ -111,14 +111,14 @@ prompts:
 When running `npx promptfoo@latest`, you might encounter this error:
 
 ```
-Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
+Error: The module '/path/to/node_modules/@libsql/darwin-x64/node.darwin-x64.node'
 was compiled against a different Node.js version using
 NODE_MODULE_VERSION 115. This version of Node.js requires
 NODE_MODULE_VERSION 127. Please try re-compiling or re-installing
 the module (for instance, using `npm rebuild` or `npm install`).
 ```
 
-This happens because promptfoo uses native code modules (like better-sqlite3) that need to be compiled specifically for your Node.js version.
+This happens because promptfoo uses native code modules (like libSQL) that need to be compiled specifically for your Node.js version.
 
 ### Solution: Remove npx cache and reinstall
 
@@ -132,7 +132,7 @@ This removes any cached npm packages in the npx cache directory and forces a fre
 
 ## Native build failures
 
-Some dependencies like [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) include native code that must compile locally. Ensure your machine has a C/C++ build toolchain:
+Some dependencies like [@libsql/client](https://github.com/tursodatabase/libsql) include native code that must compile locally. Ensure your machine has a C/C++ build toolchain:
 
 - **Ubuntu/Debian**: `sudo apt-get install build-essential`
 - **macOS**: `xcode-select --install`

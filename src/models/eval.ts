@@ -56,12 +56,10 @@ export function createEvalId(createdAt: Date = new Date()) {
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
-    const query = sql.raw(
-      `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
-FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
-    );
-    // Execute raw SQL with libSQL
-    const results = await db.execute(query) as { key: string; eval_id: string }[];
+    // Use sql template for safe query execution
+    const queryStr = `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
+FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`;
+    const results: { key: string; eval_id: string }[] = await db.all(sql.raw(queryStr));
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];
       acc[r.eval_id].push(r.key);
@@ -72,12 +70,10 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
 
   static async getVarsFromEval(evalId: string) {
     const db = getDb();
-    const query = sql.raw(
-      `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
-    FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
-    );
-    // Execute raw SQL with libSQL
-    const results = await db.execute(query) as { key: string }[];
+    // Use sql template for safe query execution
+    const queryStr = `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
+    FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`;
+    const results: { key: string }[] = await db.all(sql.raw(queryStr));
     const vars = results.map((r) => r.key);
 
     return vars;

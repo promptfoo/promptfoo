@@ -19,8 +19,13 @@ jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
 }));
 
-// Causes a SIGSEGV in github actions.
-jest.mock('better-sqlite3');
+// Mock libSQL client for tests
+jest.mock('@libsql/client', () => ({
+  createClient: jest.fn().mockReturnValue({
+    execute: jest.fn(),
+    close: jest.fn(),
+  }),
+}));
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

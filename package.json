@@ -146,7 +146,6 @@
     "@swc/core": "^1.13.3",
     "@swc/jest": "^0.2.39",
     "@types/async": "^3.2.24",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/cache-manager": "^4.0.6",
     "@types/cache-manager-fs-hash": "^0.0.5",
     "@types/cli-progress": "^3.11.6",
@@ -222,7 +221,6 @@
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
-    "better-sqlite3": "11.10.0",
     "cache-manager": "^4.1.0",
     "cache-manager-fs-hash": "^1.1.0",
     "chalk": "^4.1.2",
@@ -283,7 +281,6 @@
     "onlyBuiltDependencies": [
       "@playwright/browser-chromium",
       "@swc/core",
-      "better-sqlite3",
       "core-js",
       "core-js-pure",
       "esbuild"
