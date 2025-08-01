@@ -38,7 +38,6 @@ jest.mock('../../src/providers/azure', () => ({
 
 jest.mock('../../src/providers/azure/defaults', () => ({
   AzureProviderConfig: jest.fn((env: any) => ({
-    datasetGenerationProvider: { id: () => 'mock-azure-provider' },
     embeddingProvider: { id: () => 'mock-azure-provider' },
     gradingJsonProvider: { id: () => 'mock-azure-provider' },
     gradingProvider: { id: () => 'mock-azure-provider' },
@@ -310,7 +309,6 @@ describe('Provider defaults module', () => {
       // Setup mock objects that simulate the legacy interfaces
       const legacyObjectWithEnvMethod = {
         getDefaultProvidersWithEnv: () => ({
-          datasetGenerationProvider: {},
           embeddingProvider: {},
           gradingJsonProvider: {},
           gradingProvider: {},
@@ -322,7 +320,6 @@ describe('Provider defaults module', () => {
 
       const legacyObjectWithDefaultMethod = {
         getDefaultProviders: () => ({
-          datasetGenerationProvider: {},
           embeddingProvider: {},
           gradingJsonProvider: {},
           gradingProvider: {},
@@ -350,12 +347,12 @@ describe('Provider defaults module', () => {
       // Test getDefaultProvidersWithEnv path
       const result1 = configFn(legacyObjectWithEnvMethod);
       expect(result1).toBeDefined();
-      expect(result1.datasetGenerationProvider).toBeDefined();
+      expect(result1.embeddingProvider).toBeDefined();
 
       // Test getDefaultProviders path
       const result2 = configFn(legacyObjectWithDefaultMethod);
       expect(result2).toBeDefined();
-      expect(result2.datasetGenerationProvider).toBeDefined();
+      expect(result2.embeddingProvider).toBeDefined();
 
       // Test error path
       expect(() => configFn(badObject)).toThrow(
@@ -383,7 +380,6 @@ describe('Provider defaults module', () => {
             hasCredentials: jest.fn().mockImplementation(() => Promise.resolve(true)), // This one will be selected
             config: jest.fn().mockImplementation(() =>
               Promise.resolve({
-                datasetGenerationProvider: new MockProvider('selected-provider'),
                 embeddingProvider: new MockProvider('selected-provider'),
                 gradingJsonProvider: new MockProvider('selected-provider'),
                 gradingProvider: new MockProvider('selected-provider'),
@@ -444,7 +440,6 @@ describe('Provider defaults module', () => {
       const providers = await getDefaultProviders();
 
       // Assert - All required providers should be defined
-      expect(providers.datasetGenerationProvider).toBeDefined();
       expect(providers.embeddingProvider).toBeDefined();
       expect(providers.gradingJsonProvider).toBeDefined();
       expect(providers.gradingProvider).toBeDefined();
@@ -467,7 +462,6 @@ describe('Provider defaults module', () => {
 
       // Assert - We should get back providers (OpenAI fallback)
       expect(providers).toBeDefined();
-      expect(providers.datasetGenerationProvider).toBeDefined();
       expect(providers.embeddingProvider).toBeDefined();
       expect(providers.gradingProvider).toBeDefined();
       expect(providers.moderationProvider).toBeDefined();
@@ -484,7 +478,7 @@ describe('Provider defaults module', () => {
 
         // Assert
         expect(providers).toBeDefined();
-        expect(providers.datasetGenerationProvider).toBeDefined();
+        expect(providers.embeddingProvider).toBeDefined();
       } finally {
         // Cleanup
         process.env = originalEnv;
@@ -645,7 +639,6 @@ describe('Provider defaults module', () => {
       // Create temporary mock implementation
       const mockAzureConfig = {
         getDefaultProvidersWithEnv: jest.fn().mockReturnValue({
-          datasetGenerationProvider: { id: () => 'azure-legacy-with-env' },
           embeddingProvider: { id: () => 'azure-legacy-with-env' },
           gradingJsonProvider: { id: () => 'azure-legacy-with-env' },
           gradingProvider: { id: () => 'azure-legacy-with-env' },
@@ -695,7 +688,7 @@ describe('Provider defaults module', () => {
         // Avoid conditional expect by checking properties directly
         expect(azureLegacyWithEnvResult).toBeTruthy();
         // Only access properties if we're confident the object exists
-        const envResultId = azureLegacyWithEnvResult?.datasetGenerationProvider?.id();
+        const envResultId = azureLegacyWithEnvResult?.embeddingProvider?.id();
         // Separate assertions outside the conditional
         expect(typeof envResultId).toBe('string');
         expect(envResultId).toBe('azure-legacy-with-env');
@@ -709,7 +702,6 @@ describe('Provider defaults module', () => {
       // Create temporary mock implementation
       const mockAzureConfig = {
         getDefaultProviders: jest.fn().mockReturnValue({
-          datasetGenerationProvider: { id: () => 'azure-legacy-without-env' },
           embeddingProvider: { id: () => 'azure-legacy-without-env' },
           gradingJsonProvider: { id: () => 'azure-legacy-without-env' },
           gradingProvider: { id: () => 'azure-legacy-without-env' },
@@ -745,7 +737,7 @@ describe('Provider defaults module', () => {
         // Avoid conditional expect by checking properties directly
         expect(azureLegacyWithoutEnvResult).toBeTruthy();
         // Only access properties if we're confident the object exists
-        const withoutEnvResultId = azureLegacyWithoutEnvResult?.datasetGenerationProvider?.id();
+        const withoutEnvResultId = azureLegacyWithoutEnvResult?.embeddingProvider?.id();
         // Separate assertions outside the conditional
         expect(typeof withoutEnvResultId).toBe('string');
         expect(withoutEnvResultId).toBe('azure-legacy-without-env');

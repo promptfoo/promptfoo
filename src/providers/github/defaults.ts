@@ -52,7 +52,6 @@ export const GitHubProviderConfig: ProviderConfiguration = (env?: EnvOverrides) 
   logger.debug('Using GitHub Models default providers');
 
   return {
-    datasetGenerationProvider: DefaultGitHubGradingProvider,
     embeddingProvider: new OpenAiEmbeddingProvider('text-embedding-3-large', { env }), // GitHub doesn't support embeddings yet
     gradingJsonProvider: DefaultGitHubGradingJsonProvider,
     gradingProvider: DefaultGitHubGradingProvider,

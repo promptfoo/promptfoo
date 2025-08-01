@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import type { EnvOverrides } from '../../types/env';
 import type { ProviderConfiguration } from '../../types/providerConfig';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock';
 import { OpenAiModerationProvider } from '../openai/moderation';
@@ -30,10 +31,9 @@ export const DefaultLlmRubricProvider = new AwsBedrockCompletionProvider(
 /**
  * AWS Bedrock provider configuration
  */
-export const BedrockProviderConfig: ProviderConfiguration = (env) => {
+export const BedrockProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
   logger.debug('Using AWS Bedrock default providers');
   return {
-    datasetGenerationProvider: DefaultGradingProvider,
     embeddingProvider: DefaultEmbeddingProvider,
     gradingJsonProvider: DefaultGradingJsonProvider,
     gradingProvider: DefaultGradingProvider,

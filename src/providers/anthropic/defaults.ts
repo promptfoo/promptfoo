@@ -117,7 +117,7 @@ const llmRubricProviderFactory = createLazyProvider(
 /**
  * Anthropic provider configuration
  */
-export const AnthropicProviderConfig: ProviderConfiguration = (env) => {
+export const AnthropicProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
   logger.debug('Using Anthropic default providers');
 
   // Get providers with the provided environment variables
@@ -125,7 +125,6 @@ export const AnthropicProviderConfig: ProviderConfiguration = (env) => {
   const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
 
   return {
-    datasetGenerationProvider: gradingProvider,
     embeddingProvider: new OpenAiEmbeddingProvider(DEFAULT_EMBEDDING_MODEL, { env }),
     gradingJsonProvider: gradingProvider,
     gradingProvider,

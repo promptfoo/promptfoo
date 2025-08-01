@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import type { EnvOverrides } from '../../types/env';
 import type { ProviderConfiguration } from '../../types/providerConfig';
 import { OpenAiChatCompletionProvider } from './chat';
 import { OpenAiEmbeddingProvider } from './embedding';
@@ -17,10 +18,9 @@ export const DefaultModerationProvider = new OpenAiModerationProvider('omni-mode
 /**
  * OpenAI provider configuration
  */
-export const OpenAiProviderConfig: ProviderConfiguration = (env) => {
+export const OpenAiProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
   logger.debug('Using OpenAI default providers');
   return {
-    datasetGenerationProvider: DefaultGradingProvider,
     embeddingProvider: DefaultEmbeddingProvider,
     gradingJsonProvider: DefaultGradingJsonProvider,
     gradingProvider: DefaultGradingProvider,

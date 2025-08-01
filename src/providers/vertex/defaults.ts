@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import type { EnvOverrides } from '../../types/env';
 import type { ProviderConfiguration } from '../../types/providerConfig';
 import { OpenAiModerationProvider } from '../openai/moderation';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../google/vertex';
@@ -10,10 +11,9 @@ export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedd
 /**
  * Google Gemini provider configuration
  */
-export const GeminiProviderConfig: ProviderConfiguration = (env) => {
+export const GeminiProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
   logger.debug('Using Google Gemini default providers');
   return {
-    datasetGenerationProvider: DefaultGradingProvider,
     embeddingProvider: DefaultEmbeddingProvider,
     gradingJsonProvider: DefaultGradingProvider,
     gradingProvider: DefaultGradingProvider,

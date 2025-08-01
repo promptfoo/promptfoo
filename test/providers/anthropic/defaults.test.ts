@@ -54,7 +54,6 @@ describe('Anthropic Default Providers', () => {
     it('should return all required provider implementations', () => {
       const providers = AnthropicProviderConfig();
 
-      expect(providers.datasetGenerationProvider).toBeInstanceOf(AnthropicMessagesProvider);
       expect(providers.embeddingProvider).toBeInstanceOf(OpenAiEmbeddingProvider);
       expect(providers.gradingJsonProvider).toBeInstanceOf(AnthropicMessagesProvider);
       expect(providers.gradingProvider).toBeInstanceOf(AnthropicMessagesProvider);

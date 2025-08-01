@@ -45,7 +45,6 @@ export const AzureProviderConfig: ProviderConfiguration = (env?: EnvOverrides) =
       : new OpenAiModerationProvider('omni-moderation-latest');
 
   return {
-    datasetGenerationProvider: azureProvider,
     embeddingProvider: azureEmbeddingProvider,
     gradingJsonProvider: azureProvider,
     gradingProvider: azureProvider,

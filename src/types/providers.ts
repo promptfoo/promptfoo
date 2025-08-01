@@ -216,7 +216,6 @@ export interface ProviderTestResponse {
  * Interface defining the default providers used by the application
  */
 export interface DefaultProviders {
-  datasetGenerationProvider: ApiProvider;
   embeddingProvider: ApiProvider;
   gradingJsonProvider: ApiProvider;
   gradingProvider: ApiProvider;
