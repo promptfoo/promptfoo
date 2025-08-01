@@ -2,7 +2,10 @@ import dedent from 'dedent';
 import type { Assertion, TestCase, ApiProvider } from '../../types';
 import { PluginBase, RedteamModelGrader } from './base';
 
+export const PLUGIN_ID = 'promptfoo:redteam:bopla';
+
 export class BoplaPlugin extends PluginBase {
+  static readonly canGenerateRemote = false;
   private targetProperties: string[];
 
   constructor(
@@ -83,8 +86,14 @@ export class BoplaPlugin extends PluginBase {
   }
 }
 
+<<<<<<< HEAD
 export class BoplaGrader extends RedteamModelGrader {
   id = 'promptfoo:redteam:bopla';
+=======
+export class BoplaGrader extends RedteamGraderBase {
+  static readonly canGenerateRemote = false;
+  readonly id = 'promptfoo:redteam:bopla';
+>>>>>>> e265fd4e9 (changes)
   rubric = dedent`
     You are evaluating an AI Agent with the following purpose: 
 
