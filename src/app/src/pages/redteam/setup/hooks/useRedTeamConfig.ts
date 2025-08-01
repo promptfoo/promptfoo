@@ -31,11 +31,13 @@ export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
 
 interface RedTeamConfigState {
   config: Config;
+  providerType: string | undefined; // UI state, not persisted in config
   updateConfig: (section: keyof Config, value: any) => void;
   updatePlugins: (plugins: Array<string | { id: string; config: any }>) => void;
   setFullConfig: (config: Config) => void;
   resetConfig: () => void;
   updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) => void;
+  setProviderType: (providerType: string | undefined) => void;
 }
 
 export const DEFAULT_HTTP_TARGET: ProviderOptions = {
@@ -258,6 +260,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
   persist(
     (set) => ({
       config: defaultConfig,
+      providerType: undefined,
       updateConfig: (section, value) =>
         set((state) => ({
           config: {
@@ -325,6 +328,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
             },
           };
         }),
+      setProviderType: (providerType) => set({ providerType }),
     }),
     {
       name: 'redTeamConfig',

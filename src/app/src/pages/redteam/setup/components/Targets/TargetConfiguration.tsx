@@ -28,7 +28,7 @@ export default function TargetConfiguration({
   onBack,
   setupModalOpen,
 }: TargetConfigurationProps) {
-  const { config, updateConfig } = useRedTeamConfig();
+  const { config, updateConfig, providerType } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
@@ -188,7 +188,7 @@ export default function TargetConfiguration({
           onValidate={(isValid) => {
             // Validation errors will be displayed through the handleError function
           }}
-          providerType={selectedTarget.id?.split(':')[0] || 'custom'}
+          providerType={providerType}
         />
 
         {testingEnabled && (

@@ -3,8 +3,8 @@ import React from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
 import ProviderTypeSelector from './ProviderTypeSelector';
+
 import type { ProviderOptions } from '../../types';
 
 const renderWithTheme = (ui: React.ReactElement) => {
@@ -38,11 +38,14 @@ describe('ProviderTypeSelector', () => {
     }
 
     expect(mockSetProvider).toHaveBeenCalledTimes(1);
-    expect(mockSetProvider).toHaveBeenCalledWith({
-      id: 'file:///path/to/custom_provider.py',
-      config: {},
-      label: 'My Test Provider',
-    });
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      {
+        id: 'file:///path/to/custom_provider.py',
+        config: {},
+        label: 'My Test Provider',
+      },
+      'python',
+    );
 
     const pythonRadio = screen.getByDisplayValue('python') as HTMLInputElement;
     expect(pythonRadio.checked).toBe(true);
@@ -137,7 +140,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(mockSetProvider).toHaveBeenCalledTimes(1);
-    expect(mockSetProvider).toHaveBeenCalledWith(defaultHttpConfig);
+    expect(mockSetProvider).toHaveBeenCalledWith(defaultHttpConfig, 'http');
 
     const httpRadio = screen.getByDisplayValue('http') as HTMLInputElement;
     expect(httpRadio.checked).toBe(true);
@@ -156,17 +159,20 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(mockSetProvider).toHaveBeenCalledTimes(1);
-    expect(mockSetProvider).toHaveBeenCalledWith({
-      id: 'http',
-      config: {
-        url: '',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: '{{prompt}}',
-        }),
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      {
+        id: 'http',
+        config: {
+          url: '',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: '{{prompt}}',
+          }),
+        },
       },
-    });
+      'http',
+    );
 
     const httpRadio = screen.getByDisplayValue('http') as HTMLInputElement;
     expect(httpRadio.checked).toBe(true);

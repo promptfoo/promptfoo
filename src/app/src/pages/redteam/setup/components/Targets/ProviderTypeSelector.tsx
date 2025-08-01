@@ -265,7 +265,7 @@ const providerOptions = [
 
 interface ProviderTypeSelectorProps {
   provider: ProviderOptions | undefined;
-  setProvider: (provider: ProviderOptions) => void;
+  setProvider: (provider: ProviderOptions, providerType: string) => void;
   availableProviderIds?: string[];
   disableModelSelection?: boolean;
   providerType?: string;
@@ -302,29 +302,23 @@ export default function ProviderTypeSelector({
     );
   };
 
-  // Sync selectedProviderType with providerType prop
-  useEffect(() => {
-    if (providerType !== undefined) {
-      setSelectedProviderType(providerType);
-    } else if (provider?.id) {
-      setSelectedProviderType(getProviderType(provider.id));
-    }
-  }, [providerType, provider?.id]);
-
   useEffect(() => {
     if (!provider?.id) {
       setSelectedProviderType('http');
-      setProvider({
-        id: 'http',
-        config: {
-          url: '',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: '{{prompt}}',
-          }),
+      setProvider(
+        {
+          id: 'http',
+          config: {
+            url: '',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: '{{prompt}}',
+            }),
+          },
         },
-      });
+        'http',
+      );
     }
   }, []);
 
@@ -335,258 +329,372 @@ export default function ProviderTypeSelector({
     const currentLabel = provider?.label;
 
     if (value === 'custom') {
-      setProvider({
-        id: '',
-        label: currentLabel,
-        config: {},
-      });
+      setProvider(
+        {
+          id: '',
+          label: currentLabel,
+          config: {},
+        },
+        'custom',
+      );
     } else if (value === 'javascript') {
-      setProvider({
-        id: 'file:///path/to/custom_provider.js',
-        config: {},
-        label: currentLabel,
-      });
+      setProvider(
+        {
+          id: 'file:///path/to/custom_provider.js',
+          config: {},
+          label: currentLabel,
+        },
+        'javascript',
+      );
     } else if (value === 'python') {
-      setProvider({
-        id: 'file:///path/to/custom_provider.py',
-        config: {},
-        label: currentLabel,
-      });
+      setProvider(
+        {
+          id: 'file:///path/to/custom_provider.py',
+          config: {},
+          label: currentLabel,
+        },
+        'python',
+      );
     } else if (value === 'http') {
-      setProvider({
-        id: 'http',
-        label: currentLabel,
-        config: {
-          url: '',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: '{{prompt}}',
-          }),
+      setProvider(
+        {
+          id: 'http',
+          label: currentLabel,
+          config: {
+            url: '',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: '{{prompt}}',
+            }),
+          },
         },
-      });
+        'http',
+      );
     } else if (value === 'websocket') {
-      setProvider({
-        id: 'websocket',
-        label: currentLabel,
-        config: {
-          type: 'websocket',
-          url: 'wss://example.com/ws',
-          messageTemplate: '{"message": "{{prompt}}"}',
-          transformResponse: 'response.message',
-          timeoutMs: 30000,
+      setProvider(
+        {
+          id: 'websocket',
+          label: currentLabel,
+          config: {
+            type: 'websocket',
+            url: 'wss://example.com/ws',
+            messageTemplate: '{"message": "{{prompt}}"}',
+            transformResponse: 'response.message',
+            timeoutMs: 30000,
+          },
         },
-      });
+        'websocket',
+      );
     } else if (value === 'mcp') {
-      setProvider({
-        id: 'mcp',
-        label: currentLabel,
-        config: {
-          enabled: true,
-          verbose: false,
+      setProvider(
+        {
+          id: 'mcp',
+          label: currentLabel,
+          config: {
+            enabled: true,
+            verbose: false,
+          },
         },
-      });
+        'mcp',
+      );
     } else if (value === 'browser') {
-      setProvider({
-        id: 'browser',
-        label: currentLabel,
-        config: {
-          steps: [
-            {
-              action: 'navigate',
-              args: { url: 'https://example.com' },
-            },
-          ],
+      setProvider(
+        {
+          id: 'browser',
+          label: currentLabel,
+          config: {
+            steps: [
+              {
+                action: 'navigate',
+                args: { url: 'https://example.com' },
+              },
+            ],
+          },
         },
-      });
+        'browser',
+      );
     } else if (value === 'exec') {
-      setProvider({
-        id: 'exec: python script.py',
-        label: currentLabel,
-        config: {},
-      });
-    } else if (value === 'openai') {
-      setProvider({
-        id: 'openai:gpt-4.1',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'anthropic') {
-      setProvider({
-        id: 'anthropic:messages:claude-sonnet-4-20250514',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'google') {
-      setProvider({
-        id: 'google:gemini-2.5-pro',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'vertex') {
-      setProvider({
-        id: 'vertex:gemini-2.5-pro',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'mistral') {
-      setProvider({
-        id: 'mistral:mistral-large-latest',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'cohere') {
-      setProvider({
-        id: 'cohere:command-r-plus',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'groq') {
-      setProvider({
-        id: 'groq:llama-3.1-70b-versatile',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'deepseek') {
-      setProvider({
-        id: 'deepseek:deepseek-chat',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'cerebras') {
-      setProvider({
-        id: 'cerebras:llama3.1-70b',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'perplexity') {
-      setProvider({
-        id: 'perplexity:llama-3.1-sonar-large-128k-online',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'bedrock') {
-      setProvider({
-        id: 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'ollama') {
-      setProvider({
-        id: 'ollama:llama3.2:latest',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'openrouter') {
-      setProvider({
-        id: 'openrouter:openai/gpt-4o',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'azure') {
-      setProvider({
-        id: 'azure:chat:',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'adaline') {
-      setProvider({
-        id: 'adaline:openai/gpt-4.1',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'cloudera') {
-      setProvider({
-        id: 'cloudera:llama-2-13b-chat',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'f5') {
-      setProvider({
-        id: 'f5:path-name',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'helicone') {
-      setProvider({
-        id: 'helicone:openai/gpt-4.1',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'ibm-bam') {
-      setProvider({
-        id: 'bam:chat:ibm/granite-13b-chat-v2',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'jfrog') {
-      setProvider({
-        id: 'jfrog:llama_3_8b_instruct',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'litellm') {
-      setProvider({
-        id: 'litellm:gpt-4.1',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'openllm') {
-      setProvider({
-        id: 'openllm:llama3',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'watsonx') {
-      setProvider({
-        id: 'watsonx:ibm/granite-13b-chat-v2',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'go') {
-      setProvider({
-        id: 'file:///path/to/your/script.go',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'webhook') {
-      setProvider({
-        id: 'webhook:http://example.com/webhook',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'echo') {
-      setProvider({
-        id: 'echo',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'manual-input') {
-      setProvider({
-        id: 'promptfoo:manual-input',
-        config: {},
-        label: currentLabel,
-      });
-    } else if (value === 'sequence') {
-      setProvider({
-        id: 'sequence',
-        config: {
-          inputs: [],
+      setProvider(
+        {
+          id: 'exec: python script.py',
+          label: currentLabel,
+          config: {},
         },
-        label: currentLabel,
-      });
+        'exec',
+      );
+    } else if (value === 'openai') {
+      setProvider(
+        {
+          id: 'openai:gpt-4.1',
+          config: {},
+          label: currentLabel,
+        },
+        'openai',
+      );
+    } else if (value === 'anthropic') {
+      setProvider(
+        {
+          id: 'anthropic:messages:claude-sonnet-4-20250514',
+          config: {},
+          label: currentLabel,
+        },
+        'anthropic',
+      );
+    } else if (value === 'google') {
+      setProvider(
+        {
+          id: 'google:gemini-2.5-pro',
+          config: {},
+          label: currentLabel,
+        },
+        'google',
+      );
+    } else if (value === 'vertex') {
+      setProvider(
+        {
+          id: 'vertex:gemini-2.5-pro',
+          config: {},
+          label: currentLabel,
+        },
+        'vertex',
+      );
+    } else if (value === 'mistral') {
+      setProvider(
+        {
+          id: 'mistral:mistral-large-latest',
+          config: {},
+          label: currentLabel,
+        },
+        'mistral',
+      );
+    } else if (value === 'cohere') {
+      setProvider(
+        {
+          id: 'cohere:command-r-plus',
+          config: {},
+          label: currentLabel,
+        },
+        'cohere',
+      );
+    } else if (value === 'groq') {
+      setProvider(
+        {
+          id: 'groq:llama-3.1-70b-versatile',
+          config: {},
+          label: currentLabel,
+        },
+        'groq',
+      );
+    } else if (value === 'deepseek') {
+      setProvider(
+        {
+          id: 'deepseek:deepseek-chat',
+          config: {},
+          label: currentLabel,
+        },
+        'deepseek',
+      );
+    } else if (value === 'cerebras') {
+      setProvider(
+        {
+          id: 'cerebras:llama3.1-70b',
+          config: {},
+          label: currentLabel,
+        },
+        'cerebras',
+      );
+    } else if (value === 'perplexity') {
+      setProvider(
+        {
+          id: 'perplexity:llama-3.1-sonar-large-128k-online',
+          config: {},
+          label: currentLabel,
+        },
+        'perplexity',
+      );
+    } else if (value === 'bedrock') {
+      setProvider(
+        {
+          id: 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
+          config: {},
+          label: currentLabel,
+        },
+        'bedrock',
+      );
+    } else if (value === 'ollama') {
+      setProvider(
+        {
+          id: 'ollama:llama3.2:latest',
+          config: {},
+          label: currentLabel,
+        },
+        'ollama',
+      );
+    } else if (value === 'openrouter') {
+      setProvider(
+        {
+          id: 'openrouter:openai/gpt-4o',
+          config: {},
+          label: currentLabel,
+        },
+        'openrouter',
+      );
+    } else if (value === 'azure') {
+      setProvider(
+        {
+          id: 'azure:chat:',
+          config: {},
+          label: currentLabel,
+        },
+        'azure',
+      );
+    } else if (value === 'adaline') {
+      setProvider(
+        {
+          id: 'adaline:openai/gpt-4.1',
+          config: {},
+          label: currentLabel,
+        },
+        'adaline',
+      );
+    } else if (value === 'cloudera') {
+      setProvider(
+        {
+          id: 'cloudera:llama-2-13b-chat',
+          config: {},
+          label: currentLabel,
+        },
+        'cloudera',
+      );
+    } else if (value === 'f5') {
+      setProvider(
+        {
+          id: 'f5:path-name',
+          config: {},
+          label: currentLabel,
+        },
+        'f5',
+      );
+    } else if (value === 'helicone') {
+      setProvider(
+        {
+          id: 'helicone:openai/gpt-4.1',
+          config: {},
+          label: currentLabel,
+        },
+        'helicone',
+      );
+    } else if (value === 'ibm-bam') {
+      setProvider(
+        {
+          id: 'bam:chat:ibm/granite-13b-chat-v2',
+          config: {},
+          label: currentLabel,
+        },
+        'ibm-bam',
+      );
+    } else if (value === 'jfrog') {
+      setProvider(
+        {
+          id: 'jfrog:llama_3_8b_instruct',
+          config: {},
+          label: currentLabel,
+        },
+        'jfrog',
+      );
+    } else if (value === 'litellm') {
+      setProvider(
+        {
+          id: 'litellm:gpt-4.1',
+          config: {},
+          label: currentLabel,
+        },
+        'litellm',
+      );
+    } else if (value === 'openllm') {
+      setProvider(
+        {
+          id: 'openllm:llama3',
+          config: {},
+          label: currentLabel,
+        },
+        'openllm',
+      );
+    } else if (value === 'watsonx') {
+      setProvider(
+        {
+          id: 'watsonx:ibm/granite-13b-chat-v2',
+          config: {},
+          label: currentLabel,
+        },
+        'watsonx',
+      );
+    } else if (value === 'go') {
+      setProvider(
+        {
+          id: 'file:///path/to/your/script.go',
+          config: {},
+          label: currentLabel,
+        },
+        'go',
+      );
+    } else if (value === 'webhook') {
+      setProvider(
+        {
+          id: 'webhook:http://example.com/webhook',
+          config: {},
+          label: currentLabel,
+        },
+        'webhook',
+      );
+    } else if (value === 'echo') {
+      setProvider(
+        {
+          id: 'echo',
+          config: {},
+          label: currentLabel,
+        },
+        'echo',
+      );
+    } else if (value === 'manual-input') {
+      setProvider(
+        {
+          id: 'promptfoo:manual-input',
+          config: {},
+          label: currentLabel,
+        },
+        'manual-input',
+      );
+    } else if (value === 'sequence') {
+      setProvider(
+        {
+          id: 'sequence',
+          config: {
+            inputs: [],
+          },
+          label: currentLabel,
+        },
+        'sequence',
+      );
     } else if (value === 'simulated-user') {
-      setProvider({
-        id: 'promptfoo:simulated-user',
-        config: {},
-        label: currentLabel,
-      });
+      setProvider(
+        {
+          id: 'promptfoo:simulated-user',
+          config: {},
+          label: currentLabel,
+        },
+        'simulated-user',
+      );
     } else {
-      setProvider({
-        id: value,
-        config: {},
-        label: currentLabel,
-      });
+      setProvider(
+        {
+          id: value,
+          config: {},
+          label: currentLabel,
+        },
+        value,
+      );
     }
   };
 

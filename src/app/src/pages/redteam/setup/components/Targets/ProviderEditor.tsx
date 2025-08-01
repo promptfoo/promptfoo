@@ -93,9 +93,9 @@ export default function ProviderEditor({
   };
 
   // Handle provider changes and update provider type
-  const handleProviderChange = (newProvider: ProviderOptions) => {
+  const handleProviderChange = (newProvider: ProviderOptions, newProviderType: string) => {
     setProvider(newProvider);
-    setProviderType(getProviderType(newProvider.id));
+    setProviderType(newProviderType);
   };
 
   if (!provider) {

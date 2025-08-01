@@ -27,31 +27,28 @@ export default function TargetTypeSelection({
   onBack,
   setupModalOpen,
 }: TargetTypeSelectionProps) {
-  const { config, updateConfig } = useRedTeamConfig();
+  const { config, updateConfig, providerType, setProviderType } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
   const [showTargetTypeSection, setShowTargetTypeSection] = useState(
     Boolean(config.target?.label && config.target?.id),
   );
-  const [providerType, setProviderType] = useState<string | undefined>(
-    getProviderType(config.target?.id),
-  );
 
   const { recordEvent } = useTelemetry();
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_target_type_selection' });
+    // Initialize providerType if not already set
+    if (!providerType && config.target?.id) {
+      setProviderType(getProviderType(config.target.id));
+    }
   }, []);
 
-  useEffect(() => {
-    updateConfig('target', selectedTarget);
-    setProviderType(getProviderType(selectedTarget.id));
-  }, [selectedTarget, updateConfig]);
-
-  const handleProviderChange = (provider: ProviderOptions) => {
+  const handleProviderChange = (provider: ProviderOptions, providerType: string) => {
     setSelectedTarget(provider);
-    setProviderType(getProviderType(provider.id));
+    setProviderType(providerType);
+    updateConfig('target', provider);
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,

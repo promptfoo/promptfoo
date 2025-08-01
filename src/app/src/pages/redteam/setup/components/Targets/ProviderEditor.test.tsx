@@ -3,7 +3,6 @@ import React from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import ProviderEditor, { defaultHttpTarget } from './ProviderEditor';
 
 import type { ProviderOptions } from '../../types';
@@ -128,7 +127,7 @@ describe('ProviderEditor', () => {
       config: {},
       label: 'My Test Provider',
     };
-    expect(setProvider).toHaveBeenCalledWith(expectedNewProvider);
+    expect(setProvider).toHaveBeenCalledWith(expectedNewProvider, 'openai');
 
     rerender(<ProviderEditor provider={setProvider.mock.calls[0][0]} setProvider={setProvider} />);
     expect(screen.getByTestId('provider-config-editor')).toHaveAttribute(
