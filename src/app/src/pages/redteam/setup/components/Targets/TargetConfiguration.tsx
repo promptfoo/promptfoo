@@ -2,15 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
-import { useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import LoadExampleButton from '../LoadExampleButton';
+import PageWrapper from '../PageWrapper';
 import Prompts from '../Prompts';
 import ProviderConfigEditor from './ProviderConfigEditor';
 import TestTargetConfiguration from './TestTargetConfiguration';
@@ -34,7 +28,6 @@ export default function TargetConfiguration({
   onBack,
   setupModalOpen,
 }: TargetConfigurationProps) {
-  const theme = useTheme();
   const { config, updateConfig } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
@@ -171,95 +164,44 @@ export default function TargetConfiguration({
   };
 
   return (
-    <Stack direction="column" spacing={3}>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-          Configure Target: {selectedTarget.label || 'Unnamed Target'}
-        </Typography>
-
-        <LoadExampleButton />
-      </Box>
-
-      <Typography variant="body1">
-        Configure the specific settings for your target. The fields below will change based on the
-        target type you selected.
-      </Typography>
-
-      {/* Provider Configuration Section */}
-      <ProviderConfigEditor
-        ref={configEditorRef}
-        provider={selectedTarget}
-        setProvider={handleProviderChange}
-        extensions={config.extensions}
-        onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
-        opts={{
-          hideErrors: false,
-          disableModelSelection: false,
-        }}
-        setError={handleError}
-        validateAll={shouldValidate}
-        onValidate={(isValid) => {
-          // Validation errors will be displayed through the handleError function
-        }}
-        providerType={selectedTarget.id?.split(':')[0] || 'custom'}
-      />
-
-      {testingEnabled && (
-        <TestTargetConfiguration
-          testingTarget={testingTarget}
-          handleTestTarget={handleTestTarget}
-          selectedTarget={selectedTarget}
-          testResult={testResult}
-        />
-      )}
-
-      {promptRequired && <Prompts />}
-
-      {/* Navigation Buttons */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: validationErrors ? 'space-between' : 'flex-end',
-          mt: 4,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 2,
-            ...(validationErrors && {
-              justifyContent: 'space-between',
-            }),
+    <PageWrapper
+      title={`Configure Target: ${selectedTarget.label || 'Unnamed Target'}`}
+      description="Configure the specific settings for your target. The fields below will change based on the target type you selected."
+      onNext={handleNext}
+      onBack={onBack}
+      nextDisabled={!isProviderValid()}
+    >
+      <Stack direction="column" spacing={3}>
+        {/* Provider Configuration Section */}
+        <ProviderConfigEditor
+          ref={configEditorRef}
+          provider={selectedTarget}
+          setProvider={handleProviderChange}
+          extensions={config.extensions}
+          onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
+          opts={{
+            hideErrors: false,
+            disableModelSelection: false,
           }}
-        >
-          <Button
-            variant="outlined"
-            startIcon={<KeyboardArrowLeftIcon />}
-            onClick={onBack}
-            sx={{ px: 4, py: 1 }}
-          >
-            Back
-          </Button>
+          setError={handleError}
+          validateAll={shouldValidate}
+          onValidate={(isValid) => {
+            // Validation errors will be displayed through the handleError function
+          }}
+          providerType={selectedTarget.id?.split(':')[0] || 'custom'}
+        />
 
-          <Button
-            variant="contained"
-            onClick={handleNext}
-            endIcon={<KeyboardArrowRightIcon />}
-            disabled={!isProviderValid()}
-            sx={{
-              backgroundColor: theme.palette.primary.main,
-              '&:hover': { backgroundColor: theme.palette.primary.dark },
-              '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
-              px: 4,
-              py: 1,
-            }}
-          >
-            Next
-          </Button>
-        </Box>
-      </Box>
-    </Stack>
+        {testingEnabled && (
+          <TestTargetConfiguration
+            testingTarget={testingTarget}
+            handleTestTarget={handleTestTarget}
+            selectedTarget={selectedTarget}
+            testResult={testResult}
+          />
+        )}
+
+        {promptRequired && <Prompts />}
+      </Stack>
+    </PageWrapper>
   );
 }

@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
-import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import LoadExampleButton from '../LoadExampleButton';
+import PageWrapper from '../PageWrapper';
 import { getProviderType } from './helpers';
 import ProviderTypeSelector from './ProviderTypeSelector';
 
@@ -28,7 +27,6 @@ export default function TargetTypeSelection({
   onBack,
   setupModalOpen,
 }: TargetTypeSelectionProps) {
-  const theme = useTheme();
   const { config, updateConfig } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
@@ -88,121 +86,166 @@ export default function TargetTypeSelection({
   const hasTargetName = selectedTarget?.label?.trim() !== '';
 
   const getNextButtonText = () => {
-    if (!hasTargetName || !showTargetTypeSection) {
-      return 'Next: Select Target Type';
-    }
-
     return 'Next: Configure Target';
   };
 
   const isNextButtonDisabled = () => {
-    if (!hasTargetName) {
-      return true;
-    }
-    if (hasTargetName && !showTargetTypeSection) {
-      return false;
-    }
     return !isValidSelection();
   };
 
+  const shouldShowFooterButton = () => {
+    return showTargetTypeSection;
+  };
+
   return (
-    <Stack direction="column" spacing={3}>
-      <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-        Target Setup
-      </Typography>
-      <Typography variant="body1">
-        Enter a name for your target. This will be used to identify the target in the UI and in the
-        logs.
-      </Typography>
-      {/* Provider Name Field */}
-      <TextField
-        sx={{ mb: 2, width: '360px' }}
-        value={selectedTarget?.label ?? ''}
-        label="Target Name"
-        placeholder="e.g. 'customer-service-agent'"
-        onChange={(e) => {
-          if (selectedTarget) {
-            setSelectedTarget({ ...selectedTarget, label: e.target.value });
-          }
-        }}
-        margin="normal"
-        required
-        autoFocus
-        InputLabelProps={{
-          shrink: true,
-        }}
-      />
-
-      {/* Only show target type selection after user clicks to reveal it */}
-      {showTargetTypeSection && (
-        <>
-          <Box
-            sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-          >
-            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-              Select Target Type
-            </Typography>
-
-            <LoadExampleButton />
-          </Box>
-
-          <Typography variant="body1">
-            Choose the type of target you want to red team. This determines how promptfoo will
-            connect to and test your system. For more information on available targets and how to
-            configure them, please visit our{' '}
-            <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
-              documentation
-            </Link>
-            .
-          </Typography>
-
-          {/* Provider Type Selection */}
-          <ProviderTypeSelector
-            provider={selectedTarget}
-            setProvider={handleProviderChange}
-            providerType={providerType}
-          />
-        </>
-      )}
-
-      {/* Navigation Buttons */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          mt: 4,
-          width: '100%',
-        }}
-      >
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          {onBack && (
-            <Button
-              variant="outlined"
-              startIcon={<KeyboardArrowLeftIcon />}
-              onClick={onBack}
-              sx={{ px: 4, py: 1 }}
-            >
-              Back
-            </Button>
-          )}
-        </Box>
-
-        <Button
-          variant="contained"
-          onClick={handleNext}
-          endIcon={hasTargetName && showTargetTypeSection ? <KeyboardArrowRightIcon /> : null}
-          disabled={isNextButtonDisabled()}
+    <PageWrapper
+      title="Target Setup"
+      description={
+        <Typography variant="body1">
+          A target is the AI system you want to red team. It could be an API endpoint, a language
+          model, a custom script, or any other{' '}
+          <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
+            supported provider
+          </Link>
+          . Choose a descriptive name to identify your target throughout the testing process.
+        </Typography>
+      }
+      onNext={shouldShowFooterButton() ? handleNext : undefined}
+      onBack={onBack}
+      nextLabel={shouldShowFooterButton() ? getNextButtonText() : undefined}
+      nextDisabled={shouldShowFooterButton() ? isNextButtonDisabled() : true}
+    >
+      <Stack direction="column" spacing={4}>
+        {/* Quick Start Section */}
+        <Alert
+          severity="info"
           sx={{
-            backgroundColor: theme.palette.primary.main,
-            '&:hover': { backgroundColor: theme.palette.primary.dark },
-            '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
-            px: 4,
-            py: 1,
+            backgroundColor: 'primary.50',
+            borderColor: 'primary.200',
+            alignItems: 'center',
+            '& .MuiAlert-icon': {
+              color: 'primary.main',
+              mt: 0.25,
+            },
+            '& .MuiAlert-message': {
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              gap: 2,
+              flexWrap: 'wrap',
+            },
           }}
         >
-          {getNextButtonText()}
-        </Button>
-      </Box>
-    </Stack>
+          <Box
+            sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', width: '100%' }}
+          >
+            <Typography variant="body2" sx={{ flex: 1, minWidth: '300px' }}>
+              <strong>New to promptfoo?</strong> Want to see it in action? Load an example
+              configuration to get started immediately!
+            </Typography>
+            <LoadExampleButton />
+          </Box>
+        </Alert>
+
+        {/* Provider Name Field */}
+        <TextField
+          sx={{ width: '360px' }}
+          value={selectedTarget?.label ?? ''}
+          label="Target Name"
+          placeholder="e.g. 'customer-service-agent'"
+          onChange={(e) => {
+            if (selectedTarget) {
+              setSelectedTarget({ ...selectedTarget, label: e.target.value });
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && hasTargetName && !showTargetTypeSection) {
+              setShowTargetTypeSection(true);
+              recordEvent('feature_used', {
+                feature: 'redteam_config_target_type_section_revealed',
+              });
+            }
+          }}
+          margin="normal"
+          required
+          autoFocus
+          InputLabelProps={{
+            shrink: true,
+          }}
+        />
+
+        {/* Inline Next Button for first step */}
+        {hasTargetName && !showTargetTypeSection && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 2 }}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                setShowTargetTypeSection(true);
+                recordEvent('feature_used', {
+                  feature: 'redteam_config_target_type_section_revealed',
+                });
+              }}
+              sx={{ minWidth: '200px' }}
+            >
+              Next: Select Target Type
+            </Button>
+          </Box>
+        )}
+
+        {/* Only show target type selection after user clicks to reveal it */}
+        {showTargetTypeSection && (
+          <Box sx={{ mt: 4 }} gap={4}>
+            <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2, mt: 4 }}>
+              Select Target Type
+            </Typography>
+            <Box sx={{ my: 2 }}>
+              <Typography variant="body1">
+                Select the type that best matches your target. Don't see what you need? Try 'Custom
+                Target' to access{' '}
+                <Link
+                  href="https://www.promptfoo.dev/docs/providers/"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  more providers
+                </Link>
+                . You can also create your own using{' '}
+                <Link
+                  href="https://www.promptfoo.dev/docs/providers/python/"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Python
+                </Link>
+                ,{' '}
+                <Link
+                  href="https://www.promptfoo.dev/docs/providers/custom-api/"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  JavaScript
+                </Link>
+                , or{' '}
+                <Link
+                  href="https://www.promptfoo.dev/docs/providers/custom-script/"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  shell scripts
+                </Link>
+                .
+              </Typography>
+            </Box>
+            {/* Provider Type Selection */}
+            <ProviderTypeSelector
+              provider={selectedTarget}
+              setProvider={handleProviderChange}
+              providerType={providerType}
+            />
+          </Box>
+        )}
+      </Stack>
+    </PageWrapper>
   );
 }

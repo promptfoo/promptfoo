@@ -150,6 +150,7 @@ const Root = styled(Box)(({ theme }) => ({
   display: 'flex',
   backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
   position: 'fixed',
+  width: '100%',
 }));
 
 const OuterSidebarContainer = styled(Box)(({ theme }) => ({
