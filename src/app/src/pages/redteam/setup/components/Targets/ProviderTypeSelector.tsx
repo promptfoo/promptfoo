@@ -773,9 +773,6 @@ export default function ProviderTypeSelector({
                 color: 'text.secondary',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
               }}
             >
               {selectedOption.description}

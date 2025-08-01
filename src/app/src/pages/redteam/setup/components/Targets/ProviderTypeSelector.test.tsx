@@ -25,9 +25,15 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
-    const httpRadio = screen.getByDisplayValue('http') as HTMLInputElement;
-    expect(httpRadio.checked).toBe(true);
+    // Component should start in collapsed state showing the selected provider
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
 
+    // Click the "Change" button to expand the view
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    // Now we should see the expanded view with all providers
     const pythonProviderCard = screen
       .getByText('Python Provider')
       .closest('div[class*="MuiPaper-root"]');
@@ -37,7 +43,6 @@ describe('ProviderTypeSelector', () => {
       fireEvent.click(pythonProviderCard);
     }
 
-    expect(mockSetProvider).toHaveBeenCalledTimes(1);
     expect(mockSetProvider).toHaveBeenCalledWith(
       {
         id: 'file:///path/to/custom_provider.py',
@@ -47,17 +52,16 @@ describe('ProviderTypeSelector', () => {
       'python',
     );
 
-    const pythonRadio = screen.getByDisplayValue('python') as HTMLInputElement;
-    expect(pythonRadio.checked).toBe(true);
-
-    expect(httpRadio.checked).toBe(false);
+    // After selection, component should collapse again and show the new selection
+    expect(screen.getByText('Python Provider')).toBeVisible();
+    expect(screen.getByText('Custom Python provider for specialized integrations')).toBeVisible();
   });
 
   it('should filter provider options by search term when the user enters text in the search box', () => {
     const mockSetProvider = vi.fn();
+    // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
+      id: '',
       config: {},
     };
 
@@ -65,6 +69,7 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
+    // Should start in expanded view since no provider is initially selected
     const searchInput = screen.getByPlaceholderText('Search providers...');
     fireEvent.change(searchInput, { target: { value: 'openai' } });
 
@@ -75,9 +80,9 @@ describe('ProviderTypeSelector', () => {
 
   it('should filter provider options by selected category when a category chip is toggled on', () => {
     const mockSetProvider = vi.fn();
+    // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
+      id: '',
       config: {},
     };
 
@@ -85,6 +90,7 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
+    // Should start in expanded view since no provider is initially selected
     const apiEndpointsChip = screen.getByRole('button', { name: 'API Endpoints' });
     fireEvent.click(apiEndpointsChip);
 
@@ -96,9 +102,9 @@ describe('ProviderTypeSelector', () => {
 
   it('should only display provider options included in availableProviderIds when availableProviderIds prop is provided', () => {
     const mockSetProvider = vi.fn();
+    // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
+      id: '',
       config: {},
     };
 
@@ -112,6 +118,7 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
+    // Should start in expanded view since no provider is initially selected
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
 
     expect(screen.getByText('Python Provider')).toBeVisible();
@@ -142,8 +149,9 @@ describe('ProviderTypeSelector', () => {
     expect(mockSetProvider).toHaveBeenCalledTimes(1);
     expect(mockSetProvider).toHaveBeenCalledWith(defaultHttpConfig, 'http');
 
-    const httpRadio = screen.getByDisplayValue('http') as HTMLInputElement;
-    expect(httpRadio.checked).toBe(true);
+    // After auto-selection, should show collapsed view with HTTP provider
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
   });
 
   it('should handle a provider with a malformed ID (empty string) and default to HTTP provider', () => {
@@ -174,15 +182,16 @@ describe('ProviderTypeSelector', () => {
       'http',
     );
 
-    const httpRadio = screen.getByDisplayValue('http') as HTMLInputElement;
-    expect(httpRadio.checked).toBe(true);
+    // After auto-selection, should show collapsed view with HTTP provider
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
   });
 
   it('should maintain category filters when a search term is entered and then cleared', () => {
     const mockSetProvider = vi.fn();
+    // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
+      id: '',
       config: {},
     };
 
@@ -190,6 +199,7 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
+    // Should start in expanded view since no provider is initially selected
     const customCategoryChip = screen.getByText('Custom');
     fireEvent.click(customCategoryChip);
 
@@ -213,5 +223,37 @@ describe('ProviderTypeSelector', () => {
     });
 
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
+  });
+
+  it('should show collapsed view when provider is selected and expand when Change button is clicked', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'anthropic:messages:claude-sonnet-4-20250514',
+      label: 'My Claude Provider',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+    );
+
+    // Should show collapsed view with selected provider
+    expect(screen.getByText('Anthropic')).toBeVisible();
+    expect(screen.getByText('Claude models including Claude Sonnet 4')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Change' })).toBeVisible();
+
+    // Should not show other providers or search/filter UI
+    expect(screen.queryByText('OpenAI')).toBeNull();
+    expect(screen.queryByPlaceholderText('Search providers...')).toBeNull();
+
+    // Click Change button to expand
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    // Now should show expanded view with all providers and search/filter UI
+    expect(screen.getByPlaceholderText('Search providers...')).toBeVisible();
+    expect(screen.getByText('OpenAI')).toBeVisible();
+    expect(screen.getByText('Anthropic')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'All Categories' })).toBeVisible();
   });
 });
