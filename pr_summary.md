@@ -4,6 +4,7 @@
 - Migrate database driver from `better-sqlite3` to `@libsql/client` (Turso)
 - Fix synchronous operations being awaited (they were no-ops)
 - Align implementation with existing config that specified `dialect: 'turso'`
+- Update drizzle-orm to latest version (0.44.4)
 
 ## Problem
 Our codebase had several issues:
@@ -23,11 +24,13 @@ Migrated to Turso's libSQL client which:
 1. **Dependencies**:
    - Removed: `better-sqlite3`, `@types/better-sqlite3`
    - Using existing: `@libsql/client` (was already installed)
+   - Updated: `drizzle-orm` from 0.44.3 to 0.44.4
 
 2. **Code changes**:
    - Replaced database connection from better-sqlite3 to libSQL
    - Removed all `.all()`, `.run()`, `.get()` suffixes (Turso is async by default)
    - Converted all transactions to async pattern: `await db.transaction(async (tx) => {...})`
+   - Added `await` to all operations within transactions (required in drizzle-orm 0.44.4)
    - Fixed raw SQL queries to use `db.all(sql.raw(query))` instead of string concatenation
 
 3. **Test updates**:
