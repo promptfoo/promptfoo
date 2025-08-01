@@ -9,7 +9,10 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
+import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -30,6 +33,7 @@ export default function PluginConfigDialog({
   onClose,
   onSave,
 }: PluginConfigDialogProps) {
+  const { config: redTeamConfig } = useRedTeamConfig();
   // Initialize with provided config
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
@@ -92,14 +96,112 @@ export default function PluginConfigDialog({
 
     switch (plugin) {
       case 'policy':
+        // Show read-only list of all configured policies
+        const policyPlugins = redTeamConfig.plugins.filter(
+          (p): p is { id: string; config: any } =>
+            typeof p === 'object' && 'id' in p && p.id === 'policy',
+        );
+
+        if (policyPlugins.length === 0) {
+          return (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              No custom policies configured. Add policies in the Custom Policies section.
+            </Typography>
+          );
+        }
+
+        return (
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Configured Custom Policies ({policyPlugins.length})
+            </Typography>
+            {policyPlugins.map((policyPlugin, index) => (
+              <Paper
+                key={index}
+                variant="outlined"
+                sx={{ p: 2, mb: 2, backgroundColor: 'grey.50' }}
+              >
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mb: 1, display: 'block' }}
+                >
+                  Policy {index + 1}
+                </Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                  {policyPlugin.config.policy || 'No policy text'}
+                </Typography>
+              </Paper>
+            ))}
+            <Typography variant="caption" color="text.secondary">
+              To edit or add policies, use the Custom Policies section in Available Plugins.
+            </Typography>
+          </Box>
+        );
+      case 'intent':
+        // Show read-only list of all configured custom intents
+        const intentPlugin = redTeamConfig.plugins.find(
+          (p): p is { id: string; config: any } =>
+            typeof p === 'object' && 'id' in p && p.id === 'intent',
+        );
+
+        if (!intentPlugin?.config?.intent) {
+          return (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              No custom intents configured. Add intents in the Custom Prompts section.
+            </Typography>
+          );
+        }
+
+        const intents = intentPlugin.config.intent;
+        const flatIntents = intents
+          .flat()
+          .filter((intent: any) => typeof intent === 'string' && intent.trim());
+
+        if (flatIntents.length === 0) {
+          return (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              No custom intents configured. Add intents in the Custom Prompts section.
+            </Typography>
+          );
+        }
+
+        return (
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Configured Custom Intents ({flatIntents.length})
+            </Typography>
+            {flatIntents.map((intent: string, index: number) => (
+              <Paper
+                key={index}
+                variant="outlined"
+                sx={{ p: 2, mb: 2, backgroundColor: 'grey.50' }}
+              >
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mb: 1, display: 'block' }}
+                >
+                  Intent {index + 1}
+                </Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                  {intent}
+                </Typography>
+              </Paper>
+            ))}
+            <Typography variant="caption" color="text.secondary">
+              To edit or add intents, use the Custom Prompts section in Available Plugins.
+            </Typography>
+          </Box>
+        );
       case 'prompt-extraction':
-        const key = plugin === 'policy' ? 'policy' : 'systemPrompt';
+        const key = 'systemPrompt';
         return (
           <TextField
             fullWidth
             multiline
             rows={4}
-            label={plugin === 'policy' ? 'Policy' : 'System Prompt'}
+            label="System Prompt"
             variant="outlined"
             margin="normal"
             value={localConfig[key] || ''}
@@ -176,15 +278,29 @@ export default function PluginConfigDialog({
     }
   };
 
+  const isReadOnlyPlugin = plugin === 'policy' || plugin === 'intent';
+
+  const getDialogTitle = () => {
+    if (plugin === 'policy') {
+      return 'View Custom Policies';
+    }
+    if (plugin === 'intent') {
+      return 'View Custom Intents';
+    }
+    return `Configure ${plugin}`;
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Configure {plugin}</DialogTitle>
+      <DialogTitle>{getDialogTitle()}</DialogTitle>
       <DialogContent>{renderConfigInputs()}</DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave} variant="contained">
-          Save
-        </Button>
+        <Button onClick={onClose}>{isReadOnlyPlugin ? 'Close' : 'Cancel'}</Button>
+        {!isReadOnlyPlugin && (
+          <Button onClick={handleSave} variant="contained">
+            Save
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );
