@@ -1,15 +1,15 @@
-import { fetchWithProxy } from '../../../src/fetch';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { PlinyGrader, PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import { fetchWithProxy } from '../../../src/util/fetch';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),
 }));
 
-jest.mock('../../../src/fetch', () => ({
+jest.mock('../../../src/util/fetch/index.ts', () => ({
   fetchWithProxy: jest.fn(),
 }));
 

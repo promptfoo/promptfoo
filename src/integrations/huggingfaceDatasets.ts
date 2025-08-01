@@ -1,9 +1,9 @@
 import dedent from 'dedent';
 import { getEnvString } from '../envars';
-import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 
 import type { TestCase } from '../types';
+import { fetchWithProxy } from '../util/fetch';
 
 interface HuggingFaceResponse {
   num_rows_total: number;

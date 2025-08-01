@@ -10,6 +10,7 @@ import {
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { fetchWithRetries } from '../../util/fetch';
 import invariant from '../../util/invariant';
 import { ProviderOptionsSchema } from '../../validators/providers';
 import type { Request, Response } from 'express';
@@ -81,19 +82,23 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
         result: ${JSON.stringify(result)}
         providerOptions: ${JSON.stringify(providerOptions)}`,
     );
-    const testAnalyzerResponse = await fetch(`${HOST}/api/v1/providers/test`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const testAnalyzerResponse = await fetchWithRetries(
+      `${HOST}/api/v1/providers/test`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          config: providerOptions,
+          providerResponse: result?.raw,
+          parsedResponse: result?.output,
+          error: result?.error,
+          headers: result?.metadata?.headers,
+        }),
       },
-      body: JSON.stringify({
-        config: providerOptions,
-        providerResponse: result?.raw,
-        parsedResponse: result?.output,
-        error: result?.error,
-        headers: result?.metadata?.headers,
-      }),
-    });
+      60000, // 60 second timeout
+    );
 
     if (!testAnalyzerResponse.ok) {
       logger.error(

@@ -1,12 +1,11 @@
-import { fetchWithCache } from '../cache';
 import { VERSION } from '../constants';
-import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import {
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
 } from '../redteam/remoteGeneration';
+import { fetchWithRetries } from '../util/fetch';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -150,7 +149,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
-      const { data, status, statusText } = await fetchWithCache(
+      const response = await fetchWithRetries(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -162,11 +161,11 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         REQUEST_TIMEOUT_MS,
       );
 
-      const { result, tokenUsage } = data;
+      const data = await response.json();
 
-      if (!result) {
+      if (!data.result) {
         logger.error(
-          `Error from promptfoo completion provider. Status: ${status} ${statusText} ${JSON.stringify(data)} `,
+          `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {
           error: 'LLM did not return a result, likely refusal',
@@ -174,8 +173,8 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       }
 
       return {
-        output: result,
-        tokenUsage,
+        output: data.result,
+        tokenUsage: data.tokenUsage,
       };
     } catch (err) {
       return {

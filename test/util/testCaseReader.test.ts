@@ -19,7 +19,7 @@ import {
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-jest.mock('../../src/fetch', () => ({
+jest.mock('../../src/util/fetch', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
@@ -32,6 +32,7 @@ jest.mock('glob', () => ({
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),
 }));
+jest.mock('../../src/util/fetch/index.ts');
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
