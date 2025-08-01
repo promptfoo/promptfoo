@@ -147,8 +147,7 @@ function a11yProps(index: number) {
 const Root = styled(Box)(({ theme }) => ({
   display: 'flex',
   backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
-  minHeight: '100vh',
-  position: 'relative',
+  position: 'fixed',
 }));
 
 const OuterSidebarContainer = styled(Box)(({ theme }) => ({

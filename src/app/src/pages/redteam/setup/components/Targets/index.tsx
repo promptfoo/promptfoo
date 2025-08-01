@@ -356,7 +356,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   return (
     <PageWrapper
-      title="Targets"
+      title="Target Configuration"
       description={
         <>
           <Typography variant="body1" sx={{ mb: 2 }}>

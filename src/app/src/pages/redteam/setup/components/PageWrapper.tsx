@@ -22,10 +22,17 @@ interface PageWrapperProps {
 const Root = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
-  height: '100%',
+  height: '100vh',
   width: '100%',
   overflow: 'hidden',
 }));
+
+const ContentContainer = styled(Box)({
+  flex: 1,
+  overflow: 'auto',
+  position: 'relative',
+  height: 0, // This forces flex child to respect flex: 1
+});
 
 const HeaderContainer = styled(Box, {
   shouldForwardProp: (prop) => prop !== 'isMinimized',
@@ -70,15 +77,9 @@ const DescriptionTypography = styled(Typography, {
   }),
 }));
 
-const ContentContainer = styled(Box)({
-  flex: 1,
-  overflow: 'auto',
-  position: 'relative',
-});
-
 const ContentBox = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(0, 3, 3, 3),
-  paddingBottom: '100px', // Space for fixed navigation
+  padding: theme.spacing(3),
+  marginBottom: '200px', // Space for fixed navigation
 }));
 
 const NavigationContainer = styled(Box)(({ theme }) => ({
@@ -138,7 +139,6 @@ export default function PageWrapper({
           </DescriptionTypography>
         )}
       </HeaderContainer>
-
       <ContentContainer ref={contentRef}>
         <ContentBox>{children}</ContentBox>
       </ContentContainer>
