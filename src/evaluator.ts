@@ -1534,6 +1534,9 @@ class Evaluator {
       if (compareRowsCount > 0) {
         progressBarManager.createComparisonBar(compareRowsCount);
       }
+    } else if (ciProgressReporter && compareRowsCount > 0) {
+      // Update total tests to include comparison tests
+      ciProgressReporter.updateTotalTests(runEvalOptions.length + compareRowsCount);
     }
 
     let compareCount = 0;
@@ -1622,7 +1625,9 @@ class Evaluator {
         }
         if (progressBarManager) {
           progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
-        } else if (!isWebUI && !ciProgressReporter) {
+        } else if (ciProgressReporter) {
+          ciProgressReporter.update(runEvalOptions.length + compareCount);
+        } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
       }
@@ -1660,7 +1665,11 @@ class Evaluator {
           // Update progress bar
           if (progressBarManager) {
             progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
-          } else if (!isWebUI && !ciProgressReporter) {
+          } else if (ciProgressReporter) {
+            // For max-score assertions, we're still in the comparison phase
+            // so we add to the total completed count
+            ciProgressReporter.update(runEvalOptions.length + compareCount);
+          } else if (!isWebUI) {
             logger.debug(`Max-score assertion for test #${testIdx} complete`);
           }
 

@@ -51,6 +51,13 @@ export class CIProgressReporter {
     }
   }
 
+  updateTotalTests(newTotal: number): void {
+    this.totalTests = Math.max(newTotal, 1);
+    // Recalculate percentage with new total
+    const percentage = Math.floor((this.completedTests / this.totalTests) * 100);
+    this.highestPercentageSeen = percentage;
+  }
+
   finish(): void {
     if (this.intervalId) {
       clearInterval(this.intervalId);
