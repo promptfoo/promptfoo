@@ -1,4 +1,11 @@
 import { getDb } from '../../src/database';
+import {
+  evalResultsTable,
+  evalsTable,
+  evalsToDatasetsTable,
+  evalsToPromptsTable,
+  evalsToTagsTable,
+} from '../../src/database/tables';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, { getEvalSummaries } from '../../src/models/eval';
@@ -20,12 +27,12 @@ describe('evaluator', () => {
     // Clear all tables before each test
     const db = getDb();
     // Delete related tables first
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
+    await db.delete(evalResultsTable);
+    await db.delete(evalsToDatasetsTable);
+    await db.delete(evalsToPromptsTable);
+    await db.delete(evalsToTagsTable);
     // Then delete from main table
-    await db.run('DELETE FROM evals');
+    await db.delete(evalsTable);
   });
 
   describe('summaryResults', () => {

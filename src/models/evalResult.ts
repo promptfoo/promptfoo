@@ -192,7 +192,7 @@ export default class EvalResult {
             lt(evalResultsTable.testIdx, offset + batchSize),
           ),
         )
-        .all();
+        ;
 
       if (results.length === 0) {
         break;

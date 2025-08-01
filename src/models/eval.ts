@@ -60,8 +60,8 @@ export class EvalQueries {
       `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
 FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string; eval_id: string }[] = await db.all(query);
+    // Execute raw SQL with libSQL
+    const results = await db.execute(query) as { key: string; eval_id: string }[];
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];
       acc[r.eval_id].push(r.key);
@@ -76,8 +76,8 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
     FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+    // Execute raw SQL with libSQL
+    const results = await db.execute(query) as { key: string }[];
     const vars = results.map((r) => r.key);
 
     return vars;
@@ -86,7 +86,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
   static async setVars(evalId: string, vars: string[]) {
     const db = getDb();
     try {
-      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId));
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
@@ -128,20 +128,19 @@ export default class Eval {
   static async findById(id: string) {
     const db = getDb();
 
-    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
+    const evalData = await db.select().from(evalsTable).where(eq(evalsTable.id, id));
 
     if (evalData.length === 0) {
       return undefined;
     }
 
-    const datasetResults = db
+    const datasetResults = await db
       .select({
         datasetId: evalsToDatasetsTable.datasetId,
       })
       .from(evalsToDatasetsTable)
       .where(eq(evalsToDatasetsTable.evalId, id))
-      .limit(1)
-      .all();
+      .limit(1);
 
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
@@ -176,8 +175,7 @@ export default class Eval {
       .select()
       .from(evalsTable)
       .limit(limit)
-      .orderBy(desc(evalsTable.createdAt))
-      .all();
+      .orderBy(desc(evalsTable.createdAt));
     return evals.map(
       (e) =>
         new Eval(e.config, {
@@ -210,8 +208,8 @@ export default class Eval {
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
-    db.transaction(() => {
-      db.insert(evalsTable)
+    await db.transaction(async (tx) => {
+      tx.insert(evalsTable)
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
@@ -220,55 +218,49 @@ export default class Eval {
           config,
           results: {},
           vars: opts?.vars || [],
-        })
-        .run();
+        });
 
       for (const prompt of renderedPrompts) {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
 
-        db.insert(promptsTable)
+        tx.insert(promptsTable)
           .values({
             id: promptId,
             prompt: label,
           })
-          .onConflictDoNothing()
-          .run();
+          .onConflictDoNothing();
 
-        db.insert(evalsToPromptsTable)
+        tx.insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
           })
-          .onConflictDoNothing()
-          .run();
+          .onConflictDoNothing();
 
         logger.debug(`Inserting prompt ${promptId}`);
       }
 
       if (opts?.results && opts.results.length > 0) {
-        const res = db
+        await tx
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
-          .run();
-        logger.debug(`Inserted ${res.changes} eval results`);
+          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })));
+        logger.debug(`Inserted eval results`);
       }
 
-      db.insert(datasetsTable)
+      tx.insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
         })
-        .onConflictDoNothing()
-        .run();
+        .onConflictDoNothing();
 
-      db.insert(evalsToDatasetsTable)
+      tx.insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
         })
-        .onConflictDoNothing()
-        .run();
+        .onConflictDoNothing();
 
       logger.debug(`Inserting dataset ${datasetId}`);
 
@@ -276,22 +268,20 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          db.insert(tagsTable)
+          tx.insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
               value: tagValue,
             })
-            .onConflictDoNothing()
-            .run();
+            .onConflictDoNothing();
 
-          db.insert(evalsToTagsTable)
+          tx.insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,
             })
-            .onConflictDoNothing()
-            .run();
+            .onConflictDoNothing();
 
           logger.debug(`Inserting tag ${tagId}`);
         }
@@ -360,7 +350,7 @@ export default class Eval {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id));
     this.persisted = true;
   }
 
@@ -410,11 +400,10 @@ export default class Eval {
 
   async getResultsCount(): Promise<number> {
     const db = getDb();
-    const result = db
+    const result = await db
       .select({ count: sql<number>`count(*)` })
       .from(evalResultsTable)
-      .where(eq(evalResultsTable.evalId, this.id))
-      .all();
+      .where(eq(evalResultsTable.evalId, this.id));
     const count = result[0]?.count ?? 0;
     return Number(count);
   }
@@ -647,7 +636,7 @@ export default class Eval {
     this.prompts = prompts;
     if (this.persisted) {
       const db = getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id));
     }
   }
 
@@ -749,12 +738,12 @@ export default class Eval {
 
   async delete() {
     const db = getDb();
-    db.transaction(() => {
-      db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
-      db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
-      db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
-      db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
-      db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
+    await db.transaction(async (tx) => {
+      tx.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id));
+      tx.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id));
+      tx.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id));
+      tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id));
+      tx.delete(evalsTable).where(eq(evalsTable.id, this.id));
     });
   }
 }
@@ -768,7 +757,7 @@ export default class Eval {
 export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
   const db = getDb();
 
-  const results = db
+  const results = await db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
@@ -780,8 +769,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
-    .orderBy(desc(evalsTable.createdAt))
-    .all();
+    .orderBy(desc(evalsTable.createdAt));
 
   /**
    * Deserialize the evals. A few things to note:

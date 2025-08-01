@@ -51,8 +51,7 @@ export async function writeResultsToDatabase(
         config,
         results,
       })
-      .onConflictDoNothing()
-      .run(),
+      .onConflictDoNothing(),
   );
 
   logger.debug(`Inserting eval ${evalId}`);
@@ -71,8 +70,7 @@ export async function writeResultsToDatabase(
           id: promptId,
           prompt: label,
         })
-        .onConflictDoNothing()
-        .run(),
+        .onConflictDoNothing(),
     );
 
     promises.push(
@@ -82,8 +80,7 @@ export async function writeResultsToDatabase(
           evalId,
           promptId,
         })
-        .onConflictDoNothing()
-        .run(),
+        .onConflictDoNothing(),
     );
 
     logger.debug(`Inserting prompt ${promptId}`);
@@ -110,8 +107,7 @@ export async function writeResultsToDatabase(
         id: datasetId,
         tests: testsForStorage,
       })
-      .onConflictDoNothing()
-      .run(),
+      .onConflictDoNothing(),
   );
 
   promises.push(
@@ -121,8 +117,7 @@ export async function writeResultsToDatabase(
         evalId,
         datasetId,
       })
-      .onConflictDoNothing()
-      .run(),
+      .onConflictDoNothing(),
   );
 
   logger.debug(`Inserting dataset ${datasetId}`);
@@ -140,8 +135,7 @@ export async function writeResultsToDatabase(
             name: tagKey,
             value: tagValue,
           })
-          .onConflictDoNothing()
-          .run(),
+          .onConflictDoNothing(),
       );
 
       promises.push(
@@ -151,8 +145,7 @@ export async function writeResultsToDatabase(
             evalId,
             tagId,
           })
-          .onConflictDoNothing()
-          .run(),
+          .onConflictDoNothing(),
       );
 
       logger.debug(`Inserting tag ${tagId}`);
@@ -392,8 +385,7 @@ async function getEvalsWithPredicate(
     })
     .from(evalsTable)
     .orderBy(desc(evalsTable.createdAt))
-    .limit(limit)
-    .all();
+    .limit(limit);
 
   const ret: EvalWithMetadata[] = [];
 
@@ -439,18 +431,15 @@ export async function getEvalFromId(hash: string) {
 
 export async function deleteEval(evalId: string) {
   const db = getDb();
-  db.transaction(() => {
+  await db.transaction(async (tx) => {
     // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
-    db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
-    db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
-    db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
-    db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
+    tx.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId));
+    tx.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId));
+    tx.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId));
+    tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId));
 
     // Finally, delete the eval record
-    const deletedIds = db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
-    if (deletedIds.changes === 0) {
-      throw new Error(`Eval with ID ${evalId} not found`);
-    }
+    tx.delete(evalsTable).where(eq(evalsTable.id, evalId));
   });
 }
 
@@ -461,12 +450,12 @@ export async function deleteEval(evalId: string) {
  */
 export async function deleteAllEvals(): Promise<void> {
   const db = getDb();
-  db.transaction(() => {
-    db.delete(evalResultsTable).run();
-    db.delete(evalsToPromptsTable).run();
-    db.delete(evalsToDatasetsTable).run();
-    db.delete(evalsToTagsTable).run();
-    db.delete(evalsTable).run();
+  await db.transaction(async (tx) => {
+    tx.delete(evalResultsTable);
+    tx.delete(evalsToPromptsTable);
+    tx.delete(evalsToDatasetsTable);
+    tx.delete(evalsToTagsTable);
+    tx.delete(evalsTable);
   });
 }
 
@@ -502,7 +491,7 @@ export async function getStandaloneEvals({
   }
 
   const db = getDb();
-  const results = db
+  const results = await db
     .select({
       evalId: evalsTable.id,
       description: evalsTable.description,
@@ -526,8 +515,7 @@ export async function getStandaloneEvals({
       ),
     )
     .orderBy(desc(evalsTable.createdAt))
-    .limit(limit)
-    .all();
+    .limit(limit);
 
   // TODO(Performance): Load all necessary data in one go rather than re-requesting each eval!
   const standaloneEvals = (

@@ -40,7 +40,7 @@ export function importCommand(program: Command) {
               results: evalData.results,
               config: evalData.config,
             })
-            .run();
+            ;
         }
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
