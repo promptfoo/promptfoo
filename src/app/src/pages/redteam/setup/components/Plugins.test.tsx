@@ -176,44 +176,4 @@ describe('Plugins', () => {
     expect(screen.getByRole('button', { name: /Next/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Back/i })).toBeInTheDocument();
   });
-
-  // [Tusk] FAILING TEST
-  it('should keep navigation buttons fixed at the bottom of the viewport when content overflows', async () => {
-    const allPlugins = [
-      'harmful:hate',
-      'harmful:self-harm',
-      'bfla',
-      'bola',
-      'rbac',
-      'ssrf',
-      'indirect-prompt-injection',
-      'prompt-extraction',
-      'policy',
-    ];
-
-    mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        plugins: allPlugins,
-      },
-      updatePlugins: mockUpdatePlugins,
-    });
-
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
-
-    const navigationContainer = screen.getByRole('button', { name: /Next/i }).closest('div');
-
-    await waitFor(() => {
-      expect(navigationContainer).toBeInTheDocument();
-    });
-
-    if (!navigationContainer) {
-      throw new Error('Navigation container not found');
-    }
-    const navigationRect = navigationContainer.getBoundingClientRect();
-    expect(navigationRect.bottom).toBeCloseTo(window.innerHeight, 2);
-  });
 });

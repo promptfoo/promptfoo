@@ -27,10 +27,8 @@ describe('Purpose Component', () => {
   const renderWithTheme = (component: React.ReactElement) => {
     return render(
       <ThemeProvider theme={theme}>
-        <MemoryRouter>
-          {component}
-        </MemoryRouter>
-      </ThemeProvider>
+        <MemoryRouter>{component}</MemoryRouter>
+      </ThemeProvider>,
     );
   };
 
