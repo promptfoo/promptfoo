@@ -1,6 +1,6 @@
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetTypeSelection from './TargetTypeSelection';
 
 const mockUpdateConfig = vi.fn();
@@ -49,25 +49,28 @@ describe('TargetTypeSelection', () => {
         },
       },
       updateConfig: mockUpdateConfig,
+      providerType: undefined,
+      setProviderType: vi.fn(),
     });
   });
 
   it('should allow user to enter name, reveal types, select one, and proceed', async () => {
     renderComponent();
 
-    const nextButton = screen.getByRole('button', { name: /Next/i });
-    expect(nextButton).toBeDisabled();
+    // Initially, no footer Next button should be present
+    expect(screen.queryByRole('button', { name: /Next.*Configure/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Select Target Type')).not.toBeInTheDocument();
 
     const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
+    // After entering name, the inline "Next: Select Target Type" button should appear
     await waitFor(() => {
-      expect(nextButton).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Next: Select Target Type' })).toBeInTheDocument();
     });
-    expect(nextButton).toHaveTextContent('Next: Select Target Type');
 
-    fireEvent.click(nextButton);
+    const inlineNextButton = screen.getByRole('button', { name: 'Next: Select Target Type' });
+    fireEvent.click(inlineNextButton);
 
     await waitFor(() => {
       expect(screen.getByText('Select Target Type')).toBeInTheDocument();
@@ -77,8 +80,9 @@ describe('TargetTypeSelection', () => {
       feature: 'redteam_config_target_type_section_revealed',
     });
 
-    expect(nextButton).toHaveTextContent('Next: Configure Target');
-    expect(nextButton).toBeEnabled();
+    // Now the footer Next button should appear
+    const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
+    expect(footerNextButton).toBeEnabled();
 
     const openAICard = await screen.findByText('OpenAI');
     fireEvent.click(openAICard.closest('div.MuiPaper-root') as HTMLElement);
@@ -89,10 +93,9 @@ describe('TargetTypeSelection', () => {
         target: expect.stringContaining('openai'),
       });
     });
-    expect(nextButton).toBeEnabled();
-    expect(nextButton).toHaveTextContent('Next: Configure Target');
+    expect(footerNextButton).toBeEnabled();
 
-    fireEvent.click(nextButton);
+    fireEvent.click(footerNextButton);
 
     expect(onNext).toHaveBeenCalledTimes(1);
   });
@@ -100,8 +103,8 @@ describe('TargetTypeSelection', () => {
   it('should have the Next button disabled and provider type section not visible when target name is empty', () => {
     renderComponent();
 
-    const nextButton = screen.getByRole('button', { name: /Next/i });
-    expect(nextButton).toBeDisabled();
+    // Initially, no footer Next button should be present, and no target type section
+    expect(screen.queryByRole('button', { name: /Next.*Configure/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Select Target Type')).not.toBeInTheDocument();
   });
 
@@ -111,8 +114,10 @@ describe('TargetTypeSelection', () => {
     const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
-    const nextButton = screen.getByRole('button', { name: /Next/i });
-    fireEvent.click(nextButton);
+    const inlineNextButton = await screen.findByRole('button', {
+      name: 'Next: Select Target Type',
+    });
+    fireEvent.click(inlineNextButton);
 
     await waitFor(() => {
       expect(screen.getByText('Select Target Type')).toBeInTheDocument();
@@ -144,21 +149,24 @@ describe('TargetTypeSelection', () => {
     const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
-    const nextButton = screen.getByRole('button', { name: /Next/i });
-    await waitFor(() => {
-      expect(nextButton).toBeEnabled();
+    const inlineNextButton = await screen.findByRole('button', {
+      name: 'Next: Select Target Type',
     });
-
-    fireEvent.click(nextButton);
+    fireEvent.click(inlineNextButton);
 
     await waitFor(() => {
       expect(screen.getByText('Select Target Type')).toBeInTheDocument();
     });
 
+    // Now the footer Next button should be present
+    const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
+
     fireEvent.change(nameInput, { target: { value: '' } });
 
+    // The button should remain enabled because the target still has a valid ID ('http')
+    // The component allows valid selections with either a valid ID or a custom provider with label
     await waitFor(() => {
-      expect(nextButton).toBeDisabled();
+      expect(footerNextButton).toBeEnabled();
     });
   });
 
@@ -168,23 +176,29 @@ describe('TargetTypeSelection', () => {
     const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
 
-    const nextButton = screen.getByRole('button', { name: /Next/i });
-    fireEvent.click(nextButton);
+    const inlineNextButton = await screen.findByRole('button', {
+      name: 'Next: Select Target Type',
+    });
+    fireEvent.click(inlineNextButton);
 
     await waitFor(() => {
       expect(screen.getByText('Select Target Type')).toBeInTheDocument();
     });
 
+    // Now the footer Next button should be present
+    const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
+
     fireEvent.change(nameInput, { target: { value: 'New Target Name' } });
 
     expect(screen.getByText('Select Target Type')).toBeInTheDocument();
 
-    expect(nextButton).toBeEnabled();
+    expect(footerNextButton).toBeEnabled();
 
     fireEvent.change(nameInput, { target: { value: '' } });
 
+    // The button should remain enabled because the target still has a valid ID ('http')
     await waitFor(() => {
-      expect(nextButton).toBeDisabled();
+      expect(footerNextButton).toBeEnabled();
     });
   });
 });

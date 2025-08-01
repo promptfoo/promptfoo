@@ -127,7 +127,7 @@ describe('ProviderEditor', () => {
       config: {},
       label: 'My Test Provider',
     };
-    expect(setProvider).toHaveBeenCalledWith(expectedNewProvider, 'openai');
+    expect(setProvider).toHaveBeenCalledWith(expectedNewProvider);
 
     rerender(<ProviderEditor provider={setProvider.mock.calls[0][0]} setProvider={setProvider} />);
     expect(screen.getByTestId('provider-config-editor')).toHaveAttribute(

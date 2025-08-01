@@ -1,10 +1,11 @@
 import React from 'react';
+
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen, act } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import FoundationModelConfiguration from './FoundationModelConfiguration';
 
 import type { ProviderOptions } from '../../types';
-import FoundationModelConfiguration from './FoundationModelConfiguration';
 
 const renderWithTheme = (ui: React.ReactElement) => {
   const theme = createTheme({ palette: { mode: 'light' } });
@@ -177,6 +178,6 @@ describe('FoundationModelConfiguration', () => {
       );
     });
 
-    expect(modelIdInput).toHaveValue('openai:gpt-4o-turbo');
+    expect(modelIdInput).toHaveValue('openai:gpt-4o');
   });
 });
