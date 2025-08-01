@@ -67,17 +67,17 @@ export const PROVIDERS: ProviderEntry[] = [
     name: 'azure',
     config: AzureProviderConfig,
     hasCredentials: (env) => {
-      const hasApiKey = isKeySet('AZURE_OPENAI_API_KEY', env) || isKeySet('AZURE_API_KEY', env);
+      const hasAuth =
+        isKeySet('AZURE_OPENAI_API_KEY', env) ||
+        isKeySet('AZURE_API_KEY', env) ||
+        (isKeySet('AZURE_CLIENT_ID', env) &&
+          isKeySet('AZURE_CLIENT_SECRET', env) &&
+          isKeySet('AZURE_TENANT_ID', env));
 
-      const hasClientCreds =
-        isKeySet('AZURE_CLIENT_ID', env) &&
-        isKeySet('AZURE_CLIENT_SECRET', env) &&
-        isKeySet('AZURE_TENANT_ID', env);
-
-      const hasDeploymentName =
+      const hasDeployment =
         isKeySet('AZURE_DEPLOYMENT_NAME', env) || isKeySet('AZURE_OPENAI_DEPLOYMENT_NAME', env);
 
-      return (hasApiKey || hasClientCreds) && hasDeploymentName;
+      return hasAuth && hasDeployment;
     },
   },
 

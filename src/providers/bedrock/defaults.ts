@@ -4,58 +4,27 @@ import type { ProviderConfiguration } from '../../types/providerConfig';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock';
 import { OpenAiModerationProvider } from '../openai/moderation';
 
-// Nova Pro provider for general completions
-export const DefaultGradingProvider = new AwsBedrockCompletionProvider('amazon.nova-pro-v1:0');
-
-// Nova Pro provider for JSON responses
-export const DefaultGradingJsonProvider = new AwsBedrockCompletionProvider('amazon.nova-pro-v1:0', {
-  config: {
-    // Nova Pro doesn't have direct JSON response format control like OpenAI
-    // but we can include it in the prompt instructions
-  },
-});
-
-// Amazon Titan Embeddings provider
-export const DefaultEmbeddingProvider = new AwsBedrockEmbeddingProvider(
-  'amazon.titan-embed-text-v1',
-);
-
-// Nova Pro provider for suggestions
-export const DefaultSuggestionsProvider = new AwsBedrockCompletionProvider('amazon.nova-pro-v1:0');
-
-// Use Claude model through Bedrock for LLM rubric evaluation
-export const DefaultLlmRubricProvider = new AwsBedrockCompletionProvider(
-  'us.anthropic.claude-sonnet-4-20250514-v1:0',
-);
+const DEFAULT_MODEL = 'amazon.nova-pro-v1:0';
+const CLAUDE_MODEL = 'us.anthropic.claude-sonnet-4-20250514-v1:0';
+const EMBEDDING_MODEL = 'amazon.titan-embed-text-v1';
 
 /**
  * AWS Bedrock provider configuration
  */
 export const BedrockProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
   logger.debug('Using AWS Bedrock default providers');
+
+  const standardConfig = { env };
+  // Nova Pro doesn't have direct JSON response format control like OpenAI
+  const jsonConfig = { env, config: {} };
+
   return {
-    embeddingProvider: new AwsBedrockEmbeddingProvider('amazon.titan-embed-text-v1', { env }),
-    gradingJsonProvider: new AwsBedrockCompletionProvider('amazon.nova-pro-v1:0', {
-      env,
-      config: {
-        // Nova Pro doesn't have direct JSON response format control like OpenAI
-        // but we can include it in the prompt instructions
-      },
-    }),
-    gradingProvider: new AwsBedrockCompletionProvider('amazon.nova-pro-v1:0', { env }),
-    llmRubricProvider: new AwsBedrockCompletionProvider(
-      'us.anthropic.claude-sonnet-4-20250514-v1:0',
-      { env },
-    ),
-    // No built-in moderation in Bedrock, use OpenAI
-    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest', { env }),
-    suggestionsProvider: new AwsBedrockCompletionProvider('amazon.nova-pro-v1:0', { env }),
-    synthesizeProvider: new AwsBedrockCompletionProvider('amazon.nova-pro-v1:0', {
-      env,
-      config: {
-        // Nova Pro doesn't have direct JSON response format control like OpenAI
-        // but we can include it in the prompt instructions
-      },
-    }),
+    embeddingProvider: new AwsBedrockEmbeddingProvider(EMBEDDING_MODEL, standardConfig),
+    gradingJsonProvider: new AwsBedrockCompletionProvider(DEFAULT_MODEL, jsonConfig),
+    gradingProvider: new AwsBedrockCompletionProvider(DEFAULT_MODEL, standardConfig),
+    llmRubricProvider: new AwsBedrockCompletionProvider(CLAUDE_MODEL, standardConfig),
+    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest', standardConfig),
+    suggestionsProvider: new AwsBedrockCompletionProvider(DEFAULT_MODEL, standardConfig),
+    synthesizeProvider: new AwsBedrockCompletionProvider(DEFAULT_MODEL, jsonConfig),
   };
 };
