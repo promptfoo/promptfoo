@@ -28,15 +28,12 @@ export async function createAndDisplayShareableUrl(
   evalRecord: Eval,
   showAuth: boolean,
 ): Promise<string | null> {
-  logger.debug(`Creating shareable URL for eval ${evalRecord.id}, showAuth: ${showAuth}`);
   const url = await createShareableUrl(evalRecord, showAuth);
 
   if (url) {
     logger.info(`View results: ${chalk.greenBright.bold(url)}`);
-    logger.debug(`Successfully created shareable URL: ${url}`);
   } else {
-    logger.error('Failed to create shareable URL');
-    logger.debug(`Failed to create shareable URL for eval ${evalRecord.id}`);
+    logger.error(`Failed to create shareable URL for eval ${evalRecord.id}`);
     process.exitCode = 1;
   }
   return url;
@@ -66,22 +63,15 @@ export function shareCommand(program: Command) {
           name: 'share',
         });
 
-        logger.debug(
-          `Share command started with evalId: ${evalId || 'latest'}, showAuth: ${cmdObj.showAuth}`,
-        );
-
         let eval_: Eval | undefined | null = null;
         if (evalId) {
-          logger.debug(`Looking for specific eval with ID: ${evalId}`);
           eval_ = await Eval.findById(evalId);
           if (!eval_) {
             logger.error(`Could not find eval with ID ${chalk.bold(evalId)}.`);
             process.exitCode = 1;
             return;
           }
-          logger.debug(`Found eval ${evalId} with ${eval_.prompts.length} prompts`);
         } else {
-          logger.debug(`Looking for latest eval`);
           eval_ = await Eval.latest();
           if (!eval_) {
             logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
@@ -89,7 +79,6 @@ export function shareCommand(program: Command) {
             return;
           }
           logger.info(`Sharing latest eval (${eval_.id})`);
-          logger.debug(`Latest eval has ${eval_.prompts.length} prompts`);
         }
 
         try {
@@ -118,21 +107,17 @@ export function shareCommand(program: Command) {
         }
 
         // Validate that the user has authenticated with Cloud.
-        logger.debug(`Checking if sharing is enabled for eval ${eval_.id}`);
         if (!isSharingEnabled(eval_)) {
-          logger.debug(`Sharing is not enabled for this eval`);
           notCloudEnabledShareInstructions();
           process.exitCode = 1;
           return;
         }
-        logger.debug(`Sharing is enabled for eval ${eval_.id}`);
 
         if (
           // Idempotency is not implemented in self-hosted mode.
           cloudConfig.isEnabled() &&
           (await hasEvalBeenShared(eval_))
         ) {
-          logger.debug(`Eval ${eval_.id} has already been shared`);
           const url = await getShareableUrl(
             eval_,
             // `remoteEvalId` is always the Eval ID when sharing to Cloud.
@@ -143,16 +128,12 @@ export function shareCommand(program: Command) {
             message: `This eval is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
           });
           if (!shouldContinue) {
-            logger.debug(`User declined to re-share eval ${eval_.id}`);
             process.exitCode = 0;
             return;
           }
-          logger.debug(`User confirmed re-sharing of eval ${eval_.id}`);
         }
 
-        logger.debug(`Starting share process for eval ${eval_.id}`);
         await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
-        logger.debug(`Share process completed for eval ${eval_.id}`);
       },
     );
 }

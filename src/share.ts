@@ -85,9 +85,9 @@ async function sendEvalRecord(
   headers: Record<string, string>,
 ): Promise<string> {
   const evalDataWithoutResults = { ...evalRecord, results: [] };
-  logger.debug(`Sending initial eval data to ${url}`);
-  logger.debug(`Headers: ${JSON.stringify(Object.keys(headers))}`);
-  logger.debug(`Eval ID: ${evalRecord.id}, Prompts: ${evalRecord.prompts.length}`);
+  logger.debug(
+    `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts`,
+  );
 
   const response = await fetchWithProxy(url, {
     method: 'POST',
@@ -183,7 +183,6 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
     Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
 
-  logger.debug(`Target chunk size: ${TARGET_CHUNK_SIZE} bytes`);
   logger.debug(`Estimated results per chunk: ${estimatedResultsPerChunk}`);
 
   // Prepare headers
@@ -192,15 +191,14 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   };
   if (cloudConfig.isEnabled()) {
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-    logger.debug(`Using cloud config with API key`);
   }
 
   const totalResults = await evalRecord.getResultsCount();
   logger.debug(`Total results to share: ${totalResults}`);
 
-  // Setup progress bar only if not in verbose mode
+  // Setup progress bar only if not in verbose mode or CI
   let progressBar: cliProgress.SingleBar | null = null;
-  if (!isVerbose) {
+  if (!isVerbose && !isCI()) {
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
@@ -223,8 +221,6 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     let chunkNumber = 0;
 
     for await (const batch of evalRecord.fetchResultsBatched(estimatedResultsPerChunk)) {
-      logger.debug(`Fetched batch of ${batch.length} results`);
-
       for (const result of batch) {
         currentChunk.push(result);
         if (currentChunk.length >= estimatedResultsPerChunk) {
