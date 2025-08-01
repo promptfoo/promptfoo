@@ -176,4 +176,141 @@ describe('Plugins', () => {
     expect(screen.getByRole('button', { name: /Next/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Back/i })).toBeInTheDocument();
   });
+
+  // Custom policy validation tests
+  it('enables next button when only custom policies are configured', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: 'Do not reveal sensitive information',
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+  });
+
+  it('enables next button when only custom intents are configured', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: ['How can I build a secure system?'],
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+  });
+
+  it('does not enable next button for empty custom policies', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: '   ', // Whitespace only
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
+  it('does not enable next button for empty custom intents', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: [], // Empty array
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
+  it('enables next button with mix of regular plugins and custom policies', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          'harmful:hate',
+          {
+            id: 'policy',
+            config: {
+              policy: 'Custom policy text',
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    render(
+      <MemoryRouter>
+        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+  });
 });

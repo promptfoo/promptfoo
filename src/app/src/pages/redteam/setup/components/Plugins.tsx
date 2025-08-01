@@ -74,7 +74,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
   const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
     return new Set(
-      config.plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)) as Plugin[],
+      config.plugins
+        .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
+        .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
     );
   });
   const [searchTerm, setSearchTerm] = useState('');
@@ -295,6 +297,35 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
     return true;
   }, [selectedPlugins, pluginConfig]);
+
+  const hasAnyPluginsConfigured = useCallback(() => {
+    // Check regular plugins
+    if (selectedPlugins.size > 0) {
+      return true;
+    }
+
+    // Check custom policies with actual content
+    const hasPolicies = config.plugins.some(
+      (p) =>
+        typeof p === 'object' &&
+        p.id === 'policy' &&
+        p.config?.policy &&
+        typeof p.config.policy === 'string' &&
+        p.config.policy.trim().length > 0,
+    );
+
+    // Check custom intents with actual content
+    const hasIntents = config.plugins.some(
+      (p) =>
+        typeof p === 'object' &&
+        p.id === 'intent' &&
+        p.config?.intent &&
+        Array.isArray(p.config.intent) &&
+        p.config.intent.length > 0,
+    );
+
+    return hasPolicies || hasIntents;
+  }, [selectedPlugins, config.plugins]);
 
   const handleConfigClick = (plugin: Plugin) => {
     setSelectedConfigPlugin(plugin);
@@ -591,7 +622,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       }
       onNext={onNext}
       onBack={onBack}
-      nextDisabled={!isConfigValid() || selectedPlugins.size === 0}
+      nextDisabled={!isConfigValid() || !hasAnyPluginsConfigured()}
     >
       <ErrorBoundary FallbackComponent={ErrorFallback}>
         <Box>
