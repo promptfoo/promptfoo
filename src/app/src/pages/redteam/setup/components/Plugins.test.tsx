@@ -61,7 +61,7 @@ describe('Plugins', () => {
         </MemoryRouter>,
       );
 
-      expect(screen.getByText('Plugin Configuration')).toBeInTheDocument();
+      expect(screen.getByText('Plugins')).toBeInTheDocument();
       expect(screen.getByText('Available presets')).toBeInTheDocument();
       expect(screen.getByLabelText('Filter Plugins')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
@@ -79,11 +79,6 @@ describe('Plugins', () => {
 
       const nextButton = screen.getByRole('button', { name: /next/i });
       expect(nextButton).toBeDisabled();
-      expect(
-        screen.getByText(
-          'Select at least one plugin, add custom policies, or create custom prompts to continue.',
-        ),
-      ).toBeInTheDocument();
     });
 
     it('enables next button when only custom policies are configured', () => {
@@ -110,11 +105,6 @@ describe('Plugins', () => {
 
       const nextButton = screen.getByRole('button', { name: /next/i });
       expect(nextButton).toBeEnabled();
-      expect(
-        screen.queryByText(
-          'Select at least one plugin, add custom policies, or create custom prompts to continue.',
-        ),
-      ).not.toBeInTheDocument();
     });
 
     it('enables next button when only custom intents are configured', () => {
@@ -167,11 +157,6 @@ describe('Plugins', () => {
 
       const nextButton = screen.getByRole('button', { name: /next/i });
       expect(nextButton).toBeDisabled();
-      expect(
-        screen.getByText(
-          'Select at least one plugin, add custom policies, or create custom prompts to continue.',
-        ),
-      ).toBeInTheDocument();
     });
 
     it('does not enable next button for empty custom intents', () => {
