@@ -39,19 +39,19 @@ describe('CIProgressReporter', () => {
     // Update to 25%
     reporter.update(25);
     expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('[Evaluation] ✓ 25% complete (25/100)')
+      expect.stringContaining('[Evaluation] ✓ 25% complete (25/100)'),
     );
 
     // Update to 50%
     reporter.update(50);
     expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('[Evaluation] ✓ 50% complete (50/100)')
+      expect.stringContaining('[Evaluation] ✓ 50% complete (50/100)'),
     );
 
     // Update to 75%
     reporter.update(75);
     expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('[Evaluation] ✓ 75% complete (75/100)')
+      expect.stringContaining('[Evaluation] ✓ 75% complete (75/100)'),
     );
   });
 
@@ -65,10 +65,10 @@ describe('CIProgressReporter', () => {
     jest.advanceTimersByTime(1000);
 
     expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('[CI Progress] Evaluation running for')
+      expect.stringContaining('[CI Progress] Evaluation running for'),
     );
     expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('Completed 30/100 tests (30%)')
+      expect.stringContaining('Completed 30/100 tests (30%)'),
     );
   });
 
@@ -81,23 +81,22 @@ describe('CIProgressReporter', () => {
     reporter.finish();
 
     expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('[Evaluation] ✓ Complete! 100/100 tests in')
+      expect.stringContaining('[Evaluation] ✓ Complete! 100/100 tests in'),
     );
   });
 
   it('should emit GitHub Actions annotations when GITHUB_ACTIONS is set', () => {
     process.env.GITHUB_ACTIONS = 'true';
     const reporter = new CIProgressReporter(100);
-    
+
     reporter.update(25);
     expect(consoleLogMock).toHaveBeenCalledWith('::notice::Evaluation 25% complete');
 
     reporter.finish();
     expect(consoleLogMock).toHaveBeenCalledWith(
-      expect.stringContaining('::notice::Evaluation completed: 25/100 tests in')
+      expect.stringContaining('::notice::Evaluation completed: 25/100 tests in'),
     );
   });
-
 
   it('should handle errors', () => {
     const reporter = new CIProgressReporter(100);
@@ -109,7 +108,7 @@ describe('CIProgressReporter', () => {
   it('should emit GitHub Actions error annotation', () => {
     process.env.GITHUB_ACTIONS = 'true';
     const reporter = new CIProgressReporter(100);
-    
+
     reporter.error('Test error');
     expect(consoleLogMock).toHaveBeenCalledWith('::error::Test error');
   });
@@ -117,12 +116,12 @@ describe('CIProgressReporter', () => {
   it('should clear interval on finish', () => {
     const reporter = new CIProgressReporter(100, 1000);
     reporter.start();
-    
+
     // Verify interval is set
     expect(jest.getTimerCount()).toBe(1);
-    
+
     reporter.finish();
-    
+
     // Verify interval is cleared
     expect(jest.getTimerCount()).toBe(0);
   });
@@ -130,14 +129,12 @@ describe('CIProgressReporter', () => {
   it('should format elapsed time correctly', () => {
     const reporter = new CIProgressReporter(100);
     reporter.start();
-    
+
     // Advance time by 65 seconds
     jest.advanceTimersByTime(65000);
-    
+
     reporter.finish();
-    
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining('1m 5s')
-    );
+
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('1m 5s'));
   });
 });
