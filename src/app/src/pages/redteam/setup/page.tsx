@@ -256,7 +256,6 @@ const StatusSection = styled(Box)(({ theme }) => ({
 }));
 
 export default function RedTeamSetupPage() {
-  // --- Hooks ---
   usePageMeta({ title: 'Red team setup', description: 'Configure red team testing' });
   const location = useLocation();
   const navigate = useNavigate();
@@ -295,6 +294,21 @@ export default function RedTeamSetupPage() {
       source: 'webui',
     });
   }, []);
+
+  const navigateToPlugins = () => {
+    setValue(3);
+    updateHash(3);
+  };
+
+  const navigateToPurpose = () => {
+    setValue(2);
+    updateHash(2);
+  };
+
+  const navigateToStrategies = () => {
+    setValue(4);
+    updateHash(4);
+  };
 
   // Handle browser back/forward
   useEffect(() => {
@@ -576,7 +590,6 @@ export default function RedTeamSetupPage() {
     });
   };
 
-  // --- JSX ---
   return (
     <Root>
       <Content>
@@ -718,7 +731,11 @@ export default function RedTeamSetupPage() {
           </CustomTabPanel>
           <CustomTabPanel value={value} index={5}>
             <ErrorBoundary name="Review Page">
-              <Review />
+              <Review
+                navigateToPlugins={navigateToPlugins}
+                navigateToStrategies={navigateToStrategies}
+                navigateToPurpose={navigateToPurpose}
+              />
             </ErrorBoundary>
           </CustomTabPanel>
         </TabContent>

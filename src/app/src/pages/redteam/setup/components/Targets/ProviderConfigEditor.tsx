@@ -121,6 +121,8 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         }
       } else if (field in updatedTarget.config) {
         (updatedTarget.config as any)[field] = value;
+      } else if (field === 'label') {
+        updatedTarget.label = value;
       }
       setProvider(updatedTarget);
     };
