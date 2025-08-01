@@ -66,7 +66,6 @@ import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
-import { formatPythonError, validatePythonFile } from '../python/pythonError';
 import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
@@ -189,17 +188,6 @@ export async function runAssertion({
         valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
-        // Basic file validation
-        const validationResult = await validatePythonFile(filePath);
-        if (!validationResult.isValid) {
-          return {
-            pass: false,
-            score: 0,
-            reason: validationResult.error || 'Python file validation failed',
-            assertion,
-          };
-        }
-
         try {
           const pythonScriptOutput = await runPython(filePath, functionName || 'get_assert', [
             output,
@@ -208,11 +196,12 @@ export async function runAssertion({
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          const formattedError = formatPythonError(
+          // Import dynamically to avoid circular dependencies
+          const { formatPythonAssertionError } = await import('./pythonError');
+          const formattedError = formatPythonAssertionError(
             error as Error,
             filePath,
             functionName || 'get_assert',
-            'assertion',
           );
           return {
             pass: false,

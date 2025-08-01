@@ -3,7 +3,7 @@ import { type GradingResult, isGradingResult } from '../types';
 import invariant from '../util/invariant';
 
 import type { AssertionParams } from '../types';
-import { formatPythonError } from '../python/pythonError';
+import { formatPythonAssertionError } from './pythonError';
 
 // Recursively map snake_case keys to camelCase for Python dataclass compatibility
 function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string, any> {
@@ -166,7 +166,7 @@ ${
     } else {
       // For all other errors, use the formatting function
       // Use a placeholder file/function name for inline assertions
-      reason = formatPythonError(error, '<inline>', 'assertion', 'assertion');
+      reason = formatPythonAssertionError(error, '<inline>', 'assertion');
     }
 
     return {
