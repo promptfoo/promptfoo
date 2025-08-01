@@ -105,8 +105,8 @@ function generateReport(
         rowIndex++,
         'Strategy',
         id,
-        requested,
-        generated,
+        id === 'basic' ? '-' : requested,
+        id === 'basic' ? '-' : generated,
         getStatus(requested, generated),
       ]);
     });
@@ -390,27 +390,26 @@ export function calculateTotalTests(
   const retryStrategy = strategies.find((s) => s.id === 'retry');
   const basicStrategy = strategies.find((s) => s.id === 'basic');
 
-  const basicStrategyExists = basicStrategy !== undefined;
+  const isBasicStrategyDefined = basicStrategy !== undefined;
   const includeBasicTests = basicStrategy?.config?.enabled ?? true;
 
-  const effectiveStrategyCount =
-    basicStrategyExists && !includeBasicTests ? strategies.length - 1 : strategies.length;
+  let effectiveStrategyCount: number;
+
+  if (isBasicStrategyDefined) {
+    if (includeBasicTests) {
+      effectiveStrategyCount = strategies.length;
+    } else {
+      // Basic strategy is explicitly disabled, so we don't count it
+      effectiveStrategyCount = strategies.length - 1;
+    }
+  } else if (includeBasicTests) {
+    // Basic strategy is implicitly enabled
+    effectiveStrategyCount = strategies.length + 1;
+  } else {
+    effectiveStrategyCount = strategies.length;
+  }
 
   const totalPluginTests = plugins.reduce((sum, p) => sum + (p.numTests || 0), 0);
-
-  // When there are no strategies, or only a disabled basic strategy
-  if (
-    strategies.length === 0 ||
-    (strategies.length === 1 && basicStrategyExists && !includeBasicTests)
-  ) {
-    return {
-      effectiveStrategyCount: 0,
-      includeBasicTests: strategies.length === 0 ? true : includeBasicTests,
-      multilingualStrategy: undefined,
-      totalPluginTests,
-      totalTests: includeBasicTests ? totalPluginTests : 0,
-    };
-  }
 
   // Start with base test count from basic strategy
   let totalTests = includeBasicTests ? totalPluginTests : 0;
@@ -536,6 +535,14 @@ export async function synthesize({
     totalTests,
   } = calculateTotalTests(plugins, strategies);
 
+  // If the basic strategy is enabled but not in the strategies list, add it
+  if (
+    includeBasicTests &&
+    !strategies.some((s) => (typeof s === 'string' ? s === 'basic' : s.id === 'basic'))
+  ) {
+    strategies.push({ id: 'basic' });
+  }
+
   logger.info(
     `Synthesizing test cases for ${prompts.length} ${
       prompts.length === 1 ? 'prompt' : 'prompts'
@@ -549,17 +556,26 @@ export async function synthesize({
         .join('\n'),
     )}\n`,
   );
+
   if (strategies.length > 0) {
     logger.info(
       `Using strategies:\n\n${chalk.yellow(
         strategies
-          .filter((s) => !['basic', 'retry'].includes(s.id))
+          .filter((s) => !['retry'].includes(s.id))
           .map((s) => {
-            // For non-basic, non-multilingual strategies, we want to show the additional tests they generate
-            const testCount =
-              s.id === 'multilingual'
-                ? getTestCount(s, totalPluginTests, strategies)
-                : totalPluginTests;
+            // For non-multilingual strategies, we want to show the additional tests they generate
+            let testCount: number;
+            switch (s.id) {
+              case 'multilingual':
+                testCount = getTestCount(s, totalPluginTests, strategies);
+                break;
+              case 'basic':
+                testCount = 0;
+                break;
+              default:
+                testCount = totalPluginTests;
+            }
+
             return `${s.id} (${formatTestCount(testCount, true)})`;
           })
           .sort()
@@ -885,8 +901,26 @@ export async function synthesize({
 
   Object.assign(strategyResults, otherStrategyResults);
 
+  // Handle basic strategy explicitly
+  let basicTestCases: TestCaseWithPlugin[] = [];
+  if (includeBasicTests) {
+    // Add strategyId to plugin test cases when basic strategy is enabled
+    basicTestCases = pluginTestCases.map((testCase) => ({
+      ...testCase,
+      metadata: {
+        ...testCase.metadata,
+        strategyId: 'basic',
+      },
+    }));
+    // Record basic strategy results
+    strategyResults['basic'] = {
+      requested: pluginTestCases.length,
+      generated: pluginTestCases.length,
+    };
+  }
+
   // Combine test cases based on basic strategy setting
-  const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
+  const finalTestCases = [...basicTestCases, ...strategyTestCases];
 
   // Check for abort signal or apply multilingual strategy to all test cases
   checkAbort();
