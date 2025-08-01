@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -434,6 +435,33 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return hasPolicies || hasIntents;
   }, [selectedPlugins, config.plugins]);
 
+  const getNextButtonTooltip = useCallback(() => {
+    if (!hasAnyPluginsConfigured()) {
+      return 'Select at least one plugin';
+    }
+
+    if (!isConfigValid()) {
+      const missingConfigPlugins = Array.from(selectedPlugins).filter(
+        (plugin) => PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin),
+      );
+
+      if (missingConfigPlugins.length === 1) {
+        const pluginName =
+          displayNameOverrides[missingConfigPlugins[0]] ||
+          categoryAliases[missingConfigPlugins[0]] ||
+          missingConfigPlugins[0];
+        return `Click the settings button (⚙️) to configure ${pluginName}`;
+      } else if (missingConfigPlugins.length > 1) {
+        const pluginNames = missingConfigPlugins
+          .map((plugin) => displayNameOverrides[plugin] || categoryAliases[plugin] || plugin)
+          .join(', ');
+        return `Click the settings buttons (⚙️) to configure: ${pluginNames}`;
+      }
+    }
+
+    return '';
+  }, [hasAnyPluginsConfigured, isConfigValid, selectedPlugins, pluginConfig]);
+
   const handleConfigClick = (plugin: Plugin) => {
     setSelectedConfigPlugin(plugin);
     setConfigDialogOpen(true);
@@ -541,6 +569,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       onNext={onNext}
       onBack={onBack}
       nextDisabled={!isConfigValid() || !hasAnyPluginsConfigured()}
+      warningMessage={
+        !isConfigValid() || !hasAnyPluginsConfigured() ? getNextButtonTooltip() : undefined
+      }
     >
       <ErrorBoundary FallbackComponent={ErrorFallback}>
         <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
@@ -702,19 +733,61 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   }}
                   sx={{
                     border: '2px solid',
-                    borderColor: selectedPlugins.has(plugin) ? 'primary.main' : 'divider',
+                    borderColor: (() => {
+                      if (selectedPlugins.has(plugin)) {
+                        // Show red border if plugin is selected but missing required config
+                        if (
+                          PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                          !isPluginConfigured(plugin)
+                        ) {
+                          return 'error.main';
+                        }
+                        return 'primary.main';
+                      }
+                      return 'divider';
+                    })(),
                     borderRadius: 2,
-                    bgcolor: selectedPlugins.has(plugin)
-                      ? 'rgba(25, 118, 210, 0.08)'
-                      : 'transparent',
+                    bgcolor: (() => {
+                      if (selectedPlugins.has(plugin)) {
+                        // Show red background if plugin is selected but missing required config
+                        if (
+                          PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                          !isPluginConfigured(plugin)
+                        ) {
+                          return 'rgba(211, 47, 47, 0.08)'; // error red with transparency
+                        }
+                        return 'rgba(25, 118, 210, 0.08)'; // primary blue with transparency
+                      }
+                      return 'transparent';
+                    })(),
                     '&:hover': {
-                      bgcolor: selectedPlugins.has(plugin)
-                        ? 'rgba(25, 118, 210, 0.12)'
-                        : 'rgba(0, 0, 0, 0.04)',
+                      bgcolor: (() => {
+                        if (selectedPlugins.has(plugin)) {
+                          // Show red hover if plugin is selected but missing required config
+                          if (
+                            PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                            !isPluginConfigured(plugin)
+                          ) {
+                            return 'rgba(211, 47, 47, 0.12)'; // error red with more transparency
+                          }
+                          return 'rgba(25, 118, 210, 0.12)'; // primary blue with more transparency
+                        }
+                        return 'rgba(0, 0, 0, 0.04)';
+                      })(),
                       cursor: 'pointer',
-                      borderColor: selectedPlugins.has(plugin)
-                        ? 'primary.main'
-                        : theme.palette.action.hover,
+                      borderColor: (() => {
+                        if (selectedPlugins.has(plugin)) {
+                          // Keep red border on hover if missing config
+                          if (
+                            PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                            !isPluginConfigured(plugin)
+                          ) {
+                            return 'error.main';
+                          }
+                          return 'primary.main';
+                        }
+                        return theme.palette.action.hover;
+                      })(),
                     },
                     p: 2,
                     transition: 'all 0.2s ease-in-out',
@@ -722,20 +795,44 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     alignItems: 'center',
                     width: '100%',
                     ...(selectedPlugins.has(plugin) && {
-                      boxShadow: '0 2px 8px rgba(25, 118, 210, 0.15)',
+                      boxShadow:
+                        PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin)
+                          ? '0 2px 8px rgba(211, 47, 47, 0.15)' // red shadow for missing config
+                          : '0 2px 8px rgba(25, 118, 210, 0.15)', // blue shadow for normal selection
                     }),
                   }}
                 >
-                  <Checkbox
-                    checked={selectedPlugins.has(plugin)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      handlePluginToggle(plugin);
-                    }}
-                    color="primary"
-                    sx={{ mr: 2, flexShrink: 0 }}
-                    size="small"
-                  />
+                  <Box sx={{ display: 'flex', alignItems: 'center', mr: 2, flexShrink: 0 }}>
+                    <Checkbox
+                      checked={selectedPlugins.has(plugin)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handlePluginToggle(plugin);
+                      }}
+                      color="primary"
+                      size="small"
+                    />
+                    {/* Generate test case button */}
+                    <Tooltip
+                      title={`Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
+                    >
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleGenerateTestCase(plugin);
+                        }}
+                        disabled={generatingTestCase && generatingPlugin === plugin}
+                        sx={{ color: 'text.secondary', ml: 0.5 }}
+                      >
+                        {generatingTestCase && generatingPlugin === plugin ? (
+                          <CircularProgress size={16} />
+                        ) : (
+                          <PlayArrowIcon fontSize="small" />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
 
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
@@ -815,46 +912,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   </Box>
 
                   <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
-                    {/* Documentation link */}
-                    {hasSpecificPluginDocumentation(plugin) && (
-                      <Tooltip
-                        title={`View ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin} documentation`}
-                      >
-                        <IconButton
-                          size="small"
-                          component={Link}
-                          href={getPluginDocumentationUrl(plugin)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          sx={{ mr: 1, color: 'text.secondary' }}
-                        >
-                          <HelpOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-
-                    {/* Generate test case button */}
-                    <Tooltip
-                      title={`Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
-                    >
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleGenerateTestCase(plugin);
-                        }}
-                        disabled={generatingTestCase && generatingPlugin === plugin}
-                        sx={{ mr: 1, color: 'text.secondary' }}
-                      >
-                        {generatingTestCase && generatingPlugin === plugin ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <PlayArrowIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    </Tooltip>
-
+                    {/* Settings/Configuration button */}
                     {selectedPlugins.has(plugin) && PLUGINS_SUPPORTING_CONFIG.includes(plugin) && (
                       <IconButton
                         size="small"
@@ -868,6 +926,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                           handleConfigClick(plugin);
                         }}
                         sx={{
+                          mr: 1,
                           opacity: 0.6,
                           '&:hover': {
                             opacity: 1,
@@ -882,6 +941,25 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       >
                         <SettingsOutlinedIcon fontSize="small" />
                       </IconButton>
+                    )}
+
+                    {/* Documentation link */}
+                    {hasSpecificPluginDocumentation(plugin) && (
+                      <Tooltip
+                        title={`View ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin} documentation`}
+                      >
+                        <IconButton
+                          size="small"
+                          component={Link}
+                          href={getPluginDocumentationUrl(plugin)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          sx={{ color: 'text.secondary' }}
+                        >
+                          <HelpOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     )}
                   </Box>
                 </Paper>
@@ -1054,32 +1132,62 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 </Typography>
               ) : (
                 <Stack sx={{ maxHeight: '400px', overflowY: 'auto' }} spacing={1}>
-                  {Array.from(selectedPlugins).map((plugin) => (
-                    <Paper
-                      key={plugin}
-                      variant="outlined"
-                      sx={{
-                        p: 1.5,
-                        display: 'flex',
-                        alignItems: 'center',
-                        backgroundColor: 'primary.50',
-                        borderColor: 'primary.200',
-                      }}
-                    >
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
-                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                        </Typography>
-                      </Box>
-                      <IconButton
-                        size="small"
-                        onClick={() => handlePluginToggle(plugin)}
-                        sx={{ color: 'text.secondary', ml: 1 }}
+                  {Array.from(selectedPlugins).map((plugin) => {
+                    const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
+                    const hasError = requiresConfig && !isPluginConfigured(plugin);
+
+                    return (
+                      <Paper
+                        key={plugin}
+                        variant="outlined"
+                        sx={{
+                          p: 1.5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          backgroundColor: hasError ? 'error.50' : 'primary.50',
+                          borderColor: hasError ? 'error.main' : 'primary.200',
+                          borderWidth: hasError ? 2 : 1,
+                        }}
                       >
-                        <RemoveIcon fontSize="small" />
-                      </IconButton>
-                    </Paper>
-                  ))}
+                        <Box
+                          sx={{
+                            flex: 1,
+                            minWidth: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                          }}
+                        >
+                          {hasError && (
+                            <ErrorIcon
+                              fontSize="small"
+                              sx={{
+                                color: 'error.main',
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 500,
+                              fontSize: '0.875rem',
+                              color: hasError ? 'error.main' : 'text.primary',
+                            }}
+                          >
+                            {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                          </Typography>
+                        </Box>
+                        <IconButton
+                          size="small"
+                          onClick={() => handlePluginToggle(plugin)}
+                          sx={{ color: 'text.secondary', ml: 1 }}
+                        >
+                          <RemoveIcon fontSize="small" />
+                        </IconButton>
+                      </Paper>
+                    );
+                  })}
                 </Stack>
               )}
 
