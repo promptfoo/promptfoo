@@ -374,9 +374,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
       let output = '';
-      // Handle cases where we have both reasoning and content (e.g. Gemini thinking models)
-      // In this case, content should be the primary output, not reasoning
-      if (message.content && (message.function_call || message.tool_calls)) {
+      if (message.reasoning) {
+        output = message.reasoning;
+      } else if (message.content && (message.function_call || message.tool_calls)) {
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
           output = message.content;
         } else {
@@ -389,7 +389,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ) {
         output = message.function_call || message.tool_calls;
       } else {
-        output = message.content || message.reasoning || '';
+        output = message.content;
       }
       const logProbs = data.choices[0].logprobs?.content?.map(
         (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
@@ -457,17 +457,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         (this.config.showThinking ?? true)
       ) {
         output = `Thinking: ${message.reasoning_content}\n\n${output}`;
-      }
-
-      // Handle Gemini's reasoning field (when both reasoning and content are present)
-      if (
-        message.reasoning &&
-        message.content &&
-        typeof message.reasoning === 'string' &&
-        typeof output === 'string' &&
-        (this.config.showThinking ?? true)
-      ) {
-        output = `Thinking: ${message.reasoning}\n\n${output}`;
       }
       if (message.audio) {
         return {

@@ -375,66 +375,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
     });
 
-    it('should handle responses with both reasoning and content fields', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                content: 'This is the actual response content',
-                reasoning: 'This is the reasoning process',
-              },
-            },
-          ],
-          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
-      mockFetchWithCache.mockResolvedValue(mockResponse);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4', {
-        config: {},
-      });
-      const result = await provider.callApi('Test prompt');
-
-      // When both reasoning and content exist, content should be used as output
-      // and reasoning should be prepended as thinking when showThinking is true (default)
-      const expectedOutput = `Thinking: This is the reasoning process\n\nThis is the actual response content`;
-      expect(result.output).toBe(expectedOutput);
-      expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
-    });
-
-    it('should hide reasoning content when showThinking is false', async () => {
-      const mockResponse = {
-        data: {
-          choices: [
-            {
-              message: {
-                content: 'This is the actual response content',
-                reasoning: 'This is the reasoning process',
-              },
-            },
-          ],
-          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
-      mockFetchWithCache.mockResolvedValue(mockResponse);
-
-      const provider = new OpenAiChatCompletionProvider('gpt-4', {
-        config: { showThinking: false },
-      });
-      const result = await provider.callApi('Test prompt');
-
-      // Should only show content, not reasoning
-      expect(result.output).toBe('This is the actual response content');
-      expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
-    });
-
     it('should handle function tool callbacks correctly', async () => {
       const mockResponse = {
         data: {
