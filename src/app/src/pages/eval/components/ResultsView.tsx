@@ -851,7 +851,6 @@ export default function ResultsView({
           showStats={showInferenceDetails}
           filterMode={filterMode}
           failureFilter={failureFilter}
-          searchText={searchText}
           debouncedSearchText={debouncedSearchValue}
           onFailureFilterToggle={handleFailureFilterToggle}
           onSearchTextChange={handleSearchTextChange}

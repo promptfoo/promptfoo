@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
@@ -36,7 +36,6 @@ import yaml from 'js-yaml';
 import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
-import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
@@ -128,7 +127,6 @@ interface ResultsTableProps {
   wordBreak: 'break-word' | 'break-all';
   filterMode: FilterMode;
   failureFilter: { [key: string]: boolean };
-  searchText: string;
   debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
@@ -152,8 +150,7 @@ function ResultsTable({
   wordBreak,
   filterMode,
   failureFilter,
-  searchText,
-  debouncedSearchText: externalDebouncedSearchText,
+  debouncedSearchText,
   showStats,
   onFailureFilterToggle,
   onSearchTextChange,
@@ -336,14 +333,6 @@ function ResultsTable({
     },
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
-
-  const [localDebouncedSearchText] = useDebounce(searchText, 200);
-  const debouncedSearchText = externalDebouncedSearchText || localDebouncedSearchText;
-  const [isSearching, setIsSearching] = useState(false);
-
-  React.useEffect(() => {
-    setIsSearching(searchText !== debouncedSearchText && searchText !== '');
-  }, [searchText, debouncedSearchText]);
 
   const tableBody = React.useMemo(() => {
     return body.map((row, rowIndex) => ({
@@ -1021,27 +1010,6 @@ function ResultsTable({
     // of this component. This ensures that the pagination footer is always pinned to the bottom
     // of the viewport (because the parent container is a flexbox).
     <>
-      {isSearching && searchText && (
-        <Box
-          sx={{
-            position: 'fixed',
-            top: '60px',
-            right: '20px',
-            zIndex: 1000,
-            backgroundColor: 'rgba(25, 118, 210, 0.1)',
-            padding: '5px 10px',
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <Typography variant="body2" color="primary">
-            Searching...
-          </Typography>
-        </Box>
-      )}
-
       {filteredResultsCount === 0 &&
         !isFetching &&
         (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (

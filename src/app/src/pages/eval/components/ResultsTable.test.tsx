@@ -51,13 +51,15 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('./EvalOutputCell', () => {
-  const MockEvalOutputCell = vi.fn(({ onRating }: { onRating: any }) => {
-    return (
-      <div data-testid="eval-output-cell">
-        <button onClick={() => onRating(true, 0.75, 'test comment')}>Rate</button>
-      </div>
-    );
-  });
+  const MockEvalOutputCell = vi.fn(
+    ({ onRating, searchText }: { onRating: any; searchText?: string }) => {
+      return (
+        <div data-testid="eval-output-cell" data-searchtext={searchText}>
+          <button onClick={() => onRating(true, 0.75, 'test comment')}>Rate</button>
+        </div>
+      );
+    },
+  );
   return {
     __esModule: true,
     default: MockEvalOutputCell,
@@ -1252,6 +1254,245 @@ describe('ResultsTable Empty State', () => {
 
     render(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('No results found for the current filters.')).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [{ provider: 'test-provider' }], vars: [] },
+        body: [
+          {
+            outputs: [{ pass: true, score: 1, text: 'test output' }],
+            test: {},
+            vars: [],
+          },
+        ],
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('should pass the debouncedSearchText prop as the searchText to each EvalOutputCell', () => {
+    const debouncedSearchText = 'test search';
+    render(<ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />);
+    const evalOutputCell = screen.getByTestId('eval-output-cell');
+    expect(evalOutputCell).toHaveAttribute('data-searchtext', debouncedSearchText);
+  });
+});
+
+describe('ResultsTable Search Highlights', () => {
+  const mockTable = {
+    body: [
+      {
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: [{}],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('correctly updates cell highlights to match the new search term when debouncedSearchText is updated', () => {
+    const newSearchText = 'new search term';
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} debouncedSearchText={newSearchText} />);
+
+    const evalOutputCell = screen.getByTestId('eval-output-cell');
+    expect(evalOutputCell).toHaveAttribute('data-searchtext', newSearchText);
+  });
+});
+
+describe('ResultsTable Regex Handling', () => {
+  const mockTable = {
+    body: [
+      {
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: [{}],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should handle special regex characters in debouncedSearchText without throwing errors', () => {
+    const specialRegexChars = '[(*+?^$.{}|)]';
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} debouncedSearchText={specialRegexChars} />);
+
+    const evalOutputCell = screen.getByTestId('eval-output-cell');
+    expect(evalOutputCell).toBeInTheDocument();
+    expect(evalOutputCell).toHaveAttribute('data-searchtext', specialRegexChars);
+  });
+});
+
+describe('ResultsTable', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [{ provider: 'test-provider' }], vars: [] },
+        body: [
+          {
+            outputs: [{ pass: true, score: 1, text: 'test output' }],
+            test: {},
+            vars: [],
+          },
+        ],
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('should pass the debouncedSearchText prop as the searchText to each EvalOutputCell', () => {
+    const debouncedSearchText = 'test search';
+    render(<ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />);
+    const evalOutputCell = screen.getByTestId('eval-output-cell');
+    expect(evalOutputCell).toHaveAttribute('data-searchtext', debouncedSearchText);
   });
 });
 
