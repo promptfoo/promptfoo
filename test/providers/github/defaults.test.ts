@@ -31,7 +31,7 @@ describe('GitHub Models Default Providers', () => {
       }
       return defaultValue;
     });
-    
+
     mockedIsKeySet.mockImplementation((key: string) => {
       return key === 'GITHUB_TOKEN';
     });
@@ -58,7 +58,7 @@ describe('GitHub Models Default Providers', () => {
       }
       return defaultValue;
     });
-    
+
     mockedIsKeySet.mockImplementation((key: string) => {
       return key === 'OPENAI_API_KEY' || key === 'GITHUB_TOKEN';
     });
@@ -79,7 +79,7 @@ describe('GitHub Models Default Providers', () => {
       }
       return defaultValue;
     });
-    
+
     mockedIsKeySet.mockImplementation((key: string) => {
       return key === 'ANTHROPIC_API_KEY' || key === 'GITHUB_TOKEN';
     });
@@ -92,7 +92,7 @@ describe('GitHub Models Default Providers', () => {
 
   it('should use GitHub with env overrides', async () => {
     mockedGetEnvString.mockImplementation((key: string, defaultValue?: any) => defaultValue);
-    
+
     mockedIsKeySet.mockImplementation((key: string, env?: any) => {
       return env && key === 'GITHUB_TOKEN' && !!env[key];
     });
