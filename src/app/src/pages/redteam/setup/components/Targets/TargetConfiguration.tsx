@@ -177,6 +177,18 @@ export default function TargetConfiguration({
       nextDisabled={!isProviderValid()}
     >
       <Stack direction="column" spacing={3}>
+        {/* Validation Error Display */}
+        {validationErrors && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              Please fix the following issues before continuing:
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1, fontWeight: 'medium' }}>
+              {validationErrors}
+            </Typography>
+          </Alert>
+        )}
+
         {/* Documentation Alert for specific providers */}
         {hasSpecificDocumentation(selectedTarget.id) && (
           <Alert severity="info" sx={{ mb: 2 }}>

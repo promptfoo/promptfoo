@@ -21,250 +21,253 @@ import { getProviderDocumentationUrl, hasSpecificDocumentation } from './provide
 
 import type { ProviderOptions } from '../../types';
 
-// Provider options grouped by category
-const providerOptions = [
+// Flattened provider options with category information
+const allProviderOptions = [
+  // API Endpoints
   {
+    value: 'http',
+    label: 'HTTP/HTTPS Endpoint',
+    description: 'Connect to REST APIs and HTTP endpoints',
     category: 'endpoint',
-    title: 'API Endpoints',
-    description: 'Connect to existing AI applications via HTTP or WebSocket',
-    options: [
-      {
-        value: 'http',
-        label: 'HTTP/HTTPS Endpoint',
-        description: 'Connect to REST APIs and HTTP endpoints',
-      },
-      {
-        value: 'websocket',
-        label: 'WebSocket Endpoint',
-        description: 'Real-time communication with WebSocket APIs',
-      },
-    ],
   },
   {
+    value: 'websocket',
+    label: 'WebSocket Endpoint',
+    description: 'Real-time communication with WebSocket APIs',
+    category: 'endpoint',
+  },
+  // Code-based Providers
+  {
+    value: 'javascript',
+    label: 'JavaScript Provider',
+    description: 'Custom JS provider for specialized integrations',
     category: 'custom',
-    title: 'Code-based Providers',
-    description:
-      'Use custom code or specialized integrations. Recommended for most workflows with agents, MCP clients, and other specialized use cases.',
-    options: [
-      {
-        value: 'javascript',
-        label: 'JavaScript Provider',
-        description: 'Custom JS provider for specialized integrations',
-      },
-      {
-        value: 'python',
-        label: 'Python Provider',
-        description: 'Custom Python provider for specialized integrations',
-      },
-      {
-        value: 'go',
-        label: 'Go Provider',
-        description: 'Custom Go provider for specialized integrations',
-      },
-      {
-        value: 'custom',
-        label: 'Custom Provider',
-        description: 'Other custom providers and implementations',
-      },
-      {
-        value: 'mcp',
-        label: 'MCP Server',
-        description: 'Connect to Model Context Protocol (MCP) servers for direct tool red teaming',
-      },
-      {
-        value: 'browser',
-        label: 'Web Browser',
-        description: 'Automate web browser interactions for testing',
-      },
-      {
-        value: 'exec',
-        label: 'Shell Command',
-        description: 'Execute custom scripts and commands',
-      },
-    ],
   },
   {
+    value: 'python',
+    label: 'Python Provider',
+    description: 'Custom Python provider for specialized integrations',
+    category: 'custom',
+  },
+  {
+    value: 'go',
+    label: 'Go Provider',
+    description: 'Custom Go provider for specialized integrations',
+    category: 'custom',
+  },
+  {
+    value: 'custom',
+    label: 'Custom Provider',
+    description: 'Other custom providers and implementations',
+    category: 'custom',
+  },
+  {
+    value: 'mcp',
+    label: 'MCP Server',
+    description: 'Connect to Model Context Protocol (MCP) servers for direct tool red teaming',
+    category: 'custom',
+  },
+  {
+    value: 'browser',
+    label: 'Web Browser',
+    description: 'Automate web browser interactions for testing',
+    category: 'custom',
+  },
+  {
+    value: 'exec',
+    label: 'Shell Command',
+    description: 'Execute custom scripts and commands',
+    category: 'custom',
+  },
+  // Foundation Models
+  {
+    value: 'openai',
+    label: 'OpenAI',
+    description: 'GPT models including GPT-4.1 and reasoning models',
     category: 'model',
-    title: 'Foundation Models',
-    description: 'Test popular AI models and providers directly',
-    options: [
-      {
-        value: 'openai',
-        label: 'OpenAI',
-        description: 'GPT models including GPT-4.1 and reasoning models',
-      },
-      {
-        value: 'anthropic',
-        label: 'Anthropic',
-        description: 'Claude models including Claude Sonnet 4',
-      },
-      {
-        value: 'google',
-        label: 'Google AI Studio',
-        description: 'Gemini models and Live API',
-      },
-      {
-        value: 'vertex',
-        label: 'Google Vertex AI',
-        description: "Google Cloud's AI platform with Gemini models",
-      },
-      {
-        value: 'azure',
-        label: 'Azure OpenAI',
-        description: 'Azure-hosted OpenAI models',
-      },
-      {
-        value: 'mistral',
-        label: 'Mistral AI',
-        description: "Mistral's language models including Magistral",
-      },
-      {
-        value: 'groq',
-        label: 'Groq',
-        description: 'High-performance inference API',
-      },
-      {
-        value: 'perplexity',
-        label: 'Perplexity AI',
-        description: 'Search-augmented chat with citations',
-      },
-      {
-        value: 'deepseek',
-        label: 'DeepSeek',
-        description: "DeepSeek's language models including R1",
-      },
-      {
-        value: 'xai',
-        label: 'X.AI (Grok)',
-        description: "X.AI's Grok models",
-      },
-    ],
   },
   {
+    value: 'anthropic',
+    label: 'Anthropic',
+    description: 'Claude models including Claude Sonnet 4',
+    category: 'model',
+  },
+  {
+    value: 'google',
+    label: 'Google AI Studio',
+    description: 'Gemini models and Live API',
+    category: 'model',
+  },
+  {
+    value: 'vertex',
+    label: 'Google Vertex AI',
+    description: "Google Cloud's AI platform with Gemini models",
+    category: 'model',
+  },
+  {
+    value: 'azure',
+    label: 'Azure OpenAI',
+    description: 'Azure-hosted OpenAI models',
+    category: 'model',
+  },
+  {
+    value: 'mistral',
+    label: 'Mistral AI',
+    description: "Mistral's language models including Magistral",
+    category: 'model',
+  },
+  {
+    value: 'groq',
+    label: 'Groq',
+    description: 'High-performance inference API',
+    category: 'model',
+  },
+  {
+    value: 'perplexity',
+    label: 'Perplexity AI',
+    description: 'Search-augmented chat with citations',
+    category: 'model',
+  },
+  {
+    value: 'deepseek',
+    label: 'DeepSeek',
+    description: "DeepSeek's language models including R1",
+    category: 'model',
+  },
+  {
+    value: 'xai',
+    label: 'X.AI (Grok)',
+    description: "X.AI's Grok models",
+    category: 'model',
+  },
+  // Cloud & Enterprise
+  {
+    value: 'bedrock',
+    label: 'AWS Bedrock',
+    description: 'AWS-hosted models from various providers',
     category: 'cloud',
-    title: 'Cloud & Enterprise',
-    description: 'Enterprise and cloud-hosted AI services',
-    options: [
-      {
-        value: 'bedrock',
-        label: 'AWS Bedrock',
-        description: 'AWS-hosted models from various providers',
-      },
-      {
-        value: 'sagemaker',
-        label: 'Amazon SageMaker',
-        description: 'Models deployed on SageMaker endpoints',
-      },
-      {
-        value: 'databricks',
-        label: 'Databricks',
-        description: 'Databricks Foundation Model APIs',
-      },
-      {
-        value: 'cloudflare-ai',
-        label: 'Cloudflare AI',
-        description: "Cloudflare's OpenAI-compatible AI platform",
-      },
-      {
-        value: 'huggingface',
-        label: 'Hugging Face',
-        description: 'Access thousands of models',
-      },
-      {
-        value: 'helicone',
-        label: 'Helicone AI Gateway',
-        description: 'Self-hosted AI gateway for unified provider access',
-      },
-      {
-        value: 'jfrog',
-        label: 'JFrog ML',
-        description: "JFrog's LLM Model Library",
-      },
-    ],
   },
   {
+    value: 'sagemaker',
+    label: 'Amazon SageMaker',
+    description: 'Models deployed on SageMaker endpoints',
+    category: 'cloud',
+  },
+  {
+    value: 'databricks',
+    label: 'Databricks',
+    description: 'Databricks Foundation Model APIs',
+    category: 'cloud',
+  },
+  {
+    value: 'cloudflare-ai',
+    label: 'Cloudflare AI',
+    description: "Cloudflare's OpenAI-compatible AI platform",
+    category: 'cloud',
+  },
+  {
+    value: 'huggingface',
+    label: 'Hugging Face',
+    description: 'Access thousands of models',
+    category: 'cloud',
+  },
+  {
+    value: 'helicone',
+    label: 'Helicone AI Gateway',
+    description: 'Self-hosted AI gateway for unified provider access',
+    category: 'cloud',
+  },
+  {
+    value: 'jfrog',
+    label: 'JFrog ML',
+    description: "JFrog's LLM Model Library",
+    category: 'cloud',
+  },
+  // Third-Party Providers
+  {
+    value: 'openrouter',
+    label: 'OpenRouter',
+    description: 'Access hundreds of top AI models through a single API',
     category: 'specialized',
-    title: 'Third-Party Providers',
-    description: 'Providers for specific use cases and integrations',
-    options: [
-      {
-        value: 'openrouter',
-        label: 'OpenRouter',
-        description: 'Access hundreds of top AI models through a single API',
-      },
-      {
-        value: 'github',
-        label: 'GitHub Models',
-        description: "GitHub's hosted models from multiple providers",
-      },
-      {
-        value: 'ai21',
-        label: 'AI21 Labs',
-        description: 'Jurassic and Jamba models',
-      },
-      {
-        value: 'aimlapi',
-        label: 'AI/ML API',
-        description: 'Access 300+ AI models with a single API',
-      },
-      {
-        value: 'hyperbolic',
-        label: 'Hyperbolic',
-        description: 'OpenAI-compatible Llama 3 provider',
-      },
-      {
-        value: 'lambdalabs',
-        label: 'Lambda Labs',
-        description: 'Lambda Labs models via Inference API',
-      },
-      {
-        value: 'fal',
-        label: 'fal.ai',
-        description: 'Image generation and specialized AI models',
-      },
-      {
-        value: 'voyage',
-        label: 'Voyage AI',
-        description: 'Specialized embedding models',
-      },
-    ],
   },
   {
+    value: 'github',
+    label: 'GitHub Models',
+    description: "GitHub's hosted models from multiple providers",
+    category: 'specialized',
+  },
+  {
+    value: 'ai21',
+    label: 'AI21 Labs',
+    description: 'Jurassic and Jamba models',
+    category: 'specialized',
+  },
+  {
+    value: 'aimlapi',
+    label: 'AI/ML API',
+    description: 'Access 300+ AI models with a single API',
+    category: 'specialized',
+  },
+  {
+    value: 'hyperbolic',
+    label: 'Hyperbolic',
+    description: 'OpenAI-compatible Llama 3 provider',
+    category: 'specialized',
+  },
+  {
+    value: 'lambdalabs',
+    label: 'Lambda Labs',
+    description: 'Lambda Labs models via Inference API',
+    category: 'specialized',
+  },
+  {
+    value: 'fal',
+    label: 'fal.ai',
+    description: 'Image generation and specialized AI models',
+    category: 'specialized',
+  },
+  {
+    value: 'voyage',
+    label: 'Voyage AI',
+    description: 'Specialized embedding models',
+    category: 'specialized',
+  },
+  // Local Models
+  {
+    value: 'ollama',
+    label: 'Ollama',
+    description: 'Local model runner with easy setup',
     category: 'local',
-    title: 'Local Models',
-    description: 'Models run locally on your hardware or infrastructure',
-    options: [
-      {
-        value: 'ollama',
-        label: 'Ollama',
-        description: 'Local model runner with easy setup',
-      },
-      {
-        value: 'vllm',
-        label: 'vLLM',
-        description: 'High-performance local inference server',
-      },
-      {
-        value: 'localai',
-        label: 'LocalAI',
-        description: 'Local OpenAI-compatible API',
-      },
-      {
-        value: 'llamafile',
-        label: 'Llamafile',
-        description: 'Single-file local model server',
-      },
-      {
-        value: 'llama.cpp',
-        label: 'llama.cpp',
-        description: 'Lightweight local model inference',
-      },
-      {
-        value: 'text-generation-webui',
-        label: 'Text Generation WebUI',
-        description: 'Gradio-based local model interface',
-      },
-    ],
+  },
+  {
+    value: 'vllm',
+    label: 'vLLM',
+    description: 'High-performance local inference server',
+    category: 'local',
+  },
+  {
+    value: 'localai',
+    label: 'LocalAI',
+    description: 'Local OpenAI-compatible API',
+    category: 'local',
+  },
+  {
+    value: 'llamafile',
+    label: 'Llamafile',
+    description: 'Single-file local model server',
+    category: 'local',
+  },
+  {
+    value: 'llama.cpp',
+    label: 'llama.cpp',
+    description: 'Lightweight local model inference',
+    category: 'local',
+  },
+  {
+    value: 'text-generation-webui',
+    label: 'Text Generation WebUI',
+    description: 'Gradio-based local model interface',
+    category: 'local',
   },
 ];
 
@@ -288,7 +291,7 @@ export default function ProviderTypeSelector({
     providerType ?? getProviderType(provider?.id),
   );
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
 
   // Category filter options
   const categoryFilters = [
@@ -302,9 +305,7 @@ export default function ProviderTypeSelector({
 
   // Handle category filter toggle
   const handleCategoryToggle = (category: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category],
-    );
+    setSelectedCategory(category);
   };
 
   useEffect(() => {
@@ -704,28 +705,21 @@ export default function ProviderTypeSelector({
   };
 
   // Filter available options if availableProviderIds is provided, by search term, and by category
-  const filteredProviderOptions = providerOptions
-    .filter((group) => {
-      // Filter by selected categories if any are selected
-      return selectedCategories.length === 0 || selectedCategories.includes(group.category);
-    })
-    .map((group) => ({
-      ...group,
-      options: group.options.filter((option) => {
-        // Filter by availableProviderIds if provided
-        const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
+  const filteredProviderOptions = allProviderOptions.filter((option) => {
+    // Filter by availableProviderIds if provided
+    const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
 
-        // Filter by search term if provided
-        const matchesSearch =
-          !searchTerm ||
-          option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          option.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          group.title.toLowerCase().includes(searchTerm.toLowerCase());
+    // Filter by search term if provided
+    const matchesSearch =
+      !searchTerm ||
+      option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      option.description.toLowerCase().includes(searchTerm.toLowerCase());
 
-        return isAvailable && matchesSearch;
-      }),
-    }))
-    .filter((group) => group.options.length > 0);
+    // Filter by selected category if provided
+    const matchesCategory = !selectedCategory || option.category === selectedCategory;
+
+    return isAvailable && matchesSearch && matchesCategory;
+  });
 
   return (
     <Box>
@@ -747,19 +741,29 @@ export default function ProviderTypeSelector({
 
         <Box sx={{ flex: 1 }}>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+            <Chip
+              label="All Categories"
+              variant={selectedCategory === undefined ? 'filled' : 'outlined'}
+              color={selectedCategory === undefined ? 'primary' : 'default'}
+              onClick={() => setSelectedCategory(undefined)}
+              sx={{
+                cursor: 'pointer',
+                '&:hover': {
+                  bgcolor: selectedCategory === undefined ? 'primary.dark' : 'action.hover',
+                },
+              }}
+            />
             {categoryFilters.map((filter) => (
               <Chip
                 key={filter.key}
                 label={filter.label}
-                variant={selectedCategories.includes(filter.key) ? 'filled' : 'outlined'}
-                color={selectedCategories.includes(filter.key) ? 'primary' : 'default'}
+                variant={selectedCategory === filter.key ? 'filled' : 'outlined'}
+                color={selectedCategory === filter.key ? 'primary' : 'default'}
                 onClick={() => handleCategoryToggle(filter.key)}
                 sx={{
                   cursor: 'pointer',
                   '&:hover': {
-                    bgcolor: selectedCategories.includes(filter.key)
-                      ? 'primary.dark'
-                      : 'action.hover',
+                    bgcolor: selectedCategory === filter.key ? 'primary.dark' : 'action.hover',
                   },
                 }}
               />
@@ -769,110 +773,96 @@ export default function ProviderTypeSelector({
       </Stack>
 
       <FormControl component="fieldset" sx={{ width: '100%' }}>
-        {filteredProviderOptions.map((group) => (
-          <Box key={group.category} sx={{ mb: 3 }}>
-            <Typography
-              variant="subtitle1"
+        <Stack spacing={1}>
+          {filteredProviderOptions.map((option) => (
+            <Paper
+              key={option.value}
+              variant="outlined"
+              onClick={() => handleProviderTypeSelect(option.value)}
               sx={{
-                mb: 1.5,
-                fontWeight: 600,
-                color: 'text.primary',
-                fontSize: '1rem',
+                border: '1px solid',
+                borderColor: selectedProviderType === option.value ? 'primary.main' : 'divider',
+                borderWidth: selectedProviderType === option.value ? 2 : 1,
+                borderRadius: 2,
+                bgcolor:
+                  selectedProviderType === option.value
+                    ? 'rgba(25, 118, 210, 0.04)'
+                    : 'transparent',
+                '&:hover': {
+                  bgcolor: 'rgba(0, 0, 0, 0.04)',
+                  cursor: 'pointer',
+                  borderColor:
+                    selectedProviderType === option.value
+                      ? 'primary.main'
+                      : theme.palette.action.hover,
+                },
+                p: selectedProviderType === option.value ? '15px' : 2,
+                transition: 'background-color 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                width: '100%',
               }}
             >
-              {group.title}
-            </Typography>
+              <Radio
+                checked={selectedProviderType === option.value}
+                onChange={() => handleProviderTypeSelect(option.value)}
+                value={option.value}
+                name="provider-type-radio"
+                sx={{ mr: 2, flexShrink: 0 }}
+                size="small"
+              />
 
-            <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-              {group.description}
-            </Typography>
-
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                gap: 2,
-              }}
-            >
-              {group.options.map((option) => (
-                <Paper
-                  key={option.value}
-                  variant="outlined"
-                  onClick={() => handleProviderTypeSelect(option.value)}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography
+                  variant="subtitle1"
                   sx={{
-                    border: '1px solid',
-                    borderColor: selectedProviderType === option.value ? 'primary.main' : 'divider',
-                    borderWidth: selectedProviderType === option.value ? 2 : 1,
-                    borderRadius: 2,
-                    bgcolor:
-                      selectedProviderType === option.value
-                        ? 'rgba(25, 118, 210, 0.04)'
-                        : 'transparent',
-                    '&:hover': {
-                      bgcolor: 'rgba(0, 0, 0, 0.04)',
-                      cursor: 'pointer',
-                      borderColor:
-                        selectedProviderType === option.value
-                          ? 'primary.main'
-                          : theme.palette.action.hover,
-                    },
-                    p: selectedProviderType === option.value ? '15px' : 2,
-                    transition: 'background-color 0.2s',
-                    display: 'flex',
-                    flexDirection: 'column',
+                    fontWeight: selectedProviderType === option.value ? 600 : 500,
+                    color: selectedProviderType === option.value ? 'primary.main' : 'text.primary',
+                    mb: 0.5,
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Radio
-                      checked={selectedProviderType === option.value}
-                      onChange={() => handleProviderTypeSelect(option.value)}
-                      value={option.value}
-                      name="provider-type-radio"
-                      sx={{ mr: 1, p: 0 }}
+                  {option.label}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'text.secondary',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                  }}
+                >
+                  {option.description}
+                </Typography>
+              </Box>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
+                {/* Documentation link */}
+                {hasSpecificDocumentation(option.value) && (
+                  <Tooltip title={`View ${option.label} documentation`}>
+                    <IconButton
                       size="small"
-                    />
-                    <Typography
-                      variant="subtitle1"
-                      sx={{
-                        fontWeight: selectedProviderType === option.value ? 600 : 500,
-                        color:
-                          selectedProviderType === option.value ? 'primary.main' : 'text.primary',
-                        flex: 1,
-                      }}
+                      component={Link}
+                      href={getProviderDocumentationUrl(option.value)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      sx={{ mr: 1, color: 'text.secondary' }}
                     >
-                      {option.label}
-                    </Typography>
+                      <HelpOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
 
-                    {/* Documentation link */}
-                    {hasSpecificDocumentation(option.value) && (
-                      <Tooltip title={`View ${option.label} documentation`}>
-                        <IconButton
-                          size="small"
-                          component={Link}
-                          href={getProviderDocumentationUrl(option.value)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          sx={{ ml: 1, color: 'text.secondary' }}
-                        >
-                          <HelpOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-
-                    {selectedProviderType === option.value && (
-                      <CheckCircleIcon color="primary" fontSize="small" />
-                    )}
-                  </Box>
-
-                  <Typography variant="body2" sx={{ color: 'text.secondary', ml: '28px' }}>
-                    {option.description}
-                  </Typography>
-                </Paper>
-              ))}
-            </Box>
-          </Box>
-        ))}
+                {selectedProviderType === option.value && (
+                  <CheckCircleIcon color="primary" fontSize="small" />
+                )}
+              </Box>
+            </Paper>
+          ))}
+        </Stack>
       </FormControl>
     </Box>
   );

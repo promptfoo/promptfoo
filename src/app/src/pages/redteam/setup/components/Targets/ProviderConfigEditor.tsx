@@ -129,12 +129,19 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
       const errors: string[] = [];
 
       if (providerType === 'http') {
-        if (
-          !provider.config.request &&
-          (!provider.config.url || !validateUrl(provider.config.url))
-        ) {
-          errors.push('Valid URL is required');
+        // Check if we're in raw mode (using request field) or structured mode (using url field)
+        if (provider.config.request !== undefined) {
+          // Raw mode: validate that request is not empty
+          if (!provider.config.request || provider.config.request.trim() === '') {
+            errors.push('HTTP request content is required');
+          }
+        } else {
+          // Structured mode: validate URL
+          if (!provider.config.url || !validateUrl(provider.config.url)) {
+            errors.push('Valid URL is required');
+          }
         }
+
         if (bodyError) {
           errors.push(bodyError);
         }
