@@ -128,20 +128,19 @@ export default class Eval {
   static async findById(id: string) {
     const db = getDb();
 
-    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
+    const evalData = await db.select().from(evalsTable).where(eq(evalsTable.id, id));
 
     if (evalData.length === 0) {
       return undefined;
     }
 
-    const datasetResults = db
+    const datasetResults = await db
       .select({
         datasetId: evalsToDatasetsTable.datasetId,
       })
       .from(evalsToDatasetsTable)
       .where(eq(evalsToDatasetsTable.evalId, id))
-      .limit(1)
-      .all();
+      .limit(1);
 
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
@@ -176,8 +175,7 @@ export default class Eval {
       .select()
       .from(evalsTable)
       .limit(limit)
-      .orderBy(desc(evalsTable.createdAt))
-      .all();
+      .orderBy(desc(evalsTable.createdAt));
     return evals.map(
       (e) =>
         new Eval(e.config, {
@@ -410,11 +408,10 @@ export default class Eval {
 
   async getResultsCount(): Promise<number> {
     const db = getDb();
-    const result = db
+    const result = await db
       .select({ count: sql<number>`count(*)` })
       .from(evalResultsTable)
-      .where(eq(evalResultsTable.evalId, this.id))
-      .all();
+      .where(eq(evalResultsTable.evalId, this.id));
     const count = result[0]?.count ?? 0;
     return Number(count);
   }
@@ -768,7 +765,7 @@ export default class Eval {
 export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
   const db = getDb();
 
-  const results = db
+  const results = await db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
@@ -780,8 +777,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
-    .orderBy(desc(evalsTable.createdAt))
-    .all();
+    .orderBy(desc(evalsTable.createdAt));
 
   /**
    * Deserialize the evals. A few things to note:

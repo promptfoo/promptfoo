@@ -392,8 +392,7 @@ async function getEvalsWithPredicate(
     })
     .from(evalsTable)
     .orderBy(desc(evalsTable.createdAt))
-    .limit(limit)
-    .all();
+    .limit(limit);
 
   const ret: EvalWithMetadata[] = [];
 
@@ -502,7 +501,7 @@ export async function getStandaloneEvals({
   }
 
   const db = getDb();
-  const results = db
+  const results = await db
     .select({
       evalId: evalsTable.id,
       description: evalsTable.description,
@@ -526,8 +525,7 @@ export async function getStandaloneEvals({
       ),
     )
     .orderBy(desc(evalsTable.createdAt))
-    .limit(limit)
-    .all();
+    .limit(limit);
 
   // TODO(Performance): Load all necessary data in one go rather than re-requesting each eval!
   const standaloneEvals = (
