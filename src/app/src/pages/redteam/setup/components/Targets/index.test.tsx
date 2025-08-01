@@ -4,7 +4,6 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
@@ -251,25 +250,23 @@ describe('Targets Component', () => {
 
     renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
 
-    const user = userEvent.setup();
-
     const websocketProviderCard = screen
       .getByText('WebSocket Endpoint')
       .closest('div[class*="MuiPaper-root"]');
-    await user.click(websocketProviderCard!);
+    fireEvent.click(websocketProviderCard!);
 
     const webSocketURLInput = screen.getByLabelText(/WebSocket URL/i);
-    await user.type(webSocketURLInput, 'wss://example.com/ws');
+    fireEvent.change(webSocketURLInput, { target: { value: 'wss://example.com/ws' } });
 
     const targetNameInput = screen.getByLabelText(/Provider Name/i);
-    await user.type(targetNameInput, 'My WebSocket Target');
+    fireEvent.change(targetNameInput, { target: { value: 'My WebSocket Target' } });
 
     const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
     await waitFor(() => {
       expect(nextButton).not.toBeDisabled();
     });
 
-    await user.click(nextButton);
+    fireEvent.click(nextButton);
     expect(mockOnNext).toHaveBeenCalledTimes(1);
   });
 
