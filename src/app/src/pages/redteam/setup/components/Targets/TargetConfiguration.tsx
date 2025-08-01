@@ -2,11 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import PageWrapper from '../PageWrapper';
 import Prompts from '../Prompts';
 import ProviderConfigEditor from './ProviderConfigEditor';
+import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 import TestTargetConfiguration from './TestTargetConfiguration';
 import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 
@@ -172,6 +177,25 @@ export default function TargetConfiguration({
       nextDisabled={!isProviderValid()}
     >
       <Stack direction="column" spacing={3}>
+        {/* Documentation Alert for specific providers */}
+        {hasSpecificDocumentation(selectedTarget.id) && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Box>
+              <Typography variant="body2">
+                Need help configuring {selectedTarget.label || selectedTarget.id}?{' '}
+                <Link
+                  href={getProviderDocumentationUrl(selectedTarget.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View the documentation
+                </Link>{' '}
+                for detailed setup instructions and examples.
+              </Typography>
+            </Box>
+          </Alert>
+        )}
+
         {/* Provider Configuration Section */}
         <ProviderConfigEditor
           ref={configEditorRef}
