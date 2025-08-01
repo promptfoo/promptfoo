@@ -15,7 +15,7 @@ export const redteamRouter = Router();
 // Generate a single test case for a specific plugin
 redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { pluginId, config } = req.body;
+    const { pluginId, config, timestamp, requestId } = req.body;
 
     if (!pluginId) {
       res.status(400).json({ error: 'Plugin ID is required' });
@@ -39,6 +39,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     });
 
     // Generate a single test case using the plugin's action
+    // Add randomization through modifiers to ensure unique test cases
+    const randomizedModifiers = {
+      ...config?.modifiers,
+      _requestId: requestId || Math.random().toString(36).substring(7),
+      _timestamp: timestamp || Date.now(),
+    };
+
     const testCases = await plugin.action({
       provider: redteamProvider,
       purpose,
@@ -47,7 +54,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       delayMs: 0,
       config: {
         language: config?.language || 'en',
-        modifiers: config?.modifiers || {},
+        modifiers: randomizedModifiers,
       },
     });
 
@@ -59,9 +66,20 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     const testCase = testCases[0];
     const generatedPrompt = testCase.vars?.[injectVar] || 'Unable to extract test prompt';
 
+    // Generate dynamic context message with timestamp for uniqueness
+    const contextMessages = [
+      `This test case targets the ${pluginId} plugin and was generated based on your application context.`,
+      `Generated test case for ${pluginId} - customize your application definition to improve relevance.`,
+      `Test case sample for ${pluginId} plugin - each generation produces unique variations.`,
+      `Dynamic test case for ${pluginId} created using your configured application purpose.`,
+    ];
+
+    const contextIndex = (timestamp || Date.now()) % contextMessages.length;
+    const dynamicContext = contextMessages[contextIndex];
+
     res.json({
       prompt: generatedPrompt,
-      context: `This test case was dynamically generated for the ${pluginId} plugin using your application context. You can tune generation by updating your application context.`,
+      context: dynamicContext,
       metadata: testCase.metadata,
     });
   } catch (error) {

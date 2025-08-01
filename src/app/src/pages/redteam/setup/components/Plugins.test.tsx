@@ -1,7 +1,9 @@
+import React from 'react';
+
+import { ToastProvider } from '@app/contexts/ToastContext';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
 
@@ -36,8 +38,69 @@ vi.mock('react-error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+vi.mock('@promptfoo/redteam/constants', () => ({
+  riskCategories: {
+    'Security & Access Control': ['bola', 'indirect-prompt-injection', 'rbac'],
+    'Harmful Content': ['harmful:hate', 'harmful:self-harm'],
+    'Privacy & Data Protection': ['pii', 'pii:direct'],
+  },
+  categoryAliases: {
+    bola: 'Object-Level Authorization Bypass',
+    'indirect-prompt-injection': 'Indirect Prompt Injection',
+    rbac: 'Role-Based Access Control',
+  },
+  displayNameOverrides: {
+    bola: 'Object-Level Authorization Bypass',
+    'indirect-prompt-injection': 'Indirect Prompt Injection',
+  },
+  subCategoryDescriptions: {
+    bola: 'Tests for object-level authorization bypass vulnerabilities',
+    'indirect-prompt-injection': 'Tests for indirect prompt injection attacks',
+  },
+  DEFAULT_PLUGINS: new Set(['bola', 'harmful:hate']),
+  FOUNDATION_PLUGINS: ['bola'],
+  GUARDRAILS_EVALUATION_PLUGINS: ['harmful:hate'],
+  HARM_PLUGINS: { 'harmful:hate': 'hate', 'harmful:self-harm': 'self-harm' },
+  NIST_AI_RMF_MAPPING: {},
+  OWASP_LLM_TOP_10_MAPPING: {},
+  OWASP_LLM_RED_TEAM_MAPPING: {},
+  OWASP_API_TOP_10_MAPPING: {},
+  MITRE_ATLAS_MAPPING: {},
+  EU_AI_ACT_MAPPING: {},
+  PLUGIN_PRESET_DESCRIPTIONS: {
+    Recommended: 'A broad set of plugins recommended by Promptfoo',
+    'Minimal Test': 'Minimal set of plugins to validate your setup',
+    RAG: 'Recommended plugins plus tests for RAG-specific scenarios',
+    Foundation: 'Foundation plugins',
+    'Guardrails Evaluation': 'Guardrails evaluation plugins',
+    Harmful: 'Harmful content plugins',
+    NIST: 'NIST framework plugins',
+    'OWASP LLM Top 10': 'OWASP LLM Top 10 plugins',
+    'OWASP Gen AI Red Team': 'OWASP Gen AI Red Team plugins',
+    'OWASP API Top 10': 'OWASP API Top 10 plugins',
+    MITRE: 'MITRE ATLAS plugins',
+    'EU AI Act': 'EU AI Act plugins',
+  },
+  AGENTIC_EXEMPT_PLUGINS: [],
+  DATASET_EXEMPT_PLUGINS: [],
+  PLUGINS_REQUIRING_CONFIG: ['indirect-prompt-injection'],
+  REDTEAM_DEFAULTS: {
+    MAX_CONCURRENCY: 4,
+    NUM_TESTS: 10,
+  },
+}));
+
 const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
 const mockUseRecentlyUsedPlugins = useRecentlyUsedPlugins as unknown as Mock;
+
+// Helper function for rendering with providers
+const renderWithProviders = (ui: React.ReactNode) => {
+  return render(
+    <MemoryRouter>
+      <ToastProvider>{ui}</ToastProvider>
+    </MemoryRouter>,
+  );
+};
 
 describe('Plugins', () => {
   const mockOnNext = vi.fn();
@@ -59,11 +122,7 @@ describe('Plugins', () => {
   });
 
   it('should render title, description, and disable Next button based on plugin selection and configuration', async () => {
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     expect(screen.getByRole('heading', { name: /Plugins/i, level: 4 })).toBeInTheDocument();
     expect(
@@ -106,11 +165,7 @@ describe('Plugins', () => {
   });
 
   it('should open the PluginConfigDialog when a plugin that requires configuration is selected', async () => {
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     fireEvent.click(screen.getByRole('button', { name: /Security & Access Control/i }));
 
@@ -125,11 +180,7 @@ describe('Plugins', () => {
   });
 
   it('should keep Next button disabled when a config-requiring plugin is selected but not configured', async () => {
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     const nextButton = screen.getByRole('button', { name: /Next/i });
     expect(nextButton).toBeDisabled();
@@ -147,11 +198,7 @@ describe('Plugins', () => {
   });
 
   it('should call onBack when the Back button is clicked', () => {
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     const backButton = screen.getByRole('button', { name: /Back/i });
     fireEvent.click(backButton);
@@ -165,11 +212,7 @@ describe('Plugins', () => {
       value: 320,
     });
 
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     expect(screen.getByRole('heading', { name: /Plugins/i, level: 4 })).toBeInTheDocument();
 
@@ -193,11 +236,7 @@ describe('Plugins', () => {
       updatePlugins: mockUpdatePlugins,
     });
 
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     const nextButton = screen.getByRole('button', { name: /Next/i });
     await waitFor(() => {
@@ -220,11 +259,7 @@ describe('Plugins', () => {
       updatePlugins: mockUpdatePlugins,
     });
 
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     const nextButton = screen.getByRole('button', { name: /Next/i });
     await waitFor(() => {
@@ -247,11 +282,7 @@ describe('Plugins', () => {
       updatePlugins: mockUpdatePlugins,
     });
 
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     const nextButton = screen.getByRole('button', { name: /Next/i });
     await waitFor(() => {
@@ -274,11 +305,7 @@ describe('Plugins', () => {
       updatePlugins: mockUpdatePlugins,
     });
 
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     const nextButton = screen.getByRole('button', { name: /Next/i });
     await waitFor(() => {
@@ -302,11 +329,7 @@ describe('Plugins', () => {
       updatePlugins: mockUpdatePlugins,
     });
 
-    render(
-      <MemoryRouter>
-        <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     const nextButton = screen.getByRole('button', { name: /Next/i });
     await waitFor(() => {
