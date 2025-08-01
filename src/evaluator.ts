@@ -23,6 +23,7 @@ import { isPromptfooSampleTarget } from './providers/shared';
 import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
+import { CIProgressReporter } from './progress/ciProgressReporter';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,
@@ -815,6 +816,10 @@ class Evaluator {
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
+    // Progress reporters declared here for cleanup in finally block
+    let ciProgressReporter: CIProgressReporter | null = null;
+    let progressBarManager: ProgressBarManager | null = null;
+
     if (maxEvalTimeMs > 0) {
       globalAbortController = new AbortController();
       options.abortSignal = options.abortSignal
@@ -1426,11 +1431,16 @@ class Evaluator {
     // Set up progress tracking
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
-    const progressBarManager = new ProgressBarManager(isWebUI);
 
-    // Initialize progress bar manager if needed
-    if (this.options.showProgressBar) {
-      // We'll create the comparison bar dynamically later when we know the actual count
+    // Choose appropriate progress reporter
+
+    if (isCI() && !isWebUI) {
+      // Use CI-friendly progress reporter
+      ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
+      ciProgressReporter.start();
+    } else if (this.options.showProgressBar && process.stdout.isTTY) {
+      // Use visual progress bars
+      progressBarManager = new ProgressBarManager(isWebUI);
       await progressBarManager.initialize(runEvalOptions, concurrency, 0);
     }
 
@@ -1443,10 +1453,13 @@ class Evaluator {
         const provider = evalStep.provider.label || evalStep.provider.id();
         const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
-      } else if (this.options.showProgressBar) {
+      } else if (progressBarManager) {
         // Progress bar update is handled by the manager
         const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
         progressBarManager.updateProgress(index, evalStep, phase);
+      } else if (ciProgressReporter) {
+        // CI progress reporter update
+        ciProgressReporter.update(numComplete);
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
       }
@@ -1482,7 +1495,7 @@ class Evaluator {
         }
 
         // Mark serial phase as complete
-        if (this.options.showProgressBar) {
+        if (progressBarManager) {
           progressBarManager.completePhase('serial');
         }
       }
@@ -1499,6 +1512,9 @@ class Evaluator {
         await this.evalRecord.addPrompts(prompts);
       });
     } catch (err) {
+      if (ciProgressReporter) {
+        ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
+      }
       if (options.abortSignal?.aborted) {
         evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
         logger.warn(`Evaluation aborted: ${String(err)}`);
@@ -1511,7 +1527,7 @@ class Evaluator {
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
 
     // Mark concurrent phase as complete
-    if (this.options.showProgressBar) {
+    if (progressBarManager) {
       progressBarManager.completePhase('concurrent');
 
       // Create comparison progress bar now that we know the actual count
@@ -1604,9 +1620,9 @@ class Evaluator {
             await result.save();
           }
         }
-        if (this.options.showProgressBar) {
+        if (progressBarManager) {
           progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
-        } else if (!isWebUI) {
+        } else if (!isWebUI && !ciProgressReporter) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
       }
@@ -1642,9 +1658,9 @@ class Evaluator {
           );
 
           // Update progress bar
-          if (this.options.showProgressBar) {
+          if (progressBarManager) {
             progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
-          } else if (!isWebUI) {
+          } else if (!isWebUI && !ciProgressReporter) {
             logger.debug(`Max-score assertion for test #${testIdx} complete`);
           }
 
@@ -1686,10 +1702,16 @@ class Evaluator {
 
     await this.evalRecord.addPrompts(prompts);
 
-    // Finish up
-    if (this.options.showProgressBar) {
-      progressBarManager.completePhase('comparison');
-      progressBarManager.stop();
+    // Clean up progress reporters and timers
+    try {
+      if (progressBarManager) {
+        progressBarManager.completePhase('comparison');
+        progressBarManager.stop();
+      } else if (ciProgressReporter) {
+        ciProgressReporter.finish();
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during progress reporter cleanup: ${cleanupErr}`);
     }
 
     if (globalTimeout) {

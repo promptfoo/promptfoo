@@ -93,3 +93,34 @@ When the CI style check is failing, run these commands to fix style issues:
 - Keep code DRY and use existing utilities where possible
 - Use Drizzle ORM for database operations
 - Workspaces include src/app and site directories
+
+## CI/CD Integration
+
+### Progress Reporting
+
+When running in CI environments (GitHub Actions, GitLab CI, Jenkins, etc.), promptfoo automatically switches to CI-friendly progress reporting:
+
+- **Milestone logging**: Progress updates at 25%, 50%, 75% completion
+- **Periodic updates**: Status every 30 seconds with completion rate and ETA
+- **GitHub Actions**: Automatic `::notice::` annotations for better visibility
+- **Error throttling**: Prevents log spam by throttling errors to once per 5 seconds
+
+### CI Detection
+
+The following environment variables trigger CI mode:
+
+- `CI=true`
+- `GITHUB_ACTIONS=true`
+- `TRAVIS=true`
+- `CIRCLECI=true`
+- `JENKINS_URL` or `JENKINS_HOME`
+- `GITLAB_CI=true`
+- And others (see `isCI()` in `src/envars.ts`)
+
+### Long-Running Evaluations
+
+For evaluations in CI:
+
+- Progress updates include time elapsed and estimated time remaining
+- Errors are properly cleaned up even if evaluation fails
+- Resources (intervals, timeouts) are always cleaned up via finally blocks
