@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import EditIcon from '@mui/icons-material/Edit';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import SearchIcon from '@mui/icons-material/Search';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import FormControl from '@mui/material/FormControl';
 import IconButton from '@mui/material/IconButton';
@@ -292,6 +294,7 @@ export default function ProviderTypeSelector({
   );
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
+  const [isExpanded, setIsExpanded] = useState<boolean>(!selectedProviderType);
 
   // Category filter options
   const categoryFilters = [
@@ -331,6 +334,7 @@ export default function ProviderTypeSelector({
   // Handle provider type selection
   const handleProviderTypeSelect = (value: string) => {
     setSelectedProviderType(value);
+    setIsExpanded(false); // Collapse after selection
 
     const currentLabel = provider?.label;
 
@@ -704,6 +708,13 @@ export default function ProviderTypeSelector({
     }
   };
 
+  // Handle edit/change button click
+  const handleEditSelection = () => {
+    setIsExpanded(true);
+    setSearchTerm(''); // Clear search when expanding
+    setSelectedCategory(undefined); // Clear category filter when expanding
+  };
+
   // Filter available options if availableProviderIds is provided, by search term, and by category
   const filteredProviderOptions = allProviderOptions.filter((option) => {
     // Filter by availableProviderIds if provided
@@ -721,6 +732,89 @@ export default function ProviderTypeSelector({
     return isAvailable && matchesSearch && matchesCategory;
   });
 
+  // Get the selected provider option for collapsed view
+  const selectedOption = selectedProviderType
+    ? allProviderOptions.find((option) => option.value === selectedProviderType)
+    : undefined;
+
+  // Show collapsed view when a provider is selected and not in expanded mode
+  if (selectedOption && !isExpanded) {
+    return (
+      <Box>
+        <Paper
+          variant="outlined"
+          sx={{
+            border: '2px solid',
+            borderColor: 'primary.main',
+            borderRadius: 2,
+            bgcolor: 'rgba(25, 118, 210, 0.04)',
+            p: 2,
+            display: 'flex',
+            alignItems: 'center',
+            width: '100%',
+          }}
+        >
+          <CheckCircleIcon color="primary" sx={{ mr: 2, flexShrink: 0 }} />
+
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography
+              variant="subtitle1"
+              sx={{
+                fontWeight: 600,
+                color: 'primary.main',
+                mb: 0.5,
+              }}
+            >
+              {selectedOption.label}
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                color: 'text.secondary',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+              }}
+            >
+              {selectedOption.description}
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
+            {/* Documentation link */}
+            {hasSpecificDocumentation(selectedOption.value) && (
+              <Tooltip title={`View ${selectedOption.label} documentation`}>
+                <IconButton
+                  size="small"
+                  component={Link}
+                  href={getProviderDocumentationUrl(selectedOption.value)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{ mr: 1, color: 'text.secondary' }}
+                >
+                  <HelpOutlineIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<EditIcon />}
+              onClick={handleEditSelection}
+              sx={{ ml: 1 }}
+            >
+              Change
+            </Button>
+          </Box>
+        </Paper>
+      </Box>
+    );
+  }
+
+  // Show expanded view (original full list)
   return (
     <Box>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
