@@ -547,59 +547,44 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           {/* Main content */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {/* Presets section */}
-            <Box sx={{ mb: 4 }}>
+            <Box sx={{ mb: 3 }}>
               <Typography
-                variant="h5"
+                variant="h6"
                 sx={{
-                  mb: 3,
-                  fontWeight: 500,
+                  mb: 2,
+                  fontWeight: 600,
                   color: 'text.primary',
                 }}
               >
-                Available presets
+                Presets
               </Typography>
 
-              <Box>
-                <Grid
-                  container
-                  spacing={3}
-                  sx={{
-                    mb: 4,
-                    justifyContent: {
-                      xs: 'center',
-                      sm: 'flex-start',
-                    },
-                  }}
-                >
-                  {presets.map((preset) => {
-                    const isSelected =
-                      preset.name === 'Custom'
-                        ? isCustomMode
-                        : preset.name === currentlySelectedPreset?.name;
-                    return (
-                      <Grid
-                        item
-                        xs={12}
-                        sm={6}
-                        md={4}
-                        lg={3}
-                        key={preset.name}
-                        sx={{
-                          minWidth: { xs: '280px', sm: '320px' },
-                          maxWidth: { xs: '100%', sm: '380px' },
-                        }}
-                      >
-                        <PresetCard
-                          name={preset.name}
-                          description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
-                          isSelected={isSelected}
-                          onClick={() => handlePresetSelect(preset)}
-                        />
-                      </Grid>
-                    );
-                  })}
-                </Grid>
-              </Box>
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                {presets.map((preset) => {
+                  const isSelected =
+                    preset.name === 'Custom'
+                      ? isCustomMode
+                      : preset.name === currentlySelectedPreset?.name;
+                  return (
+                    <Grid
+                      item
+                      xs={12}
+                      sm={6}
+                      md={4}
+                      lg={3}
+                      key={preset.name}
+                      sx={{ minWidth: '200px' }}
+                    >
+                      <PresetCard
+                        name={preset.name}
+                        description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
+                        isSelected={isSelected}
+                        onClick={() => handlePresetSelect(preset)}
+                      />
+                    </Grid>
+                  );
+                })}
+              </Grid>
             </Box>
 
             {/* Search and Filter section */}
@@ -1041,8 +1026,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             sx={{
               width: 320,
               position: 'sticky',
-              top: 20,
-              maxHeight: 'calc(100vh - 100px)',
+              top: 72,
+              maxHeight: '60vh',
               overflowY: 'auto',
             }}
           >
@@ -1068,7 +1053,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   Click on plugins to add them here.
                 </Typography>
               ) : (
-                <Stack spacing={1}>
+                <Stack sx={{ maxHeight: '400px', overflowY: 'auto' }} spacing={1}>
                   {Array.from(selectedPlugins).map((plugin) => (
                     <Paper
                       key={plugin}
