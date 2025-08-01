@@ -680,7 +680,7 @@ export default function RedTeamSetupPage() {
         <TabContent>
           <CustomTabPanel value={value} index={0}>
             <ErrorBoundary name="Targets Page">
-              <Targets onNext={handleNext} onBack={handleBack} setupModalOpen={setupModalOpen} />
+              <Targets onNext={handleNext} setupModalOpen={setupModalOpen} />
             </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>

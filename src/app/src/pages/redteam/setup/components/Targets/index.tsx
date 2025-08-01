@@ -28,9 +28,9 @@ import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 import type { ProviderOptions } from '../../types';
 
 interface TargetsProps {
-  onNext: () => void;
-  onBack: () => void;
-  setupModalOpen: boolean;
+  onNext?: () => void;
+  onBack?: () => void;
+  setupModalOpen?: boolean;
 }
 
 const selectOptions = [...predefinedTargets, customTargetOption];
