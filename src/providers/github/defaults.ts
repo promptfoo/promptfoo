@@ -51,12 +51,35 @@ export const DefaultGitHubReasoningProvider = new OpenAiChatCompletionProvider('
 export const GitHubProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
   logger.debug('Using GitHub Models default providers');
 
+  const githubConfigWithEnv = {
+    apiBaseUrl: 'https://models.github.ai',
+    apiKeyEnvar: 'GITHUB_TOKEN',
+  };
+
   return {
     embeddingProvider: new OpenAiEmbeddingProvider('text-embedding-3-large', { env }), // GitHub doesn't support embeddings yet
-    gradingJsonProvider: DefaultGitHubGradingJsonProvider,
-    gradingProvider: DefaultGitHubGradingProvider,
-    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest'), // GitHub doesn't have moderation
-    suggestionsProvider: DefaultGitHubSuggestionsProvider,
-    synthesizeProvider: DefaultGitHubGradingJsonProvider,
+    gradingJsonProvider: new OpenAiChatCompletionProvider('openai/gpt-4.1', {
+      env,
+      config: {
+        ...githubConfigWithEnv,
+        response_format: { type: 'json_object' },
+      },
+    }),
+    gradingProvider: new OpenAiChatCompletionProvider('openai/gpt-4.1', {
+      env,
+      config: githubConfigWithEnv,
+    }),
+    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest', { env }), // GitHub doesn't have moderation
+    suggestionsProvider: new OpenAiChatCompletionProvider('openai/gpt-4.1', {
+      env,
+      config: githubConfigWithEnv,
+    }),
+    synthesizeProvider: new OpenAiChatCompletionProvider('openai/gpt-4.1', {
+      env,
+      config: {
+        ...githubConfigWithEnv,
+        response_format: { type: 'json_object' },
+      },
+    }),
   };
 };

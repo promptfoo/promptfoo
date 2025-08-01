@@ -42,7 +42,7 @@ export const AzureProviderConfig: ProviderConfiguration = (env?: EnvOverrides) =
   const moderationProvider =
     getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || env?.AZURE_CONTENT_SAFETY_ENDPOINT
       ? new AzureModerationProvider('text-content-safety', { env })
-      : new OpenAiModerationProvider('omni-moderation-latest');
+      : new OpenAiModerationProvider('omni-moderation-latest', { env });
 
   return {
     embeddingProvider: azureEmbeddingProvider,

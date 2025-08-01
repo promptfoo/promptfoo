@@ -21,11 +21,21 @@ export const DefaultModerationProvider = new OpenAiModerationProvider('omni-mode
 export const OpenAiProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
   logger.debug('Using OpenAI default providers');
   return {
-    embeddingProvider: DefaultEmbeddingProvider,
-    gradingJsonProvider: DefaultGradingJsonProvider,
-    gradingProvider: DefaultGradingProvider,
-    moderationProvider: DefaultModerationProvider,
-    suggestionsProvider: DefaultSuggestionsProvider,
-    synthesizeProvider: DefaultGradingJsonProvider,
+    embeddingProvider: new OpenAiEmbeddingProvider('text-embedding-3-large', { env }),
+    gradingJsonProvider: new OpenAiChatCompletionProvider('gpt-4.1-2025-04-14', {
+      env,
+      config: {
+        response_format: { type: 'json_object' },
+      },
+    }),
+    gradingProvider: new OpenAiChatCompletionProvider('gpt-4.1-2025-04-14', { env }),
+    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest', { env }),
+    suggestionsProvider: new OpenAiChatCompletionProvider('gpt-4.1-2025-04-14', { env }),
+    synthesizeProvider: new OpenAiChatCompletionProvider('gpt-4.1-2025-04-14', {
+      env,
+      config: {
+        response_format: { type: 'json_object' },
+      },
+    }),
   };
 };

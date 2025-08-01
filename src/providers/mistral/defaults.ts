@@ -24,11 +24,16 @@ export const MistralProviderConfig: ProviderConfiguration = (env?: EnvOverrides)
   logger.debug('Using Mistral default providers');
 
   return {
-    embeddingProvider: DefaultEmbeddingProvider,
-    gradingJsonProvider: DefaultGradingJsonProvider,
-    gradingProvider: DefaultGradingProvider,
-    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest'),
-    suggestionsProvider: DefaultSuggestionsProvider,
-    synthesizeProvider: DefaultSynthesizeProvider,
+    embeddingProvider: new MistralEmbeddingProvider({ env }),
+    gradingJsonProvider: new MistralChatCompletionProvider('mistral-large-latest', {
+      env,
+      config: {
+        response_format: { type: 'json_object' },
+      },
+    }),
+    gradingProvider: new MistralChatCompletionProvider('mistral-large-latest', { env }),
+    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest', { env }),
+    suggestionsProvider: new MistralChatCompletionProvider('mistral-large-latest', { env }),
+    synthesizeProvider: new MistralChatCompletionProvider('mistral-large-latest', { env }),
   };
 };

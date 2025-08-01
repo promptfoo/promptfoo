@@ -5,7 +5,7 @@ import { OpenAiModerationProvider } from '../openai/moderation';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../google/vertex';
 
 // Default providers
-export const DefaultGradingProvider = new VertexChatProvider('gemini-1.5-pro');
+export const DefaultGradingProvider = new VertexChatProvider('gemini-2.5-pro');
 export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedding');
 
 /**
@@ -14,11 +14,11 @@ export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedd
 export const GeminiProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
   logger.debug('Using Google Gemini default providers');
   return {
-    embeddingProvider: DefaultEmbeddingProvider,
-    gradingJsonProvider: DefaultGradingProvider,
-    gradingProvider: DefaultGradingProvider,
-    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest'), // No native moderation, fallback to OpenAI
-    suggestionsProvider: DefaultGradingProvider,
-    synthesizeProvider: DefaultGradingProvider,
+    embeddingProvider: new VertexEmbeddingProvider('text-embedding', { env }),
+    gradingJsonProvider: new VertexChatProvider('gemini-2.5-pro', { env }),
+    gradingProvider: new VertexChatProvider('gemini-2.5-pro', { env }),
+    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest', { env }), // No native moderation, fallback to OpenAI
+    suggestionsProvider: new VertexChatProvider('gemini-2.5-pro', { env }),
+    synthesizeProvider: new VertexChatProvider('gemini-2.5-pro', { env }),
   };
 };

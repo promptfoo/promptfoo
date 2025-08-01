@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { isKeySet } from '../envars';
 import logger from '../logger';
 import type { ApiProvider, DefaultProviders } from '../types';
 import type { EnvOverrides } from '../types/env';
@@ -39,15 +39,7 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
 }
 
 /**
- * Helper to check if a key is set in environment or env overrides
- * Exported for testing
- */
-export function isKeySet(key: keyof EnvOverrides, env?: EnvOverrides): boolean {
-  return !!getEnvString(key) || !!env?.[key];
-}
-
-/**
- * Simplified provider configuration with credential checking
+ * Provider configuration with credential checking
  */
 interface ProviderEntry {
   /** Provider name for logging */
@@ -61,7 +53,7 @@ interface ProviderEntry {
 }
 
 // Exported for testing
-// Order matters - earlier providers take precedence
+// IMPORTANT: Order matters - earlier providers take precedence when multiple credentials are available
 export const PROVIDERS: ProviderEntry[] = [
   // OpenAI Provider
   {
@@ -179,8 +171,7 @@ function applyGlobalModerationOverride(
   env?: EnvOverrides,
 ): DefaultProviders {
   // Check if Azure Content Safety endpoint is configured
-  const hasAzureContentSafety =
-    isKeySet('AZURE_CONTENT_SAFETY_ENDPOINT', env) || isKeySet('AZURE_CONTENT_SAFETY_API_KEY', env);
+  const hasAzureContentSafety = isKeySet('AZURE_CONTENT_SAFETY_ENDPOINT', env);
 
   if (hasAzureContentSafety) {
     logger.debug('Applying global Azure Content Safety moderation');

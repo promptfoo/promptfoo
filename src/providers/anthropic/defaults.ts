@@ -129,7 +129,7 @@ export const AnthropicProviderConfig: ProviderConfiguration = (env?: EnvOverride
     gradingJsonProvider: gradingProvider,
     gradingProvider,
     llmRubricProvider,
-    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest'), // No native moderation, fallback to OpenAI
+    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest', { env }), // No native moderation, fallback to OpenAI
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,
   };

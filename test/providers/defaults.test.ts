@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, jest, afterAll } from '@jest/globals';
 import loggerModule from '../../src/logger';
+import { isKeySet } from '../../src/envars';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
-  isKeySet,
   PROVIDERS,
 } from '../../src/providers/defaults';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
