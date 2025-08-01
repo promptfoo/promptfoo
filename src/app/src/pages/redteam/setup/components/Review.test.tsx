@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
 
@@ -81,7 +81,7 @@ describe('Review Component', () => {
     it('renders all main sections including DefaultTestVariables component', () => {
       render(<Review />);
 
-      expect(screen.getByText('Review Your Configuration')).toBeInTheDocument();
+      expect(screen.getByText('Review & Run')).toBeInTheDocument();
       expect(screen.getByText('Configuration Summary')).toBeInTheDocument();
       expect(screen.getByTestId('default-test-variables')).toBeInTheDocument();
       expect(screen.getByText('Running Your Configuration')).toBeInTheDocument();

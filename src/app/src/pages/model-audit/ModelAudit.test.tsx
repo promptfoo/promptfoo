@@ -200,6 +200,61 @@ describe('ModelAudit', () => {
 
       expect(screen.getByText('Not Installed')).toBeInTheDocument();
     });
+
+    it('should call `checkInstallation` when the user clicks the refresh (IconButton) in the header when installationStatus.installed is false', async () => {
+      mockUseModelAuditStore.mockReturnValue({
+        ...getDefaultStoreState(),
+        installationStatus: {
+          checking: false,
+          installed: false,
+          lastChecked: Date.now(),
+          error: null,
+          cwd: '/fake/dir',
+        },
+      });
+
+      render(
+        <MemoryRouter>
+          <ThemeProvider theme={theme}>
+            <ModelAudit />
+          </ThemeProvider>
+        </MemoryRouter>,
+      );
+
+      const refreshButton = screen.getByTestId('RefreshIcon').closest('button');
+      if (refreshButton) {
+        fireEvent.click(refreshButton);
+
+        await waitFor(() => {
+          expect(mockCheckInstallation).toHaveBeenCalled();
+        });
+      }
+    });
+
+    it('should display the error message from `installationStatus.error` in the tooltip when installationStatus.installed is false and error is set', () => {
+      const errorMessage = 'Failed to connect to server.';
+      mockUseModelAuditStore.mockReturnValue({
+        ...getDefaultStoreState(),
+        installationStatus: {
+          checking: false,
+          installed: false,
+          lastChecked: Date.now(),
+          error: errorMessage,
+          cwd: null,
+        },
+      });
+
+      render(
+        <MemoryRouter>
+          <ThemeProvider theme={theme}>
+            <ModelAudit />
+          </ThemeProvider>
+        </MemoryRouter>,
+      );
+
+      const tooltip = screen.getByLabelText(errorMessage);
+      expect(tooltip).toBeInTheDocument();
+    });
   });
 
   describe('Happy Path', () => {

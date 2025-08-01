@@ -242,6 +242,11 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     if (this.initializationPromise) {
       await this.initializationPromise;
     }
+    if (!this.getApiKey()) {
+      throw new Error(
+        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,

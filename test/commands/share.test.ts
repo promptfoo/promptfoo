@@ -77,7 +77,9 @@ describe('Share Command', () => {
 
       expect(createShareableUrl).toHaveBeenCalledWith(mockEval, false);
       expect(result).toBeNull();
-      expect(logger.error).toHaveBeenCalledWith('Failed to create shareable URL');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to create shareable URL for eval test-eval-id',
+      );
       expect(logger.info).not.toHaveBeenCalled();
     });
   });

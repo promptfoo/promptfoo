@@ -14,7 +14,6 @@ interface RecentScan {
 interface InstallationStatus {
   checking: boolean;
   installed: boolean | null;
-  lastChecked: number | null;
   error: string | null;
   cwd: string | null;
 }
@@ -70,7 +69,6 @@ interface ModelAuditState {
 }
 
 const MAX_RECENT_SCANS = 10;
-const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
 // Singleton promise for request deduplication
 let checkInstallationPromise: Promise<{ installed: boolean; cwd: string }> | null = null;
@@ -94,7 +92,6 @@ export const useModelAuditStore = create<ModelAuditState>()(
       installationStatus: {
         checking: false,
         installed: null,
-        lastChecked: null,
         error: null,
         cwd: null,
       },
@@ -153,23 +150,9 @@ export const useModelAuditStore = create<ModelAuditState>()(
       },
 
       checkInstallation: async () => {
-        const state = get();
-
         // If already checking, return existing promise
         if (checkInstallationPromise) {
           return checkInstallationPromise;
-        }
-
-        // Check if we have a recent cached result
-        if (
-          state.installationStatus.lastChecked &&
-          Date.now() - state.installationStatus.lastChecked < CACHE_DURATION &&
-          state.installationStatus.installed !== null
-        ) {
-          return {
-            installed: state.installationStatus.installed,
-            cwd: state.installationStatus.cwd || '',
-          };
         }
 
         // Update status to checking
@@ -190,7 +173,6 @@ export const useModelAuditStore = create<ModelAuditState>()(
               installationStatus: {
                 checking: false,
                 installed: data.installed,
-                lastChecked: Date.now(),
                 error: null,
                 cwd: data.cwd || null,
               },
@@ -206,7 +188,6 @@ export const useModelAuditStore = create<ModelAuditState>()(
               installationStatus: {
                 checking: false,
                 installed: false,
-                lastChecked: Date.now(),
                 error: error.message,
                 cwd: null,
               },
@@ -235,10 +216,9 @@ export const useModelAuditStore = create<ModelAuditState>()(
       version: 2, // Increment version to handle migration
       skipHydration: true,
       partialize: (state) => ({
-        // Only persist these fields
+        // Only persist these fields - removed installationStatus
         recentScans: state.recentScans,
         scanOptions: state.scanOptions,
-        installationStatus: state.installationStatus,
       }),
       storage: createJSONStorage(() => localStorage),
     },
