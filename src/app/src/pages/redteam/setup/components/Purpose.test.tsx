@@ -1,53 +1,61 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useApiHealth } from '@app/hooks/useApiHealth';
+import { useTelemetry } from '@app/hooks/useTelemetry';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Purpose from './Purpose';
-import { DEFAULT_HTTP_TARGET } from '../hooks/useRedTeamConfig';
 
-vi.mock('@app/hooks/useTelemetry', () => ({
-  useTelemetry: () => ({
-    recordEvent: vi.fn(),
-  }),
-}));
-
-vi.mock('@app/hooks/useApiHealth', () => ({
-  useApiHealth: () => ({
-    status: 'unknown',
-    checkHealth: vi.fn(),
-    isChecking: false,
-  }),
-}));
-
+vi.mock('../hooks/useRedTeamConfig');
+vi.mock('@app/hooks/useTelemetry');
+vi.mock('@app/hooks/useApiHealth');
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
 }));
 
-const mockUpdateApplicationDefinition = vi.fn();
-const mockUpdateConfig = vi.fn();
-const mockUseRedTeamConfig = vi.fn();
-
-vi.mock('../hooks/useRedTeamConfig', () => ({
-  useRedTeamConfig: () => mockUseRedTeamConfig(),
-  DEFAULT_HTTP_TARGET: { id: 'http' },
-}));
+const mockedUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
+const mockedUseTelemetry = useTelemetry as unknown as Mock;
+const mockedUseApiHealth = useApiHealth as unknown as Mock;
 
 describe('Purpose Component', () => {
   const theme = createTheme();
+  const onNext = vi.fn();
+  const onBack = vi.fn();
 
   const renderWithTheme = (component: React.ReactElement) => {
-    return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
+    return render(
+      <ThemeProvider theme={theme}>
+        <MemoryRouter>
+          {component}
+        </MemoryRouter>
+      </ThemeProvider>
+    );
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseRedTeamConfig.mockReturnValue({
+
+    mockedUseRedTeamConfig.mockReturnValue({
       config: {
-        applicationDefinition: { purpose: '' },
+        applicationDefinition: {
+          purpose: '',
+        },
         target: DEFAULT_HTTP_TARGET,
       },
-      updateApplicationDefinition: mockUpdateApplicationDefinition,
-      updateConfig: mockUpdateConfig,
+      updateApplicationDefinition: vi.fn(),
+      updateConfig: vi.fn(),
+    });
+
+    mockedUseTelemetry.mockReturnValue({
+      recordEvent: vi.fn(),
+    });
+
+    mockedUseApiHealth.mockReturnValue({
+      status: 'unknown',
+      checkHealth: vi.fn(),
+      isChecking: false,
     });
   });
 
@@ -55,13 +63,13 @@ describe('Purpose Component', () => {
     const onNextMock = vi.fn();
     const onBackMock = vi.fn();
 
-    mockUseRedTeamConfig.mockReturnValue({
+    mockedUseRedTeamConfig.mockReturnValue({
       config: {
         applicationDefinition: { purpose: 'A valid purpose to enable the next button' },
         target: DEFAULT_HTTP_TARGET,
       },
-      updateApplicationDefinition: mockUpdateApplicationDefinition,
-      updateConfig: mockUpdateConfig,
+      updateApplicationDefinition: vi.fn(),
+      updateConfig: vi.fn(),
     });
 
     renderWithTheme(<Purpose onNext={onNextMock} onBack={onBackMock} />);
@@ -85,15 +93,6 @@ describe('Purpose Component', () => {
   });
 
   it('should disable the Next button in PageWrapper when testMode is application and the main purpose field is empty', () => {
-    mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        applicationDefinition: { purpose: '' },
-        target: DEFAULT_HTTP_TARGET,
-      },
-      updateApplicationDefinition: mockUpdateApplicationDefinition,
-      updateConfig: mockUpdateConfig,
-    });
-
     renderWithTheme(<Purpose onNext={vi.fn()} onBack={vi.fn()} />);
 
     const nextButton = screen.getByRole('button', { name: /Next/i });
@@ -147,5 +146,26 @@ describe('Purpose Component', () => {
 
     fireEvent.click(accordionSummary);
     expect(accordionSummary).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('should render all main sections, navigation buttons, and have a full-width container without a max-width', () => {
+    renderWithTheme(<Purpose onNext={onNext} onBack={onBack} />);
+
+    expect(
+      screen.getByRole('heading', { name: /Application Details/i, level: 4 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/What is the main purpose of your application/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Core Application Details/i, level: 6 }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Back/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Next/i })).toBeInTheDocument();
+
+    const toggleButtonGroup = screen.getByRole('group', { name: /test mode/i });
+    const mainContainer = toggleButtonGroup.parentElement?.parentElement;
+
+    expect(mainContainer).toBeInTheDocument();
+    expect(mainContainer).toHaveStyle('width: 100%');
+    expect(mainContainer?.style.maxWidth).toBeFalsy();
   });
 });
