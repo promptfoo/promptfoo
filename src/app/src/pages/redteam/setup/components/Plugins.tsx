@@ -818,6 +818,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       }}
                       color="primary"
                       size="small"
+                      aria-label={displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
                     />
                     {/* Generate test case button */}
                     <Tooltip

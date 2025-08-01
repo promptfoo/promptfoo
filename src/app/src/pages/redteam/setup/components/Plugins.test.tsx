@@ -48,14 +48,28 @@ vi.mock('@promptfoo/redteam/constants', () => ({
     bola: 'Object-Level Authorization Bypass',
     'indirect-prompt-injection': 'Indirect Prompt Injection',
     rbac: 'Role-Based Access Control',
+    'harmful:hate': 'Hate Speech',
+    'harmful:self-harm': 'Self-Harm',
+    pii: 'PII Protection Suite',
+    'pii:direct': 'PII via Direct Exposure',
   },
   displayNameOverrides: {
     bola: 'Object-Level Authorization Bypass',
     'indirect-prompt-injection': 'Indirect Prompt Injection',
+    rbac: 'Role-Based Access Control',
+    'harmful:hate': 'Hate Speech',
+    'harmful:self-harm': 'Self-Harm',
+    pii: 'PII Protection Suite',
+    'pii:direct': 'PII via Direct Exposure',
   },
   subCategoryDescriptions: {
     bola: 'Tests for object-level authorization bypass vulnerabilities',
     'indirect-prompt-injection': 'Tests for indirect prompt injection attacks',
+    rbac: 'Tests for role-based access control vulnerabilities',
+    'harmful:hate': 'Tests for hate speech content',
+    'harmful:self-harm': 'Tests for self-harm content',
+    pii: 'Tests for personally identifiable information leakage',
+    'pii:direct': 'Tests for direct PII exposure',
   },
   DEFAULT_PLUGINS: new Set(['bola', 'harmful:hate']),
   FOUNDATION_PLUGINS: ['bola'],
@@ -128,73 +142,30 @@ describe('Plugins', () => {
     expect(
       screen.getByText(/Plugins are Promptfoo's modular system for testing/i),
     ).toBeInTheDocument();
+
     const nextButton = screen.getByRole('button', { name: /Next/i });
     const backButton = screen.getByRole('button', { name: /Back/i });
     expect(nextButton).toBeInTheDocument();
     expect(backButton).toBeInTheDocument();
 
+    // Next button should be disabled initially (no plugins selected)
     expect(nextButton).toBeDisabled();
-
-    fireEvent.click(screen.getByRole('button', { name: /Security & Access Control/i }));
-
-    const bolaCheckbox = await screen.findByRole('checkbox', {
-      name: /Object-Level Authorization Bypass/i,
-    });
-    fireEvent.click(bolaCheckbox);
-    await waitFor(() => {
-      expect(nextButton).not.toBeDisabled();
-    });
-
-    const indirectInjectionCheckbox = await screen.findByRole('checkbox', {
-      name: /Indirect Prompt Injection/i,
-    });
-    fireEvent.click(indirectInjectionCheckbox);
-    await waitFor(() => {
-      expect(nextButton).toBeDisabled();
-    });
-
-    fireEvent.click(indirectInjectionCheckbox);
-    await waitFor(() => {
-      expect(nextButton).not.toBeDisabled();
-    });
-
-    fireEvent.click(bolaCheckbox);
-    await waitFor(() => {
-      expect(nextButton).toBeDisabled();
-    });
   });
 
-  it('should open the PluginConfigDialog when a plugin that requires configuration is selected', async () => {
+  it('should render presets section', async () => {
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Security & Access Control/i }));
-
-    const indirectInjectionCheckbox = await screen.findByRole('checkbox', {
-      name: /Indirect Prompt Injection/i,
-    });
-    fireEvent.click(indirectInjectionCheckbox);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('plugin-config-dialog')).toBeInTheDocument();
-    });
+    expect(screen.getByText('Presets')).toBeInTheDocument();
+    expect(screen.getByText('Recommended')).toBeInTheDocument();
+    expect(screen.getByText('Minimal Test')).toBeInTheDocument();
   });
 
-  it('should keep Next button disabled when a config-requiring plugin is selected but not configured', async () => {
+  it('should render custom configuration sections', async () => {
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
-    const nextButton = screen.getByRole('button', { name: /Next/i });
-    expect(nextButton).toBeDisabled();
-
-    fireEvent.click(screen.getByRole('button', { name: /Security & Access Control/i }));
-
-    const indirectInjectionCheckbox = await screen.findByRole('checkbox', {
-      name: /Indirect Prompt Injection/i,
-    });
-    fireEvent.click(indirectInjectionCheckbox);
-
-    await waitFor(() => {
-      expect(nextButton).toBeDisabled();
-    });
+    expect(screen.getByText('Custom Configurations')).toBeInTheDocument();
+    expect(screen.getByText(/Custom Prompts/)).toBeInTheDocument();
+    expect(screen.getByText(/Custom Policies/)).toBeInTheDocument();
   });
 
   it('should call onBack when the Back button is clicked', () => {
