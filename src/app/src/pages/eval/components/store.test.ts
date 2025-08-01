@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
 
-import type { EvaluateTable, PromptMetrics } from './types';
+import type { EvaluateTable, PromptMetrics, ResultsFile } from './types';
 
 vi.mock('uuid', () => ({
   v4: vi.fn(),
@@ -182,6 +182,37 @@ describe('useTableStore', () => {
       expect(state.filters.appliedCount).toBe(0);
       expect(state.filters.values[mockFilterId].value).toBe('');
     });
+
+    it("should update `filters.options.strategy` with unique strategy IDs (from both strings and objects) and always include 'basic' when `fetchEvalData` receives a config with mixed strategy types", async () => {
+      const mockEvalId = 'test-eval-id';
+      const mockStrategies = ['strategy1', { id: 'strategy2' }, 'strategy1', { id: 'strategy3' }];
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: {
+            redteam: {
+              strategies: mockStrategies,
+            },
+          },
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual([
+        'strategy1',
+        'strategy2',
+        'strategy3',
+        'basic',
+      ]);
+    });
   });
 
   describe('fetchEvalData', () => {
@@ -243,6 +274,81 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.isFetching).toBe(false);
       expect(result).toBe(null);
+    });
+
+    it("should handle a null strategies array in the API response by setting filters.options.strategy to ['basic']", async () => {
+      const mockEvalId = 'test-eval-id';
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: {
+            redteam: {
+              strategies: null,
+            },
+          },
+        }),
+      } as any);
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual(['basic']);
+    });
+  });
+
+  describe('setTableFromResultsFile', () => {
+    it("should set `filters.options.strategy` to only include 'basic' when `setTableFromResultsFile` is called with a resultsFile that has no strategies defined", () => {
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: {
+          redteam: {
+            strategies: [],
+          },
+        },
+        results: {
+          results: [],
+        } as any,
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual(['basic']);
+    });
+
+    it('should deduplicate strategy IDs in filters.options.strategy when resultsFile contains duplicate strategy IDs', () => {
+      const resultsFile: ResultsFile = {
+        version: 3,
+        config: {
+          redteam: {
+            strategies: ['strategy1', 'strategy2', 'strategy1'],
+          },
+        },
+        results: {
+          table: {
+            head: { prompts: [], vars: [] },
+            body: [],
+          },
+        },
+        prompts: [],
+      } as any;
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(resultsFile);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual(['strategy1', 'strategy2', 'basic']);
     });
   });
 

@@ -23,6 +23,7 @@ import {
   type GridToolbarQuickFilterProps,
 } from '@mui/x-data-grid';
 import invariant from '@promptfoo/util/invariant';
+import { useLocation } from 'react-router-dom';
 
 type Eval = {
   createdAt: number;
@@ -135,23 +136,44 @@ export default function EvalsDataGrid({
   /**
    * Fetch evals from the API.
    */
-  useEffect(() => {
-    const fetchEvals = async () => {
-      try {
-        const response = await callApi('/results', { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error('Failed to fetch evals');
-        }
-        const body = (await response.json()) as { data: Eval[] };
-        setEvals(body.data);
-      } catch (error) {
+  const fetchEvals = async (signal: AbortSignal) => {
+    try {
+      setIsLoading(true);
+      const response = await callApi('/results', { cache: 'no-store', signal });
+      if (!response.ok) {
+        throw new Error('Failed to fetch evals');
+      }
+      const body = (await response.json()) as { data: Eval[] };
+      setEvals(body.data);
+      setError(null);
+    } catch (error) {
+      // Don't set error state if the request was aborted
+      if ((error as Error).name !== 'AbortError') {
         setError(error as Error);
-      } finally {
+      }
+    } finally {
+      // Don't set loading to false if the request was aborted
+      if (signal && !signal.aborted) {
         setIsLoading(false);
       }
+    }
+  };
+
+  // Use React Router's location to detect navigation
+  const location = useLocation();
+
+  useEffect(() => {
+    // Create AbortController for this fetch
+    const abortController = new AbortController();
+
+    // Fetch evals whenever we navigate to this page
+    fetchEvals(abortController.signal);
+
+    // Cleanup: abort any in-flight request when location changes or component unmounts
+    return () => {
+      abortController.abort();
     };
-    fetchEvals();
-  }, []);
+  }, [location.pathname, location.search]); // Refetch when the pathname or query params change
 
   /**
    * Construct dataset rows:
