@@ -439,19 +439,25 @@ export async function getEvalFromId(hash: string) {
 
 export async function deleteEval(evalId: string) {
   const db = getDb();
-  db.transaction(() => {
-    // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
-    db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
-    db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
-    db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
-    db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
+  // Note: better-sqlite3 transactions are synchronous by design
+  try {
+    db.transaction(() => {
+      // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
+      db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
+      db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
+      db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
+      db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
 
-    // Finally, delete the eval record
-    const deletedIds = db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
-    if (deletedIds.changes === 0) {
-      throw new Error(`Eval with ID ${evalId} not found`);
-    }
-  });
+      // Finally, delete the eval record
+      const deletedIds = db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
+      if (deletedIds.changes === 0) {
+        throw new Error(`Eval with ID ${evalId} not found`);
+      }
+    });
+  } catch (error) {
+    logger.error(`Failed to delete eval ${evalId}: ${error}`);
+    throw error; // Re-throw to maintain existing behavior
+  }
 }
 
 /**
@@ -461,13 +467,19 @@ export async function deleteEval(evalId: string) {
  */
 export async function deleteAllEvals(): Promise<void> {
   const db = getDb();
-  db.transaction(() => {
-    db.delete(evalResultsTable).run();
-    db.delete(evalsToPromptsTable).run();
-    db.delete(evalsToDatasetsTable).run();
-    db.delete(evalsToTagsTable).run();
-    db.delete(evalsTable).run();
-  });
+  // Note: better-sqlite3 transactions are synchronous by design
+  try {
+    db.transaction(() => {
+      db.delete(evalResultsTable).run();
+      db.delete(evalsToPromptsTable).run();
+      db.delete(evalsToDatasetsTable).run();
+      db.delete(evalsToTagsTable).run();
+      db.delete(evalsTable).run();
+    });
+  } catch (error) {
+    logger.error(`Failed to delete all evals: ${error}`);
+    throw new Error(`Failed to delete all evals: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 export type StandaloneEval = CompletedPrompt & {

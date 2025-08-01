@@ -116,15 +116,30 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    await db.transaction(async (tx) => {
-      for (const result of results) {
-        const dbResult = await tx
-          .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
-          .returning();
-        returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
-      }
-    });
+    // Note: better-sqlite3 doesn't support async transactions
+    // We need to use synchronous transaction and handle returning() separately
+    try {
+      db.transaction(() => {
+        for (const result of results) {
+          const id = randomUUID();
+          db.insert(evalResultsTable)
+            .values({ ...result, evalId, id })
+            .run();
+          // Fetch the inserted result
+          const inserted = db
+            .select()
+            .from(evalResultsTable)
+            .where(eq(evalResultsTable.id, id))
+            .get();
+          if (inserted) {
+            returnResults.push(new EvalResult({ ...inserted, persisted: true }));
+          }
+        }
+      });
+    } catch (error) {
+      logger.error(`Failed to create eval results: ${error}`);
+      throw new Error(`Failed to create eval results: ${error instanceof Error ? error.message : String(error)}`);
+    }
     return returnResults;
   }
 

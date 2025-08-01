@@ -210,8 +210,11 @@ export default class Eval {
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
-    db.transaction(() => {
-      db.insert(evalsTable)
+    // Note: better-sqlite3 transactions are synchronous by design
+    // Wrap in try-catch for proper error handling
+    try {
+      db.transaction(() => {
+        db.insert(evalsTable)
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
@@ -296,7 +299,11 @@ export default class Eval {
           logger.debug(`Inserting tag ${tagId}`);
         }
       }
-    });
+      });
+    } catch (error) {
+      logger.error(`Failed to create eval: ${error}`);
+      throw new Error(`Failed to create eval: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
     return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
   }
@@ -749,13 +756,19 @@ export default class Eval {
 
   async delete() {
     const db = getDb();
-    db.transaction(() => {
-      db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
-      db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
-      db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
-      db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
-      db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
-    });
+    // Note: better-sqlite3 transactions are synchronous by design
+    try {
+      db.transaction(() => {
+        db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
+        db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
+        db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
+        db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
+        db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
+      });
+    } catch (error) {
+      logger.error(`Failed to delete eval ${this.id}: ${error}`);
+      throw new Error(`Failed to delete eval: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 
