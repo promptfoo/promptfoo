@@ -5,6 +5,7 @@ import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import Box from '@mui/material/Box';
@@ -124,9 +125,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     label: category,
   }));
 
-  // Add "Recently Used" category if there are recently used plugins
+  // Add "Recently Used" category and "Selected" filter if there are recently used plugins or selected plugins
   const allCategoryFilters = [
     ...(recentlyUsedSnapshot.length > 0 ? [{ key: 'Recently Used', label: 'Recently Used' }] : []),
+    ...(selectedPlugins.size > 0
+      ? [{ key: 'Selected', label: `Selected (${selectedPlugins.size})` }]
+      : []),
     ...categoryFilters,
   ];
 
@@ -226,6 +230,26 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   const allPluginsWithCategories = useMemo(() => {
     const pluginsWithCategories: Array<{ plugin: Plugin; category: string }> = [];
 
+    // Handle "Selected" filter - show only selected plugins
+    if (selectedCategory === 'Selected') {
+      Array.from(selectedPlugins).forEach((plugin) => {
+        // Find the original category for this plugin
+        let originalCategory = 'Other';
+        if (recentlyUsedSnapshot.includes(plugin)) {
+          originalCategory = 'Recently Used';
+        } else {
+          for (const [category, plugins] of Object.entries(riskCategories)) {
+            if (plugins.includes(plugin)) {
+              originalCategory = category;
+              break;
+            }
+          }
+        }
+        pluginsWithCategories.push({ plugin, category: originalCategory });
+      });
+      return pluginsWithCategories;
+    }
+
     // Add recently used plugins if selected category is "Recently Used" or no category selected
     if (
       recentlyUsedSnapshot.length > 0 &&
@@ -237,7 +261,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     // Add plugins from risk categories
-    if (!selectedCategory || selectedCategory !== 'Recently Used') {
+    if (
+      !selectedCategory ||
+      (selectedCategory !== 'Recently Used' && selectedCategory !== 'Selected')
+    ) {
       Object.entries(riskCategories).forEach(([category, plugins]) => {
         if (!selectedCategory || selectedCategory === category) {
           plugins
@@ -253,30 +280,33 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     return pluginsWithCategories;
-  }, [selectedCategory, recentlyUsedSnapshot]);
+  }, [selectedCategory, recentlyUsedSnapshot, selectedPlugins]);
 
   // Filter plugins based on search term
   const filteredPlugins = useMemo(() => {
-    if (!searchTerm) {
-      return allPluginsWithCategories;
+    let plugins = allPluginsWithCategories;
+
+    // Apply search filter if there's a search term
+    if (searchTerm) {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      plugins = plugins.filter(({ plugin }) => {
+        return (
+          plugin.toLowerCase().includes(lowerSearchTerm) ||
+          HARM_PLUGINS[plugin as keyof typeof HARM_PLUGINS]
+            ?.toLowerCase()
+            .includes(lowerSearchTerm) ||
+          displayNameOverrides[plugin as keyof typeof displayNameOverrides]
+            ?.toLowerCase()
+            .includes(lowerSearchTerm) ||
+          categoryAliases[plugin as keyof typeof categoryAliases]
+            ?.toLowerCase()
+            .includes(lowerSearchTerm) ||
+          subCategoryDescriptions[plugin]?.toLowerCase().includes(lowerSearchTerm)
+        );
+      });
     }
 
-    const lowerSearchTerm = searchTerm.toLowerCase();
-    return allPluginsWithCategories.filter(({ plugin }) => {
-      return (
-        plugin.toLowerCase().includes(lowerSearchTerm) ||
-        HARM_PLUGINS[plugin as keyof typeof HARM_PLUGINS]
-          ?.toLowerCase()
-          .includes(lowerSearchTerm) ||
-        displayNameOverrides[plugin as keyof typeof displayNameOverrides]
-          ?.toLowerCase()
-          .includes(lowerSearchTerm) ||
-        categoryAliases[plugin as keyof typeof categoryAliases]
-          ?.toLowerCase()
-          .includes(lowerSearchTerm) ||
-        subCategoryDescriptions[plugin]?.toLowerCase().includes(lowerSearchTerm)
-      );
-    });
+    return plugins;
   }, [searchTerm, allPluginsWithCategories]);
 
   const presets: {
@@ -513,474 +543,578 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       nextDisabled={!isConfigValid() || !hasAnyPluginsConfigured()}
     >
       <ErrorBoundary FallbackComponent={ErrorFallback}>
-        <Box>
-          {/* Presets section */}
-          <Box sx={{ mb: 4 }}>
-            <Typography
-              variant="h5"
-              sx={{
-                mb: 3,
-                fontWeight: 500,
-                color: 'text.primary',
-              }}
-            >
-              Available presets
-            </Typography>
-
-            <Box>
-              <Grid
-                container
-                spacing={3}
+        <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
+          {/* Main content */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            {/* Presets section */}
+            <Box sx={{ mb: 4 }}>
+              <Typography
+                variant="h5"
                 sx={{
-                  mb: 4,
-                  justifyContent: {
-                    xs: 'center',
-                    sm: 'flex-start',
-                  },
+                  mb: 3,
+                  fontWeight: 500,
+                  color: 'text.primary',
                 }}
               >
-                {presets.map((preset) => {
-                  const isSelected =
-                    preset.name === 'Custom'
-                      ? isCustomMode
-                      : preset.name === currentlySelectedPreset?.name;
-                  return (
-                    <Grid
-                      item
-                      xs={12}
-                      sm={6}
-                      md={4}
-                      lg={3}
-                      key={preset.name}
-                      sx={{
-                        minWidth: { xs: '280px', sm: '320px' },
-                        maxWidth: { xs: '100%', sm: '380px' },
-                      }}
-                    >
-                      <PresetCard
-                        name={preset.name}
-                        description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
-                        isSelected={isSelected}
-                        onClick={() => handlePresetSelect(preset)}
-                      />
-                    </Grid>
-                  );
-                })}
-              </Grid>
-            </Box>
-          </Box>
+                Available presets
+              </Typography>
 
-          {/* Search and Filter section */}
-          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-            <TextField
-              variant="outlined"
-              placeholder="Search plugins..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{ minWidth: 300, flexShrink: 0 }}
-            />
-
-            <Box sx={{ flex: 1 }}>
-              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                <Chip
-                  label="All Categories"
-                  variant={selectedCategory === undefined ? 'filled' : 'outlined'}
-                  color={selectedCategory === undefined ? 'primary' : 'default'}
-                  onClick={() => setSelectedCategory(undefined)}
+              <Box>
+                <Grid
+                  container
+                  spacing={3}
                   sx={{
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: selectedCategory === undefined ? 'primary.dark' : 'action.hover',
+                    mb: 4,
+                    justifyContent: {
+                      xs: 'center',
+                      sm: 'flex-start',
                     },
                   }}
-                />
-                {allCategoryFilters.map((filter) => (
+                >
+                  {presets.map((preset) => {
+                    const isSelected =
+                      preset.name === 'Custom'
+                        ? isCustomMode
+                        : preset.name === currentlySelectedPreset?.name;
+                    return (
+                      <Grid
+                        item
+                        xs={12}
+                        sm={6}
+                        md={4}
+                        lg={3}
+                        key={preset.name}
+                        sx={{
+                          minWidth: { xs: '280px', sm: '320px' },
+                          maxWidth: { xs: '100%', sm: '380px' },
+                        }}
+                      >
+                        <PresetCard
+                          name={preset.name}
+                          description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
+                          isSelected={isSelected}
+                          onClick={() => handlePresetSelect(preset)}
+                        />
+                      </Grid>
+                    );
+                  })}
+                </Grid>
+              </Box>
+            </Box>
+
+            {/* Search and Filter section */}
+            <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+              <TextField
+                variant="outlined"
+                placeholder="Search plugins..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ minWidth: 300, flexShrink: 0 }}
+              />
+
+              <Box sx={{ flex: 1 }}>
+                <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
                   <Chip
-                    key={filter.key}
-                    label={filter.label}
-                    variant={selectedCategory === filter.key ? 'filled' : 'outlined'}
-                    color={selectedCategory === filter.key ? 'primary' : 'default'}
-                    onClick={() => handleCategoryToggle(filter.key)}
+                    label="All Categories"
+                    variant={selectedCategory === undefined ? 'filled' : 'outlined'}
+                    color={selectedCategory === undefined ? 'primary' : 'default'}
+                    onClick={() => setSelectedCategory(undefined)}
                     sx={{
                       cursor: 'pointer',
                       '&:hover': {
-                        bgcolor: selectedCategory === filter.key ? 'primary.dark' : 'action.hover',
+                        bgcolor: selectedCategory === undefined ? 'primary.dark' : 'action.hover',
                       },
                     }}
                   />
-                ))}
-              </Stack>
-            </Box>
-          </Stack>
+                  {allCategoryFilters.map((filter) => (
+                    <Chip
+                      key={filter.key}
+                      label={filter.label}
+                      variant={selectedCategory === filter.key ? 'filled' : 'outlined'}
+                      color={selectedCategory === filter.key ? 'primary' : 'default'}
+                      onClick={() => handleCategoryToggle(filter.key)}
+                      sx={{
+                        cursor: 'pointer',
+                        '&:hover': {
+                          bgcolor:
+                            selectedCategory === filter.key ? 'primary.dark' : 'action.hover',
+                        },
+                      }}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+            </Stack>
 
-          {/* Bulk selection actions */}
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: 2,
-              mb: 2,
-              '& > *': {
-                color: 'primary.main',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                textDecoration: 'none',
-                '&:hover': {
-                  textDecoration: 'underline',
-                },
-              },
-            }}
-          >
+            {/* Bulk selection actions */}
             <Box
-              component="span"
-              onClick={() => {
-                filteredPlugins.forEach(({ plugin }) => {
-                  if (!selectedPlugins.has(plugin)) {
-                    handlePluginToggle(plugin);
-                  }
-                });
-              }}
-            >
-              Select all
-            </Box>
-            <Box
-              component="span"
-              onClick={() => {
-                filteredPlugins.forEach(({ plugin }) => {
-                  if (selectedPlugins.has(plugin)) {
-                    handlePluginToggle(plugin);
-                  }
-                });
-              }}
-            >
-              Select none
-            </Box>
-          </Box>
-
-          {/* Plugin list */}
-          <Stack spacing={1} sx={{ mb: 3 }}>
-            {filteredPlugins.map(({ plugin, category }) => (
-              <Paper
-                key={plugin}
-                variant="outlined"
-                onClick={() => handlePluginToggle(plugin)}
-                sx={{
-                  border: '1px solid',
-                  borderColor: selectedPlugins.has(plugin) ? 'primary.main' : 'divider',
-                  borderWidth: selectedPlugins.has(plugin) ? 2 : 1,
-                  borderRadius: 2,
-                  bgcolor: selectedPlugins.has(plugin) ? 'rgba(25, 118, 210, 0.04)' : 'transparent',
+              sx={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 2,
+                mb: 2,
+                '& > *': {
+                  color: 'primary.main',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  textDecoration: 'none',
                   '&:hover': {
-                    bgcolor: selectedPlugins.has(plugin)
-                      ? 'rgba(25, 118, 210, 0.08)'
-                      : 'rgba(0, 0, 0, 0.04)',
-                    cursor: 'pointer',
-                    borderColor: selectedPlugins.has(plugin)
-                      ? 'primary.main'
-                      : theme.palette.action.hover,
+                    textDecoration: 'underline',
                   },
-                  p: selectedPlugins.has(plugin) ? '15px' : 2,
-                  transition: 'all 0.2s ease-in-out',
-                  display: 'flex',
-                  alignItems: 'center',
-                  width: '100%',
+                },
+              }}
+            >
+              <Box
+                component="span"
+                onClick={() => {
+                  filteredPlugins.forEach(({ plugin }) => {
+                    if (!selectedPlugins.has(plugin)) {
+                      handlePluginToggle(plugin);
+                    }
+                  });
                 }}
               >
-                <Checkbox
-                  checked={selectedPlugins.has(plugin)}
-                  onChange={() => handlePluginToggle(plugin)}
-                  color="primary"
-                  sx={{ mr: 2, flexShrink: 0 }}
-                  size="small"
-                />
+                Select all
+              </Box>
+              <Box
+                component="span"
+                onClick={() => {
+                  filteredPlugins.forEach(({ plugin }) => {
+                    if (selectedPlugins.has(plugin)) {
+                      handlePluginToggle(plugin);
+                    }
+                  });
+                }}
+              >
+                Select none
+              </Box>
+            </Box>
 
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            {/* Plugin list */}
+            <Stack spacing={1} sx={{ mb: 3 }}>
+              {filteredPlugins.map(({ plugin, category }) => (
+                <Paper
+                  key={plugin}
+                  variant="outlined"
+                  onClick={(e) => {
+                    // Don't toggle if clicking on checkbox, buttons, or other interactive elements
+                    if (
+                      e.target instanceof Element &&
+                      (e.target.closest('input[type="checkbox"]') ||
+                        e.target.closest('button') ||
+                        e.target.closest('[role="checkbox"]'))
+                    ) {
+                      return;
+                    }
+                    handlePluginToggle(plugin);
+                  }}
+                  sx={{
+                    border: '2px solid',
+                    borderColor: selectedPlugins.has(plugin) ? 'primary.main' : 'divider',
+                    borderRadius: 2,
+                    bgcolor: selectedPlugins.has(plugin)
+                      ? 'rgba(25, 118, 210, 0.08)'
+                      : 'transparent',
+                    '&:hover': {
+                      bgcolor: selectedPlugins.has(plugin)
+                        ? 'rgba(25, 118, 210, 0.12)'
+                        : 'rgba(0, 0, 0, 0.04)',
+                      cursor: 'pointer',
+                      borderColor: selectedPlugins.has(plugin)
+                        ? 'primary.main'
+                        : theme.palette.action.hover,
+                    },
+                    p: 2,
+                    transition: 'all 0.2s ease-in-out',
+                    display: 'flex',
+                    alignItems: 'center',
+                    width: '100%',
+                    ...(selectedPlugins.has(plugin) && {
+                      boxShadow: '0 2px 8px rgba(25, 118, 210, 0.15)',
+                    }),
+                  }}
+                >
+                  <Checkbox
+                    checked={selectedPlugins.has(plugin)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      handlePluginToggle(plugin);
+                    }}
+                    color="primary"
+                    sx={{ mr: 2, flexShrink: 0 }}
+                    size="small"
+                  />
+
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                      <Typography
+                        variant="subtitle1"
+                        sx={{
+                          fontWeight: selectedPlugins.has(plugin) ? 600 : 500,
+                          color: selectedPlugins.has(plugin) ? 'primary.main' : 'text.primary',
+                        }}
+                      >
+                        {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                      </Typography>
+
+                      {/* Category badge for "Recently Used" plugins */}
+                      {category === 'Recently Used' && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            backgroundColor: 'action.hover',
+                            px: 1,
+                            py: 0.25,
+                            borderRadius: 1,
+                            color: 'text.secondary',
+                            fontSize: '0.7rem',
+                          }}
+                        >
+                          Recently Used
+                        </Typography>
+                      )}
+
+                      {AGENTIC_EXEMPT_PLUGINS.includes(plugin as any) && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            fontSize: '0.7rem',
+                            color: 'text.secondary',
+                            fontWeight: 400,
+                            backgroundColor: 'action.hover',
+                            px: 0.5,
+                            py: 0.25,
+                            borderRadius: 0.5,
+                          }}
+                        >
+                          agentic
+                        </Typography>
+                      )}
+                      {DATASET_EXEMPT_PLUGINS.includes(plugin as any) && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            fontSize: '0.7rem',
+                            color: 'text.secondary',
+                            fontWeight: 400,
+                            backgroundColor: 'action.hover',
+                            px: 0.5,
+                            py: 0.25,
+                            borderRadius: 0.5,
+                          }}
+                        >
+                          no strategies
+                        </Typography>
+                      )}
+                    </Box>
                     <Typography
-                      variant="subtitle1"
+                      variant="body2"
                       sx={{
-                        fontWeight: selectedPlugins.has(plugin) ? 600 : 500,
-                        color: selectedPlugins.has(plugin) ? 'primary.main' : 'text.primary',
+                        color: 'text.secondary',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
                       }}
                     >
-                      {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                      {subCategoryDescriptions[plugin]}
                     </Typography>
-
-                    {/* Category badge for "Recently Used" plugins */}
-                    {category === 'Recently Used' && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          backgroundColor: 'action.hover',
-                          px: 1,
-                          py: 0.25,
-                          borderRadius: 1,
-                          color: 'text.secondary',
-                          fontSize: '0.7rem',
-                        }}
-                      >
-                        Recently Used
-                      </Typography>
-                    )}
-
-                    {AGENTIC_EXEMPT_PLUGINS.includes(plugin as any) && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          fontSize: '0.7rem',
-                          color: 'text.secondary',
-                          fontWeight: 400,
-                          backgroundColor: 'action.hover',
-                          px: 0.5,
-                          py: 0.25,
-                          borderRadius: 0.5,
-                        }}
-                      >
-                        agentic
-                      </Typography>
-                    )}
-                    {DATASET_EXEMPT_PLUGINS.includes(plugin as any) && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          fontSize: '0.7rem',
-                          color: 'text.secondary',
-                          fontWeight: 400,
-                          backgroundColor: 'action.hover',
-                          px: 0.5,
-                          py: 0.25,
-                          borderRadius: 0.5,
-                        }}
-                      >
-                        no strategies
-                      </Typography>
-                    )}
                   </Box>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: 'text.secondary',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                    }}
-                  >
-                    {subCategoryDescriptions[plugin]}
-                  </Typography>
-                </Box>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
-                  {/* Documentation link */}
-                  {hasSpecificPluginDocumentation(plugin) && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
+                    {/* Documentation link */}
+                    {hasSpecificPluginDocumentation(plugin) && (
+                      <Tooltip
+                        title={`View ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin} documentation`}
+                      >
+                        <IconButton
+                          size="small"
+                          component={Link}
+                          href={getPluginDocumentationUrl(plugin)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          sx={{ mr: 1, color: 'text.secondary' }}
+                        >
+                          <HelpOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+
+                    {/* Generate test case button */}
                     <Tooltip
-                      title={`View ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin} documentation`}
+                      title={`Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
                     >
                       <IconButton
                         size="small"
-                        component={Link}
-                        href={getPluginDocumentationUrl(plugin)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleGenerateTestCase(plugin);
+                        }}
+                        disabled={generatingTestCase && generatingPlugin === plugin}
                         sx={{ mr: 1, color: 'text.secondary' }}
                       >
-                        <HelpOutlineIcon fontSize="small" />
+                        {generatingTestCase && generatingPlugin === plugin ? (
+                          <CircularProgress size={16} />
+                        ) : (
+                          <PlayArrowIcon fontSize="small" />
+                        )}
                       </IconButton>
                     </Tooltip>
-                  )}
 
-                  {/* Generate test case button */}
-                  <Tooltip
-                    title={`Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
-                  >
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleGenerateTestCase(plugin);
-                      }}
-                      disabled={generatingTestCase && generatingPlugin === plugin}
-                      sx={{ mr: 1, color: 'text.secondary' }}
-                    >
-                      {generatingTestCase && generatingPlugin === plugin ? (
-                        <CircularProgress size={16} />
-                      ) : (
-                        <PlayArrowIcon fontSize="small" />
-                      )}
-                    </IconButton>
-                  </Tooltip>
-
-                  {selectedPlugins.has(plugin) && PLUGINS_SUPPORTING_CONFIG.includes(plugin) && (
-                    <IconButton
-                      size="small"
-                      title={
-                        isPluginConfigured(plugin) ? 'Edit Configuration' : 'Configuration Required'
-                      }
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConfigClick(plugin);
-                      }}
-                      sx={{
-                        opacity: 0.6,
-                        '&:hover': {
-                          opacity: 1,
-                          backgroundColor: alpha(theme.palette.primary.main, 0.08),
-                        },
-                        ...(PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                          !isPluginConfigured(plugin) && {
-                            color: 'error.main',
+                    {selectedPlugins.has(plugin) && PLUGINS_SUPPORTING_CONFIG.includes(plugin) && (
+                      <IconButton
+                        size="small"
+                        title={
+                          isPluginConfigured(plugin)
+                            ? 'Edit Configuration'
+                            : 'Configuration Required'
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConfigClick(plugin);
+                        }}
+                        sx={{
+                          opacity: 0.6,
+                          '&:hover': {
                             opacity: 1,
-                          }),
+                            backgroundColor: alpha(theme.palette.primary.main, 0.08),
+                          },
+                          ...(PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+                            !isPluginConfigured(plugin) && {
+                              color: 'error.main',
+                              opacity: 1,
+                            }),
+                        }}
+                      >
+                        <SettingsOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Box>
+                </Paper>
+              ))}
+            </Stack>
+
+            {/* Custom sections */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
+                Custom Configurations
+              </Typography>
+
+              <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 2 }}>
+                  Custom Prompts (
+                  {config.plugins.filter(
+                    (p): p is { id: string; config: any } =>
+                      typeof p === 'object' && 'id' in p && p.id === 'intent' && 'config' in p,
+                  )[0]?.config?.intent?.length || 0}
+                  )
+                </Typography>
+                <CustomIntentSection />
+              </Paper>
+
+              <Paper variant="outlined" sx={{ p: 3 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 2 }}>
+                  Custom Policies (
+                  {config.plugins.filter(
+                    (p) => typeof p === 'object' && 'id' in p && p.id === 'policy',
+                  ).length || 0}
+                  )
+                </Typography>
+                <CustomPoliciesSection />
+              </Paper>
+            </Box>
+
+            <PluginConfigDialog
+              open={configDialogOpen}
+              plugin={selectedConfigPlugin}
+              config={selectedConfigPlugin ? pluginConfig[selectedConfigPlugin] || {} : {}}
+              onClose={() => {
+                setConfigDialogOpen(false);
+                setSelectedConfigPlugin(null);
+              }}
+              onSave={(plugin, newConfig) => {
+                updatePluginConfig(plugin, newConfig);
+              }}
+            />
+
+            {/* Test Case Generation Dialog */}
+            <Dialog
+              open={testCaseDialogOpen}
+              onClose={() => {
+                setTestCaseDialogOpen(false);
+                setGeneratedTestCase(null);
+                setGeneratingPlugin(null);
+              }}
+              maxWidth="md"
+              fullWidth
+            >
+              <DialogTitle>
+                Generated Test Case -{' '}
+                {generatingPlugin &&
+                  (displayNameOverrides[generatingPlugin] ||
+                    categoryAliases[generatingPlugin] ||
+                    generatingPlugin)}
+              </DialogTitle>
+              <DialogContent>
+                {generatedTestCase && (
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
+                      Generated Prompt:
+                    </Typography>
+                    <Box
+                      sx={{
+                        p: 2,
+                        mb: 3,
+                        backgroundColor: 'grey.50',
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: 'grey.300',
+                        fontFamily: 'monospace',
+                        fontSize: '0.875rem',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
                       }}
                     >
-                      <SettingsOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  )}
-                </Box>
-              </Paper>
-            ))}
-          </Stack>
-
-          {/* Custom sections */}
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
-              Custom Configurations
-            </Typography>
-
-            <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 2 }}>
-                Custom Prompts (
-                {config.plugins.filter(
-                  (p): p is { id: string; config: any } =>
-                    typeof p === 'object' && 'id' in p && p.id === 'intent' && 'config' in p,
-                )[0]?.config?.intent?.length || 0}
-                )
-              </Typography>
-              <CustomIntentSection />
-            </Paper>
-
-            <Paper variant="outlined" sx={{ p: 3 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 2 }}>
-                Custom Policies (
-                {config.plugins.filter(
-                  (p) => typeof p === 'object' && 'id' in p && p.id === 'policy',
-                ).length || 0}
-                )
-              </Typography>
-              <CustomPoliciesSection />
-            </Paper>
-          </Box>
-
-          <PluginConfigDialog
-            open={configDialogOpen}
-            plugin={selectedConfigPlugin}
-            config={selectedConfigPlugin ? pluginConfig[selectedConfigPlugin] || {} : {}}
-            onClose={() => {
-              setConfigDialogOpen(false);
-              setSelectedConfigPlugin(null);
-            }}
-            onSave={(plugin, newConfig) => {
-              updatePluginConfig(plugin, newConfig);
-            }}
-          />
-
-          {/* Test Case Generation Dialog */}
-          <Dialog
-            open={testCaseDialogOpen}
-            onClose={() => {
-              setTestCaseDialogOpen(false);
-              setGeneratedTestCase(null);
-              setGeneratingPlugin(null);
-            }}
-            maxWidth="md"
-            fullWidth
-          >
-            <DialogTitle>
-              Generated Test Case -{' '}
-              {generatingPlugin &&
-                (displayNameOverrides[generatingPlugin] ||
-                  categoryAliases[generatingPlugin] ||
-                  generatingPlugin)}
-            </DialogTitle>
-            <DialogContent>
-              {generatedTestCase && (
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-                    Generated Prompt:
-                  </Typography>
-                  <Box
-                    sx={{
-                      p: 2,
-                      mb: 3,
-                      backgroundColor: 'grey.50',
-                      borderRadius: 1,
-                      border: '1px solid',
-                      borderColor: 'grey.300',
-                      fontFamily: 'monospace',
-                      fontSize: '0.875rem',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {generatedTestCase.prompt}
-                  </Box>
-
-                  {generatedTestCase.context && (
-                    <Box>
-                      <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-                        Context:
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        {generatedTestCase.context}
-                      </Typography>
+                      {generatedTestCase.prompt}
                     </Box>
-                  )}
 
-                  {generatedTestCase.metadata &&
-                    Object.keys(generatedTestCase.metadata).length > 0 && (
+                    {generatedTestCase.context && (
                       <Box>
                         <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-                          Metadata:
+                          Context:
                         </Typography>
-                        <Box
-                          sx={{
-                            p: 2,
-                            backgroundColor: 'grey.50',
-                            borderRadius: 1,
-                            border: '1px solid',
-                            borderColor: 'grey.300',
-                            fontFamily: 'monospace',
-                            fontSize: '0.875rem',
-                          }}
-                        >
-                          {JSON.stringify(generatedTestCase.metadata, null, 2)}
-                        </Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          {generatedTestCase.context}
+                        </Typography>
                       </Box>
                     )}
+
+                    {generatedTestCase.metadata &&
+                      Object.keys(generatedTestCase.metadata).length > 0 && (
+                        <Box>
+                          <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
+                            Metadata:
+                          </Typography>
+                          <Box
+                            sx={{
+                              p: 2,
+                              backgroundColor: 'grey.50',
+                              borderRadius: 1,
+                              border: '1px solid',
+                              borderColor: 'grey.300',
+                              fontFamily: 'monospace',
+                              fontSize: '0.875rem',
+                            }}
+                          >
+                            {JSON.stringify(generatedTestCase.metadata, null, 2)}
+                          </Box>
+                        </Box>
+                      )}
+                  </Box>
+                )}
+              </DialogContent>
+              <DialogActions>
+                <Button
+                  onClick={() => {
+                    setTestCaseDialogOpen(false);
+                    setGeneratedTestCase(null);
+                    setGeneratingPlugin(null);
+                  }}
+                >
+                  Close
+                </Button>
+              </DialogActions>
+            </Dialog>
+          </Box>
+
+          {/* Selected Plugins Sidebar */}
+          <Box
+            sx={{
+              width: 320,
+              position: 'sticky',
+              top: 20,
+              maxHeight: 'calc(100vh - 100px)',
+              overflowY: 'auto',
+            }}
+          >
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                backgroundColor: 'background.paper',
+              }}
+            >
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                Selected Plugins ({selectedPlugins.size})
+              </Typography>
+
+              {selectedPlugins.size === 0 ? (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ textAlign: 'center', py: 4 }}
+                >
+                  No plugins selected yet.
+                  <br />
+                  Click on plugins to add them here.
+                </Typography>
+              ) : (
+                <Stack spacing={1}>
+                  {Array.from(selectedPlugins).map((plugin) => (
+                    <Paper
+                      key={plugin}
+                      variant="outlined"
+                      sx={{
+                        p: 1.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        backgroundColor: 'primary.50',
+                        borderColor: 'primary.200',
+                      }}
+                    >
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                        </Typography>
+                      </Box>
+                      <IconButton
+                        size="small"
+                        onClick={() => handlePluginToggle(plugin)}
+                        sx={{ color: 'text.secondary', ml: 1 }}
+                      >
+                        <RemoveIcon fontSize="small" />
+                      </IconButton>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+
+              {selectedPlugins.size > 0 && (
+                <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    onClick={() => {
+                      selectedPlugins.forEach((plugin) => handlePluginToggle(plugin));
+                    }}
+                    sx={{ fontSize: '0.875rem' }}
+                  >
+                    Clear All
+                  </Button>
                 </Box>
               )}
-            </DialogContent>
-            <DialogActions>
-              <Button
-                onClick={() => {
-                  setTestCaseDialogOpen(false);
-                  setGeneratedTestCase(null);
-                  setGeneratingPlugin(null);
-                }}
-              >
-                Close
-              </Button>
-            </DialogActions>
-          </Dialog>
+            </Paper>
+          </Box>
         </Box>
       </ErrorBoundary>
     </PageWrapper>
