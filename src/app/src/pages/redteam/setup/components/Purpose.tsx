@@ -291,7 +291,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
       onBack={onBack}
       nextDisabled={testMode === 'application' && !isPurposePresent}
     >
-      <Box sx={{ maxWidth: '1200px', width: '100%', px: 3 }}>
+      <Box sx={{ width: '100%', px: 3 }}>
         <Stack direction="column" spacing={4}>
           <ToggleButtonGroup
             value={testMode}
