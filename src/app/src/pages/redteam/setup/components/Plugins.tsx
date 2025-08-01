@@ -6,9 +6,11 @@ import { callApi } from '@app/utils/api';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -153,7 +155,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           .filter((plugin): plugin is string | { id: string; config: any } => plugin !== null),
       [selectedPlugins, pluginConfig],
     ),
-    1000,
+    100,
   );
 
   useEffect(() => {
@@ -164,7 +166,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     if (debouncedPlugins) {
       updatePlugins(debouncedPlugins);
     }
-  }, [debouncedPlugins, updatePlugins]);
+  }, [debouncedPlugins]);
 
   const handlePluginToggle = useCallback(
     (plugin: Plugin) => {
@@ -481,6 +483,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
         },
         body: JSON.stringify({
           pluginId: plugin,
@@ -490,6 +494,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
             language: 'en',
             modifiers: {},
           },
+          // Add timestamp to ensure unique requests and bypass caching
+          timestamp: Date.now(),
+          requestId: Math.random().toString(36).substring(7),
         }),
       });
 
@@ -1021,22 +1028,38 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               fullWidth
             >
               <DialogTitle>
-                Generated Test Case -{' '}
+                Test Case Sample -{' '}
                 {generatingPlugin &&
                   (displayNameOverrides[generatingPlugin] ||
                     categoryAliases[generatingPlugin] ||
                     generatingPlugin)}
               </DialogTitle>
               <DialogContent>
-                {generatedTestCase && (
+                {generatingTestCase ? (
+                  <Box
+                    sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}
+                  >
+                    <CircularProgress sx={{ mb: 2 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      Generating test case...
+                    </Typography>
+                  </Box>
+                ) : generatedTestCase ? (
                   <Box>
+                    {/* Context first as an alert */}
+                    {generatedTestCase.context && (
+                      <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
+                        {generatedTestCase.context}
+                      </Alert>
+                    )}
+
+                    {/* Generated Prompt */}
                     <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
                       Generated Prompt:
                     </Typography>
                     <Box
                       sx={{
                         p: 2,
-                        mb: 3,
                         backgroundColor: 'grey.50',
                         borderRadius: 1,
                         border: '1px solid',
@@ -1049,41 +1072,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     >
                       {generatedTestCase.prompt}
                     </Box>
-
-                    {generatedTestCase.context && (
-                      <Box>
-                        <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-                          Context:
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          {generatedTestCase.context}
-                        </Typography>
-                      </Box>
-                    )}
-
-                    {generatedTestCase.metadata &&
-                      Object.keys(generatedTestCase.metadata).length > 0 && (
-                        <Box>
-                          <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-                            Metadata:
-                          </Typography>
-                          <Box
-                            sx={{
-                              p: 2,
-                              backgroundColor: 'grey.50',
-                              borderRadius: 1,
-                              border: '1px solid',
-                              borderColor: 'grey.300',
-                              fontFamily: 'monospace',
-                              fontSize: '0.875rem',
-                            }}
-                          >
-                            {JSON.stringify(generatedTestCase.metadata, null, 2)}
-                          </Box>
-                        </Box>
-                      )}
                   </Box>
-                )}
+                ) : null}
               </DialogContent>
               <DialogActions>
                 <Button
@@ -1094,6 +1084,18 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   }}
                 >
                   Close
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={generatingTestCase ? <CircularProgress size={16} /> : <RefreshIcon />}
+                  onClick={() => {
+                    if (generatingPlugin) {
+                      handleGenerateTestCase(generatingPlugin);
+                    }
+                  }}
+                  disabled={!generatingPlugin || generatingTestCase}
+                >
+                  Generate Another
                 </Button>
               </DialogActions>
             </Dialog>
