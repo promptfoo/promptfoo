@@ -36,6 +36,7 @@ import { FalImageGenerationProvider } from './fal';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
 import { GoogleLiveProvider } from './google/live';
+import { GoogleImageProvider } from './google/image';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HeliconeGatewayProvider } from './helicone';
@@ -67,6 +68,7 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { createOpenRouterProvider } from './openrouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
 import { PortkeyChatCompletionProvider } from './portkey';
@@ -731,26 +733,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://openrouter.ai/api/v1',
-          apiKeyEnvar: 'OPENROUTER_API_KEY',
-          passthrough: {
-            // Pass through OpenRouter-specific options
-            // https://openrouter.ai/docs/requests
-            ...(providerOptions.config.transforms && {
-              transforms: providerOptions.config.transforms,
-            }),
-            ...(providerOptions.config.models && { models: providerOptions.config.models }),
-            ...(providerOptions.config.route && { route: providerOptions.config.route }),
-            ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
-            ...(providerOptions.config.passthrough || {}),
-          },
-        },
+      return createOpenRouterProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },
@@ -834,6 +819,20 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const { createAimlApiProvider } = await import('./aimlapi');
       return createAimlApiProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('docker:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createDockerProvider } = await import('./docker');
+      return createDockerProvider(providerPath, {
         ...providerOptions,
         env: context.env,
       });
@@ -943,6 +942,9 @@ export const providerMap: ProviderFactory[] = [
         if (serviceType === 'live') {
           // This is a Live API request
           return new GoogleLiveProvider(modelName, providerOptions);
+        } else if (serviceType === 'image') {
+          // This is an Image Generation request
+          return new GoogleImageProvider(modelName, providerOptions);
         }
       }
 

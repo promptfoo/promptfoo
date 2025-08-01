@@ -1,9 +1,49 @@
 import React from 'react';
 
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+
+import { useTelemetry } from '@app/hooks/useTelemetry';
+import { callApi } from '@app/utils/api';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
+import Targets from './index';
+
+vi.mock('../../hooks/useRedTeamConfig');
+vi.mock('@app/hooks/useTelemetry');
+vi.mock('@app/utils/api');
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+}));
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: vi.fn(),
+  }),
+}));
+vi.mock('../PageWrapper', () => ({
+  default: ({
+    children,
+    onNext,
+    onBack,
+    nextDisabled,
+  }: {
+    children: React.ReactNode;
+    onNext: () => void;
+    onBack: () => void;
+    nextDisabled: boolean;
+  }) => (
+    <div>
+      {children}
+      <button onClick={onBack}>Back</button>
+      <button onClick={onNext} disabled={nextDisabled}>
+        Next
+      </button>
+    </div>
+  ),
+}));
 
 const renderWithTheme = (ui: React.ReactElement) => {
   const theme = createTheme({ palette: { mode: 'light' } });
@@ -143,5 +183,236 @@ describe('updateCustomTarget function behavior', () => {
 
     expect(result.config).toEqual(newConfig);
     expect(result.config).not.toHaveProperty('config'); // No nesting
+  });
+});
+
+describe('Targets Component', () => {
+  let mockUpdateConfig: ReturnType<typeof vi.fn>;
+  let mockRecordEvent: ReturnType<typeof vi.fn>;
+  let mockOnNext: ReturnType<typeof vi.fn>;
+  let mockOnBack: ReturnType<typeof vi.fn>;
+  let mockCallApi: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    mockUpdateConfig = vi.fn();
+    mockRecordEvent = vi.fn();
+    mockOnNext = vi.fn();
+    mockOnBack = vi.fn();
+    mockCallApi = vi.fn();
+
+    (useTelemetry as any).mockReturnValue({
+      recordEvent: mockRecordEvent,
+    });
+
+    (callApi as any).mockImplementation(mockCallApi);
+  });
+
+  it('should allow http target selection, and enable the Next button when all required fields are filled', async () => {
+    (useRedTeamConfig as any).mockReturnValue({
+      config: {
+        target: DEFAULT_HTTP_TARGET,
+        plugins: [],
+        strategies: [],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    expect(nextButton).toBeDisabled();
+
+    const targetNameInput = screen.getByLabelText(/Target Name/i);
+    fireEvent.change(targetNameInput, { target: { value: 'My Test API' } });
+
+    const urlInput = screen.getByLabelText(/URL/i);
+    fireEvent.change(urlInput, { target: { value: 'https://my.api.com/chat' } });
+
+    await waitFor(() => {
+      expect(nextButton).not.toBeDisabled();
+    });
+
+    fireEvent.click(nextButton);
+    expect(mockOnNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("should allow the user to select the 'websocket' target, enter a valid WebSocket URL, and enable the Next button when all required fields are present", async () => {
+    (useRedTeamConfig as any).mockReturnValue({
+      config: {
+        target: {
+          id: 'http',
+          label: '',
+          config: {},
+        },
+        plugins: [],
+        strategies: [],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+
+    const user = userEvent.setup();
+
+    const targetTypeSelect = screen.getByLabelText(/Target Type/i);
+    await user.click(targetTypeSelect);
+    const websocketOption = screen.getByRole('option', { name: /websocket/i });
+    await user.click(websocketOption);
+
+    const webSocketURLInput = screen.getByLabelText(/WebSocket URL/i);
+    await user.type(webSocketURLInput, 'wss://example.com/ws');
+
+    const targetNameInput = screen.getByLabelText(/Target Name/i);
+    await user.type(targetNameInput, 'My WebSocket Target');
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).not.toBeDisabled();
+    });
+
+    await user.click(nextButton);
+    expect(mockOnNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('should call handleTestTarget and display a success message when the user tests a valid HTTP target configuration', async () => {
+    const validHttpTarget = {
+      ...DEFAULT_HTTP_TARGET,
+      label: 'My Valid HTTP Target',
+      config: {
+        ...DEFAULT_HTTP_TARGET.config,
+        url: 'https://example.com/api',
+      },
+    };
+
+    (useRedTeamConfig as any).mockReturnValue({
+      config: {
+        target: validHttpTarget,
+        plugins: [],
+        strategies: [],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        testResult: {
+          success: true,
+          message: 'Target configuration is valid!',
+        },
+        providerResponse: {},
+      }),
+    });
+
+    renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+
+    const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
+    fireEvent.click(testTargetButton);
+
+    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(callApi).toHaveBeenCalledWith(
+      '/providers/test',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(validHttpTarget),
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Target configuration is valid!')).toBeInTheDocument();
+    });
+  });
+
+  it('should reset error states when switching from an HTTP target with validation errors to another target type', async () => {
+    (useRedTeamConfig as any).mockReturnValue({
+      config: {
+        target: {
+          ...DEFAULT_HTTP_TARGET,
+          config: {
+            ...DEFAULT_HTTP_TARGET.config,
+            url: 'invalid-url',
+          },
+        },
+        plugins: [],
+        strategies: [],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+
+    const targetTypeSelect = screen.getByLabelText(/Target Type/i);
+    fireEvent.mouseDown(targetTypeSelect);
+    const websocketOption = screen.getByText(/WebSocket/i);
+    fireEvent.click(websocketOption);
+
+    await waitFor(() => {
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        'target',
+        expect.objectContaining({
+          id: 'websocket',
+          config: expect.objectContaining({
+            url: 'wss://example.com/ws',
+          }),
+        }),
+      );
+    });
+  });
+
+  it('should preserve target settings when navigating back after configuring a target', async () => {
+    const initialTargetName = 'My Initial Target';
+    const initialTargetURL = 'https://example.com/api';
+
+    (useRedTeamConfig as any).mockReturnValue({
+      config: {
+        target: {
+          ...DEFAULT_HTTP_TARGET,
+          label: initialTargetName,
+          config: {
+            ...DEFAULT_HTTP_TARGET.config,
+            url: initialTargetURL,
+          },
+        },
+        plugins: [],
+        strategies: [],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+
+    const targetNameInput = screen.getByLabelText(/Target Name/i);
+    const urlInput = screen.getByLabelText(/URL/i);
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    const backButton = screen.getByRole('button', { name: /Back/i });
+
+    fireEvent.change(targetNameInput, { target: { value: initialTargetName } });
+    fireEvent.change(urlInput, { target: { value: initialTargetURL } });
+
+    await waitFor(() => {
+      expect(nextButton).not.toBeDisabled();
+    });
+
+    fireEvent.click(nextButton);
+    expect(mockOnNext).toHaveBeenCalledTimes(1);
+
+    (useRedTeamConfig as any).mockReturnValue({
+      config: {
+        target: {
+          ...DEFAULT_HTTP_TARGET,
+          label: initialTargetName,
+          config: {
+            ...DEFAULT_HTTP_TARGET.config,
+            url: initialTargetURL,
+          },
+        },
+        plugins: [],
+        strategies: [],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    fireEvent.click(backButton);
+    expect(mockOnBack).toHaveBeenCalledTimes(1);
   });
 });

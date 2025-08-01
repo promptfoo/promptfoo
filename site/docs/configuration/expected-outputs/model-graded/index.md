@@ -18,12 +18,17 @@ Output-based:
 - [`classifier`](/docs/configuration/expected-outputs/classifier) - see classifier grading docs.
 - [`moderation`](/docs/configuration/expected-outputs/moderation) - see moderation grading docs.
 - [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - compare outputs from multiple test cases and choose a winner
+- [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - select the output with the highest aggregate score from other assertions
 
 Context-based:
 
 - [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
 - [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+
+Conversational:
+
+- [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - ensure that responses remain relevant throughout a conversation
 
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
@@ -110,6 +115,33 @@ tests:
     assert:
       - type: select-best
         value: choose the tweet that contains the most facts
+```
+
+The `max-score` assertion type is used to objectively select the output with the highest score from other assertions:
+
+```yaml
+prompts:
+  - 'Write a summary of {{article}}'
+  - 'Write a detailed summary of {{article}}'
+  - 'Write a comprehensive summary of {{article}} with key points'
+
+providers:
+  - openai:gpt-4
+
+tests:
+  - vars:
+      article: 'AI safety research is accelerating...'
+    assert:
+      - type: contains
+        value: 'AI safety'
+      - type: contains
+        value: 'research'
+      - type: llm-rubric
+        value: 'Summary captures the main points accurately'
+      - type: max-score
+        value:
+          method: average # Use average of all assertion scores
+          threshold: 0.7 # Require at least 70% score to pass
 ```
 
 ## Overriding the LLM grader

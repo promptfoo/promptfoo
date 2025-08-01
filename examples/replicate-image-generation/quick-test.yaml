@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Quick test of Replicate image generation (2 models, 3 prompts)
+
+prompts:
+  - 'Generate an image: {{imagePrompt}}'
+
+providers:
+  # FLUX Dev - Best balance of quality and cost
+  - id: replicate:image:black-forest-labs/flux-dev
+    config:
+      width: 1024
+      height: 1024
+      num_outputs: 1
+      guidance: 3.5
+      num_inference_steps: 28
+
+  # SDXL for comparison
+  - id: replicate:image:stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc
+    label: sdxl
+    config:
+      width: 1024
+      height: 1024
+      num_inference_steps: 25
+
+tests:
+  # Simple object
+  - vars:
+      imagePrompt: 'A red apple on a white table, professional product photography, soft lighting'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          if (typeof output !== 'string') {
+            return false;
+          }
+          return output.includes('![') && output.includes('](http');
+
+  # Portrait
+  - vars:
+      imagePrompt: 'Portrait of a smiling elderly man with grey beard, warm lighting, bokeh background'
+    assert:
+      - type: javascript
+        value: |
+          // Check markdown image format
+          return output && output.includes('![') && output.includes('](http');
+
+  # Landscape
+  - vars:
+      imagePrompt: 'Serene mountain lake at sunrise, mirror reflection, pine trees, photorealistic'
+    assert:
+      - type: javascript
+        value: |
+          // Check markdown image format
+          return output && output.includes('![') && output.includes('](http');

@@ -98,3 +98,22 @@ providers:
 - Support for text and multimodal (vision) models
 - Compatible with OpenAI API format
 - Pay-as-you-go pricing
+
+## Thinking/Reasoning Models
+
+Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are shown using the `showThinking` parameter:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openrouter:google/gemini-2.5-pro
+    config:
+      showThinking: false # Hide thinking content from output (default: true)
+```
+
+When `showThinking` is true (default), the output includes thinking content:
+
+```
+Thinking: <reasoning process>
+
+<actual response>
+```

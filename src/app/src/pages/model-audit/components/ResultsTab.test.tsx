@@ -29,6 +29,9 @@ vi.mock('./SecurityFindings', () => ({
   )),
 }));
 
+const MockedScanStatistics = vi.mocked(ScanStatistics);
+const MockedSecurityFindings = vi.mocked(SecurityFindings);
+
 const theme = createTheme();
 
 describe('ResultsTab', () => {
@@ -55,28 +58,22 @@ describe('ResultsTab', () => {
       </ThemeProvider>,
     );
 
-    expect(ScanStatistics).toHaveBeenCalledTimes(1);
-    expect(ScanStatistics).toHaveBeenCalledWith(
-      {
-        scanResults: mockScanResults,
-        selectedSeverity: null,
-        onSeverityClick: expect.any(Function),
-        onFilesClick: mockOnShowFilesDialog,
-      },
-      {},
-    );
+    expect(MockedScanStatistics).toHaveBeenCalledTimes(1);
+    expect(MockedScanStatistics.mock.calls[0][0]).toMatchObject({
+      scanResults: mockScanResults,
+      selectedSeverity: null,
+      onSeverityClick: expect.any(Function),
+      onFilesClick: mockOnShowFilesDialog,
+    });
 
-    expect(SecurityFindings).toHaveBeenCalledTimes(1);
-    expect(SecurityFindings).toHaveBeenCalledWith(
-      {
-        scanResults: mockScanResults,
-        selectedSeverity: null,
-        onSeverityChange: expect.any(Function),
-        showRawOutput: false,
-        onToggleRawOutput: expect.any(Function),
-      },
-      {},
-    );
+    expect(MockedSecurityFindings).toHaveBeenCalledTimes(1);
+    expect(MockedSecurityFindings.mock.calls[0][0]).toMatchObject({
+      scanResults: mockScanResults,
+      selectedSeverity: null,
+      onSeverityChange: expect.any(Function),
+      showRawOutput: false,
+      onToggleRawOutput: expect.any(Function),
+    });
   });
 
   it('should update selectedSeverity and pass it to SecurityFindings when a severity is clicked in ScanStatistics', async () => {
@@ -99,17 +96,14 @@ describe('ResultsTab', () => {
     const severityButton = screen.getByTestId('severity-button');
     await user.click(severityButton);
 
-    expect(SecurityFindings).toHaveBeenCalledTimes(2);
-    expect(SecurityFindings).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scanResults: mockScanResults,
-        selectedSeverity: 'error',
-        onSeverityChange: expect.any(Function),
-        showRawOutput: false,
-        onToggleRawOutput: expect.any(Function),
-      }),
-      {},
-    );
+    expect(MockedSecurityFindings).toHaveBeenCalledTimes(2);
+    expect(MockedSecurityFindings.mock.lastCall?.[0]).toMatchObject({
+      scanResults: mockScanResults,
+      selectedSeverity: 'error',
+      onSeverityChange: expect.any(Function),
+      showRawOutput: false,
+      onToggleRawOutput: expect.any(Function),
+    });
   });
 
   it('should toggle showRawOutput and pass the updated value to SecurityFindings when the raw output toggle is triggered', async () => {
@@ -132,17 +126,14 @@ describe('ResultsTab', () => {
     const toggleButton = screen.getByTestId('toggle-raw-output');
     await user.click(toggleButton);
 
-    expect(SecurityFindings).toHaveBeenCalledTimes(2);
-    expect(SecurityFindings).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scanResults: mockScanResults,
-        selectedSeverity: null,
-        onSeverityChange: expect.any(Function),
-        showRawOutput: true,
-        onToggleRawOutput: expect.any(Function),
-      }),
-      {},
-    );
+    expect(MockedSecurityFindings).toHaveBeenCalledTimes(2);
+    expect(MockedSecurityFindings.mock.lastCall?.[0]).toMatchObject({
+      scanResults: mockScanResults,
+      selectedSeverity: null,
+      onSeverityChange: expect.any(Function),
+      showRawOutput: true,
+      onToggleRawOutput: expect.any(Function),
+    });
   });
 
   it('should handle malformed scanResults gracefully when scanResults.issues is undefined', () => {
@@ -205,15 +196,12 @@ describe('ResultsTab', () => {
 
     await userEvent.click(severityButton);
 
-    expect(ScanStatistics).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        scanResults: mockScanResults,
-        selectedSeverity: null,
-        onSeverityClick: expect.any(Function),
-        onFilesClick: mockOnShowFilesDialog,
-      }),
-      {},
-    );
+    expect(MockedScanStatistics.mock.lastCall?.[0]).toMatchObject({
+      scanResults: mockScanResults,
+      selectedSeverity: null,
+      onSeverityClick: expect.any(Function),
+      onFilesClick: mockOnShowFilesDialog,
+    });
 
     originalMock.mockReset();
   });

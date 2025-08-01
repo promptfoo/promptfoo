@@ -429,6 +429,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'context-faithfulness',
   'context-recall',
   'context-relevance',
+  'conversation-relevance',
   'cost',
   'equals',
   'factuality',
@@ -475,9 +476,11 @@ type NotPrefixed<T extends string> = `not-${T}`;
 // The 'human' assertion type is added via the web UI to allow manual grading.
 // The 'select-best' assertion type compares all variations for a given test case
 // and selects the highest scoring one after all other assertions have completed.
-export type SpecialAssertionTypes = 'select-best' | 'human';
+// The 'max-score' assertion type selects the output with the highest aggregate score
+// from other assertions.
+export type SpecialAssertionTypes = 'select-best' | 'human' | 'max-score';
 
-export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human']);
+export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human', 'max-score']);
 
 export const NotPrefixedAssertionTypesSchema = BaseAssertionTypesSchema.transform(
   (baseType) => `not-${baseType}` as NotPrefixed<BaseAssertionTypes>,
@@ -1141,12 +1144,23 @@ export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
 export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
 
+export interface OutputMetadata {
+  promptfooVersion: string;
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  exportedAt: string;
+  evaluationCreatedAt?: string;
+  author?: string;
+}
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
   results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
+  metadata?: OutputMetadata;
 }
 
 // Live eval job state

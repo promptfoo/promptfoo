@@ -5,6 +5,8 @@ import async from 'async';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
+import { handleConversationRelevance } from '../external/assertions/deepeval';
+import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import {
   matchesAnswerRelevance,
@@ -267,13 +269,14 @@ export async function runAssertion({
     'context-faithfulness': handleContextFaithfulness,
     'context-recall': handleContextRecall,
     'context-relevance': handleContextRelevance,
+    'conversation-relevance': handleConversationRelevance,
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
     'finish-reason': handleFinishReason,
+    'g-eval': handleGEval,
     gleu: handleGleuScore,
     guardrails: handleGuardrails,
-    'g-eval': handleGEval,
     icontains: handleIContains,
     'icontains-all': handleIContainsAll,
     'icontains-any': handleIContainsAny,
@@ -310,6 +313,7 @@ export async function runAssertion({
     moderation: handleModeration,
     perplexity: handlePerplexity,
     'perplexity-score': handlePerplexityScore,
+    pi: handlePiScorer,
     python: handlePython,
     regex: handleRegex,
     'rouge-n': handleRougeScore,
@@ -319,8 +323,12 @@ export async function runAssertion({
     'trace-span-count': handleTraceSpanCount,
     'trace-span-duration': handleTraceSpanDuration,
     webhook: handleWebhook,
-    pi: handlePiScorer,
   };
+
+  // Check for redteam assertions first
+  if (baseType.startsWith('promptfoo:redteam:')) {
+    return handleRedteam(assertionParams);
+  }
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
   if (handler) {
@@ -337,9 +345,6 @@ export async function runAssertion({
     return result;
   }
 
-  if (baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
-  }
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
@@ -402,8 +407,8 @@ export async function runAssertions({
     asserts,
     ASSERTIONS_MAX_CONCURRENCY,
     async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-')) {
-        // Select-type assertions are handled separately because they depend on multiple outputs.
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
         return;
       }
 
@@ -491,4 +496,5 @@ export default {
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
   matchesModeration,
+  matchesConversationRelevance,
 };
