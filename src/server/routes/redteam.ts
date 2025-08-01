@@ -2,12 +2,94 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import cliState from '../../cliState';
 import logger from '../../logger';
+import { REDTEAM_MODEL } from '../../redteam/constants';
+import { Plugins } from '../../redteam/plugins';
+import { redteamProviderManager } from '../../redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
+
+// Generate a single test case for a specific plugin
+redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { pluginId, config, timestamp, requestId } = req.body;
+
+    if (!pluginId) {
+      res.status(400).json({ error: 'Plugin ID is required' });
+      return;
+    }
+
+    // Find the plugin
+    const plugin = Plugins.find((p) => p.key === pluginId);
+    if (!plugin) {
+      res.status(400).json({ error: `Plugin ${pluginId} not found` });
+      return;
+    }
+
+    // Get default values from config
+    const purpose = config?.applicationDefinition?.purpose || 'general AI assistant';
+    const injectVar = config?.injectVar || 'query';
+
+    // Get the red team provider
+    const redteamProvider = await redteamProviderManager.getProvider({
+      provider: config?.provider || REDTEAM_MODEL,
+    });
+
+    // Generate a single test case using the plugin's action
+    // Add randomization through modifiers to ensure unique test cases
+    const randomizedModifiers = {
+      ...config?.modifiers,
+      _requestId: requestId || Math.random().toString(36).substring(7),
+      _timestamp: timestamp || Date.now(),
+    };
+
+    const testCases = await plugin.action({
+      provider: redteamProvider,
+      purpose,
+      injectVar,
+      n: 1, // Generate only one test case
+      delayMs: 0,
+      config: {
+        language: config?.language || 'en',
+        modifiers: randomizedModifiers,
+      },
+    });
+
+    if (testCases.length === 0) {
+      res.status(500).json({ error: 'Failed to generate test case' });
+      return;
+    }
+
+    const testCase = testCases[0];
+    const generatedPrompt = testCase.vars?.[injectVar] || 'Unable to extract test prompt';
+
+    // Generate dynamic context message with timestamp for uniqueness
+    const contextMessages = [
+      `This test case targets the ${pluginId} plugin and was generated based on your application context.`,
+      `Generated test case for ${pluginId} - customize your application definition to improve relevance.`,
+      `Test case sample for ${pluginId} plugin - each generation produces unique variations.`,
+      `Dynamic test case for ${pluginId} created using your configured application purpose.`,
+    ];
+
+    const contextIndex = (timestamp || Date.now()) % contextMessages.length;
+    const dynamicContext = contextMessages[contextIndex];
+
+    res.json({
+      prompt: generatedPrompt,
+      context: dynamicContext,
+      metadata: testCase.metadata,
+    });
+  } catch (error) {
+    logger.error(`Error generating test case: ${error}`);
+    res.status(500).json({
+      error: 'Failed to generate test case',
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
 
 // Track the current running job
 let currentJobId: string | null = null;
