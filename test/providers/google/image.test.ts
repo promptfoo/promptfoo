@@ -17,11 +17,15 @@ describe('GoogleImageProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.GOOGLE_API_KEY = 'test-api-key';
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
   });
 
   afterEach(() => {
     delete process.env.GOOGLE_API_KEY;
     delete process.env.GOOGLE_PROJECT_ID;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
   });
 
   it('should construct with model name', () => {
@@ -65,6 +69,8 @@ describe('GoogleImageProvider', () => {
   it('should return error when both project ID and API key are missing', async () => {
     delete process.env.GOOGLE_PROJECT_ID;
     delete process.env.GOOGLE_API_KEY;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
     const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
     const result = await provider.callApi('Test prompt');
@@ -304,6 +310,8 @@ describe('GoogleImageProvider', () => {
 
     it('should handle missing API key for Google AI Studio', async () => {
       delete process.env.GOOGLE_API_KEY;
+      delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      delete process.env.GEMINI_API_KEY;
       const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
       const result = await provider.callApi('Test prompt');

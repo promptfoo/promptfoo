@@ -33,7 +33,7 @@ export async function createAndDisplayShareableUrl(
   if (url) {
     logger.info(`View results: ${chalk.greenBright.bold(url)}`);
   } else {
-    logger.error('Failed to create shareable URL');
+    logger.error(`Failed to create shareable URL for eval ${evalRecord.id}`);
     process.exitCode = 1;
   }
   return url;
