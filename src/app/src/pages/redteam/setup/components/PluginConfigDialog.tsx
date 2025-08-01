@@ -197,16 +197,23 @@ export default function PluginConfigDialog({
       case 'prompt-extraction':
         const key = 'systemPrompt';
         return (
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            label="System Prompt"
-            variant="outlined"
-            margin="normal"
-            value={localConfig[key] || ''}
-            onChange={(e) => setLocalConfig({ ...localConfig, [key]: e.target.value })}
-          />
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              The Prompt Extraction plugin tests whether an attacker can extract your system prompt
+              through various techniques. Provide your actual system prompt here so the plugin can
+              test if it can be extracted.
+            </Typography>
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              label="System Prompt"
+              variant="outlined"
+              margin="normal"
+              value={localConfig[key] || ''}
+              onChange={(e) => setLocalConfig({ ...localConfig, [key]: e.target.value })}
+            />
+          </Box>
         );
       case 'bfla':
       case 'bola':
@@ -217,10 +224,27 @@ export default function PluginConfigDialog({
             : plugin === 'bola'
               ? 'targetSystems'
               : 'targetUrls';
+
+        const getExplanation = () => {
+          switch (plugin) {
+            case 'bfla':
+              return "BFLA (Broken Function Level Authorization) tests whether users can access functions they shouldn't. Specify function names, API endpoints, or identifiers that should have restricted access.";
+            case 'bola':
+              return "BOLA (Broken Object Level Authorization) tests whether users can access objects they shouldn't own. Specify system names, object IDs, or resource identifiers to test authorization controls.";
+            case 'ssrf':
+              return 'SSRF (Server-Side Request Forgery) tests whether your application can be tricked into making requests to unintended destinations. Specify URLs or endpoints that should not be accessible.';
+            default:
+              return '';
+          }
+        };
+
         // Ensure we always have at least one item
         const currentArray = (localConfig[arrayKey] as string[]) || [''];
         return (
-          <>
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {getExplanation()}
+            </Typography>
             {currentArray.map((item: string, index: number) => (
               <Box key={index} sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
                 <TextField
@@ -249,20 +273,32 @@ export default function PluginConfigDialog({
             >
               Add
             </Button>
-          </>
+          </Box>
         );
       case 'indirect-prompt-injection':
         return (
-          <TextField
-            fullWidth
-            label="Indirect Injection Variable"
-            variant="outlined"
-            margin="normal"
-            value={localConfig.indirectInjectionVar || ''}
-            onChange={(e) =>
-              setLocalConfig({ ...localConfig, indirectInjectionVar: e.target.value })
-            }
-          />
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Indirect Prompt Injection tests whether untrusted content can influence your AI
+              system's behavior. This happens when user-generated content or external data (like
+              from RAG systems) contains malicious instructions. Specify the variable name in your
+              prompt that contains untrusted data (e.g., 'name', 'userContent', 'document').
+            </Typography>
+            <TextField
+              fullWidth
+              label="Indirect Injection Variable"
+              variant="outlined"
+              margin="normal"
+              value={localConfig.indirectInjectionVar || ''}
+              onChange={(e) =>
+                setLocalConfig({ ...localConfig, indirectInjectionVar: e.target.value })
+              }
+              placeholder="e.g., name, userContent, document"
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              {`Example: If your prompt is "Hello {{name}}, how can I help?" and user data goes into the 'name' variable, enter "name" above.`}
+            </Typography>
+          </Box>
         );
       default:
         return null;
