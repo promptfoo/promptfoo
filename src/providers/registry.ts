@@ -104,6 +104,84 @@ interface ProviderFactory {
   ) => Promise<ApiProvider>;
 }
 
+/**
+ * Helper to create a simple provider factory for providers that just need a model name
+ */
+function createSimpleProviderFactory(
+  prefix: string,
+  ProviderClass: new (modelName: string, options: ProviderOptions) => ApiProvider,
+  defaultModel?: string,
+): ProviderFactory {
+  return {
+    test: (providerPath: string) => providerPath.startsWith(`${prefix}:`),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const modelName = providerPath.split(':').slice(1).join(':') || defaultModel || '';
+      return new ProviderClass(modelName, providerOptions);
+    },
+  };
+}
+
+/**
+ * Helper to create a provider factory that supports multiple types (chat, completion, embedding)
+ */
+function createMultiTypeProviderFactory(
+  prefix: string,
+  providers: {
+    chat?: new (modelName: string, options: any) => ApiProvider;
+    completion?: new (modelName: string, options: any) => ApiProvider;
+    embedding?: new (modelName: string, options: any) => ApiProvider;
+    default: new (modelName: string, options: any) => ApiProvider;
+  },
+): ProviderFactory {
+  return {
+    test: (providerPath: string) => providerPath.startsWith(`${prefix}:`),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+
+      if ((modelType === 'chat' || modelType === 'messages') && providers.chat) {
+        return new providers.chat(modelName, providerOptions);
+      } else if (modelType === 'completion' && providers.completion) {
+        return new providers.completion(modelName, providerOptions);
+      } else if ((modelType === 'embedding' || modelType === 'embeddings') && providers.embedding) {
+        return new providers.embedding(modelName || modelType, providerOptions);
+      } else {
+        // Default case - type is actually part of model name
+        const fullModelName = splits.slice(1).join(':');
+        return new providers.default(fullModelName, providerOptions);
+      }
+    },
+  };
+}
+
+/**
+ * Helper to create a provider factory for providers that use a factory function
+ */
+function createFactoryProviderFactory(
+  prefix: string,
+  factoryFn: (providerPath: string, options: any) => ApiProvider,
+): ProviderFactory {
+  return {
+    test: (providerPath: string) => providerPath.startsWith(`${prefix}:`),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return factoryFn(providerPath, { config: providerOptions, env: context.env });
+    },
+  };
+}
+
 export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
@@ -143,17 +221,7 @@ export const providerMap: ProviderFactory[] = [
       return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('ai21:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const modelName = providerPath.split(':')[1];
-      return new AI21ChatCompletionProvider(modelName, providerOptions);
-    },
-  },
+  createSimpleProviderFactory('ai21', AI21ChatCompletionProvider),
   {
     test: (providerPath: string) =>
       providerPath.startsWith('alibaba:') ||
@@ -353,19 +421,7 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('cerebras:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createCerebrasProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  createFactoryProviderFactory('cerebras', createCerebrasProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('cloudera:'),
     create: async (
@@ -527,17 +583,7 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => createGitHubProvider(providerPath, providerOptions, context),
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('groq:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const modelName = providerPath.split(':')[1];
-      return new GroqProvider(modelName, providerOptions);
-    },
-  },
+  createSimpleProviderFactory('groq', GroqProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('helicone:'),
     create: async (
@@ -604,28 +650,12 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('localai:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const modelType = splits[1];
-      const modelName = splits[2];
-      if (modelType === 'chat') {
-        return new LocalAiChatProvider(modelName, providerOptions);
-      }
-      if (modelType === 'completion') {
-        return new LocalAiCompletionProvider(modelName, providerOptions);
-      }
-      if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new LocalAiEmbeddingProvider(modelName, providerOptions);
-      }
-      return new LocalAiChatProvider(modelType, providerOptions);
-    },
-  },
+  createMultiTypeProviderFactory('localai', {
+    chat: LocalAiChatProvider,
+    completion: LocalAiCompletionProvider,
+    embedding: LocalAiEmbeddingProvider,
+    default: LocalAiChatProvider,
+  }),
   {
     test: (providerPath: string) => providerPath.startsWith('mistral:'),
     create: async (
@@ -642,32 +672,12 @@ export const providerMap: ProviderFactory[] = [
       return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('ollama:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const firstPart = splits[1];
-      if (firstPart === 'chat') {
-        const modelName = splits.slice(2).join(':');
-        return new OllamaChatProvider(modelName, providerOptions);
-      }
-      if (firstPart === 'completion') {
-        const modelName = splits.slice(2).join(':');
-        return new OllamaCompletionProvider(modelName, providerOptions);
-      }
-      if (firstPart === 'embedding' || firstPart === 'embeddings') {
-        const modelName = splits.slice(2).join(':');
-        return new OllamaEmbeddingProvider(modelName, providerOptions);
-      }
-      // Default to completion provider
-      const modelName = splits.slice(1).join(':');
-      return new OllamaCompletionProvider(modelName, providerOptions);
-    },
-  },
+  createMultiTypeProviderFactory('ollama', {
+    chat: OllamaChatProvider,
+    completion: OllamaCompletionProvider,
+    embedding: OllamaEmbeddingProvider,
+    default: OllamaCompletionProvider,
+  }),
   {
     test: (providerPath: string) => providerPath.startsWith('openai:'),
     create: async (
@@ -726,19 +736,7 @@ export const providerMap: ProviderFactory[] = [
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('openrouter:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createOpenRouterProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  createFactoryProviderFactory('openrouter', createOpenRouterProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('package:'),
     create: async (
@@ -749,19 +747,7 @@ export const providerMap: ProviderFactory[] = [
       return parsePackageProvider(providerPath, context.basePath || process.cwd(), providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('perplexity:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createPerplexityProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  createFactoryProviderFactory('perplexity', createPerplexityProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('portkey:'),
     create: async (
@@ -797,19 +783,7 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('togetherai:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createTogetherAiProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  createFactoryProviderFactory('togetherai', createTogetherAiProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('aimlapi:'),
     create: async (
@@ -867,18 +841,7 @@ export const providerMap: ProviderFactory[] = [
       return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('watsonx:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new WatsonXProvider(modelName, providerOptions);
-    },
-  },
+  createSimpleProviderFactory('watsonx', WatsonXProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('webhook:'),
     create: async (
@@ -1225,17 +1188,5 @@ export const providerMap: ProviderFactory[] = [
       );
     },
   },
-  {
-    test: (providerPath: string) => providerPath.startsWith('lambdalabs:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createLambdaLabsProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
-  },
+  createFactoryProviderFactory('lambdalabs', createLambdaLabsProvider),
 ];
