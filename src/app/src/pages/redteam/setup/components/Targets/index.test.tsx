@@ -250,6 +250,10 @@ describe('Targets Component', () => {
 
     renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
 
+    // Component starts in collapsed view showing HTTP provider, click Change to expand
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
     const websocketProviderCard = screen
       .getByText('WebSocket Endpoint')
       .closest('div[class*="MuiPaper-root"]');
@@ -336,6 +340,10 @@ describe('Targets Component', () => {
     });
 
     renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
+
+    // Component starts in collapsed view showing HTTP provider, click Change to expand
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
 
     const websocketProviderCard = screen
       .getByText('WebSocket Endpoint')

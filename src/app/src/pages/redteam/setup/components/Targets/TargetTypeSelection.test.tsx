@@ -84,6 +84,11 @@ describe('TargetTypeSelection', () => {
     const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
     expect(footerNextButton).toBeEnabled();
 
+    // After target type section is revealed, component defaults to HTTP provider in collapsed state
+    // Click "Change" button to expand the provider selector
+    const changeButton = await screen.findByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
     const openAICard = await screen.findByText('OpenAI');
     fireEvent.click(openAICard.closest('div.MuiPaper-root') as HTMLElement);
 
@@ -122,6 +127,11 @@ describe('TargetTypeSelection', () => {
     await waitFor(() => {
       expect(screen.getByText('Select Target Type')).toBeInTheDocument();
     });
+
+    // After target type section is revealed, component defaults to HTTP provider in collapsed state
+    // Click "Change" button to expand the provider selector
+    const changeButton = await screen.findByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
 
     const openAICard = await screen.findByText('OpenAI');
     fireEvent.click(openAICard.closest('div.MuiPaper-root') as HTMLElement);
