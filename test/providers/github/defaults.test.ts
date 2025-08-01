@@ -1,5 +1,5 @@
 import { getDefaultProviders } from '../../../src/providers/defaults';
-import { getEnvString } from '../../../src/envars';
+import { getEnvString, isKeySet } from '../../../src/envars';
 
 jest.mock('../../../src/envars');
 jest.mock('../../../src/logger', () => ({
@@ -16,6 +16,7 @@ jest.mock('../../../src/providers/google/util', () => ({
 }));
 
 const mockedGetEnvString = jest.mocked(getEnvString);
+const mockedIsKeySet = jest.mocked(isKeySet);
 
 describe('GitHub Models Default Providers', () => {
   beforeEach(() => {
@@ -24,11 +25,15 @@ describe('GitHub Models Default Providers', () => {
 
   it('should use GitHub token for github: model when only GITHUB_TOKEN is available', async () => {
     // Mock environment where only GITHUB_TOKEN is set
-    mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => {
+    mockedGetEnvString.mockImplementation((key: string, defaultValue?: any) => {
       if (key === 'GITHUB_TOKEN') {
         return 'test-github-token';
       }
       return defaultValue;
+    });
+    
+    mockedIsKeySet.mockImplementation((key: string) => {
+      return key === 'GITHUB_TOKEN';
     });
 
     const providers = await getDefaultProviders();
@@ -44,7 +49,7 @@ describe('GitHub Models Default Providers', () => {
   });
 
   it('should prefer OpenAI over GitHub when both tokens are available', async () => {
-    mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => {
+    mockedGetEnvString.mockImplementation((key: string, defaultValue?: any) => {
       if (key === 'OPENAI_API_KEY') {
         return 'test-openai-key';
       }
@@ -52,6 +57,10 @@ describe('GitHub Models Default Providers', () => {
         return 'test-github-token';
       }
       return defaultValue;
+    });
+    
+    mockedIsKeySet.mockImplementation((key: string) => {
+      return key === 'OPENAI_API_KEY' || key === 'GITHUB_TOKEN';
     });
 
     const providers = await getDefaultProviders();
@@ -61,7 +70,7 @@ describe('GitHub Models Default Providers', () => {
   });
 
   it('should prefer Anthropic over GitHub when Anthropic is available', async () => {
-    mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => {
+    mockedGetEnvString.mockImplementation((key: string, defaultValue?: any) => {
       if (key === 'ANTHROPIC_API_KEY') {
         return 'test-anthropic-key';
       }
@@ -69,6 +78,10 @@ describe('GitHub Models Default Providers', () => {
         return 'test-github-token';
       }
       return defaultValue;
+    });
+    
+    mockedIsKeySet.mockImplementation((key: string) => {
+      return key === 'ANTHROPIC_API_KEY' || key === 'GITHUB_TOKEN';
     });
 
     const providers = await getDefaultProviders();
@@ -78,7 +91,11 @@ describe('GitHub Models Default Providers', () => {
   });
 
   it('should use GitHub with env overrides', async () => {
-    mockedGetEnvString.mockImplementation((key: string, defaultValue = '') => defaultValue);
+    mockedGetEnvString.mockImplementation((key: string, defaultValue?: any) => defaultValue);
+    
+    mockedIsKeySet.mockImplementation((key: string, env?: any) => {
+      return env && key === 'GITHUB_TOKEN' && !!env[key];
+    });
 
     const providers = await getDefaultProviders({
       GITHUB_TOKEN: 'override-github-token',
