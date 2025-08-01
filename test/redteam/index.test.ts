@@ -1080,7 +1080,7 @@ describe('calculateTotalTests', () => {
     expect(result).toEqual({
       totalTests: 5,
       totalPluginTests: 5,
-      effectiveStrategyCount: 0,
+      effectiveStrategyCount: 1,
       multilingualStrategy: undefined,
       includeBasicTests: true,
     });
@@ -1110,13 +1110,24 @@ describe('calculateTotalTests', () => {
     });
   });
 
+  it('should implicitly enable the basic strategy when no strategies are provided', () => {
+    const result = calculateTotalTests(mockPlugins, []);
+    expect(result).toEqual({
+      totalTests: 5,
+      totalPluginTests: 5,
+      effectiveStrategyCount: 1,
+      includeBasicTests: true,
+      multilingualStrategy: undefined,
+    });
+  });
+
   it('should handle multilingual strategy with default languages', () => {
     const strategies = [{ id: 'multilingual' }];
     const result = calculateTotalTests(mockPlugins, strategies);
     expect(result).toEqual({
       totalTests: 5 * DEFAULT_LANGUAGES.length,
       totalPluginTests: 5,
-      effectiveStrategyCount: 1,
+      effectiveStrategyCount: 2,
       multilingualStrategy: strategies[0],
       includeBasicTests: true,
     });
@@ -1130,7 +1141,7 @@ describe('calculateTotalTests', () => {
     expect(result).toEqual({
       totalTests: 15,
       totalPluginTests: 5,
-      effectiveStrategyCount: 1,
+      effectiveStrategyCount: 2,
       multilingualStrategy: strategies[0],
       includeBasicTests: true,
     });
@@ -1157,7 +1168,7 @@ describe('calculateTotalTests', () => {
     expect(result).toEqual({
       totalTests: 10,
       totalPluginTests: 5,
-      effectiveStrategyCount: 1,
+      effectiveStrategyCount: 2,
       includeBasicTests: true,
       multilingualStrategy: undefined,
     });
@@ -1169,7 +1180,7 @@ describe('calculateTotalTests', () => {
     expect(result).toEqual({
       totalTests: 8,
       totalPluginTests: 5,
-      effectiveStrategyCount: 1,
+      effectiveStrategyCount: 2,
       includeBasicTests: true,
       multilingualStrategy: undefined,
     });
@@ -1184,7 +1195,7 @@ describe('calculateTotalTests', () => {
     expect(result).toEqual({
       totalTests: 20,
       totalPluginTests: 5,
-      effectiveStrategyCount: 2,
+      effectiveStrategyCount: 3,
       includeBasicTests: true,
       multilingualStrategy: strategies[1],
     });
@@ -1197,7 +1208,7 @@ describe('calculateTotalTests', () => {
     expect(result).toEqual({
       totalTests: 100,
       totalPluginTests: 50,
-      effectiveStrategyCount: 1,
+      effectiveStrategyCount: 2,
       includeBasicTests: true,
       multilingualStrategy: undefined,
     });
@@ -1209,7 +1220,7 @@ describe('calculateTotalTests', () => {
     expect(result).toEqual({
       totalTests: 15,
       totalPluginTests: 5,
-      effectiveStrategyCount: 2,
+      effectiveStrategyCount: 3,
       includeBasicTests: true,
       multilingualStrategy: undefined,
     });
@@ -1225,7 +1236,7 @@ describe('calculateTotalTests', () => {
     expect(result).toEqual({
       totalTests: 30,
       totalPluginTests: 5,
-      effectiveStrategyCount: 3,
+      effectiveStrategyCount: 4,
       includeBasicTests: true,
       multilingualStrategy: strategies[2],
     });
