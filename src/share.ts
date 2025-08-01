@@ -8,7 +8,7 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
-import logger from './logger';
+import logger, { isDebugEnabled } from './logger';
 import { makeRequest as makeCloudRequest } from './util/cloud';
 
 import type Eval from './models/eval';
@@ -85,7 +85,10 @@ async function sendEvalRecord(
   headers: Record<string, string>,
 ): Promise<string> {
   const evalDataWithoutResults = { ...evalRecord, results: [] };
-  logger.debug(`Sending initial eval data to ${url}`);
+  logger.debug(
+    `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts`,
+  );
+
   const response = await fetchWithProxy(url, {
     method: 'POST',
     headers,
@@ -116,8 +119,12 @@ async function sendChunkOfResults(
   headers: Record<string, string>,
 ) {
   const targetUrl = `${url}/${evalId}/results`;
-  logger.debug(`Sending chunk of ${chunk.length} results to ${targetUrl}`);
   const stringifiedChunk = JSON.stringify(chunk);
+  const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
+
+  logger.debug(`Sending chunk of ${chunk.length} results to ${targetUrl}`);
+  logger.debug(`Chunk size: ${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB`);
+
   const response = await fetchWithProxy(targetUrl, {
     method: 'POST',
     headers,
@@ -156,6 +163,9 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
 }
 
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
+  const isVerbose = isDebugEnabled();
+  logger.debug(`Starting chunked results upload to ${url}`);
+
   const sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
@@ -184,16 +194,20 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   }
 
   const totalResults = await evalRecord.getResultsCount();
+  logger.debug(`Total results to share: ${totalResults}`);
 
-  // Setup progress bar
-  const progressBar = new cliProgress.SingleBar(
-    {
-      format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
-      gracefulExit: true,
-    },
-    cliProgress.Presets.shades_classic,
-  );
-  progressBar.start(totalResults, 0);
+  // Setup progress bar only if not in verbose mode or CI
+  let progressBar: cliProgress.SingleBar | null = null;
+  if (!isVerbose && !isCI()) {
+    progressBar = new cliProgress.SingleBar(
+      {
+        format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
+        gracefulExit: true,
+      },
+      cliProgress.Presets.shades_classic,
+    );
+    progressBar.start(totalResults, 0);
+  }
 
   let evalId: string | undefined;
   try {
@@ -203,21 +217,50 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
     // Send chunks using batched cursor
     let currentChunk: EvalResult[] = [];
+    let totalSent = 0;
+    let chunkNumber = 0;
+
     for await (const batch of evalRecord.fetchResultsBatched(estimatedResultsPerChunk)) {
       for (const result of batch) {
         currentChunk.push(result);
         if (currentChunk.length >= estimatedResultsPerChunk) {
+          chunkNumber++;
+          logger.debug(`Sending chunk ${chunkNumber} with ${currentChunk.length} results`);
+
           await sendChunkOfResults(currentChunk, url, evalId, headers);
-          progressBar.increment(currentChunk.length);
+          totalSent += currentChunk.length;
+
+          if (progressBar) {
+            progressBar.increment(currentChunk.length);
+          } else {
+            logger.info(
+              `Progress: ${totalSent}/${totalResults} results shared (${Math.round((totalSent / totalResults) * 100)}%)`,
+            );
+          }
+
           currentChunk = [];
         }
       }
     }
+
     // Send final chunk
     if (currentChunk.length > 0) {
+      chunkNumber++;
+      logger.debug(`Sending final chunk ${chunkNumber} with ${currentChunk.length} results`);
+
       await sendChunkOfResults(currentChunk, url, evalId, headers);
-      progressBar.increment(currentChunk.length);
+      totalSent += currentChunk.length;
+
+      if (progressBar) {
+        progressBar.increment(currentChunk.length);
+      } else {
+        logger.info(`Progress: ${totalSent}/${totalResults} results shared (100%)`);
+      }
     }
+
+    logger.debug(
+      `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
+    );
 
     return evalId;
   } catch (e) {
@@ -229,7 +272,9 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     }
     return null;
   } finally {
-    progressBar.stop();
+    if (progressBar) {
+      progressBar.stop();
+    }
   }
 }
 
