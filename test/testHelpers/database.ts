@@ -31,6 +31,14 @@ export async function setupTestDatabase(testSuiteName: string) {
   if (tables.length === 0) {
     throw new Error('Migrations failed - no tables created');
   }
+  
+  // Specifically check for evals table
+  const evalsTableExists = await db.all(sql`SELECT name FROM sqlite_master WHERE type='table' AND name='evals'`);
+  if (evalsTableExists.length === 0) {
+    throw new Error('Migrations failed - evals table not created');
+  }
+  
+  console.log(`Database setup complete for ${testSuiteName}, tables:`, tables.map(t => t.name));
 }
 
 /**
