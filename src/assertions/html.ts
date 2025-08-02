@@ -4,32 +4,40 @@ import type { AssertionParams, GradingResult } from '../types';
 
 // Patterns that indicate HTML content
 const HTML_PATTERNS = {
-  // Opening tags with optional attributes
-  openingTag: /<[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^>]*)?>/,
+  // Opening tags with optional attributes - fixed to prevent ReDoS
+  openingTag: /<[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?>/,
   // Closing tags
   closingTag: /<\/[a-zA-Z][a-zA-Z0-9-]*\s*>/,
-  // Self-closing tags
-  selfClosingTag: /<[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^>]*)?\/>/,
+  // Self-closing tags - fixed to prevent ReDoS
+  selfClosingTag: /<[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?\/>/,
   // HTML entities
   htmlEntity: /&(?:[a-zA-Z]+|#[0-9]+|#x[0-9a-fA-F]+);/,
   // DOCTYPE declaration
   doctype: /<!DOCTYPE\s+html/i,
-  // HTML comments
-  htmlComment: /<!--[\s\S]*?-->/,
-  // Common attribute patterns
-  htmlAttribute: /\s+[a-zA-Z-]+\s*=\s*["'][^"']*["']/,
+  // HTML comments - using non-greedy quantifier to prevent ReDoS
+  htmlComment: /<!--[^-]*(?:-[^-]+)*-->/,
+  // Common attribute patterns - simplified to prevent ReDoS
+  htmlAttribute: /\s[a-zA-Z-]+=\s*["'][^"']*["']/,
 };
 
+// Maximum input size to prevent DoS attacks (10MB)
+const MAX_INPUT_SIZE = 10 * 1024 * 1024;
+
 function containsHtml(text: string): boolean {
+  // Size limit check to prevent DoS
+  if (text.length > MAX_INPUT_SIZE) {
+    return false;
+  }
+
   // First try the pattern-based approach for performance
   let htmlIndicators = 0;
 
   // Check for paired tags (opening and closing)
-  const openingMatches = text.match(HTML_PATTERNS.openingTag);
-  const closingMatches = text.match(HTML_PATTERNS.closingTag);
-  if (openingMatches && closingMatches) {
+  const hasOpening = HTML_PATTERNS.openingTag.test(text);
+  const hasClosing = HTML_PATTERNS.closingTag.test(text);
+  if (hasOpening && hasClosing) {
     htmlIndicators += 2;
-  } else if (openingMatches || closingMatches) {
+  } else if (hasOpening || hasClosing) {
     htmlIndicators += 1;
   }
 
@@ -209,6 +217,11 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
 
   if (!trimmed) {
     return { isValid: false, reason: 'Output is empty' };
+  }
+
+  // Size limit check to prevent DoS
+  if (trimmed.length > MAX_INPUT_SIZE) {
+    return { isValid: false, reason: 'Output exceeds maximum size limit' };
   }
 
   // Exclude XML documents
