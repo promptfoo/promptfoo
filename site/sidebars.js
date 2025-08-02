@@ -252,7 +252,7 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
-        label: 'Agentic Red Teaming',
+        label: 'Agent Red Teaming',
         id: 'red-team/agents',
       },
       {
