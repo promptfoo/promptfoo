@@ -1,3 +1,7 @@
+// Unmock database for real database tests
+jest.unmock('../../src/database');
+jest.unmock('../../src/database/tables');
+
 import { getDb, closeDb } from '../../src/database';
 import {
   evalResultsTable,
@@ -21,19 +25,21 @@ jest.mock('../../src/globalConfig/accounts', () => ({
 describe('evaluator', () => {
   beforeAll(async () => {
     process.env.IS_TESTING = 'true';
-    closeDb(); // Close any existing database connection
     await runDbMigrations();
+  });
+
+  afterAll(() => {
+    closeDb(); // Clean up after all tests
   });
 
   beforeEach(async () => {
     // Clear all tables before each test
     const db = getDb();
-    // Delete related tables first
+    // Use drizzle methods to delete from tables
     await db.delete(evalResultsTable);
     await db.delete(evalsToDatasetsTable);
     await db.delete(evalsToPromptsTable);
     await db.delete(evalsToTagsTable);
-    // Then delete from main table
     await db.delete(evalsTable);
   });
 

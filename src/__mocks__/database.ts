@@ -1,51 +1,87 @@
-export const mockDbInstance = {
-  insert: jest.fn().mockReturnThis(),
-  values: jest.fn().mockResolvedValue(undefined),
-  select: jest.fn().mockReturnThis(),
-  from: jest.fn().mockReturnThis(),
-  where: jest.fn().mockReturnThis(),
-  limit: jest.fn().mockResolvedValue([]),
-  delete: jest.fn().mockReturnThis(),
-  update: jest.fn().mockReturnThis(),
-  set: jest.fn().mockReturnThis(),
+// Mock database module for tests that don't need real database
+// Tests that need real database should use jest.unmock('../../src/database')
+
+// Re-export actual table definitions
+export * from '../database/tables';
+
+// Create chainable mock methods
+const createChainableMock = () => {
+  const mock: any = {
+    insert: jest.fn(),
+    values: jest.fn(),
+    select: jest.fn(),
+    from: jest.fn(),
+    where: jest.fn(),
+    limit: jest.fn(),
+    delete: jest.fn(),
+    update: jest.fn(),
+    set: jest.fn(),
+    orderBy: jest.fn(),
+    leftJoin: jest.fn(),
+    innerJoin: jest.fn(),
+    returning: jest.fn(),
+    onConflictDoNothing: jest.fn(),
+    onConflictDoUpdate: jest.fn(),
+    all: jest.fn(),
+    get: jest.fn(),
+    run: jest.fn(),
+    execute: jest.fn(),
+    transaction: jest.fn(),
+  };
+
+  // Make all methods return the mock for chaining
+  Object.keys(mock).forEach((key) => {
+    if (key === 'transaction') {
+      // Transaction needs special handling
+      mock[key].mockImplementation(async (fn: any) => {
+        const tx = createChainableMock();
+        return fn(tx);
+      });
+    } else {
+      mock[key].mockReturnThis();
+    }
+  });
+
+  // Override specific methods that should resolve to values
+  mock.limit.mockResolvedValue([]);
+  mock.where.mockResolvedValue([]);
+  mock.returning.mockResolvedValue([]);
+  mock.onConflictDoNothing.mockResolvedValue([]);
+  mock.onConflictDoUpdate.mockResolvedValue([]);
+  mock.execute.mockResolvedValue({ rows: [] });
+  mock.all.mockResolvedValue([]);
+  mock.get.mockResolvedValue(undefined);
+  mock.run.mockResolvedValue({ changes: 0 });
+  
+  // Special handling for values - it should resolve when used with insert/update
+  mock.values.mockImplementation(() => {
+    const valuesMock = Object.create(mock);
+    valuesMock.returning = jest.fn().mockResolvedValue([]);
+    valuesMock.onConflictDoNothing = jest.fn().mockResolvedValue([]);
+    valuesMock.onConflictDoUpdate = jest.fn().mockResolvedValue([]);
+    // For direct resolution (no chaining after values)
+    valuesMock.then = (resolve: any) => resolve([]);
+    return valuesMock;
+  });
+
+  // Special handling for set - it should resolve when used with update
+  mock.set.mockImplementation(() => {
+    const setMock = Object.create(mock);
+    setMock.where = jest.fn().mockResolvedValue({ changes: 1 });
+    setMock.returning = jest.fn().mockResolvedValue([]);
+    return setMock;
+  });
+
+  // Special handling for delete - make it resolve
+  mock.delete.mockResolvedValue({ changes: 0 });
+
+  return mock;
 };
 
-const mockRelations = jest.fn();
-
-const mockSqliteTable = jest.fn().mockImplementation((tableName, schema) => {
-  // You can customize this mock based on your testing needs
-  return { tableName, schema };
-});
-
-export const prompts = mockSqliteTable('prompts', {
-  /* schema definition */
-});
-export const promptsRelations = mockRelations;
-export const datasets = mockSqliteTable('datasets', {
-  /* schema definition */
-});
-export const datasetsRelations = mockRelations;
-export const evals = mockSqliteTable('evals', {
-  /* schema definition */
-});
-export const evalsRelations = mockRelations;
-export const evalsToPrompts = mockSqliteTable('evals_to_prompts', {
-  /* schema definition */
-});
-export const evalsToPromptsRelations = mockRelations;
-export const evalsToDatasets = mockSqliteTable('evals_to_datasets', {
-  /* schema definition */
-});
-export const evalsToDatasetsRelations = mockRelations;
-export const llmOutputs = mockSqliteTable('llm_outputs', {
-  /* schema definition */
-});
-export const llmOutputsRelations = mockRelations;
-export const tracesTable = mockSqliteTable('traces', {
-  /* schema definition */
-});
-export const spansTable = mockSqliteTable('spans', {
-  /* schema definition */
-});
+export const mockDbInstance = createChainableMock();
 
 export const getDb = jest.fn(() => mockDbInstance);
+export const closeDb = jest.fn();
+export const isDbOpen = jest.fn(() => true);
+export const getDbPath = jest.fn(() => ':memory:');
+export const getDbSignalPath = jest.fn(() => '/tmp/evalLastWritten');

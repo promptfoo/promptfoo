@@ -1,3 +1,7 @@
+// Unmock database for real database tests
+jest.unmock('../../src/database');
+jest.unmock('../../src/database/tables');
+
 import request from 'supertest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -11,7 +15,13 @@ describe('eval routes', () => {
   const testEvalIds = new Set<string>();
 
   beforeAll(async () => {
+    process.env.IS_TESTING = 'true';
     await runDbMigrations();
+  });
+  
+  afterAll(async () => {
+    const { closeDb } = await import('../../src/database');
+    closeDb();
   });
 
   beforeEach(() => {

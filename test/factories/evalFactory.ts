@@ -1,3 +1,7 @@
+// Unmock database for real database operations
+jest.unmock('../../src/database');
+jest.unmock('../../src/database/tables');
+
 import { randomUUID } from 'crypto';
 
 import { ResultFailureReason } from '../../src';

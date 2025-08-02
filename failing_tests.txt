@@ -1,0 +1,4 @@
+FAIL test/evaluator.test.ts
+FAIL test/models/eval.test.ts
+FAIL test/server/eval.test.ts
+FAIL test/util/deleteAll.test.ts

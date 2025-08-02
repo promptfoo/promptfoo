@@ -1,3 +1,7 @@
+// Unmock database for real database tests
+jest.unmock('../src/database');
+jest.unmock('../src/database/tables');
+
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 
@@ -248,7 +252,13 @@ function toPrompt(text: string): Prompt {
 
 describe('evaluator', () => {
   beforeAll(async () => {
+    process.env.IS_TESTING = 'true';
     await runDbMigrations();
+  });
+  
+  afterAll(async () => {
+    const { closeDb } = await import('../src/database');
+    closeDb();
   });
 
   beforeEach(() => {
@@ -3410,7 +3420,13 @@ describe('formatVarsForDisplay', () => {
 
 describe('evaluator defaultTest merging', () => {
   beforeAll(async () => {
+    process.env.IS_TESTING = 'true';
     await runDbMigrations();
+  });
+  
+  afterAll(async () => {
+    const { closeDb } = await import('../src/database');
+    closeDb();
   });
 
   beforeEach(() => {
