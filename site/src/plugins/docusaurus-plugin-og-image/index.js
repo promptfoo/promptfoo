@@ -438,20 +438,15 @@ module.exports = function (context, options) {
                     .catch(() => false)
                 ) {
                   let html = await fs.readFile(htmlPath, 'utf8');
+                  
+                  const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
+                  const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
 
-                  // Check if OG image meta tag already exists
-                  if (!html.includes('property="og:image"')) {
-                    // Inject OG meta tags before </head>
-                    const ogTags = `
-    <meta property="og:image" content="${siteConfig.url}${imageUrl}" />
-    <meta property="og:image:width" content="${WIDTH}" />
-    <meta property="og:image:height" content="${HEIGHT}" />
-    <meta property="og:image:type" content="image/png" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="${siteConfig.url}${imageUrl}" />`;
-
-                    html = html.replace('</head>', `${ogTags}\n  </head>`);
+                  // If HTML contains the default thumbnail URL, replace all instances
+                  if (html.includes(defaultThumbnailUrl)) {
+                    html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
                     await fs.writeFile(htmlPath, html);
+                    console.log(`Replaced default thumbnail OG meta tags for ${routePath}`);
                   }
                 }
               } catch (error) {
