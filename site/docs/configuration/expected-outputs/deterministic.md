@@ -36,6 +36,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-all](#contains-all)                                   | output contains all list of substrings                             |
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
+| [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
 | [contains-xml](#contains-xml)                                   | output contains valid xml                                          |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
@@ -198,6 +199,28 @@ assert:
 ```
 
 See also: [`is-json`](#is-json)
+
+### Contains-Html
+
+The `contains-html` assertion checks if the LLM output contains HTML content. This is useful when you want to verify that the model has generated HTML markup, even if it's embedded within other text.
+
+Example:
+
+```yaml
+assert:
+  - type: contains-html
+```
+
+The assertion uses multiple indicators to detect HTML:
+
+- Opening and closing tags (e.g., `<div>`, `</div>`)
+- Self-closing tags (e.g., `<br />`, `<img />`)
+- HTML entities (e.g., `&amp;`, `&nbsp;`, `&#123;`)
+- HTML attributes (e.g., `class="example"`, `id="test"`)
+- HTML comments (e.g., `<!-- comment -->`)
+- DOCTYPE declarations
+
+This assertion requires at least two HTML indicators to avoid false positives from text like "a < b" or email addresses.
 
 ### Contains-Sql
 
