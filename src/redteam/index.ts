@@ -770,6 +770,10 @@ export async function synthesize({
             pluginConfig: resolvePluginConfig(plugin.config),
             severity:
               plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            modifiers: {
+              ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
+              ...(plugin.config?.modifiers || {}),
+            },
             ...(t?.metadata || {}),
           },
         }));
@@ -816,6 +820,10 @@ export async function synthesize({
             pluginConfig: resolvePluginConfig(plugin.config),
             severity:
               plugin.severity || getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            modifiers: {
+              ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
+              ...(plugin.config?.modifiers || {}),
+            },
             ...(t.metadata || {}),
           },
         }));

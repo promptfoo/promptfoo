@@ -8,6 +8,11 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import {
+  accumulateGraderTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
@@ -21,11 +26,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
-import {
-  createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
-} from '../../util/tokenUsageUtils';
 import type { BaseRedteamMetadata } from '../types';
 import type { Message } from './shared';
 
@@ -216,6 +216,7 @@ export default class GoatProvider implements ApiProvider {
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
+            modifiers: context?.test?.metadata?.modifiers,
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
           response = await fetch(getRemoteGenerationUrl(), {
@@ -249,6 +250,7 @@ export default class GoatProvider implements ApiProvider {
             this.config.excludeTargetOutputFromAgenticAttackGeneration,
           failureReason,
           purpose: context?.test?.metadata?.purpose,
+          modifiers: context?.test?.metadata?.modifiers,
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);

@@ -8,10 +8,10 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import {
+  accumulateGraderTokenUsage,
+  accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
 } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';
@@ -266,6 +266,10 @@ export class CrescendoProvider implements ApiProvider {
       currentRound: roundNum + 1,
       maxTurns: this.maxTurns,
       purpose: context?.test?.metadata?.purpose,
+      modifierSection:
+        Object.entries(context?.test?.metadata?.modifiers || {})
+          .map(([key, value]) => `${key}: ${value}`)
+          .join('\n') || undefined,
     });
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
