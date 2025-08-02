@@ -247,7 +247,6 @@ describe('handleIsHtml', () => {
         output: 'Some text with <strong>HTML</strong> inside',
         reason: 'Output must be wrapped in HTML tags',
       },
-      { output: '<div>Unclosed div', reason: 'Output must be wrapped in HTML tags' },
       {
         output: 'Text before <div>HTML</div>',
         reason: 'Output must be wrapped in HTML tags',

@@ -216,27 +216,15 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
     return { isValid: false, reason: 'Output appears to be XML, not HTML' };
   }
 
-  // Must start with < and end with >
-  if (!trimmed.startsWith('<') || !trimmed.endsWith('>')) {
-    return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
-  }
-
-  // Quick check for text between tags (e.g., "</div>text<span>")
-  // This catches the most common case of mixed content
-  if (/>([^<]+)<(?!\/)/g.test(trimmed)) {
-    const match = trimmed.match(/>([^<]+)<(?!\/)/);
-    if (match && match[1].trim()) {
-      return { isValid: false, reason: 'Output contains text outside of HTML tags' };
-    }
-  }
-
   try {
-    // Parse with jsdom
+    // Parse with jsdom - let it handle all HTML parsing
     const dom = new JSDOM(trimmed, {
       runScripts: 'outside-only',
       resources: undefined,
       pretendToBeVisual: false,
       includeNodeLocations: false,
+      // Don't try to parse as XML
+      contentType: 'text/html',
     });
 
     const { document } = dom.window;
@@ -245,27 +233,50 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
       return { isValid: false, reason: 'Failed to parse HTML' };
     }
 
-    // Check if it's a complete document or a fragment
-    const isCompleteDoc = /<!doctype\s+html|<html/i.test(trimmed);
+    // Check for invalid content by examining what JSDOM had to do
+    // If JSDOM wrapped the content in body tags, check what's inside
+    if (document.body && !trimmed.toLowerCase().includes('<body')) {
+      const bodyNodes = Array.from(document.body.childNodes);
 
-    if (!isCompleteDoc) {
-      // For fragments, ensure at least one valid element exists
-      // Extract first element name
-      const elementMatch = trimmed.match(/<([a-zA-Z][a-zA-Z0-9-]*)/);
-      if (!elementMatch) {
-        return { isValid: false, reason: 'No valid HTML element found' };
+      // Check for any non-whitespace text nodes
+      const textNodes = bodyNodes.filter(
+        (node) => node.nodeType === 3 /* TEXT_NODE */ && node.textContent?.trim(),
+      );
+
+      // Check for element nodes
+      const elementNodes = bodyNodes.filter((node) => node.nodeType === 1 /* ELEMENT_NODE */);
+
+      // Case 1: Plain text only (no HTML tags at all)
+      if (textNodes.length > 0 && elementNodes.length === 0) {
+        return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
       }
 
-      const elementName = elementMatch[1].toLowerCase();
-
-      // Check if it's either:
-      // 1. A standard HTML element
-      // 2. A custom element (contains hyphen as per Web Components spec)
-      const isValidElement = VALID_HTML_ELEMENTS.has(elementName) || elementName.includes('-');
-
-      if (!isValidElement) {
-        return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
+      // Case 2: Mixed content (text and elements at the same level)
+      if (textNodes.length > 0 && elementNodes.length > 0) {
+        return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
       }
+    }
+
+    // Validate that we have actual HTML elements (not just text that got wrapped)
+    const allElements = Array.from(document.querySelectorAll('*'));
+
+    // Filter out elements that JSDOM adds automatically (unless they're in the original input)
+    const userElements = allElements.filter((element) => {
+      const tagName = element.tagName.toLowerCase();
+      // Keep the element if it's explicitly in the input or it's not an auto-added element
+      return (
+        trimmed.toLowerCase().includes(`<${tagName}`) || !['html', 'head', 'body'].includes(tagName)
+      );
+    });
+
+    // Check if any of the user's elements are valid
+    const hasValidHtmlElement = userElements.some((element) => {
+      const tagName = element.tagName.toLowerCase();
+      return VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-');
+    });
+
+    if (!hasValidHtmlElement) {
+      return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
     }
 
     return { isValid: true, reason: 'Output is valid HTML' };
