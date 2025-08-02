@@ -1,33 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
 import Prompts from '../Prompts';
-import ProviderEditor from './ProviderEditor';
+import ProviderConfigEditor from './ProviderConfigEditor';
+import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 import TestTargetConfiguration from './TestTargetConfiguration';
 import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 
 import type { ProviderOptions } from '../../types';
+import type { ProviderConfigEditorRef } from './ProviderConfigEditor';
 
-interface TargetsProps {
-  onNext?: () => void;
-  onBack?: () => void;
-  setupModalOpen?: boolean;
+interface TargetConfigurationProps {
+  onNext: () => void;
+  onBack: () => void;
+  setupModalOpen: boolean;
 }
 
 const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
-  const { config, updateConfig } = useRedTeamConfig();
+export default function TargetConfiguration({
+  onNext,
+  onBack,
+  setupModalOpen,
+}: TargetConfigurationProps) {
+  const { config, updateConfig, providerType } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
@@ -41,11 +47,14 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const [providerError, setProviderError] = useState<string | null>(null);
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
   const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
+  const [validationErrors, setValidationErrors] = useState<string | null>(null);
+  const [shouldValidate, setShouldValidate] = useState<boolean>(false);
 
+  const configEditorRef = useRef<ProviderConfigEditorRef>(null);
   const { recordEvent } = useTelemetry();
 
   useEffect(() => {
-    recordEvent('webui_page_view', { page: 'redteam_config_targets' });
+    recordEvent('webui_page_view', { page: 'redteam_config_target_configuration' });
   }, []);
 
   useEffect(() => {
@@ -56,7 +65,10 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   const handleProviderChange = (provider: ProviderOptions) => {
     setSelectedTarget(provider);
-    recordEvent('feature_used', { feature: 'redteam_config_target_changed', target: provider.id });
+    recordEvent('feature_used', {
+      feature: 'redteam_config_target_configured',
+      target: provider.id,
+    });
   };
 
   const handleTestTarget = async () => {
@@ -133,54 +145,86 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     }
   };
 
+  // Handle errors from child components
+  const handleError = (error: string | null) => {
+    setValidationErrors(error);
+    setProviderError(error);
+  };
+
   const isProviderValid = () => {
     return selectedTarget.label && !providerError;
   };
 
+  const handleNext = () => {
+    // Enable validation when button is clicked
+    setShouldValidate(true);
+
+    // Use the ref to validate
+    const isValid = configEditorRef.current?.validate() ?? false;
+
+    // Only proceed if there are no errors
+    if (isValid && !validationErrors) {
+      onNext();
+    }
+  };
+
   return (
     <PageWrapper
-      title="Target Configuration"
-      description={
-        <>
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            A target is the specific LLM or endpoint you want to evaluate in your red teaming
-            process. In Promptfoo targets are also known as providers. You can configure additional
-            targets later.
-          </Typography>
-          <Typography variant="body1">
-            For more information on available providers and how to configure them, please visit our{' '}
-            <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
-              provider documentation
-            </Link>
-            .
-          </Typography>
-        </>
-      }
-      onNext={onNext}
+      title={`Configure Target: ${selectedTarget.label || 'Unnamed Target'}`}
+      description="Configure the specific settings for your target. The fields below will change based on the target type you selected."
+      onNext={handleNext}
       onBack={onBack}
-      nextDisabled={!selectedTarget.label}
+      nextDisabled={!isProviderValid()}
     >
       <Stack direction="column" spacing={3}>
-        <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-            Select Red Team Target
-          </Typography>
+        {/* Validation Error Display */}
+        {validationErrors && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              Please fix the following issues before continuing:
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1, fontWeight: 'medium' }}>
+              {validationErrors}
+            </Typography>
+          </Alert>
+        )}
 
-          <LoadExampleButton />
-        </Box>
+        {/* Documentation Alert for specific providers */}
+        {hasSpecificDocumentation(selectedTarget.id) && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Box>
+              <Typography variant="body2">
+                Need help configuring {selectedTarget.label || selectedTarget.id}?{' '}
+                <Link
+                  href={getProviderDocumentationUrl(selectedTarget.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View the documentation
+                </Link>{' '}
+                for detailed setup instructions and examples.
+              </Typography>
+            </Box>
+          </Alert>
+        )}
 
-        <ProviderEditor
+        {/* Provider Configuration Section */}
+        <ProviderConfigEditor
+          ref={configEditorRef}
           provider={selectedTarget}
           setProvider={handleProviderChange}
           extensions={config.extensions}
           onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
-          onBack={onBack}
-          onActionButtonClick={isProviderValid() ? onNext : undefined}
           opts={{
-            disableTitle: true,
-            actionButtonText: 'Next',
+            hideErrors: false,
+            disableModelSelection: false,
           }}
-          setError={setProviderError}
+          setError={handleError}
+          validateAll={shouldValidate}
+          onValidate={(isValid) => {
+            // Validation errors will be displayed through the handleError function
+          }}
+          providerType={providerType}
         />
 
         {testingEnabled && (

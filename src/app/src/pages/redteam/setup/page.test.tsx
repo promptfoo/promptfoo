@@ -89,7 +89,7 @@ describe('RedTeamSetupPage', () => {
         </MemoryRouter>,
       );
 
-      expect(mockedUsePageMeta).toHaveBeenCalledTimes(1);
+      expect(mockedUsePageMeta).toHaveBeenCalledTimes(2);
       expect(mockedUsePageMeta).toHaveBeenCalledWith({
         title: 'Red team setup',
         description: 'Configure red team testing',
@@ -118,12 +118,12 @@ describe('RedTeamSetupPage', () => {
         </MemoryRouter>,
       );
 
-      // Simulate a tab change by clicking the "Plugins" tab (index 2)
+      // Simulate a tab change by clicking the "Plugins" tab (index 3)
       const pluginsTab = screen.getByRole('tab', { name: /Plugins/i });
       fireEvent.click(pluginsTab);
 
       // Assert that useNavigate is called with the correct hash
-      expect(mockNavigate).toHaveBeenCalledWith('#2');
+      expect(mockNavigate).toHaveBeenCalledWith('#3');
     });
   });
 
