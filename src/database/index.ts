@@ -1,3 +1,4 @@
+import * as os from 'os';
 import * as path from 'path';
 
 import { createClient } from '@libsql/client';
@@ -33,16 +34,12 @@ export function getDb() {
 
     let dbUrl: string;
     if (isMemoryDb) {
-      // Use in-memory database for tests (except on Windows)
-      if (process.platform === 'win32' && testDbId) {
-        // Windows doesn't support in-memory databases well with libSQL
-        // Use a temporary file instead
-        const tmpDir = process.env.TEMP || process.env.TMP || 'C:\\Temp';
-        const dbPath = path.join(tmpDir, `test-${testDbId}.db`);
-        dbUrl = `file:${dbPath}`;
-      } else {
-        dbUrl = 'file::memory:';
-      }
+      // Use temporary file databases for tests
+      // libSQL's in-memory mode seems to have issues with persistence
+      const tmpDir = os.tmpdir();
+      const testId = testDbId || `test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const dbPath = path.join(tmpDir, `promptfoo-test-${testId}.db`);
+      dbUrl = `file:${dbPath}`;
     } else {
       const dbPath = getDbPath();
       dbUrl = `file:${dbPath}`;

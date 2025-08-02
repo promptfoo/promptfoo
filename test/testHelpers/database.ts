@@ -10,15 +10,14 @@ export async function setupTestDatabase(testSuiteName: string) {
   // Ensure we're using in-memory database for tests
   process.env.IS_TESTING = 'true';
 
-  // On Windows, we need a unique test ID for file-based databases
-  if (process.platform === 'win32') {
-    // Close any existing connection first
-    closeDb();
-
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(7);
-    process.env.TEST_DB_ID = `${testSuiteName}-${timestamp}-${random}`;
-  }
+  // Set a unique test ID for file-based databases
+  // We're now using file-based databases for all platforms in tests
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(7);
+  process.env.TEST_DB_ID = `${testSuiteName}-${timestamp}-${random}`;
+  
+  // Close any existing connection to ensure we get a fresh database
+  closeDb();
 
   // Get the database instance first to ensure it's created
   const db = getDb();
@@ -45,14 +44,15 @@ export async function setupTestDatabase(testSuiteName: string) {
  * Clean up test database after tests complete
  */
 export async function cleanupTestDatabase() {
-  // On Windows, we need to close the connection and clean up the file
-  if (process.platform === 'win32' && process.env.TEST_DB_ID) {
+  // Clean up test database files for all platforms
+  if (process.env.TEST_DB_ID) {
     closeDb();
 
     const fs = await import('fs/promises');
     const path = await import('path');
-    const tmpDir = process.env.TEMP || process.env.TMP || 'C:\\Temp';
-    const dbPath = path.join(tmpDir, `test-${process.env.TEST_DB_ID}.db`);
+    const os = await import('os');
+    const tmpDir = os.tmpdir();
+    const dbPath = path.join(tmpDir, `promptfoo-test-${process.env.TEST_DB_ID}.db`);
 
     try {
       // Delete the database file and any associated files (WAL, SHM)
@@ -65,6 +65,4 @@ export async function cleanupTestDatabase() {
 
     delete process.env.TEST_DB_ID;
   }
-  // In-memory databases are automatically cleaned up
-  // We don't close the connection on non-Windows to avoid issues with parallel tests
 }
