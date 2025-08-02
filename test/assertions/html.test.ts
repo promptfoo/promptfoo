@@ -1,4 +1,4 @@
-import { handleContainsHtml } from '../../src/assertions/html';
+import { handleContainsHtml, handleIsHtml } from '../../src/assertions/html';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types';
 
@@ -95,9 +95,9 @@ describe('handleContainsHtml', () => {
       '2 < 3 and 4 > 1',
       'email@example.com',
       'Math: a < b > c',
-      '< div >',  // space after < means it's not a valid HTML tag
-      'Generic <example> text',  // Single unpaired tag without HTML indicators
-      'if (a<b) { return c>d; }',  // Code with comparison operators
+      '< div >', // space after < means it's not a valid HTML tag
+      'Generic <example> text', // Single unpaired tag without HTML indicators
+      'if (a<b) { return c>d; }', // Code with comparison operators
       'The price is <$50',
       'Email me at <john@example.com>',
     ];
@@ -174,10 +174,10 @@ describe('handleContainsHtml', () => {
   it('should handle edge cases with minimal HTML indicators', () => {
     // These should pass - have multiple HTML indicators
     const minimalHtmlPasses = [
-      '<div>&nbsp;</div>',  // tag + entity
-      '<!-- comment --><span>text</span>',  // comment + tag
-      '<br/><hr/>',  // multiple self-closing tags
-      'Text with <b>bold</b> and <i>italic</i>',  // multiple paired tags
+      '<div>&nbsp;</div>', // tag + entity
+      '<!-- comment --><span>text</span>', // comment + tag
+      '<br/><hr/>', // multiple self-closing tags
+      'Text with <b>bold</b> and <i>italic</i>', // multiple paired tags
     ];
 
     minimalHtmlPasses.forEach((html) => {
@@ -194,9 +194,9 @@ describe('handleContainsHtml', () => {
 
     // These should fail - only one HTML indicator
     const minimalHtmlFails = [
-      '<custom>',  // single unpaired non-standard tag
-      '&amp;',  // just an entity
-      '<!-- comment -->',  // just a comment
+      '<custom>', // single unpaired non-standard tag
+      '&amp;', // just an entity
+      '<!-- comment -->', // just a comment
     ];
 
     minimalHtmlFails.forEach((text) => {
@@ -208,6 +208,147 @@ describe('handleContainsHtml', () => {
       };
 
       const result = handleContainsHtml(params);
+      expect(result.pass).toBe(false);
+    });
+  });
+});
+
+describe('handleIsHtml', () => {
+  it('should pass when output is valid HTML', () => {
+    const validHtmlExamples = [
+      '<div>Hello World</div>',
+      '<!DOCTYPE html><html><head><title>Test</title></head><body>Content</body></html>',
+      '<p>Simple paragraph</p>',
+      '<div><span>Nested</span></div>',
+      '<img src="test.jpg" />',
+      '<br />',
+      '<div class="test" id="main">Content</div>',
+      '  <div>With whitespace</div>  ',
+    ];
+
+    validHtmlExamples.forEach((html) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: html,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+  });
+
+  it('should fail when output is not valid HTML', () => {
+    const invalidHtmlExamples = [
+      { output: 'Just plain text', reason: 'Output does not start with an HTML tag or DOCTYPE' },
+      {
+        output: 'Some text with <strong>HTML</strong> inside',
+        reason: 'Output does not start with an HTML tag or DOCTYPE',
+      },
+      { output: '<div>Unclosed div', reason: 'Output does not end with an HTML tag' },
+      {
+        output: 'Text before <div>HTML</div>',
+        reason: 'Output does not start with an HTML tag or DOCTYPE',
+      },
+      { output: '<div>HTML</div> Text after', reason: 'Output does not end with an HTML tag' },
+      {
+        output: '<?xml version="1.0"?><root>XML</root>',
+        reason: 'Output appears to be XML, not HTML',
+      },
+      { output: '', reason: 'Output is empty' },
+      { output: '   ', reason: 'Output is empty' },
+      { output: '<notarealtag>', reason: 'Output does not contain enough HTML indicators' },
+      { output: '2 < 3 and 4 > 1', reason: 'Output does not start with an HTML tag or DOCTYPE' },
+    ];
+
+    invalidHtmlExamples.forEach(({ output, reason }) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: output,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe(reason);
+    });
+  });
+
+  it('should handle inverse assertion correctly', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'not-is-html' },
+      outputString: 'Just plain text',
+      inverse: true,
+    };
+
+    const result = handleIsHtml(params);
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+      assertion: params.assertion,
+    });
+  });
+
+  it('should handle inverse assertion when HTML is present', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'not-is-html' },
+      outputString: '<div>Valid HTML</div>',
+      inverse: true,
+    };
+
+    const result = handleIsHtml(params);
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Output is valid HTML',
+      assertion: params.assertion,
+    });
+  });
+
+  it('should accept HTML fragments', () => {
+    const fragments = [
+      '<div>Fragment without doctype</div>',
+      '<h1>Title</h1><p>Paragraph</p>',
+      '<ul><li>Item 1</li><li>Item 2</li></ul>',
+      '<form><input type="text" /><button>Submit</button></form>',
+    ];
+
+    fragments.forEach((html) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: html,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(true);
+    });
+  });
+
+  it('should reject mixed content', () => {
+    const mixedContent = [
+      'Here is some HTML: <div>test</div>',
+      '<div>HTML</div> and some text',
+      'Text <br /> more text',
+    ];
+
+    mixedContent.forEach((content) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: content,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
       expect(result.pass).toBe(false);
     });
   });
