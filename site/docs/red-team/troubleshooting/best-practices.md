@@ -51,7 +51,7 @@ Improves: _Attack Success Rate_, _Coverage_
 
 If your target supports conversation state, enable:
 
-- **[Crescendo](/docs/red-team/strategies/multi-turn/#crescendo)**: Gradually escalates harm over turns (based on research from Microsoft).
+- **[Crescendo](/docs/red-team/strategies/multi-turn/)**: Gradually escalates harm over turns (based on research from Microsoft).
 - **[GOAT](/docs/red-team/strategies/goat/)**: Generates adaptive multi‑turn attack conversations (based on research from Meta).
 
 Multi‑turn approaches uncover failures that appear only after context builds up and routinely add 70–90% more successful attacks. Configure them in YAML just like any other strategy:
