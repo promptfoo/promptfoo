@@ -38,7 +38,6 @@ describe('strategies constants', () => {
       'jailbreak',
       'jailbreak:tree',
       'mischievous-user',
-      'pandamonium',
     ]);
   });
 
@@ -78,7 +77,6 @@ describe('strategies constants', () => {
       'mischievous-user',
       'morse',
       'multilingual',
-      'pandamonium',
       'piglatin',
       'prompt-injection',
       'retry',
