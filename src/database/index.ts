@@ -29,16 +29,19 @@ export function getDbSignalPath() {
 export function getDb() {
   if (!dbInstance) {
     const isMemoryDb = getEnvBool('IS_TESTING');
-    const dbPath = isMemoryDb ? ':memory:' : getDbPath();
-
-    // Create libSQL client
-    // For tests, use a unique in-memory database name if TEST_DB_ID is set
     const testDbId = process.env.TEST_DB_ID;
-    // LibSQL uses file:<name>:memory: syntax for named in-memory databases
-    const memoryDbUrl = testDbId ? `file:${testDbId}:memory:` : 'file::memory:';
+    
+    let dbUrl: string;
+    if (isMemoryDb) {
+      // Use in-memory database for tests
+      dbUrl = 'file::memory:';
+    } else {
+      const dbPath = getDbPath();
+      dbUrl = `file:${dbPath}`;
+    }
 
     sqliteInstance = createClient({
-      url: isMemoryDb ? memoryDbUrl : `file:${dbPath}`,
+      url: dbUrl,
     });
 
     // Note: WAL mode is enabled by default in libSQL

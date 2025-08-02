@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { setupTestDatabase, cleanupTestDatabase } from '../testHelpers/database';
 import { getDb } from '../../src/database';
 import {
@@ -8,6 +9,7 @@ import {
   evalsToTagsTable,
 } from '../../src/database/tables';
 import { getUserEmail } from '../../src/globalConfig/accounts';
+import { runDbMigrations } from '../../src/migrate';
 import Eval, { getEvalSummaries } from '../../src/models/eval';
 import EvalFactory from '../factories/evalFactory';
 
@@ -30,12 +32,20 @@ describe('evaluator', () => {
   beforeEach(async () => {
     // Clear all tables before each test
     const db = getDb();
-    // Use drizzle methods to delete from tables
-    await db.delete(evalResultsTable);
-    await db.delete(evalsToDatasetsTable);
-    await db.delete(evalsToPromptsTable);
-    await db.delete(evalsToTagsTable);
-    await db.delete(evalsTable);
+    
+    try {
+      // Clear the tables
+      await db.delete(evalResultsTable);
+      await db.delete(evalsToDatasetsTable);
+      await db.delete(evalsToPromptsTable);
+      await db.delete(evalsToTagsTable);
+      await db.delete(evalsTable);
+    } catch (error) {
+      // If tables don't exist, skip the cleanup
+      if (!error.message?.includes('no such table')) {
+        throw error;
+      }
+    }
   });
 
   describe('summaryResults', () => {
