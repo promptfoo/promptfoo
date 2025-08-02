@@ -2,7 +2,7 @@
 sidebar_label: Best Practices
 ---
 
-# Best Practices for Configuring Promptfoo Red Teaming
+# Best Practices for Configuring AI Red Teaming
 
 To successfully use AI red teaming automation, you **must** provide rich application context and a diverse set of attack strategies.
 
@@ -63,7 +63,7 @@ redteam:
 
 See the [Multi‑turn strategy guide](/docs/red-team/strategies/multi-turn/) for tuning maximum turns, back‑tracking, and session handling.
 
-## 4. Add Custom Prompts & Custom Policies
+## 4. Add Custom Prompts & Policies
 
 Improves: _Attack Success Rate_, _Coverage_
 
@@ -80,7 +80,9 @@ Put on your thinking cap and try to make these _as specific as possible_ to your
 
 Declare them under [`plugins:`](/docs/red-team/plugins/) and pair with your high‑ASR strategies so the Promptfoo attacker can mutate your seed inputs or policy text into sophisticated exploits.
 
-## 5. Calibrate Grading to Reduce False Positives
+## 5. Calibrate Grading
+
+Improves: _False Positive Rate_
 
 Deciding whether LLM outputs are good or bad can be subjective, and Promptfoo can't read your mind.
 
@@ -88,7 +90,7 @@ There are two main levers to [reduce false positives](/docs/red-team/troubleshoo
 
 1. **Context first**: An under‑specified purpose/application details is the #1 cause of false flags. The models that decide whether the output is OK or not depend on this.
 
-Your Application Details/Purpose should include all the detail a human red teamer would need to be productive right out of the gate. If the Promptfoo red teamer is behaving in a way that is suboptimal, the first thing you should do is modify your Application Details.
+   Your Application Details/Purpose should include all the detail a human red teamer would need to be productive right out of the gate. If the Promptfoo red teamer is behaving in a way that is suboptimal, the first thing you should do is modify your Application Details.
 
 2. **Grader examples**: Teach the evaluator by adding explicit pass/fail examples for edge‑cases. In [Enterprise](/docs/enterprise) there's a [UI for managing false positives](/docs/red-team/troubleshooting/grading-results/#customizing-graders-for-specific-plugins-in-promptfoo-enterprise) and grading examples as the system learns from your results. In open-source you can manually add examples:
 
