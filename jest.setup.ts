@@ -1,8 +1,13 @@
+import { mkdirSync } from 'fs';
 import { rm } from 'fs/promises';
 import nock from 'nock';
 import { TEST_CONFIG_DIR } from './.jest/setEnvVars';
 
 jest.mock('./src/logger');
+jest.mock('./src/globalConfig/globalConfig');
+
+// Ensure test config directory exists
+mkdirSync(TEST_CONFIG_DIR, { recursive: true });
 
 // Configure nock
 beforeAll(() => {
