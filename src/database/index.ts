@@ -75,6 +75,7 @@ export function closeDb() {
 
 /**
  * Check if the database is currently open
+ * @returns true if database connection is active
  */
 export function isDbOpen(): boolean {
   return sqliteInstance !== null && dbInstance !== null;
