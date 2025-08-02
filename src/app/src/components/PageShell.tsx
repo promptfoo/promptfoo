@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
+import { useResultsViewSettingsStore } from '@app/pages/eval/components/store';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
 const createAppTheme = (darkMode: boolean) =>
@@ -233,8 +234,23 @@ const createAppTheme = (darkMode: boolean) =>
 const lightTheme = createAppTheme(false);
 const darkTheme = createAppTheme(true);
 
-function Layout({ children }: { children: React.ReactNode }) {
-  return <div>{children}</div>;
+function Layout({ darkMode, toggleDarkMode }: { darkMode: boolean; toggleDarkMode: () => void }) {
+  const location = useLocation();
+  const topAreaCollapsed = useResultsViewSettingsStore((state) => state.topAreaCollapsed);
+
+  // Only hide navigation on eval results pages
+  const isEvalResultsPage = location.pathname.startsWith('/eval/');
+  const shouldHideNavigation = isEvalResultsPage && topAreaCollapsed;
+
+  return (
+    <div>
+      {!shouldHideNavigation && (
+        <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
+      )}
+      <Outlet />
+      <PostHogPageViewTracker />
+    </div>
+  );
 }
 
 export default function PageShell() {
@@ -275,11 +291,7 @@ export default function PageShell() {
   return (
     <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
       <PostHogProvider>
-        <Layout>
-          <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
-          <Outlet />
-          <PostHogPageViewTracker />
-        </Layout>
+        <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
       </PostHogProvider>
     </ThemeProvider>
   );

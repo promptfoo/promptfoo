@@ -27,9 +27,10 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import { styled } from '@mui/material/styles';
+import { styled, useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -238,10 +239,20 @@ export default function ResultsView({
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [shareLoading, setShareLoading] = React.useState(false);
-  const [topAreaCollapsed, setTopAreaCollapsed] = React.useState(false);
 
   const [filtersFormOpen, setFiltersFormOpen] = React.useState(false);
   const filtersButtonRef = React.useRef<HTMLButtonElement>(null);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { topAreaCollapsed, setTopAreaCollapsed } = useResultsViewSettingsStore();
+
+  // Auto-collapse on mobile
+  React.useEffect(() => {
+    if (isMobile && !topAreaCollapsed) {
+      setTopAreaCollapsed(true);
+    }
+  }, [isMobile, topAreaCollapsed, setTopAreaCollapsed]);
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -539,10 +550,10 @@ export default function ResultsView({
         <Box
           sx={{
             position: 'absolute',
-            top: 8,
-            right: 16,
+            top: isMobile ? 4 : 8,
+            right: isMobile ? 8 : 16,
             zIndex: 1000,
-            opacity: topAreaCollapsed ? 0.3 : 1,
+            opacity: topAreaCollapsed ? (isMobile ? 0.7 : 0.3) : 1,
             transition: 'opacity 0.2s ease',
             '&:hover': {
               opacity: 1,
@@ -551,19 +562,27 @@ export default function ResultsView({
         >
           <Tooltip
             title={topAreaCollapsed ? 'Expand controls' : 'Collapse controls'}
-            placement="left"
+            placement={isMobile ? 'bottom' : 'left'}
           >
             <IconButton
               onClick={() => setTopAreaCollapsed(!topAreaCollapsed)}
-              size="small"
+              size={isMobile ? 'medium' : 'small'}
               sx={{
+                display: 'flex',
+                alignItems: 'center',
+                borderRadius: '16px',
+                padding: isMobile ? '8px 16px' : '4px 12px',
+                fontSize: '0.875rem',
                 backgroundColor: 'background.paper',
                 border: 1,
                 borderColor: 'divider',
+                boxShadow: isMobile ? 2 : 1,
                 '&:hover': {
                   backgroundColor: 'action.hover',
+                  boxShadow: 3,
                 },
               }}
+              aria-label={topAreaCollapsed ? 'Expand controls' : 'Collapse controls'}
             >
               {topAreaCollapsed ? <UnfoldMoreIcon /> : <UnfoldLessIcon />}
             </IconButton>
