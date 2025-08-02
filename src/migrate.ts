@@ -11,7 +11,7 @@ export async function runDbMigrations(): Promise<void> {
   try {
     const db = getDb();
     const migrationsFolder = path.join(__dirname, '..', 'drizzle');
-    logger.debug(`Running database migrations...`);
+    logger.debug(`Running database migrations from: ${migrationsFolder}`);
     await migrate(db, { migrationsFolder });
     logger.debug('Database migrations completed');
   } catch (error) {
