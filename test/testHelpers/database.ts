@@ -1,24 +1,21 @@
-import { promises as fs } from 'fs';
-import { getDbPath } from '../../src/database';
 import { runDbMigrations } from '../../src/migrate';
 
 /**
- * Set up a unique database for integration tests
- * This prevents database locking issues when tests run in parallel
+ * Set up a unique in-memory database for integration tests
+ * Each test suite gets its own isolated database instance
  */
 export async function setupTestDatabase(testSuiteName: string) {
   // Unmock database module
   jest.unmock('../../src/database');
   
-  // Use file-based database instead of in-memory for migrations to work
-  delete process.env.IS_TESTING;
+  // Ensure we're using in-memory database for tests
+  process.env.IS_TESTING = 'true';
   
-  // Create unique database directory for this test suite
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(7);
-  process.env.PROMPTFOO_CONFIG_DIR = `./.local/jest/${testSuiteName}-${timestamp}-${random}`;
+  // Force close any existing database connection
+  const { closeDb } = await import('../../src/database');
+  closeDb();
   
-  // Run migrations
+  // Run migrations on the new in-memory database
   await runDbMigrations();
 }
 
@@ -27,24 +24,7 @@ export async function setupTestDatabase(testSuiteName: string) {
  */
 export async function cleanupTestDatabase() {
   const { closeDb } = await import('../../src/database');
+  
+  // Close the in-memory database connection
   closeDb();
-  
-  // Clean up test database files and directory
-  const dbPath = getDbPath();
-  const configDir = process.env.PROMPTFOO_CONFIG_DIR;
-  
-  try {
-    await fs.unlink(dbPath);
-    await fs.unlink(dbPath + '-shm');
-    await fs.unlink(dbPath + '-wal');
-    if (configDir && configDir.startsWith('./.local/jest/')) {
-      await fs.rmdir(configDir);
-    }
-  } catch (e) {
-    // Ignore errors if files don't exist
-  }
-  
-  // Restore defaults for other tests
-  process.env.IS_TESTING = 'true';
-  process.env.PROMPTFOO_CONFIG_DIR = './.local/jest/config';
 }
