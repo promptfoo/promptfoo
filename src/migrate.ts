@@ -10,8 +10,26 @@ import logger from './logger';
 export async function runDbMigrations(): Promise<void> {
   try {
     const db = getDb();
-    const migrationsFolder = path.join(__dirname, '..', 'drizzle');
+    // In compiled code, __dirname will be dist/src, so we need to go up two levels
+    // In tests, we need to handle the path differently
+    let migrationsFolder: string;
+    
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+      // In tests, use process.cwd() to find the drizzle folder
+      migrationsFolder = path.join(process.cwd(), 'drizzle');
+    } else {
+      migrationsFolder = path.join(__dirname, '..', 'drizzle');
+    }
+    
     logger.debug(`Running database migrations from: ${migrationsFolder}`);
+    
+    // Check if migrations folder exists
+    const fs = await import('fs');
+    if (!fs.existsSync(migrationsFolder)) {
+      logger.error(`Migrations folder not found: ${migrationsFolder}`);
+      throw new Error(`Migrations folder not found: ${migrationsFolder}`);
+    }
+    
     await migrate(db, { migrationsFolder });
     logger.debug('Database migrations completed');
   } catch (error) {
