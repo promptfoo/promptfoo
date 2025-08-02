@@ -216,14 +216,18 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
     return { isValid: false, reason: 'Output appears to be XML, not HTML' };
   }
 
-  // Check if it starts with an HTML tag or DOCTYPE
-  if (!/^<(!DOCTYPE\s+html|[a-zA-Z])/i.test(trimmed)) {
-    return { isValid: false, reason: 'Output does not start with an HTML tag or DOCTYPE' };
+  // Must start with < and end with >
+  if (!trimmed.startsWith('<') || !trimmed.endsWith('>')) {
+    return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
   }
 
-  // Check if it ends with a closing tag
-  if (!/>$/.test(trimmed)) {
-    return { isValid: false, reason: 'Output does not end with an HTML tag' };
+  // Quick check for text between tags (e.g., "</div>text<span>")
+  // This catches the most common case of mixed content
+  if (/>([^<]+)<(?!\/)/g.test(trimmed)) {
+    const match = trimmed.match(/>([^<]+)<(?!\/)/);
+    if (match && match[1].trim()) {
+      return { isValid: false, reason: 'Output contains text outside of HTML tags' };
+    }
   }
 
   try {
@@ -241,45 +245,27 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
       return { isValid: false, reason: 'Failed to parse HTML' };
     }
 
-    // Check if jsdom had to wrap the content (indicating a fragment)
-    const isFragment =
-      !trimmed.toLowerCase().includes('<html') && !trimmed.toLowerCase().includes('<!doctype');
+    // Check if it's a complete document or a fragment
+    const isCompleteDoc = /<!doctype\s+html|<html/i.test(trimmed);
 
-    // For fragments, validate that they contain valid HTML elements
-    if (isFragment) {
-      // Extract all element names from the input
-      const elementMatches = trimmed.matchAll(/<([a-zA-Z][a-zA-Z0-9-]*)/gi);
-      const foundElements = new Set(
-        Array.from(elementMatches).map((match) => match[1].toLowerCase()),
-      );
+    if (!isCompleteDoc) {
+      // For fragments, ensure at least one valid element exists
+      // Extract first element name
+      const elementMatch = trimmed.match(/<([a-zA-Z][a-zA-Z0-9-]*)/);
+      if (!elementMatch) {
+        return { isValid: false, reason: 'No valid HTML element found' };
+      }
 
-      // Check if at least one valid HTML element is present
-      const hasValidElements = Array.from(foundElements).some((elem) =>
-        VALID_HTML_ELEMENTS.has(elem),
-      );
+      const elementName = elementMatch[1].toLowerCase();
 
-      if (!hasValidElements) {
+      // Check if it's either:
+      // 1. A standard HTML element
+      // 2. A custom element (contains hyphen as per Web Components spec)
+      const isValidElement = VALID_HTML_ELEMENTS.has(elementName) || elementName.includes('-');
+
+      if (!isValidElement) {
         return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
       }
-
-      // Verify no text content exists outside of tags at the root level
-      // Parse the content to check for text nodes
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = trimmed;
-
-      // Check direct children for text nodes
-      for (const node of tempDiv.childNodes) {
-        if (node.nodeType === 3 /* TEXT_NODE */ && node.textContent?.trim()) {
-          return { isValid: false, reason: 'Output contains text outside of HTML tags' };
-        }
-      }
-    }
-
-    // Additional validation: Check for parsing errors
-    // JSDOM is quite permissive, so we need to check for common issues
-    const errorTags = document.querySelectorAll('parsererror');
-    if (errorTags.length > 0) {
-      return { isValid: false, reason: 'HTML contains parsing errors' };
     }
 
     return { isValid: true, reason: 'Output is valid HTML' };

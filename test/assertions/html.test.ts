@@ -242,17 +242,17 @@ describe('handleIsHtml', () => {
 
   it('should fail when output is not valid HTML', () => {
     const invalidHtmlExamples = [
-      { output: 'Just plain text', reason: 'Output does not start with an HTML tag or DOCTYPE' },
+      { output: 'Just plain text', reason: 'Output must be wrapped in HTML tags' },
       {
         output: 'Some text with <strong>HTML</strong> inside',
-        reason: 'Output does not start with an HTML tag or DOCTYPE',
+        reason: 'Output must be wrapped in HTML tags',
       },
-      { output: '<div>Unclosed div', reason: 'Output does not end with an HTML tag' },
+      { output: '<div>Unclosed div', reason: 'Output must be wrapped in HTML tags' },
       {
         output: 'Text before <div>HTML</div>',
-        reason: 'Output does not start with an HTML tag or DOCTYPE',
+        reason: 'Output must be wrapped in HTML tags',
       },
-      { output: '<div>HTML</div> Text after', reason: 'Output does not end with an HTML tag' },
+      { output: '<div>HTML</div> Text after', reason: 'Output must be wrapped in HTML tags' },
       {
         output: '<?xml version="1.0"?><root>XML</root>',
         reason: 'Output appears to be XML, not HTML',
@@ -260,7 +260,7 @@ describe('handleIsHtml', () => {
       { output: '', reason: 'Output is empty' },
       { output: '   ', reason: 'Output is empty' },
       { output: '<notarealtag>', reason: 'Output does not contain recognized HTML elements' },
-      { output: '2 < 3 and 4 > 1', reason: 'Output does not start with an HTML tag or DOCTYPE' },
+      { output: '2 < 3 and 4 > 1', reason: 'Output must be wrapped in HTML tags' },
     ];
 
     invalidHtmlExamples.forEach(({ output, reason }) => {
