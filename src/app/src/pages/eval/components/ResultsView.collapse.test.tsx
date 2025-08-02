@@ -1,8 +1,6 @@
-
-
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { fireEvent, render, screen, } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -176,7 +174,7 @@ describe('ResultsView - Collapse Button', () => {
   describe('Collapse button visibility and behavior', () => {
     it('should render the collapse button', () => {
       renderResultsView();
-      
+
       const collapseButton = screen.getByLabelText('Collapse controls');
       expect(collapseButton).toBeInTheDocument();
     });
@@ -184,18 +182,18 @@ describe('ResultsView - Collapse Button', () => {
     it('should toggle collapse state when clicked', async () => {
       const user = userEvent.setup();
       renderResultsView();
-      
+
       const collapseButton = screen.getByLabelText('Collapse controls');
-      
+
       await user.click(collapseButton);
-      
+
       expect(mockSetTopAreaCollapsed).toHaveBeenCalledWith(true);
     });
 
     it('should show expand button when collapsed', () => {
       mockTopAreaCollapsed = true;
       renderResultsView();
-      
+
       const expandButton = screen.getByLabelText('Expand controls');
       expect(expandButton).toBeInTheDocument();
     });
@@ -204,20 +202,20 @@ describe('ResultsView - Collapse Button', () => {
       const user = userEvent.setup();
       mockTopAreaCollapsed = true;
       renderResultsView();
-      
+
       const expandButton = screen.getByLabelText('Expand controls');
-      
+
       await user.click(expandButton);
-      
+
       expect(mockSetTopAreaCollapsed).toHaveBeenCalledWith(false);
     });
 
     it('should show correct icon based on collapsed state', () => {
       const { rerender } = renderResultsView();
-      
+
       // Collapsed = false, should show UnfoldLess icon
       expect(screen.getByTestId('UnfoldLessIcon')).toBeInTheDocument();
-      
+
       // Update state and rerender
       mockTopAreaCollapsed = true;
       rerender(
@@ -233,7 +231,7 @@ describe('ResultsView - Collapse Button', () => {
           </ShiftKeyContext.Provider>
         </MemoryRouter>,
       );
-      
+
       // Collapsed = true, should show UnfoldMore icon
       expect(screen.getByTestId('UnfoldMoreIcon')).toBeInTheDocument();
     });
@@ -242,7 +240,7 @@ describe('ResultsView - Collapse Button', () => {
   describe('Content visibility based on collapse state', () => {
     it('should show controls when not collapsed', () => {
       renderResultsView();
-      
+
       // Should show search field and other controls
       expect(screen.getByPlaceholderText('Search or select an eval...')).toBeInTheDocument();
       expect(screen.getByText('Eval actions')).toBeInTheDocument();
@@ -251,7 +249,7 @@ describe('ResultsView - Collapse Button', () => {
     it('should hide controls when collapsed', () => {
       mockTopAreaCollapsed = true;
       renderResultsView();
-      
+
       // Should not show search field and other controls
       expect(screen.queryByPlaceholderText('Search or select an eval...')).not.toBeInTheDocument();
       expect(screen.queryByText('Eval actions')).not.toBeInTheDocument();
@@ -261,22 +259,22 @@ describe('ResultsView - Collapse Button', () => {
   describe('Button styling and position', () => {
     it('should position button in top-right corner', () => {
       renderResultsView();
-      
+
       // Check that the button exists and is an IconButton
       const button = screen.getByLabelText('Collapse controls');
       expect(button).toBeInTheDocument();
       expect(button.tagName).toBe('BUTTON');
-      
+
       // Verify it has the expected class names for an IconButton
       expect(button).toHaveClass('MuiIconButton-root');
     });
 
     it('should maintain button visibility in both states', () => {
       const { rerender } = renderResultsView();
-      
+
       // Button should be visible when expanded
       expect(screen.getByLabelText('Collapse controls')).toBeInTheDocument();
-      
+
       // Update state and rerender
       mockTopAreaCollapsed = true;
       rerender(
@@ -292,7 +290,7 @@ describe('ResultsView - Collapse Button', () => {
           </ShiftKeyContext.Provider>
         </MemoryRouter>,
       );
-      
+
       // Button should still be visible when collapsed
       expect(screen.getByLabelText('Expand controls')).toBeInTheDocument();
     });
@@ -301,27 +299,27 @@ describe('ResultsView - Collapse Button', () => {
   describe('Keyboard accessibility', () => {
     it('should be keyboard accessible', async () => {
       renderResultsView();
-      
+
       const collapseButton = screen.getByLabelText('Collapse controls');
-      
+
       // Focus the button
       collapseButton.focus();
       expect(document.activeElement).toBe(collapseButton);
-      
+
       // Press Enter
       fireEvent.keyDown(collapseButton, { key: 'Enter', code: 'Enter' });
       fireEvent.click(collapseButton);
-      
+
       expect(mockSetTopAreaCollapsed).toHaveBeenCalledWith(true);
     });
 
     it('should have proper ARIA labels', () => {
       const { rerender } = renderResultsView();
-      
+
       // When expanded
       const collapseButton = screen.getByLabelText('Collapse controls');
       expect(collapseButton).toHaveAttribute('aria-label', 'Collapse controls');
-      
+
       // When collapsed
       mockTopAreaCollapsed = true;
       rerender(
@@ -337,7 +335,7 @@ describe('ResultsView - Collapse Button', () => {
           </ShiftKeyContext.Provider>
         </MemoryRouter>,
       );
-      
+
       const expandButton = screen.getByLabelText('Expand controls');
       expect(expandButton).toHaveAttribute('aria-label', 'Expand controls');
     });

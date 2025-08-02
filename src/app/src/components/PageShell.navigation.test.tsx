@@ -1,4 +1,3 @@
-
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -63,7 +62,7 @@ describe('PageShell - Navigation Visibility', () => {
         }
         return { topAreaCollapsed: false };
       });
-      
+
       renderPageShell('/eval/123');
 
       await waitFor(() => {
@@ -78,7 +77,7 @@ describe('PageShell - Navigation Visibility', () => {
         }
         return { topAreaCollapsed: true };
       });
-      
+
       renderPageShell('/eval/123');
 
       await waitFor(() => {
@@ -93,7 +92,7 @@ describe('PageShell - Navigation Visibility', () => {
         }
         return { topAreaCollapsed: true };
       });
-      
+
       renderPageShell('/evals');
 
       await waitFor(() => {
@@ -119,7 +118,7 @@ describe('PageShell - Navigation Visibility', () => {
           }
           return { topAreaCollapsed: true };
         });
-        
+
         renderPageShell(path);
 
         await waitFor(() => {
@@ -129,7 +128,7 @@ describe('PageShell - Navigation Visibility', () => {
             expect(screen.getByTestId('navigation')).toBeInTheDocument();
           }
         });
-      }
+      },
     );
   });
 
@@ -142,7 +141,7 @@ describe('PageShell - Navigation Visibility', () => {
         }
         return { topAreaCollapsed };
       });
-      
+
       const { rerender } = renderPageShell('/eval/123');
 
       // Initially visible

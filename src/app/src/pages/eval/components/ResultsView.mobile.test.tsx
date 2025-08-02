@@ -1,5 +1,3 @@
-
-
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { render, screen } from '@testing-library/react';
@@ -177,9 +175,9 @@ describe('ResultsView - Mobile Viewport', () => {
     it('should auto-collapse on mobile viewport', async () => {
       // Set mobile viewport
       mockUseMediaQuery.mockReturnValue(true);
-      
+
       renderResultsView();
-      
+
       // Should call setTopAreaCollapsed(true) on mount
       expect(mockSetTopAreaCollapsed).toHaveBeenCalledWith(true);
     });
@@ -187,9 +185,9 @@ describe('ResultsView - Mobile Viewport', () => {
     it('should not auto-collapse on desktop viewport', () => {
       // Set desktop viewport
       mockUseMediaQuery.mockReturnValue(false);
-      
+
       renderResultsView();
-      
+
       // Should not call setTopAreaCollapsed on mount
       expect(mockSetTopAreaCollapsed).not.toHaveBeenCalled();
     });
@@ -199,9 +197,9 @@ describe('ResultsView - Mobile Viewport', () => {
       mockUseMediaQuery.mockReturnValue(true);
       // Already collapsed
       mockTopAreaCollapsed = true;
-      
+
       renderResultsView();
-      
+
       // Should not call setTopAreaCollapsed since it's already collapsed
       expect(mockSetTopAreaCollapsed).not.toHaveBeenCalled();
     });
@@ -212,12 +210,12 @@ describe('ResultsView - Mobile Viewport', () => {
       // Set mobile viewport
       mockUseMediaQuery.mockReturnValue(true);
       mockTopAreaCollapsed = true;
-      
+
       renderResultsView();
-      
+
       const button = screen.getByLabelText('Expand controls');
       expect(button).toBeInTheDocument();
-      
+
       // On mobile, the button should have medium size (default is small)
       // This is verified by the presence of the button, as size is handled by MUI
       expect(button).toHaveClass('MuiIconButton-root');
@@ -227,9 +225,9 @@ describe('ResultsView - Mobile Viewport', () => {
       // Set mobile viewport
       mockUseMediaQuery.mockReturnValue(true);
       mockTopAreaCollapsed = true;
-      
+
       renderResultsView();
-      
+
       // Button should exist with expand label
       const button = screen.getByLabelText('Expand controls');
       expect(button).toBeInTheDocument();
@@ -240,20 +238,20 @@ describe('ResultsView - Mobile Viewport', () => {
     it('should position tooltip at bottom on mobile', () => {
       // Set mobile viewport
       mockUseMediaQuery.mockReturnValue(true);
-      
+
       renderResultsView();
-      
+
       // Verify button exists (tooltip placement is handled by MUI)
       const button = screen.getByLabelText('Collapse controls');
       expect(button).toBeInTheDocument();
     });
 
     it('should position tooltip at left on desktop', () => {
-      // Set desktop viewport  
+      // Set desktop viewport
       mockUseMediaQuery.mockReturnValue(false);
-      
+
       renderResultsView();
-      
+
       // Verify button exists (tooltip placement is handled by MUI)
       const button = screen.getByLabelText('Collapse controls');
       expect(button).toBeInTheDocument();
@@ -265,9 +263,9 @@ describe('ResultsView - Mobile Viewport', () => {
       // Set mobile viewport
       mockUseMediaQuery.mockReturnValue(true);
       mockTopAreaCollapsed = false;
-      
+
       renderResultsView();
-      
+
       // Controls should be visible when expanded
       expect(screen.getByPlaceholderText('Search or select an eval...')).toBeInTheDocument();
       expect(screen.getByText('Eval actions')).toBeInTheDocument();
@@ -277,9 +275,9 @@ describe('ResultsView - Mobile Viewport', () => {
       // Set mobile viewport
       mockUseMediaQuery.mockReturnValue(true);
       mockTopAreaCollapsed = true;
-      
+
       renderResultsView();
-      
+
       // Controls should be hidden when collapsed
       expect(screen.queryByPlaceholderText('Search or select an eval...')).not.toBeInTheDocument();
       expect(screen.queryByText('Eval actions')).not.toBeInTheDocument();
