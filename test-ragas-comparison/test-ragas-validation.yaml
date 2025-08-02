@@ -1,0 +1,59 @@
+description: Validate RAGAS metrics work exactly like RAGAS
+
+providers:
+  - id: openai:gpt-4o-mini
+    config:
+      temperature: 0
+
+prompts:
+  - |
+    Answer this question based on the context provided.
+    
+    Context: {{context}}
+    Question: {{query}}
+    
+    Answer:
+
+tests:
+  # Test 1: Context Recall - should analyze ground truth sentences
+  - vars:
+      query: "What are Einstein's major contributions?"
+      context: |
+        Albert Einstein was a German-born theoretical physicist. 
+        He developed the theory of relativity.
+        He won the Nobel Prize in Physics in 1921.
+        His formula E=mc² is very famous.
+    assert:
+      - type: context-recall
+        value: |
+          Einstein developed the theory of relativity.
+          He won the Nobel Prize for the photoelectric effect.
+          He created the formula E=mc².
+          He was born in Germany.
+        threshold: 0.75  # 3/4 sentences should be attributed
+      
+  # Test 2: Context Relevance - should measure relevant context sentences
+  - vars:
+      query: "What is the capital of France?"
+      context: |
+        France is a country in Europe.
+        Paris is the capital of France.
+        The Eiffel Tower is in Paris.
+        French cuisine is world famous.
+        France borders Spain and Germany.
+    assert:
+      - type: context-relevance
+        threshold: 0.4  # 2/5 sentences are relevant (Paris sentences)
+
+  # Test 3: Context with no relevant info
+  - vars:
+      query: "What is quantum computing?"
+      context: |
+        The weather today is sunny.
+        Birds can fly very high.
+        The ocean is very deep.
+    assert:
+      - type: context-relevance
+        threshold: 0.1  # Should be 0 as no relevant sentences
+
+outputPath: test-ragas-validation-results.json

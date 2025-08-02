@@ -1127,28 +1127,34 @@ export async function matchesContextRelevance(
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
-  const sentences = splitIntoSentences(resp.output);
-  let numerator = 0;
+  
+  // Split the original context into sentences to get the total count
+  const contextSentences = splitIntoSentences(context);
+  const totalContextSentences = contextSentences.length;
+  
+  // Parse the LLM's response to get relevant sentences
+  const extractedSentences = splitIntoSentences(resp.output);
   const relevantSentences: string[] = [];
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
-
+  
+  let numerator = 0;
   if (insufficientInformation) {
-    // If the entire response is "Insufficient Information", treat all as irrelevant
+    // If the entire response is "Insufficient Information", no sentences are relevant
     numerator = 0;
   } else {
-    // Each sentence is considered relevant
-    numerator = sentences.length;
-    relevantSentences.push(...sentences);
+    // Count the extracted sentences as relevant
+    numerator = extractedSentences.length;
+    relevantSentences.push(...extractedSentences);
   }
-
-  const score =
-    sentences.length > 0 ? numerator / sentences.length : insufficientInformation ? 0 : 1;
+  
+  // RAGAS calculates: relevant sentences / total sentences in context
+  const score = totalContextSentences > 0 ? numerator / totalContextSentences : 0;
   const pass = score >= threshold - Number.EPSILON;
 
   const metadata = {
     extractedSentences: relevantSentences,
-    totalSentences: sentences.length,
-    relevantSentences: numerator,
+    totalContextSentences,
+    relevantSentenceCount: numerator,
     insufficientInformation,
     score,
   };
