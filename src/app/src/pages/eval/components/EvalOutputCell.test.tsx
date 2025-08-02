@@ -33,6 +33,9 @@ vi.mock('./store', () => ({
     maxImageWidth: 256,
     maxImageHeight: 256,
   }),
+  useTableStore: () => ({
+    shouldHighlightSearchText: false,
+  }),
 }));
 
 vi.mock('../../../hooks/useShiftKey', () => ({
@@ -425,6 +428,260 @@ describe('EvalOutputCell', () => {
       '10 prompt tokens + 20 completion tokens & 5 reasoning tokens = 35 total';
     const tooltipElement = screen.getByLabelText(expectedTooltipText);
     expect(tooltipElement).toBeInTheDocument();
+  });
+
+  it('does not highlight text when shouldHighlightSearchText is true but searchText is empty', () => {
+    vi.mock('./store', () => ({
+      useResultsViewSettingsStore: () => ({
+        prettifyJson: false,
+        renderMarkdown: true,
+        showPassFail: true,
+        showPrompts: true,
+        maxImageWidth: 256,
+        maxImageHeight: 256,
+      }),
+      useTableStore: () => ({
+        shouldHighlightSearchText: true,
+      }),
+    }));
+
+    const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    const highlightedText = container.querySelector('.search-highlight');
+    expect(highlightedText).toBeNull();
+
+    const outputText = screen.getByText('Test output text');
+    expect(outputText).toBeInTheDocument();
+  });
+
+  it('handles invalid regex in searchText gracefully', () => {
+    const invalidRegex = '(';
+    renderWithProviders(<EvalOutputCell {...defaultProps} searchText={invalidRegex} />);
+
+    expect(screen.getByText('Test output text')).toBeInTheDocument();
+  });
+
+  it('handles zero-length regex matches gracefully', () => {
+    const propsWithZeroLengthSearch: MockEvalOutputCellProps = {
+      ...defaultProps,
+      searchText: '',
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithZeroLengthSearch} />);
+
+    expect(screen.getByText('Test output text')).toBeInTheDocument();
+  });
+});
+
+describe('EvalOutputCell search highlighting boundary conditions', () => {
+  const mockOnRating = vi.fn();
+
+  const defaultProps: MockEvalOutputCellProps = {
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    maxTextLength: 100,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      gradingResult: {
+        comment: 'Initial comment',
+        componentResults: [
+          {
+            assertion: {
+              metric: 'accuracy',
+              type: 'contains' as AssertionType,
+              value: 'expected value',
+            },
+            pass: true,
+            reason: 'Perfect match',
+            score: 1.0,
+          },
+          {
+            assertion: {
+              metric: 'relevance',
+              type: 'similar',
+              value: 'another value',
+            },
+            pass: false,
+            reason: 'Partial match',
+            score: 0.6,
+          },
+        ],
+        pass: true,
+        reason: 'Test reason',
+        score: 0.8,
+      },
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+      metadata: { testKey: 'testValue' },
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mock('./store', () => ({
+      useResultsViewSettingsStore: () => ({
+        prettifyJson: false,
+        renderMarkdown: true,
+        showPassFail: true,
+        showPrompts: true,
+        maxImageWidth: 256,
+        maxImageHeight: 256,
+      }),
+      useTableStore: () => ({
+        shouldHighlightSearchText: true,
+      }),
+    }));
+  });
+
+  it('should highlight when searchText matches the beginning of the output text', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: 'Test output text',
+      },
+      searchText: 'Test',
+    };
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const highlightedText = screen.getByText('Test');
+    expect(highlightedText).toHaveClass('search-highlight');
+  });
+
+  it('should highlight when searchText matches the end of the output text', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: 'Test output text',
+      },
+      searchText: 'text',
+    };
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const highlightedText = screen.getByText('text');
+    expect(highlightedText).toHaveClass('search-highlight');
+  });
+});
+
+describe('EvalOutputCell with prettified JSON', () => {
+  const mockOnRating = vi.fn();
+
+  const defaultProps: MockEvalOutputCellProps = {
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: 'Test output text',
+      testCase: {},
+    },
+    maxTextLength: 100,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      gradingResult: {
+        comment: 'Initial comment',
+        componentResults: [
+          {
+            assertion: {
+              metric: 'accuracy',
+              type: 'contains' as AssertionType,
+              value: 'expected value',
+            },
+            pass: true,
+            reason: 'Perfect match',
+            score: 1.0,
+          },
+          {
+            assertion: {
+              metric: 'relevance',
+              type: 'similar',
+              value: 'another value',
+            },
+            pass: false,
+            reason: 'Partial match',
+            score: 0.6,
+          },
+        ],
+        pass: true,
+        reason: 'Test reason',
+        score: 0.8,
+      },
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.8,
+      text: '{"key1": "value1", "key2": "value2 to search for"}',
+      testCase: {},
+      metadata: { testKey: 'testValue' },
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: 'value2 to search for',
+    showDiffs: false,
+    showStats: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mock('./store', () => ({
+      useResultsViewSettingsStore: () => ({
+        prettifyJson: true,
+        renderMarkdown: false,
+        showPassFail: true,
+        showPrompts: true,
+        maxImageWidth: 256,
+        maxImageHeight: 256,
+      }),
+      useTableStore: () => ({
+        shouldHighlightSearchText: true,
+      }),
+    }));
+  });
+
+  it('highlights search matches in prettified JSON content', () => {
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    const highlightedText = screen.getByText('value2 to search for');
+    expect(highlightedText).toBeInTheDocument();
+    expect(highlightedText.closest('.search-highlight')).toBeInTheDocument();
   });
 });
 

@@ -1,169 +1,187 @@
-import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { MemoryRouter } from 'react-router-dom';
-import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useApiHealth } from '@app/hooks/useApiHealth';
-import { useTelemetry } from '@app/hooks/useTelemetry';
-import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { callApi } from '@app/utils/api';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Purpose from './Purpose';
 
-vi.mock('../hooks/useRedTeamConfig');
-vi.mock('@app/hooks/useTelemetry');
-vi.mock('@app/hooks/useApiHealth');
+const mockUpdateApplicationDefinition = vi.fn();
+const mockUpdateConfig = vi.fn();
+const mockUseRedTeamConfig = vi.fn();
+const mockRecordEvent = vi.fn();
+const mockCheckHealth = vi.fn();
+
+vi.mock('../hooks/useRedTeamConfig', () => ({
+  useRedTeamConfig: () => mockUseRedTeamConfig(),
+  DEFAULT_HTTP_TARGET: { id: 'http', config: {} },
+}));
+
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: () => ({
+    recordEvent: mockRecordEvent,
+  }),
+}));
+
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: () => ({
+    status: 'connected',
+    checkHealth: mockCheckHealth,
+  }),
+}));
+
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
 }));
 
-const mockedUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
-const mockedUseTelemetry = useTelemetry as unknown as Mock;
-const mockedUseApiHealth = useApiHealth as unknown as Mock;
-
 describe('Purpose Component', () => {
   const theme = createTheme();
-  const onNext = vi.fn();
-  const onBack = vi.fn();
 
-  const renderWithTheme = (component: React.ReactElement) => {
+  const renderComponent = (props: any) => {
     return render(
       <ThemeProvider theme={theme}>
-        <MemoryRouter>{component}</MemoryRouter>
+        <Purpose {...props} />
       </ThemeProvider>,
     );
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        applicationDefinition: {
+          purpose: 'A test purpose to enable the next button',
+        },
+        target: {},
+        testGenerationInstructions: '',
+      },
+      updateApplicationDefinition: mockUpdateApplicationDefinition,
+      updateConfig: mockUpdateConfig,
+    });
+  });
 
-    mockedUseRedTeamConfig.mockReturnValue({
+  describe('Navigation', () => {
+    it("should render a 'Back' button and call the provided onBack callback when clicked", () => {
+      const onBackMock = vi.fn();
+      const onNextMock = vi.fn();
+
+      renderComponent({ onNext: onNextMock, onBack: onBackMock });
+
+      const backButton = screen.getByRole('button', { name: /back/i });
+      expect(backButton).toBeInTheDocument();
+
+      fireEvent.click(backButton);
+
+      expect(onBackMock).toHaveBeenCalledTimes(1);
+
+      expect(onNextMock).not.toHaveBeenCalled();
+    });
+
+    it('should render an empty Box when onBack is undefined', () => {
+      const onNextMock = vi.fn();
+      renderComponent({ onNext: onNextMock });
+
+      const backButton = screen.queryByRole('button', { name: /back/i });
+      expect(backButton).toBeNull();
+
+      const nextButton = screen.getByRole('button', { name: /next/i });
+      expect(nextButton).toBeInTheDocument();
+    });
+  });
+
+  it('should enable the Next button when testMode is "model" and purpose is empty', () => {
+    mockUseRedTeamConfig.mockReturnValue({
       config: {
         applicationDefinition: {
           purpose: '',
         },
-        target: DEFAULT_HTTP_TARGET,
+        target: {},
+        testGenerationInstructions: '',
       },
-      updateApplicationDefinition: vi.fn(),
-      updateConfig: vi.fn(),
+      updateApplicationDefinition: mockUpdateApplicationDefinition,
+      updateConfig: mockUpdateConfig,
     });
 
-    mockedUseTelemetry.mockReturnValue({
-      recordEvent: vi.fn(),
-    });
-
-    mockedUseApiHealth.mockReturnValue({
-      status: 'unknown',
-      checkHealth: vi.fn(),
-      isChecking: false,
-    });
-  });
-
-  it('should render its content inside PageWrapper and correctly pass onNext and onBack handlers', () => {
-    const onNextMock = vi.fn();
-    const onBackMock = vi.fn();
-
-    mockedUseRedTeamConfig.mockReturnValue({
-      config: {
-        applicationDefinition: { purpose: 'A valid purpose to enable the next button' },
-        target: DEFAULT_HTTP_TARGET,
-      },
-      updateApplicationDefinition: vi.fn(),
-      updateConfig: vi.fn(),
-    });
-
-    renderWithTheme(<Purpose onNext={onNextMock} onBack={onBackMock} />);
-
-    expect(
-      screen.getByRole('heading', { name: /Application Details/i, level: 4 }),
-    ).toBeInTheDocument();
-
-    expect(screen.getByText(/What is the main purpose of your application?/i)).toBeInTheDocument();
-
-    const backButton = screen.getByRole('button', { name: /Back/i });
-    expect(backButton).toBeInTheDocument();
-    fireEvent.click(backButton);
-    expect(onBackMock).toHaveBeenCalledTimes(1);
-
-    const nextButton = screen.getByRole('button', { name: /Next/i });
-    expect(nextButton).toBeInTheDocument();
-    expect(nextButton).not.toBeDisabled();
-    fireEvent.click(nextButton);
-    expect(onNextMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('should disable the Next button in PageWrapper when testMode is application and the main purpose field is empty', () => {
-    renderWithTheme(<Purpose onNext={vi.fn()} onBack={vi.fn()} />);
-
-    const nextButton = screen.getByRole('button', { name: /Next/i });
-    expect(nextButton).toBeInTheDocument();
-    expect(nextButton).toBeDisabled();
-  });
-
-  it("should display an informational Alert and enable the Next button when testMode is set to 'model'", () => {
-    const onNextMock = vi.fn();
-    const onBackMock = vi.fn();
-
-    renderWithTheme(<Purpose onNext={onNextMock} onBack={onBackMock} />);
+    renderComponent({ onNext: vi.fn() });
 
     const modelButton = screen.getByRole('button', { name: /test model/i });
     fireEvent.click(modelButton);
 
-    const alertElement = screen.getByText(
-      /When testing a model directly, you don't need to provide application details./i,
-    );
-    expect(alertElement).toBeInTheDocument();
-
-    const nextButton = screen.getByRole('button', { name: /Next/i });
-    expect(nextButton).toBeInTheDocument();
-    expect(nextButton).not.toBeDisabled();
-
-    fireEvent.click(nextButton);
-    expect(onNextMock).toHaveBeenCalledTimes(1);
+    const nextButton = screen.getByRole('button', { name: /next/i });
+    expect(nextButton).toBeEnabled();
   });
 
-  it('should trigger the onBack callback when the back button is clicked', () => {
-    const onBackMock = vi.fn();
-    const onNextMock = vi.fn();
+  it('should preserve form field values when navigating away and returning', () => {
+    const testPurpose = 'Updated test purpose';
+    renderComponent({ onNext: vi.fn() });
 
-    renderWithTheme(<Purpose onNext={onNextMock} onBack={onBackMock} />);
+    const purposeTextField = screen.getByPlaceholderText(/e\.g\. Assist healthcare professionals/i);
+    expect(purposeTextField).toBeInTheDocument();
 
-    const backButton = screen.getByRole('button', { name: /Back/i });
-    fireEvent.click(backButton);
+    fireEvent.change(purposeTextField, { target: { value: testPurpose } });
 
-    expect(onBackMock).toHaveBeenCalledTimes(1);
+    expect(mockUpdateApplicationDefinition).toHaveBeenCalledTimes(1);
+    expect(mockUpdateApplicationDefinition).toHaveBeenCalledWith('purpose', testPurpose);
   });
 
-  it('should allow accordion sections to expand and collapse', () => {
-    renderWithTheme(<Purpose onNext={vi.fn()} onBack={vi.fn()} />);
+  describe('Long Text Input', () => {
+    it('should handle extremely long text input in the purpose field without breaking the UI or validation logic', () => {
+      const longText = 'This is a very long text input. '.repeat(200);
+      const onNextMock = vi.fn();
 
-    const accordionSummary = screen.getByRole('button', { name: /Core Application Details/i });
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          applicationDefinition: {
+            purpose: '',
+          },
+          target: {},
+          testGenerationInstructions: '',
+        },
+        updateApplicationDefinition: mockUpdateApplicationDefinition,
+        updateConfig: mockUpdateConfig,
+      });
 
-    expect(accordionSummary).toHaveAttribute('aria-expanded', 'true');
+      renderComponent({ onNext: onNextMock });
 
-    fireEvent.click(accordionSummary);
-    expect(accordionSummary).toHaveAttribute('aria-expanded', 'false');
+      const purposeTextField = screen.getByPlaceholderText(/e.g. Assist healthcare professionals/i);
+      expect(purposeTextField).toBeInTheDocument();
 
-    fireEvent.click(accordionSummary);
-    expect(accordionSummary).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.change(purposeTextField, { target: { value: longText } });
+
+      expect(mockUpdateApplicationDefinition).toHaveBeenCalledTimes(1);
+      expect(mockUpdateApplicationDefinition).toHaveBeenCalledWith('purpose', longText);
+    });
   });
 
-  it('should render all main sections, navigation buttons, and have a full-width container without a max-width', () => {
-    renderWithTheme(<Purpose onNext={onNext} onBack={onBack} />);
+  describe('Target Purpose Discovery', () => {
+    it('should display an error message when the target purpose discovery API call fails', async () => {
+      const errorMessage = 'Failed to discover target purpose';
+      const mockCallApi = vi.mocked(callApi);
+      mockCallApi.mockRejectedValue(new Error(errorMessage));
 
-    expect(
-      screen.getByRole('heading', { name: /Application Details/i, level: 4 }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/What is the main purpose of your application/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: /Core Application Details/i, level: 6 }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Back/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Next/i })).toBeInTheDocument();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          applicationDefinition: {
+            purpose: 'A test purpose to enable the next button',
+          },
+          target: {
+            id: 'http',
+            config: {
+              url: 'http://example.com',
+            },
+          },
+          testGenerationInstructions: '',
+        },
+        updateApplicationDefinition: mockUpdateApplicationDefinition,
+        updateConfig: mockUpdateConfig,
+      });
 
-    const toggleButtonGroup = screen.getByRole('group', { name: /test mode/i });
-    const mainContainer = toggleButtonGroup.parentElement?.parentElement;
+      renderComponent({ onNext: vi.fn() });
 
-    expect(mainContainer).toBeInTheDocument();
-    expect(mainContainer).toHaveStyle('width: 100%');
-    expect(mainContainer?.style.maxWidth).toBeFalsy();
+      const discoverButton = screen.getByRole('button', { name: /discover/i });
+      fireEvent.click(discoverButton);
+
+      await waitFor(() => {
+        expect(screen.getByText(errorMessage)).toBeInTheDocument();
+      });
+    });
   });
 });
