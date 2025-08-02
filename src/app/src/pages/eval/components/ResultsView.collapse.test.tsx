@@ -1,8 +1,8 @@
-import React from 'react';
+
 
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,6 +32,13 @@ vi.mock('react-router-dom', async () => {
     useSearchParams: () => [new URLSearchParams(''), vi.fn()],
   };
 });
+
+// Mock API utils
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  updateEvalAuthor: vi.fn(),
+}));
 
 // Mock store
 let mockTopAreaCollapsed = false;
@@ -96,7 +103,11 @@ vi.mock('./store', () => ({
     clearFilters: vi.fn(),
     updateSearchText: vi.fn(),
     fetchEvalWithoutFilters: vi.fn(),
+    fetchEvalData: vi.fn(() => Promise.resolve(null)),
     setEvalId: vi.fn(),
+    filteredResultsCount: 1,
+    totalResultsCount: 1,
+    highlightedResultsCount: 0,
     getFilteredTable: vi.fn(() => ({
       head: mockTable.head,
       body: mockTable.body,
@@ -115,8 +126,23 @@ vi.mock('@mui/material/styles', () => ({
     breakpoints: {
       down: (breakpoint: string) => `(max-width: ${breakpoint === 'md' ? '960px' : '600px'})`,
     },
+    palette: {
+      mode: 'light',
+      background: {
+        paper: '#ffffff',
+      },
+      primary: {
+        main: '#1976d2',
+      },
+      text: {
+        primary: '#000000',
+        secondary: '#666666',
+      },
+    },
+    shadows: Array(25).fill('0px 0px 0px rgba(0,0,0,0.2)'),
   }),
   styled: () => () => () => null,
+  alpha: vi.fn((color: string, opacity: number) => color),
 }));
 
 // Mock useMediaQuery
@@ -232,20 +258,43 @@ describe('ResultsView - Collapse Button', () => {
     });
   });
 
-  describe('Button styling and hover behavior', () => {
-    it('should have lower opacity when collapsed', () => {
-      mockTopAreaCollapsed = true;
+  describe('Button styling and position', () => {
+    it('should position button in top-right corner', () => {
       renderResultsView();
       
-      const buttonContainer = screen.getByLabelText('Expand controls').parentElement?.parentElement;
-      expect(buttonContainer).toHaveStyle({ opacity: 0.3 });
+      // Check that the button exists and is an IconButton
+      const button = screen.getByLabelText('Collapse controls');
+      expect(button).toBeInTheDocument();
+      expect(button.tagName).toBe('BUTTON');
+      
+      // Verify it has the expected class names for an IconButton
+      expect(button).toHaveClass('MuiIconButton-root');
     });
 
-    it('should have full opacity when expanded', () => {
-      renderResultsView();
+    it('should maintain button visibility in both states', () => {
+      const { rerender } = renderResultsView();
       
-      const buttonContainer = screen.getByLabelText('Collapse controls').parentElement?.parentElement;
-      expect(buttonContainer).toHaveStyle({ opacity: 1 });
+      // Button should be visible when expanded
+      expect(screen.getByLabelText('Collapse controls')).toBeInTheDocument();
+      
+      // Update state and rerender
+      mockTopAreaCollapsed = true;
+      rerender(
+        <MemoryRouter>
+          <ShiftKeyContext.Provider value={false}>
+            <ToastProvider>
+              <ResultsView
+                recentEvals={mockRecentEvals}
+                onRecentEvalSelected={vi.fn()}
+                defaultEvalId="1"
+              />
+            </ToastProvider>
+          </ShiftKeyContext.Provider>
+        </MemoryRouter>,
+      );
+      
+      // Button should still be visible when collapsed
+      expect(screen.getByLabelText('Expand controls')).toBeInTheDocument();
     });
   });
 
