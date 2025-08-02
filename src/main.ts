@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
+import { assetsCommand } from './commands/assets';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
@@ -98,6 +99,7 @@ async function main() {
   shareCommand(program);
 
   // Alphabetical order
+  assetsCommand(program);
   authCommand(program);
   cacheCommand(program);
   configCommand(program);

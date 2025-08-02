@@ -215,7 +215,7 @@ function EvalOutputCell({
       />
     );
   } else if (text?.match(/^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)/)) {
-    // Handle asset:// URLs
+    // Handle image asset:// URLs
     const assetMatch = text.match(/^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)/);
     if (assetMatch) {
       const [, alt, assetPath] = assetMatch;
@@ -235,6 +235,22 @@ function EvalOutputCell({
             target.parentNode?.insertBefore(textNode, target);
           }}
         />
+      );
+    }
+  } else if (text?.match(/^\[Audio\]\(asset:\/\/([^)]+)\)/)) {
+    // Handle audio asset:// URLs
+    const assetMatch = text.match(/^\[Audio\]\(asset:\/\/([^)]+)\)/);
+    if (assetMatch) {
+      const [, assetPath] = assetMatch;
+      const [evalId, resultId, assetId] = assetPath.split('/');
+      const assetUrl = `/api/eval/${evalId}/result/${resultId}/asset/${assetId}`;
+      node = (
+        <div className="audio-output">
+          <audio controls style={{ width: '100%' }} data-testid="audio-player">
+            <source src={assetUrl} type="audio/wav" />
+            Your browser does not support the audio element.
+          </audio>
+        </div>
       );
     }
   } else if (output.audio) {

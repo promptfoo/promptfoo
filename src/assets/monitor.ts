@@ -28,11 +28,14 @@ export class AssetMonitor {
 
   start(): void {
     // Check disk space every 5 minutes
-    this.checkInterval = setInterval(() => {
-      this.checkDiskSpace().catch((error) => {
-        logger.error('Failed to check disk space:', error);
-      });
-    }, 5 * 60 * 1000);
+    this.checkInterval = setInterval(
+      () => {
+        this.checkDiskSpace().catch((error) => {
+          logger.error('Failed to check disk space:', error);
+        });
+      },
+      5 * 60 * 1000,
+    );
 
     // Initial check
     this.checkDiskSpace().catch((error) => {
@@ -52,14 +55,14 @@ export class AssetMonitor {
       // Use df command on Unix-like systems
       const { stdout } = await execAsync(`df -k "${directory}"`);
       const lines = stdout.trim().split('\n');
-      
+
       if (lines.length < 2) {
         throw new Error('Unexpected df output');
       }
 
       // Parse the second line which contains the data
       const parts = lines[1].split(/\s+/).filter(Boolean);
-      
+
       // df -k gives sizes in 1K blocks
       const total = parseInt(parts[1], 10) * 1024;
       const used = parseInt(parts[2], 10) * 1024;
@@ -97,10 +100,10 @@ export class AssetMonitor {
   async checkDiskSpace(): Promise<void> {
     try {
       const assetsPath = path.join(getConfigDirectoryPath(), 'assets');
-      
+
       // Create directory if it doesn't exist
       await fs.mkdir(assetsPath, { recursive: true });
-      
+
       const diskInfo = await this.getDiskUsage(assetsPath);
       const freePercentage = 100 - diskInfo.percentUsed;
 
@@ -134,7 +137,7 @@ export class AssetMonitor {
 
   async getAssetStorageSize(): Promise<number> {
     const assetsPath = path.join(getConfigDirectoryPath(), 'assets');
-    
+
     try {
       const size = await this.getDirectorySize(assetsPath);
       return size;
@@ -148,12 +151,12 @@ export class AssetMonitor {
 
   private async getDirectorySize(dir: string): Promise<number> {
     let size = 0;
-    
+
     const files = await fs.readdir(dir, { withFileTypes: true });
-    
+
     for (const file of files) {
       const filePath = path.join(dir, file.name);
-      
+
       if (file.isDirectory()) {
         size += await this.getDirectorySize(filePath);
       } else {
@@ -161,7 +164,7 @@ export class AssetMonitor {
         size += stats.size;
       }
     }
-    
+
     return size;
   }
 

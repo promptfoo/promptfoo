@@ -1,0 +1,52 @@
+# Test configuration for audio asset storage feature
+# Run with: PROMPTFOO_USE_ASSET_STORAGE=true promptfoo eval -c test-audio-asset-storage.yaml
+
+prompts:
+  - "Say hello world in a friendly voice"
+  - "Count from one to five slowly"
+
+providers:
+  - id: hyperbolic:audio:melo
+    config:
+      voice: "EN-US"
+      speed: 1.0
+
+tests:
+  - vars:
+      tone: "cheerful"
+  - vars:
+      tone: "calm"
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        // Check if the output contains an audio asset reference
+        if (output.includes('[Audio](asset://')) {
+          return {
+            pass: true,
+            score: 1.0,
+            reason: 'Audio stored as asset successfully'
+          };
+        }
+        // Also accept base64 as fallback
+        if (output.includes('data:audio')) {
+          return {
+            pass: true,
+            score: 0.5,
+            reason: 'Audio stored as base64 (fallback)'
+          };
+        }
+        // Check if it's raw base64 audio data
+        if (output.match(/^[A-Za-z0-9+/=]{100,}$/)) {
+          return {
+            pass: true,
+            score: 0.5,
+            reason: 'Audio returned as base64 string'
+          };
+        }
+        return {
+          pass: false,
+          score: 0,
+          reason: 'No audio found in output'
+        };

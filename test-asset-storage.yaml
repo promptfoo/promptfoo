@@ -2,8 +2,8 @@
 # Run with: PROMPTFOO_USE_ASSET_STORAGE=true promptfoo eval -c test-asset-storage.yaml
 
 prompts:
-  - "Generate a colorful abstract painting with geometric shapes"
-  - "Create an image of a serene mountain landscape at sunset"
+  - 'Generate a colorful abstract painting with geometric shapes'
+  - 'Create an image of a serene mountain landscape at sunset'
 
 providers:
   - id: openai:dall-e-3
@@ -14,9 +14,9 @@ providers:
 
 tests:
   - vars:
-      style: "vibrant and modern"
+      style: 'vibrant and modern'
   - vars:
-      style: "peaceful and natural"
+      style: 'peaceful and natural'
 
 defaultTest:
   assert:

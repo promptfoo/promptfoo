@@ -7,6 +7,7 @@ Promptfoo now supports storing large assets (images, audio) as files on disk ins
 ## Quick Start
 
 1. Enable asset storage by setting the environment variable:
+
    ```bash
    export PROMPTFOO_USE_ASSET_STORAGE=true
    ```
@@ -36,15 +37,26 @@ When enabled, images from supported providers are automatically stored as files:
 providers:
   - id: openai:dall-e-3
     config:
-      response_format: b64_json  # Will be stored as file
+      response_format: b64_json # Will be stored as file
+```
+
+### Automatic Audio Handling
+
+Audio from supported providers is also automatically stored as files:
+
+```yaml
+providers:
+  - id: hyperbolic:audio:melo
+    config:
+      voice: 'EN-US' # Audio will be stored as file
 ```
 
 ### Asset URLs
 
 Assets are referenced using a special URL format:
-```
-![alt text](asset://eval-id/result-id/asset-id)
-```
+
+- Images: `![alt text](asset://eval-id/result-id/asset-id)`
+- Audio: `[Audio](asset://eval-id/result-id/asset-id)`
 
 These are automatically converted to API URLs when displayed in the UI.
 
@@ -63,16 +75,19 @@ These are automatically converted to API URLs when displayed in the UI.
 ## API Endpoints
 
 ### Get Asset
+
 ```
 GET /api/eval/:evalId/result/:resultId/asset/:assetId
 ```
 
 ### Asset Metrics
+
 ```
 GET /api/assets/metrics
 ```
 
 Returns:
+
 ```json
 {
   "saveAttempts": 10,
@@ -90,11 +105,13 @@ Returns:
 ```
 
 ### Health Check
+
 ```
 GET /api/health/assets
 ```
 
 Returns:
+
 ```json
 {
   "enabled": true,
@@ -122,6 +139,39 @@ If asset storage fails for any reason, the system automatically falls back to st
 - **Better Caching**: Assets can be cached separately by the browser
 - **Streaming**: Large assets can be streamed instead of loaded entirely
 
+## Asset Cleanup
+
+The asset storage system includes a cleanup utility to manage disk space.
+
+### CLI Commands
+
+```bash
+# Show asset storage statistics
+promptfoo assets stats
+
+# Clean up old assets (dry run)
+promptfoo assets cleanup --dry-run
+
+# Clean up assets older than 30 days
+promptfoo assets cleanup --max-age 30
+
+# Clean up only orphaned files (missing metadata)
+promptfoo assets cleanup --orphaned-only
+
+# Clean up with custom age threshold
+promptfoo assets cleanup --max-age 7
+```
+
+### Cleanup Options
+
+- `--dry-run`: Show what would be deleted without actually deleting
+- `--max-age <days>`: Delete assets older than specified days (default: 30)
+- `--orphaned-only`: Only delete files without metadata
+
+### Environment Variables
+
+- `PROMPTFOO_ASSET_MAX_AGE_DAYS`: Default maximum age for cleanup (default: 30)
+
 ## Troubleshooting
 
 ### Images Not Loading
@@ -135,15 +185,17 @@ If asset storage fails for any reason, the system automatically falls back to st
 
 If you're running low on disk space:
 
-1. Check asset storage size: `du -sh ~/.promptfoo/assets`
+1. Check asset storage size: `promptfoo assets stats`
 2. Find large evaluations: `du -sh ~/.promptfoo/assets/*/* | sort -h`
-3. Archive or delete old evaluations as needed
+3. Run cleanup: `promptfoo assets cleanup --dry-run`
+4. Archive or delete old evaluations as needed
 
 ### Performance Issues
 
 1. Check metrics at `/api/assets/metrics`
 2. Monitor disk I/O: `iostat -x 1`
 3. Check file count: `find ~/.promptfoo/assets -type f | wc -l`
+4. Run cleanup to remove old assets: `promptfoo assets cleanup`
 
 ## Future Enhancements
 

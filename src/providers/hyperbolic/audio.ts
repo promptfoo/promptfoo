@@ -2,6 +2,8 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { isAssetStorageEnabled } from '../../assets';
+import { getMetricsAssetStore } from '../../assets/store';
 
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
@@ -158,6 +160,41 @@ export class HyperbolicAudioProvider implements ApiProvider {
       }
 
       const cost = cached ? 0 : this.calculateAudioCost(prompt.length);
+
+      // Check if asset storage is enabled and we have context with eval/result IDs
+      if (
+        isAssetStorageEnabled() &&
+        context?.vars?.__evalId &&
+        context?.vars?.__resultId &&
+        data.audio
+      ) {
+        try {
+          const assetStore = getMetricsAssetStore();
+          const audioBuffer = Buffer.from(data.audio, 'base64');
+          const evalId = context.vars.__evalId as string;
+          const resultId = context.vars.__resultId as string;
+
+          const metadata = await assetStore.save(
+            audioBuffer,
+            'audio',
+            'audio/wav',
+            evalId,
+            resultId,
+          );
+
+          logger.debug(`Saved audio to asset storage: ${metadata.id} (${metadata.size} bytes)`);
+
+          return {
+            output: `[Audio](asset://${evalId}/${resultId}/${metadata.id})`,
+            cached,
+            cost,
+            metadata: { asset: metadata },
+          };
+        } catch (error) {
+          logger.warn('Failed to save audio to asset storage, falling back to base64:', error);
+          // Fall through to return base64
+        }
+      }
 
       return {
         output: data.audio,

@@ -3,12 +3,30 @@ import {
   createHyperbolicAudioProvider,
   HyperbolicAudioProvider,
 } from '../../../src/providers/hyperbolic/audio';
+import { isAssetStorageEnabled } from '../../../src/assets';
+import { getMetricsAssetStore } from '../../../src/assets/store';
 
 jest.mock('../../../src/cache');
+jest.mock('../../../src/assets');
+jest.mock('../../../src/assets/store');
+jest.mock('../../../src/logger', () => ({
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+}));
 
 describe('HyperbolicAudioProvider', () => {
+  const mockIsAssetStorageEnabled = isAssetStorageEnabled as jest.MockedFunction<
+    typeof isAssetStorageEnabled
+  >;
+  const mockGetMetricsAssetStore = getMetricsAssetStore as jest.MockedFunction<
+    typeof getMetricsAssetStore
+  >;
+
   beforeEach(() => {
     jest.resetAllMocks();
+    mockIsAssetStorageEnabled.mockReturnValue(false);
   });
 
   it('should create provider with default model', () => {
@@ -146,6 +164,107 @@ describe('HyperbolicAudioProvider', () => {
       const result = await provider.callApi('test text');
       expect(result.cached).toBe(true);
       expect(result.cost).toBe(0); // Cost should be 0 for cached responses
+    });
+
+    it('should save audio to asset storage when enabled', async () => {
+      // Enable asset storage
+      mockIsAssetStorageEnabled.mockReturnValue(true);
+
+      // Mock asset store
+      const mockAssetStore = {
+        save: jest.fn().mockResolvedValue({
+          id: 'asset-123',
+          type: 'audio',
+          mimeType: 'audio/wav',
+          size: 1000,
+          hash: 'testhash',
+          createdAt: new Date().toISOString(),
+        }),
+      };
+      mockGetMetricsAssetStore.mockReturnValue(mockAssetStore as any);
+
+      // Mock API response
+      const audioBase64 = Buffer.from('test audio data').toString('base64');
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: { audio: audioBase64 },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new HyperbolicAudioProvider('melo', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('test text', {
+        vars: {
+          __evalId: 'eval-123',
+          __resultId: 'result-456',
+        },
+      });
+
+      expect(mockAssetStore.save).toHaveBeenCalledWith(
+        Buffer.from(audioBase64, 'base64'),
+        'audio',
+        'audio/wav',
+        'eval-123',
+        'result-456',
+      );
+
+      expect(result).toEqual({
+        output: '[Audio](asset://eval-123/result-456/asset-123)',
+        cached: false,
+        cost: expect.any(Number),
+        metadata: {
+          asset: expect.objectContaining({
+            id: 'asset-123',
+            type: 'audio',
+            mimeType: 'audio/wav',
+          }),
+        },
+      });
+    });
+
+    it('should fall back to base64 when asset storage fails', async () => {
+      // Enable asset storage
+      mockIsAssetStorageEnabled.mockReturnValue(true);
+
+      // Mock asset store that fails
+      const mockAssetStore = {
+        save: jest.fn().mockRejectedValue(new Error('Storage failed')),
+      };
+      mockGetMetricsAssetStore.mockReturnValue(mockAssetStore as any);
+
+      // Mock API response
+      const audioBase64 = Buffer.from('test audio data').toString('base64');
+      jest.mocked(fetchWithCache).mockResolvedValue({
+        data: { audio: audioBase64 },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new HyperbolicAudioProvider('melo', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('test text', {
+        vars: {
+          __evalId: 'eval-123',
+          __resultId: 'result-456',
+        },
+      });
+
+      expect(result).toEqual({
+        output: audioBase64,
+        cached: false,
+        cost: expect.any(Number),
+        isBase64: true,
+        audio: {
+          data: audioBase64,
+          format: 'wav',
+        },
+      });
     });
   });
 

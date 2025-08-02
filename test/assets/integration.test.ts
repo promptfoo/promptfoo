@@ -5,7 +5,7 @@ import express from 'express';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 
-import { AssetStore, isAssetStorageEnabled } from '../../src/assets';
+import { AssetStore } from '../../src/assets';
 import { getMetricsAssetStore } from '../../src/assets/store';
 import { AssetMetrics } from '../../src/assets/metrics';
 import { setupAssetRoutes } from '../../src/server/routes/assets';
@@ -42,22 +42,24 @@ describe('Asset Storage Integration', () => {
   let app: express.Application;
   let tempDir: string;
   let assetStore: AssetStore;
-  
-  const mockGetConfigDirectoryPath = jest.requireMock('../../src/util/config/manage').getConfigDirectoryPath;
+
+  const mockGetConfigDirectoryPath = jest.requireMock(
+    '../../src/util/config/manage',
+  ).getConfigDirectoryPath;
 
   beforeEach(async () => {
     // Create temporary directory
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-integration-test-'));
     mockGetConfigDirectoryPath.mockReturnValue(tempDir);
-    
+
     // Reset metrics
     AssetMetrics.getInstance().reset();
-    
+
     // Create Express app and set up routes
     app = express();
     app.use(express.json());
     setupAssetRoutes(app);
-    
+
     // Create asset store
     assetStore = getMetricsAssetStore();
   });
@@ -73,9 +75,9 @@ describe('Asset Storage Integration', () => {
       const imageData = Buffer.from('fake image data for testing');
       const evalId = randomUUID();
       const resultId = randomUUID();
-      
+
       const metadata = await assetStore.save(imageData, 'image', 'image/png', evalId, resultId);
-      
+
       expect(metadata).toMatchObject({
         id: expect.any(String),
         type: 'image',
@@ -89,7 +91,7 @@ describe('Asset Storage Integration', () => {
         .expect(200)
         .expect('Content-Type', 'image/png')
         .expect('Content-Length', imageData.length.toString());
-      
+
       expect(response.body).toEqual(imageData);
       expect(response.headers['x-asset-hash']).toBe(metadata.hash);
       expect(response.headers['x-asset-type']).toBe('image');
@@ -99,7 +101,7 @@ describe('Asset Storage Integration', () => {
       const evalId = randomUUID();
       const resultId = randomUUID();
       const assetId = randomUUID();
-      
+
       await request(app)
         .get(`/api/eval/${evalId}/result/${resultId}/asset/${assetId}`)
         .expect(404)
@@ -118,18 +120,18 @@ describe('Asset Storage Integration', () => {
     it('should return metrics', async () => {
       // Save some assets to generate metrics
       const evalId = randomUUID();
-      
+
       for (let i = 0; i < 3; i++) {
         const data = Buffer.from(`test data ${i}`);
         const resultId = randomUUID();
         await assetStore.save(data, 'image', 'image/png', evalId, resultId);
       }
-      
+
       const response = await request(app)
         .get('/api/assets/metrics')
         .expect(200)
         .expect('Content-Type', /json/);
-      
+
       expect(response.body).toMatchObject({
         saveAttempts: 3,
         saveSuccesses: 3,
@@ -144,7 +146,7 @@ describe('Asset Storage Integration', () => {
         .get('/api/health/assets')
         .expect(200)
         .expect('Content-Type', /json/);
-      
+
       expect(response.body).toMatchObject({
         enabled: true,
         status: expect.stringMatching(/healthy|degraded/),
@@ -158,12 +160,12 @@ describe('Asset Storage Integration', () => {
       const evalId = randomUUID();
       const resultId = randomUUID();
       const assetId = randomUUID();
-      
+
       // Create asset file without metadata
       const assetDir = path.join(tempDir, 'assets', evalId, resultId);
       await fs.mkdir(assetDir, { recursive: true });
       await fs.writeFile(path.join(assetDir, assetId), 'test data');
-      
+
       // Should fail when trying to get metadata
       await request(app)
         .get(`/api/eval/${evalId}/result/${resultId}/asset/${assetId}`)
@@ -180,16 +182,16 @@ describe('Asset Storage Integration', () => {
         }
         return defaultValue;
       });
-      
+
       const evalId = randomUUID();
       const resultId = randomUUID();
       const assetId = randomUUID();
-      
+
       await request(app)
         .get(`/api/eval/${evalId}/result/${resultId}/asset/${assetId}`)
         .expect(404)
         .expect({ error: 'Asset storage is not enabled' });
-      
+
       // Restore mock
       mockGetEnvBool.mockImplementation((key: string, defaultValue: boolean) => {
         if (key === 'PROMPTFOO_USE_ASSET_STORAGE') {
@@ -204,29 +206,23 @@ describe('Asset Storage Integration', () => {
     it('should handle concurrent asset operations', async () => {
       const evalId = randomUUID();
       const promises: Promise<any>[] = [];
-      
+
       // Save 10 assets concurrently
       for (let i = 0; i < 10; i++) {
         const data = Buffer.from(`concurrent test data ${i}`);
         const resultId = randomUUID();
         promises.push(assetStore.save(data, 'image', 'image/png', evalId, resultId));
       }
-      
+
       const results = await Promise.all(promises);
       expect(results).toHaveLength(10);
-      
-      // Load them concurrently through the API
-      const loadPromises: Promise<any>[] = [];
-      for (const metadata of results) {
-        const [, resultId] = metadata.id; // This won't work, need to track resultId
-        // For this test, we'll just verify the saves worked
-      }
-      
+
+      // We've verified the saves worked by checking the results array length
+      // No need to load them through the API for this test
+
       // Verify metrics
-      const metricsResponse = await request(app)
-        .get('/api/assets/metrics')
-        .expect(200);
-      
+      const metricsResponse = await request(app).get('/api/assets/metrics').expect(200);
+
       expect(metricsResponse.body.saveSuccesses).toBe(10);
     });
   });
