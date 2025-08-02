@@ -217,65 +217,44 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
   }
 
   try {
-    // Parse with jsdom - let it handle all HTML parsing
+    // Parse with jsdom
     const dom = new JSDOM(trimmed, {
-      runScripts: 'outside-only',
-      resources: undefined,
-      pretendToBeVisual: false,
-      includeNodeLocations: false,
-      // Don't try to parse as XML
       contentType: 'text/html',
     });
 
     const { document } = dom.window;
 
-    if (!document || !document.documentElement) {
-      return { isValid: false, reason: 'Failed to parse HTML' };
-    }
+    // Check if JSDOM wrapped our content (indicates a fragment or plain text)
+    const isWrapped = document.body && !trimmed.toLowerCase().includes('<body');
 
-    // Check for invalid content by examining what JSDOM had to do
-    // If JSDOM wrapped the content in body tags, check what's inside
-    if (document.body && !trimmed.toLowerCase().includes('<body')) {
-      const bodyNodes = Array.from(document.body.childNodes);
-
-      // Check for any non-whitespace text nodes
-      const textNodes = bodyNodes.filter(
+    if (isWrapped) {
+      // Check what's in the body that JSDOM created
+      const hasText = Array.from(document.body.childNodes).some(
         (node) => node.nodeType === 3 /* TEXT_NODE */ && node.textContent?.trim(),
       );
 
-      // Check for element nodes
-      const elementNodes = bodyNodes.filter((node) => node.nodeType === 1 /* ELEMENT_NODE */);
-
-      // Case 1: Plain text only (no HTML tags at all)
-      if (textNodes.length > 0 && elementNodes.length === 0) {
-        return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
-      }
-
-      // Case 2: Mixed content (text and elements at the same level)
-      if (textNodes.length > 0 && elementNodes.length > 0) {
+      if (hasText) {
+        // Either plain text or mixed content - both invalid
         return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
       }
     }
 
-    // Validate that we have actual HTML elements (not just text that got wrapped)
-    const allElements = Array.from(document.querySelectorAll('*'));
-
-    // Filter out elements that JSDOM adds automatically (unless they're in the original input)
-    const userElements = allElements.filter((element) => {
+    // Find all elements that are actually in the user's input
+    const allElements = document.querySelectorAll('*');
+    const userProvidedElement = Array.from(allElements).find((element) => {
       const tagName = element.tagName.toLowerCase();
-      // Keep the element if it's explicitly in the input or it's not an auto-added element
-      return (
-        trimmed.toLowerCase().includes(`<${tagName}`) || !['html', 'head', 'body'].includes(tagName)
-      );
-    });
-
-    // Check if any of the user's elements are valid
-    const hasValidHtmlElement = userElements.some((element) => {
-      const tagName = element.tagName.toLowerCase();
+      // Skip JSDOM's auto-added elements unless user explicitly included them
+      if (
+        ['html', 'head', 'body'].includes(tagName) &&
+        !trimmed.toLowerCase().includes(`<${tagName}`)
+      ) {
+        return false;
+      }
+      // Check if it's a valid HTML element or custom element (with hyphen)
       return VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-');
     });
 
-    if (!hasValidHtmlElement) {
+    if (!userProvidedElement) {
       return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
     }
 
