@@ -1,4 +1,3 @@
-import { closeDb } from '../../src/database';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { deleteAllEvals } from '../../src/util/database';
@@ -6,8 +5,6 @@ import EvalFactory from '../factories/evalFactory';
 
 describe('delete all evals', () => {
   beforeAll(async () => {
-    process.env.IS_TESTING = 'true';
-    closeDb(); // Close any existing database connection
     await runDbMigrations();
   });
   it('should delete all evals', async () => {
