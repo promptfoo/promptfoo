@@ -126,8 +126,6 @@ assert:
 
 For case insensitive matching, use `icontains-any`.
 
-For case insensitive matching, use `icontains-all`.
-
 ### Regex
 
 The `regex` assertion checks if the LLM output matches the provided regular expression.

@@ -116,6 +116,17 @@ question,__expected1,__expected2,__expected3
 "What is 2+2?","equals: 4","contains: four","javascript: output.length < 10"
 ```
 
+#### Note on contains-any and contains-all
+
+These assertions expect comma-delimited values in CSV:
+
+```csv title="test_cases.csv"
+translated_text,__expected
+"<span>Hola</span> <b>mundo</b>","contains-any: <b>,</span>"
+```
+
+Writing `"contains-any: <b> </span>"` would search for the literal string "<b> </span>" instead of the individual tags.
+
 ### Special CSV Columns
 
 | Column                            | Purpose                    | Example             |
