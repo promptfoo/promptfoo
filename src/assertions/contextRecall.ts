@@ -30,17 +30,20 @@ export const handleContextRecall = async ({
 
   const context = await resolveContext(assertion, test, output, prompt, prompt, providerResponse);
 
+  const result = await matchesContextRecall(
+    context,
+    renderedValue,
+    assertion.threshold ?? 0,
+    test.options,
+    test.vars,
+  );
+  
   return {
     assertion,
-    ...(await matchesContextRecall(
-      context,
-      renderedValue,
-      assertion.threshold ?? 0,
-      test.options,
-      test.vars,
-    )),
+    ...result,
     metadata: {
       context,
+      ...(result.metadata || {}),
     },
   };
 };
