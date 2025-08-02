@@ -41,7 +41,7 @@ describe('evaluator', () => {
   beforeEach(async () => {
     // Clear all tables before each test
     const db = getDb();
-    
+
     try {
       // Clear the tables
       await db.delete(evalResultsTable);

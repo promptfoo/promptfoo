@@ -30,7 +30,7 @@ export function getDb() {
   if (!dbInstance) {
     const isMemoryDb = getEnvBool('IS_TESTING');
     const testDbId = process.env.TEST_DB_ID;
-    
+
     let dbUrl: string;
     if (isMemoryDb) {
       // Use in-memory database for tests (except on Windows)
