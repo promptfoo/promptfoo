@@ -37,24 +37,39 @@ jest.mock('path', () => {
 jest.mock('../../src/util/config/load');
 jest.mock('../../src/util/tokenUsage');
 jest.mock('../../src/database/index', () => ({
-  getDb: jest.fn(() => ({
-    transaction: jest.fn((fn) => fn()),
-    insert: jest.fn(() => ({
-      values: jest.fn(() => ({
-        onConflictDoNothing: jest.fn(() => ({
+  getDb: jest.fn(() => {
+    const mockDb = {
+      transaction: jest.fn(async (fn) => {
+        const tx = {
+          insert: jest.fn(() => ({
+            values: jest.fn(() => ({
+              onConflictDoNothing: jest.fn().mockResolvedValue({}),
+            })),
+          })),
+          delete: jest.fn(() => ({
+            where: jest.fn().mockResolvedValue({}),
+          })),
+        };
+        return fn(tx);
+      }),
+      insert: jest.fn(() => ({
+        values: jest.fn(() => ({
+          onConflictDoNothing: jest.fn(() => ({
+            run: jest.fn(),
+          })),
           run: jest.fn(),
         })),
-        run: jest.fn(),
       })),
-    })),
-    update: jest.fn(() => ({
-      set: jest.fn(() => ({
-        where: jest.fn(() => ({
-          run: jest.fn(),
+      update: jest.fn(() => ({
+        set: jest.fn(() => ({
+          where: jest.fn(() => ({
+            run: jest.fn(),
+          })),
         })),
       })),
-    })),
-  })),
+    };
+    return mockDb;
+  }),
 }));
 
 describe('evalCommand', () => {

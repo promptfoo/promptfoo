@@ -33,7 +33,7 @@ export function getDb() {
 
     // Create libSQL client
     sqliteInstance = createClient({
-      url: `file:${dbPath}`,
+      url: isMemoryDb ? 'file::memory:' : `file:${dbPath}`,
     });
 
     // Note: WAL mode is enabled by default in libSQL

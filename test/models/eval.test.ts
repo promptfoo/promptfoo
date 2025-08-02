@@ -1,4 +1,4 @@
-import { getDb } from '../../src/database';
+import { getDb, closeDb } from '../../src/database';
 import {
   evalResultsTable,
   evalsTable,
@@ -20,6 +20,8 @@ jest.mock('../../src/globalConfig/accounts', () => ({
 
 describe('evaluator', () => {
   beforeAll(async () => {
+    process.env.IS_TESTING = 'true';
+    closeDb(); // Close any existing database connection
     await runDbMigrations();
   });
 
