@@ -51,7 +51,7 @@ describe('evaluator', () => {
       await db.delete(evalsTable);
     } catch (error) {
       // If tables don't exist, skip the cleanup
-      if (!error.message?.includes('no such table')) {
+      if (!(error instanceof Error) || !error.message?.includes('no such table')) {
         throw error;
       }
     }
