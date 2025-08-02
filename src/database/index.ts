@@ -33,8 +33,16 @@ export function getDb() {
     
     let dbUrl: string;
     if (isMemoryDb) {
-      // Use in-memory database for tests
-      dbUrl = 'file::memory:';
+      // Use in-memory database for tests (except on Windows)
+      if (process.platform === 'win32' && testDbId) {
+        // Windows doesn't support in-memory databases well with libSQL
+        // Use a temporary file instead
+        const tmpDir = process.env.TEMP || process.env.TMP || 'C:\\Temp';
+        const dbPath = path.join(tmpDir, `test-${testDbId}.db`);
+        dbUrl = `file:${dbPath}`;
+      } else {
+        dbUrl = 'file::memory:';
+      }
     } else {
       const dbPath = getDbPath();
       dbUrl = `file:${dbPath}`;

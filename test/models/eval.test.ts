@@ -22,7 +22,16 @@ jest.mock('../../src/globalConfig/accounts', () => ({
 
 describe('evaluator', () => {
   beforeAll(async () => {
-    await setupTestDatabase('test-models-eval');
+    try {
+      await setupTestDatabase('test-models-eval');
+      // Ensure database is ready
+      const db = getDb();
+      await db.select({ count: sql<number>`count(*)` }).from(evalsTable);
+    } catch (error) {
+      console.error('Failed to setup test database:', error);
+      // Try running migrations directly
+      await runDbMigrations();
+    }
   });
 
   afterAll(async () => {
