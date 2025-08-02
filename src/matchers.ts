@@ -1120,12 +1120,18 @@ export async function matchesContextRelevance(
   };
 }
 
+interface ClaimVerificationResult {
+  claim: string;
+  supported: boolean;
+  explanation: string;
+}
+
 export async function matchesContextFaithfulness(
   query: string,
   output: string,
   context: string,
   threshold: number,
-  grading?: GradingConfig,
+  grading?: GradingConfig & { enableClaimLevel?: boolean },
   vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
@@ -1148,6 +1154,158 @@ export async function matchesContextFaithfulness(
     },
   };
 
+  // Check if claim-level analysis is enabled
+  if (grading?.enableClaimLevel) {
+    // Step 1: Extract claims from the answer using RAGAS prompt
+    const extractionPrompt = await renderLlmRubricPrompt(CONTEXT_FAITHFULNESS_LONGFORM, {
+      question: query,
+      answer: tryParse(output),
+      ...(vars || {}),
+    });
+
+    let resp = await textProvider.callApi(extractionPrompt);
+    accumulateTokens(tokensUsed, resp.tokenUsage);
+    if (resp.error || !resp.output) {
+      return fail(resp.error || 'Failed to extract claims', tokensUsed);
+    }
+
+    // Parse extracted claims - RAGAS format is newline-separated after "statements:\n"
+    let claims: string[] = [];
+    const extractedOutput = resp.output as string;
+
+    // RAGAS format: statements are listed after "statements:\n"
+    const statementsIndex = extractedOutput.toLowerCase().indexOf('statements:');
+    if (statementsIndex !== -1) {
+      const statementsText = extractedOutput
+        .substring(statementsIndex + 'statements:'.length)
+        .trim();
+      claims = statementsText
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+    }
+
+    if (claims.length === 0) {
+      // No claims extracted - likely a non-informative answer
+      return {
+        pass: true,
+        score: 1.0,
+        reason: 'No factual claims to verify in the response',
+        tokensUsed,
+        metadata: {
+          claimLevel: true,
+          claims: [],
+        },
+      };
+    }
+
+    // Step 2: Verify each claim against context using RAGAS NLI prompt
+    const verificationPrompt = await renderLlmRubricPrompt(CONTEXT_FAITHFULNESS_NLI_STATEMENTS, {
+      context,
+      statements: claims,
+      ...(vars || {}),
+    });
+
+    resp = await textProvider.callApi(verificationPrompt);
+    accumulateTokens(tokensUsed, resp.tokenUsage);
+    if (resp.error || !resp.output) {
+      return fail(resp.error || 'Failed to verify claims', tokensUsed);
+    }
+
+    // Parse verification results using same approach as existing implementation
+    const verificationOutput = resp.output as string;
+    const claimResults: ClaimVerificationResult[] = [];
+
+    // Look for the final verdict line
+    const finalAnswer = 'Final verdict for each statement in order:';
+    const lowerOutput = verificationOutput.toLowerCase();
+
+    if (lowerOutput.includes(finalAnswer.toLowerCase())) {
+      // Extract verdicts after the final answer line
+      const verdictSection = lowerOutput.slice(
+        lowerOutput.indexOf(finalAnswer.toLowerCase()) + finalAnswer.length,
+      );
+      const verdictParts = verdictSection.split('.');
+
+      // Parse individual verdicts
+      const verdicts = verdictParts
+        .filter((part) => part.trim() !== '')
+        .map((part) => {
+          const trimmed = part.trim().toLowerCase();
+          return trimmed === 'yes' || trimmed.includes('yes');
+        });
+
+      // Extract explanations from the full output
+      const explanationRegex = /\d+\.\s*(.+?)\s*Explanation:\s*(.+?)\s*Verdict:\s*(Yes|No)/gis;
+      const explanations = new Map<string, { explanation: string; verdict: boolean }>();
+
+      let match;
+      let claimIndex = 0;
+      while ((match = explanationRegex.exec(verificationOutput)) !== null) {
+        const _claimText = match[1].trim();
+        const explanation = match[2].trim();
+        const verdict = match[3].toLowerCase() === 'yes';
+
+        if (claimIndex < claims.length) {
+          explanations.set(claims[claimIndex], { explanation, verdict });
+        }
+        claimIndex++;
+      }
+
+      // Combine results
+      claims.forEach((claim, index) => {
+        const explanationData = explanations.get(claim);
+        claimResults.push({
+          claim,
+          supported: verdicts[index] ?? explanationData?.verdict ?? false,
+          explanation: explanationData?.explanation || 'No explanation found',
+        });
+      });
+    } else {
+      // Fallback: count "verdict: no" occurrences (same as existing implementation)
+      const noCount = lowerOutput.split('verdict: no').length - 1;
+      const yesCount = claims.length - noCount;
+
+      // Without detailed parsing, create simple results
+      claims.forEach((claim, index) => {
+        claimResults.push({
+          claim,
+          supported: index < yesCount,
+          explanation: 'Verdict extracted from response',
+        });
+      });
+    }
+
+    // Calculate score
+    const supportedClaims = claimResults.filter((r) => r.supported).length;
+    const score = claims.length > 0 ? supportedClaims / claims.length : 1.0;
+    const pass = score >= threshold - Number.EPSILON;
+
+    // Generate detailed reason
+    const unsupportedClaims = claimResults.filter((r) => !r.supported);
+    let reason = `${supportedClaims}/${claims.length} claims supported (${(score * 100).toFixed(1)}%)`;
+    if (unsupportedClaims.length > 0 && unsupportedClaims.length <= 3) {
+      reason += '\nUnsupported claims:\n';
+      unsupportedClaims.forEach((c) => {
+        reason += `- "${c.claim}"\n`;
+      });
+    }
+
+    return {
+      pass,
+      score,
+      reason,
+      tokensUsed,
+      metadata: {
+        claimLevel: true,
+        claims: claimResults,
+        supportedCount: supportedClaims,
+        totalClaims: claims.length,
+      },
+    };
+  }
+
+  // Fall back to original implementation
   if (grading?.rubricPrompt) {
     invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
   }
@@ -1211,6 +1369,233 @@ export async function matchesContextFaithfulness(
       : `Faithfulness ${score.toFixed(2)} is < ${threshold}`,
     tokensUsed,
   };
+}
+
+// Context chunk interface for RAGAS-compatible noise sensitivity
+export interface ContextChunk {
+  text: string;
+  relevant: boolean;
+}
+
+export async function matchesNoiseSensitivity(
+  query: string,
+  output: string,
+  groundTruth: string,
+  contextChunks: ContextChunk[] | string, // Support both old string format and new chunk format
+  mode: 'relevant' | 'irrelevant' = 'relevant',
+  threshold: number,
+  grading?: GradingConfig,
+  vars?: Record<string, string | object>,
+): Promise<GradingResult> {
+  const tokensUsed: Partial<TokenUsage> = {
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    cached: 0,
+    numRequests: 0,
+  };
+
+  const defaultProviders = await getDefaultProviders();
+  const provider = await getAndCheckProvider(
+    'text',
+    grading?.provider,
+    defaultProviders.gradingProvider,
+    'noise-sensitivity check',
+  );
+
+  // Import noise sensitivity specific prompts
+  const {
+    NOISE_SENSITIVITY_CLAIM_EXTRACTION,
+    NOISE_SENSITIVITY_VERIFY_CLAIM_CORRECTNESS,
+    NOISE_SENSITIVITY_VERIFY_CONTEXT_SUPPORT,
+  } = await import('./external/prompts/noise-sensitivity');
+
+  // Convert context to chunks if it's a string (backward compatibility)
+  let chunks: ContextChunk[];
+  if (typeof contextChunks === 'string') {
+    // For backward compatibility, treat entire context as relevant
+    chunks = [{ text: contextChunks, relevant: true }];
+  } else {
+    chunks = contextChunks;
+  }
+
+  // No need to pre-process chunks - they'll be used directly in the algorithm
+
+  // Step 1: Extract claims from the output
+  const extractClaimsPrompt = await renderLlmRubricPrompt(NOISE_SENSITIVITY_CLAIM_EXTRACTION, {
+    text: tryParse(output),
+    ...(vars || {}),
+  });
+
+  const outputClaimsResp = await provider.callApi(extractClaimsPrompt);
+  accumulateTokens(tokensUsed, outputClaimsResp.tokenUsage);
+
+  if (outputClaimsResp.error || !outputClaimsResp.output) {
+    throw new Error(`Failed to extract claims from output: ${outputClaimsResp.error}`);
+  }
+
+  let outputClaims: string[] = [];
+  const claimsText = outputClaimsResp.output as string;
+
+  // Parse claims from response
+  const claimsIndex = claimsText.toLowerCase().indexOf('claims:');
+  if (claimsIndex !== -1) {
+    const claimsSection = claimsText.substring(claimsIndex + 'claims:'.length).trim();
+    outputClaims = claimsSection
+      .split('\n')
+      .filter((line: string) => line.trim())
+      .map((line: string) => line.replace(/^[-*\d]+\.?\s*/, '').trim())
+      .filter((claim: string) => claim.length > 0);
+  }
+
+  if (outputClaims.length === 0) {
+    // No claims to evaluate
+    return {
+      pass: true,
+      score: 0,
+      reason: 'No factual claims found in the output to evaluate',
+      tokensUsed,
+      metadata: {
+        totalClaims: 0,
+        incorrectClaimsFromNoise: 0,
+        mode,
+      },
+    };
+  }
+
+  // Step 2: Verify each claim for correctness
+  interface ClaimAnalysis {
+    claim: string;
+    isCorrect: boolean;
+    correctnessExplanation: string;
+    sourceChunk?: ContextChunk; // Which chunk the claim came from
+  }
+
+  const claimAnalyses: ClaimAnalysis[] = [];
+
+  for (const claim of outputClaims) {
+    // Check if claim is correct according to ground truth
+    const correctnessPrompt = await renderLlmRubricPrompt(
+      NOISE_SENSITIVITY_VERIFY_CLAIM_CORRECTNESS,
+      {
+        claim,
+        reference: groundTruth,
+        ...(vars || {}),
+      },
+    );
+
+    const correctnessResp = await provider.callApi(correctnessPrompt);
+    accumulateTokens(tokensUsed, correctnessResp.tokenUsage);
+
+    const correctnessOutput = (correctnessResp.output as string).toLowerCase();
+    const isCorrect = correctnessOutput.includes('verdict: correct');
+    const correctnessExplanation = extractExplanation(correctnessResp.output as string);
+
+    // Find which chunk this claim might come from (if incorrect)
+    let sourceChunk: ContextChunk | undefined;
+    if (!isCorrect) {
+      // Check each chunk to see if the claim is supported by it
+      for (const chunk of chunks) {
+        const contextSupportPrompt = await renderLlmRubricPrompt(
+          NOISE_SENSITIVITY_VERIFY_CONTEXT_SUPPORT,
+          {
+            claim,
+            context: chunk.text,
+            ...(vars || {}),
+          },
+        );
+
+        const contextSupportResp = await provider.callApi(contextSupportPrompt);
+        accumulateTokens(tokensUsed, contextSupportResp.tokenUsage);
+
+        const contextOutput = (contextSupportResp.output as string).toLowerCase();
+        if (contextOutput.includes('verdict: supported')) {
+          sourceChunk = chunk;
+          break; // Found the source chunk
+        }
+      }
+    }
+
+    claimAnalyses.push({
+      claim,
+      isCorrect,
+      correctnessExplanation,
+      sourceChunk,
+    });
+  }
+
+  // Step 3: Calculate noise sensitivity score based on RAGAS algorithm
+  const incorrectClaims = claimAnalyses.filter((a) => !a.isCorrect);
+  
+  // RAGAS Algorithm:
+  // For relevant mode: ALL incorrect claims count as noise sensitivity
+  // For irrelevant mode: Only incorrect claims from irrelevant chunks count
+  let noiseInfluencedClaims: ClaimAnalysis[];
+  
+  if (mode === 'relevant') {
+    // In relevant mode, assume all context is relevant
+    // Any incorrect claim indicates the model was influenced by noise in the "relevant" context
+    noiseInfluencedClaims = incorrectClaims;
+  } else {
+    // In irrelevant mode, only count incorrect claims that came from irrelevant chunks
+    noiseInfluencedClaims = incorrectClaims.filter(
+      (a) => a.sourceChunk && !a.sourceChunk.relevant
+    );
+  }
+
+  // Noise sensitivity = noise-influenced claims / total claims
+  const score = outputClaims.length > 0 ? noiseInfluencedClaims.length / outputClaims.length : 0;
+
+  // Both modes use the same threshold comparison
+  const pass = score <= threshold;
+
+  // Generate detailed reason
+  let reason = `Noise sensitivity score: ${score.toFixed(2)}. `;
+  
+  if (mode === 'relevant') {
+    reason += `Found ${incorrectClaims.length} incorrect claims out of ${outputClaims.length} total claims. `;
+    reason += `In relevant mode, all incorrect claims indicate sensitivity to noise. `;
+  } else {
+    reason += `Found ${incorrectClaims.length} incorrect claims, of which ${noiseInfluencedClaims.length} came from irrelevant context chunks. `;
+    reason += `In irrelevant mode, only claims from irrelevant chunks count toward noise sensitivity. `;
+  }
+  
+  reason += pass
+    ? `Score ${score.toFixed(2)} is <= threshold ${threshold}.`
+    : `Score ${score.toFixed(2)} is > threshold ${threshold}.`;
+
+  if (noiseInfluencedClaims.length > 0 && noiseInfluencedClaims.length <= 3) {
+    reason += '\nNoise-influenced claims:\n';
+    noiseInfluencedClaims.forEach((a) => {
+      const chunkInfo = a.sourceChunk 
+        ? ` (from ${a.sourceChunk.relevant ? 'relevant' : 'irrelevant'} chunk)`
+        : '';
+      reason += `- "${a.claim}"${chunkInfo}: ${a.correctnessExplanation}\n`;
+    });
+  }
+
+  return {
+    pass,
+    score,
+    reason,
+    tokensUsed,
+    metadata: {
+      totalClaims: outputClaims.length,
+      incorrectClaimsCount: incorrectClaims.length,
+      noiseInfluencedClaimsCount: noiseInfluencedClaims.length,
+      incorrectClaims: incorrectClaims.map((a) => a.claim),
+      noiseInfluencedClaims: noiseInfluencedClaims.map((a) => a.claim),
+      claimAnalyses,
+      mode,
+      contextChunks: chunks.map(c => ({ text: c.text.substring(0, 100) + '...', relevant: c.relevant })),
+    },
+  };
+}
+
+// Helper function to extract explanation from LLM response
+function extractExplanation(response: string): string {
+  const explanationMatch = response.match(/explanation:\s*(.+)/i);
+  return explanationMatch ? explanationMatch[1].trim() : 'No explanation provided';
 }
 
 export async function matchesSelectBest(

@@ -64,6 +64,7 @@ import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
+import { handleNoiseSensitivity } from './noiseSensitivity';
 import { handleIsValidOpenAiToolsCall } from './openai';
 import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
@@ -101,6 +102,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'llm-rubric',
   'model-graded-closedqa',
   'model-graded-factuality',
+  'noise-sensitivity',
 ]);
 
 const nunjucks = getNunjucksEngine();
@@ -311,6 +313,7 @@ export async function runAssertion({
     'model-graded-closedqa': handleModelGradedClosedQa,
     'model-graded-factuality': handleFactuality,
     moderation: handleModeration,
+    'noise-sensitivity': handleNoiseSensitivity,
     perplexity: handlePerplexity,
     'perplexity-score': handlePerplexityScore,
     pi: handlePiScorer,

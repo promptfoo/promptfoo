@@ -1,0 +1,138 @@
+# Example showing exact RAGAS noise sensitivity calculation
+# This demonstrates how the metric works step-by-step
+
+description: 'Step-by-step noise sensitivity calculation matching RAGAS'
+
+providers:
+  - openai:gpt-4o-mini
+
+prompts:
+  - |
+    Based on the context, answer the question.
+    
+    Context: {{context}}
+    Question: {{query}}
+
+tests:
+  # Example calculation walkthrough
+  - description: 'Manual calculation example'
+    vars:
+      query: 'What is the capital of France?'
+      context: 'Paris is the capital of France. Berlin is the capital of Germany.'
+      
+      # For RAGAS-compatible mode, provide labeled chunks:
+      contextChunks:
+        - text: 'Paris is the capital of France.'
+          relevant: true  # This chunk is relevant to the query
+        - text: 'Berlin is the capital of Germany.'
+          relevant: false # This chunk is NOT relevant to the query
+          
+      # Simulated output with claims from both chunks
+      output: 'The capital of France is Paris. Berlin is the capital of Germany.'
+      
+    assert:
+      - type: noise-sensitivity
+        value: 'The capital of France is Paris.' # Ground truth
+        threshold: 0.6
+        config:
+          mode: relevant
+          contextChunks: '{{contextChunks}}'
+          
+    # Expected calculation for RELEVANT mode:
+    # 1. Claims extracted: 
+    #    - "The capital of France is Paris" (correct)
+    #    - "Berlin is the capital of Germany" (incorrect - not in ground truth)
+    # 2. In relevant mode: ALL incorrect claims count
+    # 3. Score = 1 incorrect / 2 total = 0.5
+    # 4. Pass: 0.5 <= 0.6 ✓
+
+  - description: 'Same example in irrelevant mode'
+    vars:
+      query: 'What is the capital of France?'
+      context: 'Paris is the capital of France. Berlin is the capital of Germany.'
+      contextChunks:
+        - text: 'Paris is the capital of France.'
+          relevant: true
+        - text: 'Berlin is the capital of Germany.'
+          relevant: false
+      output: 'The capital of France is Paris. Berlin is the capital of Germany.'
+      
+    assert:
+      - type: noise-sensitivity
+        value: 'The capital of France is Paris.'
+        threshold: 0.6
+        config:
+          mode: irrelevant
+          contextChunks: '{{contextChunks}}'
+          
+    # Expected calculation for IRRELEVANT mode:
+    # 1. Claims extracted: same as above
+    # 2. Incorrect claim "Berlin is capital of Germany" comes from IRRELEVANT chunk
+    # 3. In irrelevant mode: only incorrect claims from irrelevant chunks count
+    # 4. Score = 1 incorrect from irrelevant / 2 total = 0.5
+    # 5. Pass: 0.5 <= 0.6 ✓
+
+  # Example where modes differ
+  - description: 'Example showing mode difference'
+    vars:
+      query: 'What is Python used for?'
+      context: 'Python is used for data science. Python has dynamic typing. Ruby is used for web development.'
+      contextChunks:
+        - text: 'Python is used for data science.'
+          relevant: true
+        - text: 'Python has dynamic typing.'
+          relevant: true  # Also relevant!
+        - text: 'Ruby is used for web development.'
+          relevant: false
+          
+      # Output includes extra info not in ground truth
+      output: 'Python is used for data science. It has dynamic typing. Ruby is great for web apps.'
+      
+    assert:
+      - type: noise-sensitivity
+        value: 'Python is used for data science.' # Ground truth (minimal)
+        threshold: 0.7
+        config:
+          mode: relevant
+          contextChunks: '{{contextChunks}}'
+          
+    # RELEVANT mode calculation:
+    # Claims: "Python is used for data science" (correct)
+    #         "It has dynamic typing" (incorrect - not in ground truth)
+    #         "Ruby is great for web apps" (incorrect - not in ground truth)
+    # Score = 2 incorrect / 3 total = 0.667
+    # Pass: 0.667 <= 0.7 ✓
+
+  - description: 'Same in irrelevant mode'
+    vars:
+      query: 'What is Python used for?'
+      context: 'Python is used for data science. Python has dynamic typing. Ruby is used for web development.'
+      contextChunks:
+        - text: 'Python is used for data science.'
+          relevant: true
+        - text: 'Python has dynamic typing.'
+          relevant: true
+        - text: 'Ruby is used for web development.'
+          relevant: false
+      output: 'Python is used for data science. It has dynamic typing. Ruby is great for web apps.'
+      
+    assert:
+      - type: noise-sensitivity
+        value: 'Python is used for data science.'
+        threshold: 0.7
+        config:
+          mode: irrelevant
+          contextChunks: '{{contextChunks}}'
+          
+    # IRRELEVANT mode calculation:
+    # Incorrect claims: "It has dynamic typing" (from RELEVANT chunk)
+    #                   "Ruby is great for web apps" (from IRRELEVANT chunk)
+    # Only count claims from irrelevant chunks!
+    # Score = 1 incorrect from irrelevant / 3 total = 0.333
+    # Pass: 0.333 <= 0.7 ✓
+
+# Key insights:
+# 1. Both modes calculate: incorrect_claims_subset / total_claims
+# 2. Relevant mode: subset = ALL incorrect claims
+# 3. Irrelevant mode: subset = incorrect claims from irrelevant chunks only
+# 4. Lower scores are better (less noise sensitivity)
