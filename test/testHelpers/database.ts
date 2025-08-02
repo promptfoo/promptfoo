@@ -1,4 +1,6 @@
 import { runDbMigrations } from '../../src/migrate';
+import { getDb, closeDb } from '../../src/database';
+import { sql } from 'drizzle-orm';
 
 /**
  * Set up a unique in-memory database for integration tests
@@ -11,7 +13,6 @@ export async function setupTestDatabase(testSuiteName: string) {
   // On Windows, we need a unique test ID for file-based databases
   if (process.platform === 'win32') {
     // Close any existing connection first
-    const { closeDb } = await import('../../src/database');
     closeDb();
 
     const timestamp = Date.now();
@@ -19,8 +20,17 @@ export async function setupTestDatabase(testSuiteName: string) {
     process.env.TEST_DB_ID = `${testSuiteName}-${timestamp}-${random}`;
   }
 
+  // Get the database instance first to ensure it's created
+  const db = getDb();
+  
   // Run migrations on the database
   await runDbMigrations();
+  
+  // Verify migrations worked by checking for tables
+  const tables = await db.all(sql`SELECT name FROM sqlite_master WHERE type='table'`);
+  if (tables.length === 0) {
+    throw new Error('Migrations failed - no tables created');
+  }
 }
 
 /**
@@ -29,7 +39,6 @@ export async function setupTestDatabase(testSuiteName: string) {
 export async function cleanupTestDatabase() {
   // On Windows, we need to close the connection and clean up the file
   if (process.platform === 'win32' && process.env.TEST_DB_ID) {
-    const { closeDb } = await import('../../src/database');
     closeDb();
 
     const fs = await import('fs/promises');

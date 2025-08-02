@@ -3,7 +3,6 @@ import nock from 'nock';
 import { TEST_CONFIG_DIR } from './.jest/setEnvVars';
 
 jest.mock('./src/logger');
-jest.mock('./src/globalConfig/globalConfig');
 
 // Configure nock
 beforeAll(() => {
