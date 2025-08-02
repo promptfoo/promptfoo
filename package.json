@@ -66,7 +66,7 @@
     "postversion": "npm run citation:generate && git add CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
     "test:app": "npm run test --prefix src/app",
-    "test:integration": "jest --config jest.integration.config.ts integration",
+    "test:integration": "jest integration",
     "test:watch": "jest --watch",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
