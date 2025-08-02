@@ -1,0 +1,82 @@
+# Example: Claim-level context faithfulness evaluation
+# This shows how to get detailed feedback on which specific claims are supported by context
+
+description: 'Claim-level faithfulness analysis following RAGAS approach'
+
+providers:
+  - openai:gpt-4o-mini
+
+prompts:
+  - |
+    Based on the following context, answer the question.
+
+    Context: {{context}}
+    Question: {{query}}
+
+    Answer:
+
+tests:
+  # Test 1: All claims supported
+  - vars:
+      query: 'What are the key features of Python?'
+      context: |
+        Python is a high-level, interpreted programming language known for its simplicity and readability.
+        It supports multiple programming paradigms including procedural, object-oriented, and functional programming.
+        Python has a large standard library and an active community that contributes thousands of packages.
+    assert:
+      - type: context-faithfulness
+        threshold: 0.8
+        config:
+          claimLevel: true # Enable claim-level analysis
+
+  # Test 2: Some unsupported claims
+  - vars:
+      query: 'Tell me about electric vehicles'
+      context: |
+        Electric vehicles (EVs) use electric motors powered by rechargeable batteries.
+        They produce zero direct emissions and are generally quieter than gasoline vehicles.
+        The global EV market has been growing rapidly in recent years.
+    assert:
+      - type: context-faithfulness
+        threshold: 0.7
+        config:
+          claimLevel: true
+
+  # Test 3: Mixed support - good for testing
+  - description: 'Response with both supported and unsupported claims'
+    vars:
+      query: 'What are the benefits of remote work?'
+      context: |
+        Remote work allows employees to work from home or any location outside the office.
+        Studies show it can increase productivity and improve work-life balance.
+        Companies save on office space costs with remote work arrangements.
+    assert:
+      - type: context-faithfulness
+        threshold: 0.6
+        config:
+          claimLevel: true
+# Example output with claim-level analysis:
+#
+# When a response contains unsupported claims, you'll see:
+#
+# FAIL: 3/5 claims supported (60.0%)
+# Unsupported claims:
+# - "Remote work reduces commute time by 2 hours daily"
+# - "95% of workers prefer remote work"
+#
+# The metadata will include detailed analysis of each claim:
+# {
+#   "claimLevel": true,
+#   "claims": [
+#     {
+#       "claim": "Remote work allows flexibility",
+#       "supported": true,
+#       "explanation": "Context mentions working from any location"
+#     },
+#     {
+#       "claim": "95% of workers prefer remote work",
+#       "supported": false,
+#       "explanation": "No statistics mentioned in context"
+#     }
+#   ]
+# }

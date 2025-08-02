@@ -6,6 +6,10 @@ sidebar_label: Context Recall
 
 The `context-recall` assertion evaluates whether the provided context contains the information needed to answer a specific question or verify a particular fact.
 
+:::info
+This metric is adapted from the [RAGAS](https://github.com/explodinggradients/ragas) framework, which uses it to measure the completeness of retrieved context in RAG systems.
+:::
+
 ## Configuration
 
 ```yaml

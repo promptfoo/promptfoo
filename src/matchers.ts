@@ -1120,12 +1120,18 @@ export async function matchesContextRelevance(
   };
 }
 
+interface ClaimVerificationResult {
+  claim: string;
+  supported: boolean;
+  explanation: string;
+}
+
 export async function matchesContextFaithfulness(
   query: string,
   output: string,
   context: string,
   threshold: number,
-  grading?: GradingConfig,
+  grading?: GradingConfig & { enableClaimLevel?: boolean },
   vars?: Record<string, string | object>,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
@@ -1148,6 +1154,124 @@ export async function matchesContextFaithfulness(
     },
   };
 
+  // Check if claim-level analysis is enabled
+  if (grading?.enableClaimLevel) {
+    // Import claim-level prompts
+    const { CLAIM_EXTRACTION_PROMPT, CLAIM_VERIFICATION_PROMPT } = await import(
+      './prompts/faithfulness'
+    );
+
+    // Step 1: Extract claims from the answer
+    const extractionPrompt = await renderLlmRubricPrompt(CLAIM_EXTRACTION_PROMPT, {
+      question: query,
+      answer: tryParse(output),
+      ...(vars || {}),
+    });
+
+    let resp = await textProvider.callApi(extractionPrompt);
+    accumulateTokens(tokensUsed, resp.tokenUsage);
+    if (resp.error || !resp.output) {
+      return fail(resp.error || 'Failed to extract claims', tokensUsed);
+    }
+
+    // Parse extracted claims
+    let claims: string[] = [];
+    const extractedOutput = resp.output as string;
+    const claimsIndex = extractedOutput.toLowerCase().indexOf('claims:');
+    if (claimsIndex !== -1) {
+      const claimsSection = extractedOutput.substring(claimsIndex + 'claims:'.length).trim();
+      claims = claimsSection
+        .split('\n')
+        .filter((line: string) => line.trim())
+        .map((line: string) => line.replace(/^\d+\.\s*/, '').trim());
+    }
+
+    if (claims.length === 0) {
+      return {
+        pass: true,
+        score: 1,
+        reason: 'No claims to verify',
+        tokensUsed,
+        metadata: {
+          claimLevel: true,
+          claims: [],
+        },
+      };
+    }
+
+    // Step 2: Verify each claim against context
+    const verificationPrompt = await renderLlmRubricPrompt(CLAIM_VERIFICATION_PROMPT, {
+      context,
+      claims,
+      ...(vars || {}),
+    });
+
+    resp = await textProvider.callApi(verificationPrompt);
+    accumulateTokens(tokensUsed, resp.tokenUsage);
+    if (resp.error || !resp.output) {
+      return fail(resp.error || 'Failed to verify claims', tokensUsed);
+    }
+
+    // Parse verification results
+    const verificationOutput = resp.output as string;
+    const claimResults: ClaimVerificationResult[] = [];
+
+    for (let i = 0; i < claims.length; i++) {
+      const claim = claims[i];
+      const claimPattern = new RegExp(
+        `${i}\.\s*${claim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\s\S]*?Verdict:\s*(Yes|No)`,
+        'i',
+      );
+      const match = verificationOutput.match(claimPattern);
+
+      if (match) {
+        const supported = match[1].toLowerCase() === 'yes';
+        const explanationMatch = verificationOutput.match(
+          new RegExp(
+            `${i}\.\s*${claim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\s\S]*?Explanation:\s*([^\n]+)`,
+            'i',
+          ),
+        );
+        const explanation = explanationMatch
+          ? explanationMatch[1].trim()
+          : 'No explanation provided';
+
+        claimResults.push({
+          claim,
+          supported,
+          explanation,
+        });
+      }
+    }
+
+    // Calculate score
+    const supportedClaims = claimResults.filter((r) => r.supported).length;
+    const score = claimResults.length > 0 ? supportedClaims / claimResults.length : 0;
+    const pass = score >= threshold - Number.EPSILON;
+
+    // Generate detailed reason
+    let reason = `${supportedClaims}/${claimResults.length} claims supported (${(score * 100).toFixed(1)}%)`;
+    const unsupportedClaims = claimResults.filter((r) => !r.supported);
+    if (unsupportedClaims.length > 0) {
+      reason += '\nUnsupported claims:';
+      unsupportedClaims.forEach((r) => {
+        reason += `\n- "${r.claim}"`;
+      });
+    }
+
+    return {
+      pass,
+      score,
+      reason,
+      tokensUsed,
+      metadata: {
+        claimLevel: true,
+        claims: claimResults,
+      },
+    };
+  }
+
+  // Original implementation for backward compatibility
   if (grading?.rubricPrompt) {
     invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
   }

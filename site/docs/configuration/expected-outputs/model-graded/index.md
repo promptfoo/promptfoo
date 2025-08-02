@@ -25,6 +25,7 @@ Context-based:
 - [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
 - [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+- [`noise-sensitivity`](/docs/configuration/expected-outputs/model-graded/noise-sensitivity) - evaluate robustness to noisy or irrelevant context
 
 Conversational:
 
@@ -289,6 +290,11 @@ Context-based assertions are a special class of model-graded assertions that eva
 - [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
 - [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+- [`noise-sensitivity`](/docs/configuration/expected-outputs/model-graded/noise-sensitivity) - evaluate robustness to noisy or irrelevant context
+
+:::note
+These context-based metrics are adapted from the [RAGAS](https://github.com/explodinggradients/ragas) framework, which pioneered many of the techniques for reference-free RAG evaluation.
+:::
 
 ### Defining context
 

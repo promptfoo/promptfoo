@@ -1,5 +1,8 @@
-// These prompts are ported from RAGAS.
+// These prompts are ported from RAGAS (Retrieval Augmented Generation Assessment).
 // https://github.com/explodinggradients/ragas. See APACHE_LICENSE for license.
+//
+// RAGAS is a framework for reference-free evaluation of RAG pipelines.
+// These prompts implement their approach for context faithfulness, recall, and relevance metrics.
 
 export const ANSWER_RELEVANCY_GENERATE = `Generate question for the given answer.
 Answer:\nThe PSLV-C56 mission is scheduled to be launched on Sunday, 30 July 2023 at 06:30 IST / 01:00 UTC. It will be launched from the Satish Dhawan Space Centre, Sriharikota, Andhra Pradesh, India

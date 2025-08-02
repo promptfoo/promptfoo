@@ -6,6 +6,10 @@ sidebar_label: Context Relevance
 
 The `context-relevance` assertion evaluates whether the provided context is relevant to answering the given query or question.
 
+:::info
+This metric is adapted from the [RAGAS](https://github.com/explodinggradients/ragas) framework, which uses it to measure the signal-to-noise ratio in retrieved context for RAG systems.
+:::
+
 ## Configuration
 
 ```yaml

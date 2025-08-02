@@ -40,17 +40,26 @@ export async function handleContextFaithfulness({
     providerResponse,
   );
 
+  // Enable claim-level analysis if specified in assertion config
+  const gradingConfig = {
+    ...test.options,
+    enableClaimLevel: assertion.config?.claimLevel === true,
+  };
+
+  const result = await matchesContextFaithfulness(
+    test.vars.query,
+    output,
+    context,
+    assertion.threshold ?? 0,
+    gradingConfig,
+  );
+
   return {
     assertion,
-    ...(await matchesContextFaithfulness(
-      test.vars.query,
-      output,
-      context,
-      assertion.threshold ?? 0,
-      test.options,
-    )),
+    ...result,
     metadata: {
       context,
+      ...result.metadata,
     },
   };
 }
