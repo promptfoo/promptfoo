@@ -42,7 +42,6 @@ async function getLogoAsBase64() {
   }
 }
 
-
 // Get page type label
 function getPageTypeLabel(routePath) {
   if (routePath.includes('/blog/')) return ''; // Blog breadcrumb is redundant.
@@ -61,11 +60,10 @@ async function generateSvgTemplate(title, breadcrumbs = [], routePath = '') {
   const escapedTitle = escapeXml(truncateText(title || 'Promptfoo Documentation', 70));
   const fontSize = calculateFontSize(escapedTitle, 56, 36);
   const pageType = getPageTypeLabel(routePath);
-  
+
   // Format breadcrumbs - limit to 2 levels for cleaner look
-  const breadcrumbText = breadcrumbs.length > 0 
-    ? escapeXml(breadcrumbs.slice(0, 2).join(' › '))
-    : pageType;
+  const breadcrumbText =
+    breadcrumbs.length > 0 ? escapeXml(breadcrumbs.slice(0, 2).join(' › ')) : pageType;
 
   // Split title into multiple lines if needed
   const words = escapedTitle.split(' ');
@@ -73,7 +71,7 @@ async function generateSvgTemplate(title, breadcrumbs = [], routePath = '') {
   let currentLine = '';
   const maxLineWidth = WIDTH - 240; // More padding for better layout
   const charWidth = fontSize * 0.5;
-  
+
   for (const word of words) {
     const testLine = currentLine ? `${currentLine} ${word}` : word;
     if (testLine.length * charWidth > maxLineWidth && currentLine) {
@@ -155,8 +153,12 @@ async function generateSvgTemplate(title, breadcrumbs = [], routePath = '') {
   
   <!-- Main title with better positioning -->
   <g transform="translate(80, ${240})">
-    ${titleLines.map((line, index) => `
-    <text x="0" y="${index * (fontSize * 1.3)}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="bold" fill="white">${line}</text>`).join('')}
+    ${titleLines
+      .map(
+        (line, index) => `
+    <text x="0" y="${index * (fontSize * 1.3)}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="bold" fill="white">${line}</text>`,
+      )
+      .join('')}
   </g>
   
   <!-- Bottom section with call-to-action -->
@@ -172,12 +174,12 @@ async function generateSvgTemplate(title, breadcrumbs = [], routePath = '') {
   
   <!-- Grid decoration in bottom right -->
   <g transform="translate(${WIDTH - 200}, ${HEIGHT - 200})" opacity="0.08">
-    ${Array.from({length: 4}, (_, i) => 
-      Array.from({length: 4}, (_, j) => {
-        const size = (i === 3 && j === 3) ? 35 : 30;
+    ${Array.from({ length: 4 }, (_, i) =>
+      Array.from({ length: 4 }, (_, j) => {
+        const size = i === 3 && j === 3 ? 35 : 30;
         const opacity = 1 - (i + j) * 0.1;
         return `<rect x="${i * 40}" y="${j * 40}" width="${size}" height="${size}" fill="#e53a3a" rx="4" opacity="${opacity}"/>`;
-      }).join('')
+      }).join(''),
     ).join('')}
   </g>
   
@@ -196,7 +198,7 @@ async function generateSvgTemplate(title, breadcrumbs = [], routePath = '') {
 async function generateOgImage(title, breadcrumbs, outputPath, routePath = '') {
   try {
     const svg = await generateSvgTemplate(title, breadcrumbs, routePath);
-    
+
     // Convert SVG to PNG using resvg
     const resvg = new Resvg(svg, {
       fitTo: {
@@ -211,16 +213,16 @@ async function generateOgImage(title, breadcrumbs, outputPath, routePath = '') {
       dpi: 96,
       background: 'transparent',
     });
-    
+
     const pngData = resvg.render();
     const pngBuffer = pngData.asPng();
-    
+
     // Ensure directory exists
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    
+
     // Write PNG file
     await fs.writeFile(outputPath, pngBuffer);
-    
+
     return true;
   } catch (error) {
     console.error(`Failed to generate OG image for "${title}":`, error);
@@ -231,19 +233,19 @@ async function generateOgImage(title, breadcrumbs, outputPath, routePath = '') {
 // Extract breadcrumbs from the doc path and sidebar structure
 function extractBreadcrumbs(docPath, sidebarItems) {
   const breadcrumbs = [];
-  const pathParts = docPath.split('/').filter(part => part && part !== 'docs');
-  
+  const pathParts = docPath.split('/').filter((part) => part && part !== 'docs');
+
   // Try to build breadcrumbs from the path
   for (let i = 0; i < pathParts.length - 1; i++) {
     const part = pathParts[i];
     // Convert kebab-case to Title Case
     const breadcrumb = part
       .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
     breadcrumbs.push(breadcrumb);
   }
-  
+
   return breadcrumbs;
 }
 
@@ -254,22 +256,32 @@ async function extractTitleFromMarkdown(routePath, outDir) {
     const possiblePaths = [
       path.join(process.cwd(), 'docs', routePath.replace('/docs/', '').replace(/\/$/, '') + '.md'),
       path.join(process.cwd(), 'docs', routePath.replace('/docs/', '').replace(/\/$/, '') + '.mdx'),
-      path.join(process.cwd(), 'docs', routePath.replace('/docs/', '').replace(/\/$/, ''), 'index.md'),
-      path.join(process.cwd(), 'docs', routePath.replace('/docs/', '').replace(/\/$/, ''), 'index.mdx'),
+      path.join(
+        process.cwd(),
+        'docs',
+        routePath.replace('/docs/', '').replace(/\/$/, ''),
+        'index.md',
+      ),
+      path.join(
+        process.cwd(),
+        'docs',
+        routePath.replace('/docs/', '').replace(/\/$/, ''),
+        'index.mdx',
+      ),
       path.join(process.cwd(), 'blog', routePath.replace('/blog/', '').replace(/\/$/, '') + '.md'),
       path.join(process.cwd(), 'blog', routePath.replace('/blog/', '').replace(/\/$/, '') + '.mdx'),
     ];
-    
+
     for (const filePath of possiblePaths) {
       try {
         const content = await fs.readFile(filePath, 'utf8');
         const { data, content: markdownContent } = matter(content);
-        
+
         // Try to get title from frontmatter
         if (data.title) {
           return data.title;
         }
-        
+
         // If no frontmatter title, try to extract H1 from markdown
         const h1Match = markdownContent.match(/^#\s+(.+)$/m);
         if (h1Match) {
@@ -282,46 +294,47 @@ async function extractTitleFromMarkdown(routePath, outDir) {
   } catch (error) {
     // Couldn't read file
   }
-  
+
   return null;
 }
 
 module.exports = function (context, options) {
   const { siteConfig } = context;
-  
+
   return {
     name: 'docusaurus-plugin-og-image',
-    
+
     async contentLoaded({ content, actions }) {
       const { setGlobalData } = actions;
-      
+
       // Store plugin data globally so it can be accessed by theme components
       setGlobalData({
         ogImagePlugin: true,
       });
     },
-    
+
     async postBuild({ siteConfig, routesPaths, outDir, plugins, content, routes }) {
       console.log('Generating OG images for documentation pages...');
-      
+
       const generatedImages = new Map();
       let successCount = 0;
       let failureCount = 0;
-      
+
       // Create a map of routes to their metadata
       const routeMetadata = new Map();
-      
+
       // Process routes to extract metadata
       if (routes) {
         for (const route of routes) {
           if (route.path && route.modules && Array.isArray(route.modules)) {
             // Look for metadata in route modules
-            const metadataModule = route.modules.find(m => 
-              m && (m.metadata || m.__metadata || (typeof m === 'object' && m.title))
+            const metadataModule = route.modules.find(
+              (m) => m && (m.metadata || m.__metadata || (typeof m === 'object' && m.title)),
             );
-            
+
             if (metadataModule) {
-              const metadata = metadataModule.metadata || metadataModule.__metadata || metadataModule;
+              const metadata =
+                metadataModule.metadata || metadataModule.__metadata || metadataModule;
               routeMetadata.set(route.path, {
                 title: metadata.title || metadata.frontMatter?.title,
                 description: metadata.description || metadata.frontMatter?.description,
@@ -331,14 +344,16 @@ module.exports = function (context, options) {
           }
         }
       }
-      
+
       // Also try to get metadata from docs plugin
-      const docsPlugin = plugins.find(plugin => plugin.name === '@docusaurus/plugin-content-docs');
+      const docsPlugin = plugins.find(
+        (plugin) => plugin.name === '@docusaurus/plugin-content-docs',
+      );
       if (docsPlugin && docsPlugin.content) {
         const { loadedVersions } = docsPlugin.content;
         if (loadedVersions && loadedVersions.length > 0) {
           const version = loadedVersions[0];
-          version.docs.forEach(doc => {
+          version.docs.forEach((doc) => {
             routeMetadata.set(doc.permalink, {
               title: doc.title || doc.frontMatter?.title || doc.label,
               description: doc.description || doc.frontMatter?.description,
@@ -347,13 +362,15 @@ module.exports = function (context, options) {
           });
         }
       }
-      
+
       // Get blog plugin metadata
-      const blogPlugin = plugins.find(plugin => plugin.name === '@docusaurus/plugin-content-blog');
+      const blogPlugin = plugins.find(
+        (plugin) => plugin.name === '@docusaurus/plugin-content-blog',
+      );
       if (blogPlugin && blogPlugin.content) {
         const { blogPosts } = blogPlugin.content;
         if (blogPosts) {
-          blogPosts.forEach(post => {
+          blogPosts.forEach((post) => {
             routeMetadata.set(post.metadata.permalink, {
               title: post.metadata.title,
               description: post.metadata.description,
@@ -362,59 +379,66 @@ module.exports = function (context, options) {
           });
         }
       }
-      
+
       // Process all documentation routes
       for (const routePath of routesPaths) {
         if (routePath.startsWith('/docs/') || routePath.startsWith('/blog/')) {
           try {
             // Get metadata for this route
             const metadata = routeMetadata.get(routePath) || {};
-            
+
             // Try to get title from multiple sources
             let title = metadata.title;
-            
+
             // If no title from route metadata, try reading the markdown file
             if (!title) {
               title = await extractTitleFromMarkdown(routePath, outDir);
             }
-            
+
             // Final fallback to path parsing
             if (!title) {
               const pathParts = routePath.split('/').filter(Boolean);
               const lastPart = pathParts[pathParts.length - 1];
               title = lastPart
                 .split('-')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
                 .join(' ');
             }
-            
+
             // Extract breadcrumbs from metadata or path
-            const breadcrumbs = metadata.breadcrumbs && metadata.breadcrumbs.length > 0
-              ? metadata.breadcrumbs.map(b => b.label || b)
-              : extractBreadcrumbs(routePath, []);
-            
+            const breadcrumbs =
+              metadata.breadcrumbs && metadata.breadcrumbs.length > 0
+                ? metadata.breadcrumbs.map((b) => b.label || b)
+                : extractBreadcrumbs(routePath, []);
+
             // Generate unique filename for this route
-            const imageFileName = routePath
-              .replace(/^\//, '')
-              .replace(/\//g, '-')
-              .replace(/[^a-zA-Z0-9-]/g, '') + '-og.png';
-            
+            const imageFileName =
+              routePath
+                .replace(/^\//, '')
+                .replace(/\//g, '-')
+                .replace(/[^a-zA-Z0-9-]/g, '') + '-og.png';
+
             const imagePath = path.join(outDir, 'img', 'og', imageFileName);
             const imageUrl = `/img/og/${imageFileName}`;
-            
+
             // Generate the OG image
             const success = await generateOgImage(title, breadcrumbs, imagePath, routePath);
-            
+
             if (success) {
               generatedImages.set(routePath, imageUrl);
               successCount++;
-              
+
               // Inject meta tags into the HTML for this route
               const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
               try {
-                if (await fs.stat(htmlPath).then(stat => stat.isFile()).catch(() => false)) {
+                if (
+                  await fs
+                    .stat(htmlPath)
+                    .then((stat) => stat.isFile())
+                    .catch(() => false)
+                ) {
                   let html = await fs.readFile(htmlPath, 'utf8');
-                  
+
                   // Check if OG image meta tag already exists
                   if (!html.includes('property="og:image"')) {
                     // Inject OG meta tags before </head>
@@ -425,7 +449,7 @@ module.exports = function (context, options) {
     <meta property="og:image:type" content="image/png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="${siteConfig.url}${imageUrl}" />`;
-                    
+
                     html = html.replace('</head>', `${ogTags}\n  </head>`);
                     await fs.writeFile(htmlPath, html);
                   }
@@ -442,15 +466,17 @@ module.exports = function (context, options) {
           }
         }
       }
-      
+
       // Create a manifest file for the generated images
       const manifestPath = path.join(outDir, 'og-images-manifest.json');
       await fs.writeFile(
         manifestPath,
-        JSON.stringify(Object.fromEntries(generatedImages), null, 2)
+        JSON.stringify(Object.fromEntries(generatedImages), null, 2),
       );
-      
-      console.log(`OG image generation complete: ${successCount} succeeded, ${failureCount} failed`);
+
+      console.log(
+        `OG image generation complete: ${successCount} succeeded, ${failureCount} failed`,
+      );
     },
   };
 };
