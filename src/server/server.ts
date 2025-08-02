@@ -29,6 +29,7 @@ import {
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, openBrowser } from '../util/server';
+import { setupAssetRoutes } from './routes/assets';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
@@ -224,6 +225,9 @@ export function createApp() {
   app.use('/api/configs', configsRouter);
   app.use('/api/model-audit', modelAuditRouter);
   app.use('/api/traces', tracesRouter);
+  
+  // Setup asset routes
+  setupAssetRoutes(app);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
