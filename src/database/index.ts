@@ -34,8 +34,9 @@ export function getDb() {
     // Create libSQL client
     // For tests, use a unique in-memory database name if TEST_DB_ID is set
     const testDbId = process.env.TEST_DB_ID;
-    const memoryDbUrl = testDbId ? `file:test-${testDbId}?mode=memory` : 'file::memory:';
-    
+    // LibSQL uses file:<name>:memory: syntax for named in-memory databases
+    const memoryDbUrl = testDbId ? `file:${testDbId}:memory:` : 'file::memory:';
+
     sqliteInstance = createClient({
       url: isMemoryDb ? memoryDbUrl : `file:${dbPath}`,
     });

@@ -7,11 +7,11 @@ describe('delete all evals', () => {
   beforeAll(async () => {
     await setupTestDatabase('test-util-deleteAll');
   });
-  
+
   afterAll(async () => {
     await cleanupTestDatabase();
   });
-  
+
   it('should delete all evals', async () => {
     await EvalFactory.create();
     await EvalFactory.create();

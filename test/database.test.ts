@@ -53,10 +53,10 @@ describe('database WAL mode', () => {
     // We just verify the database initializes successfully
     const database = await import('../src/database');
     const db = database.getDb();
-    
+
     // Verify we can query the database
     expect(db).toBeDefined();
-    
+
     database.closeDb();
   });
 
@@ -65,10 +65,10 @@ describe('database WAL mode', () => {
 
     const database = await import('../src/database');
     const db = database.getDb();
-    
+
     // With libSQL, we just verify it initializes without error
     expect(db).toBeDefined();
-    
+
     database.closeDb();
   });
 
@@ -86,11 +86,11 @@ describe('database WAL mode', () => {
   it('verifies database settings', async () => {
     const database = await import('../src/database');
     const db = database.getDb();
-    
+
     // With libSQL, WAL settings are handled automatically
     // We just verify the database is functional
     expect(db).toBeDefined();
-    
+
     database.closeDb();
   });
 });

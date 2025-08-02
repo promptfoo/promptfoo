@@ -1,6 +1,7 @@
 # Turso vs better-sqlite3 Analysis for PromptFoo (2025)
 
 ## Current Situation
+
 - **Current setup**: Using `better-sqlite3` with Drizzle ORM
 - **Config issue**: `drizzle.config.ts` specifies `dialect: 'turso'` but actually using better-sqlite3
 - **Dependencies**: Both `@libsql/client` (v0.15.10) and `better-sqlite3` (v11.10.0) are installed
@@ -8,30 +9,33 @@
 ## Key Differences
 
 ### 1. **Architecture**
+
 - **better-sqlite3**: Node.js SQLite3 bindings, synchronous by design, local-only
 - **Turso/libSQL**: Fork of SQLite with additional features, supports both local and remote databases
 
 ### 2. **Transaction Support**
+
 - **better-sqlite3**: Synchronous transactions only (by design for performance)
 - **Turso/libSQL**: Full async/await transaction support with Drizzle ORM
 
 ### 3. **Features Comparison**
 
-| Feature | better-sqlite3 | Turso/libSQL |
-|---------|---------------|--------------|
-| Local SQLite | ✅ | ✅ |
-| Remote database | ❌ | ✅ |
-| Async transactions | ❌ | ✅ |
-| Edge deployment | ❌ | ✅ |
-| Embedded sync | ❌ | ✅ |
-| Additional ALTER statements | ❌ | ✅ |
-| Built-in encryption | ❌ | ✅ |
-| Connection protocols | Node.js only | HTTP, WebSocket, WASM |
-| Performance | Excellent (sync) | Excellent (async with io_uring) |
+| Feature                     | better-sqlite3   | Turso/libSQL                    |
+| --------------------------- | ---------------- | ------------------------------- |
+| Local SQLite                | ✅               | ✅                              |
+| Remote database             | ❌               | ✅                              |
+| Async transactions          | ❌               | ✅                              |
+| Edge deployment             | ❌               | ✅                              |
+| Embedded sync               | ❌               | ✅                              |
+| Additional ALTER statements | ❌               | ✅                              |
+| Built-in encryption         | ❌               | ✅                              |
+| Connection protocols        | Node.js only     | HTTP, WebSocket, WASM           |
+| Performance                 | Excellent (sync) | Excellent (async with io_uring) |
 
 ### 4. **Code Impact**
 
 #### Current code (better-sqlite3):
+
 ```typescript
 // Synchronous transactions
 db.transaction(() => {
@@ -44,6 +48,7 @@ const results = db.select().from(table).all();
 ```
 
 #### With Turso/libSQL:
+
 ```typescript
 // Async transactions
 await db.transaction(async (tx) => {
@@ -58,20 +63,25 @@ const results = await db.select().from(table);
 ## Pros and Cons for PromptFoo
 
 ### Staying with better-sqlite3
+
 **Pros:**
+
 - No migration needed
 - Excellent performance for local operations
 - Simple, battle-tested
 - Smaller dependency footprint
 
 **Cons:**
+
 - No async transactions (awkward error handling)
 - Local-only (no edge deployment options)
 - Limited to Node.js environments
 - Config mismatch needs fixing
 
 ### Switching to Turso/libSQL
+
 **Pros:**
+
 - Natural async/await patterns throughout
 - Future-proof for edge deployment
 - Better error handling with async transactions
@@ -81,6 +91,7 @@ const results = await db.select().from(table);
 - Better for distributed/cloud deployments
 
 **Cons:**
+
 - Migration effort required
 - Slightly larger dependency
 - May need to update some synchronous code patterns

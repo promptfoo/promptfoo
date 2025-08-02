@@ -13,7 +13,7 @@ describe('eval routes', () => {
   beforeAll(async () => {
     await setupTestDatabase('test-server-eval');
   });
-  
+
   afterAll(async () => {
     await cleanupTestDatabase();
   });

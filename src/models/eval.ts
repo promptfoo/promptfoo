@@ -205,29 +205,30 @@ export default class Eval {
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
     await db.transaction(async (tx) => {
-      await tx.insert(evalsTable)
-        .values({
-          id: evalId,
-          createdAt: createdAt.getTime(),
-          author,
-          description: config.description,
-          config,
-          results: {},
-          vars: opts?.vars || [],
-        });
+      await tx.insert(evalsTable).values({
+        id: evalId,
+        createdAt: createdAt.getTime(),
+        author,
+        description: config.description,
+        config,
+        results: {},
+        vars: opts?.vars || [],
+      });
 
       for (const prompt of renderedPrompts) {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
 
-        await tx.insert(promptsTable)
+        await tx
+          .insert(promptsTable)
           .values({
             id: promptId,
             prompt: label,
           })
           .onConflictDoNothing();
 
-        await tx.insert(evalsToPromptsTable)
+        await tx
+          .insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
@@ -244,14 +245,16 @@ export default class Eval {
         logger.debug(`Inserted eval results`);
       }
 
-      await tx.insert(datasetsTable)
+      await tx
+        .insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
         })
         .onConflictDoNothing();
 
-      await tx.insert(evalsToDatasetsTable)
+      await tx
+        .insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
@@ -264,7 +267,8 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          await tx.insert(tagsTable)
+          await tx
+            .insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -272,7 +276,8 @@ export default class Eval {
             })
             .onConflictDoNothing();
 
-          await tx.insert(evalsToTagsTable)
+          await tx
+            .insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,

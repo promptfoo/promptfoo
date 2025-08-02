@@ -30,17 +30,14 @@ export function importCommand(program: Command) {
         } else {
           logger.debug('Importing v2 eval');
           evalId = evalData.id || createEvalId(evalData.createdAt);
-          await db
-            .insert(evalsTable)
-            .values({
-              id: evalId,
-              createdAt: evalData.createdAt,
-              author: evalData.author || 'Unknown',
-              description: evalData.description,
-              results: evalData.results,
-              config: evalData.config,
-            })
-            ;
+          await db.insert(evalsTable).values({
+            id: evalId,
+            createdAt: evalData.createdAt,
+            author: evalData.author || 'Unknown',
+            description: evalData.description,
+            results: evalData.results,
+            config: evalData.config,
+          });
         }
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);

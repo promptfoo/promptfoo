@@ -3,6 +3,7 @@
 ## Changes Made
 
 ### 1. Database Connection (`src/database/index.ts`)
+
 - Replaced `import Database from 'better-sqlite3'` with `import { createClient } from '@libsql/client'`
 - Replaced `import { drizzle } from 'drizzle-orm/better-sqlite3'` with `import { drizzle } from 'drizzle-orm/libsql'`
 - Updated `getDb()` to use `createClient({ url: 'file:${dbPath}' })`
@@ -10,9 +11,11 @@
 - Removed manual WAL mode configuration (libSQL has it enabled by default)
 
 ### 2. Query Pattern Updates
+
 Removed `.all()`, `.get()`, `.run()` from all queries:
 
 #### Files Updated:
+
 - `src/models/eval.ts`
   - Removed `.all()` from select queries
   - Removed `.run()` from insert/update/delete queries
@@ -31,7 +34,9 @@ Removed `.all()`, `.get()`, `.run()` from all queries:
   - Removed `.run()` from insert query
 
 ### 3. Transaction Updates
+
 Changed all transactions from synchronous to async:
+
 ```typescript
 // Before
 db.transaction(() => {
@@ -45,10 +50,12 @@ await db.transaction(async (tx) => {
 ```
 
 ### 4. Test Updates
+
 - Updated `test/database.test.ts` to remove better-sqlite3 specific WAL tests
 - Updated `test/models/eval.test.ts` to use Drizzle delete methods instead of raw SQL
 
 ### 5. Configuration
+
 - `drizzle.config.ts` already had `dialect: 'turso'` ✓
 
 ## Benefits of Migration

@@ -250,7 +250,7 @@ describe('evaluator', () => {
   beforeAll(async () => {
     await setupTestDatabase('test-evaluator');
   });
-  
+
   afterAll(async () => {
     await cleanupTestDatabase();
     // Clear all module mocks to prevent any lingering state
@@ -3413,7 +3413,7 @@ describe('evaluator defaultTest merging', () => {
   beforeAll(async () => {
     await setupTestDatabase('test-evaluator-defaultTest');
   });
-  
+
   afterAll(async () => {
     await cleanupTestDatabase();
   });
