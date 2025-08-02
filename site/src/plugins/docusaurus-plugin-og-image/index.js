@@ -438,7 +438,7 @@ module.exports = function (context, options) {
                     .catch(() => false)
                 ) {
                   let html = await fs.readFile(htmlPath, 'utf8');
-                  
+
                   const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
                   const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
 
