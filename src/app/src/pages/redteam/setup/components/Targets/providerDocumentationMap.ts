@@ -110,8 +110,7 @@ export function hasSpecificDocumentation(providerType?: string): boolean {
     return false;
   }
 
-  const normalizedType = providerType.includes(':') ? providerType.split(':')[0] : providerType;
-  return normalizedType in PROVIDER_DOCUMENTATION_MAP;
+  return providerType in PROVIDER_DOCUMENTATION_MAP;
 }
 
 /**

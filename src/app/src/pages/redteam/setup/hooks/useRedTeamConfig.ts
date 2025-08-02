@@ -1,6 +1,7 @@
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { getProviderType } from '../components/Targets/helpers';
 import type { Plugin } from '@promptfoo/redteam/constants';
 
 import type { ApplicationDefinition, Config, ProviderOptions } from '../types';
@@ -307,11 +308,14 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
             },
           };
         }),
-      setFullConfig: (config) => set({ config }),
+      setFullConfig: (config) => {
+        const providerType = getProviderType(config.target?.id);
+        set({ config, providerType });
+      },
       resetConfig: () => {
-        set({ config: defaultConfig });
+        set({ config: defaultConfig, providerType: undefined });
         // There's a bunch of state that's not persisted that we want to reset
-        window.location.reload();
+        window.location.href = '/redteam/setup';
       },
       updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) =>
         set((state) => {

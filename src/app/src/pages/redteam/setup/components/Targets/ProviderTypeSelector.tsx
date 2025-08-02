@@ -18,7 +18,6 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { getProviderType } from './helpers';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
 import type { ProviderOptions } from '../../types';
@@ -290,7 +289,7 @@ export default function ProviderTypeSelector({
   const theme = useTheme();
 
   const [selectedProviderType, setSelectedProviderType] = useState<string | undefined>(
-    providerType ?? getProviderType(provider?.id),
+    providerType,
   );
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>();
@@ -313,7 +312,6 @@ export default function ProviderTypeSelector({
 
   useEffect(() => {
     if (!provider?.id) {
-      setSelectedProviderType('http');
       setProvider(
         {
           id: 'http',

@@ -187,7 +187,9 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         ) {
           errors.push('Top P must be between 0 and 1');
         }
-      } else if (['javascript', 'python', 'custom', 'mcp', 'exec'].includes(providerType || '')) {
+      } else if (
+        ['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
+      ) {
         // Custom providers validation
         if (!provider.id || provider.id.trim() === '') {
           errors.push('Provider ID is required');
@@ -326,7 +328,7 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         )}
 
         {/* Custom providers */}
-        {['javascript', 'python', 'mcp', 'exec'].includes(providerType || '') && (
+        {['javascript', 'python', 'go', 'mcp', 'exec'].includes(providerType || '') && (
           <CustomTargetConfiguration
             selectedTarget={provider}
             updateCustomTarget={updateCustomTarget}
