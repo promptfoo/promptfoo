@@ -195,7 +195,8 @@ try:
 
     logger.info(f"✅ Endpoint {args.endpoint_name} is now InService!")
     logger.info("\nTest with promptfoo using:")
-    logger.info(f"""
+    logger.info(
+        f"""
 providers:
   - id: sagemaker:{args.task.replace("-", ":")}:{args.endpoint_name}
     config:
@@ -203,7 +204,8 @@ providers:
       modelType: {"openai" if "llama" in args.model_id.lower() else "custom"}
       maxTokens: 256
       temperature: 0.7
-""")
+"""
+    )
 
     logger.info("\nOr use the test script:")
     logger.info(

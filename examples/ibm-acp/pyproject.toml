@@ -1,0 +1,16 @@
+[project]
+name = "acp-booksmith-example"
+version = "0.1.0"
+description = "Multi-agent book writing system using IBM ACP and Promptfoo"
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+   "acp-sdk==1.0.1",
+   "fastapi==0.116.1",
+   "uvicorn==0.35.0",
+   "openai==1.91.0",
+   "gradio==4.28.3",
+   "reportlab==4.1.0",
+   "requests==2.32.4",
+]
