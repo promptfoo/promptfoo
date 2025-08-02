@@ -259,7 +259,7 @@ describe('handleIsHtml', () => {
       },
       { output: '', reason: 'Output is empty' },
       { output: '   ', reason: 'Output is empty' },
-      { output: '<notarealtag>', reason: 'Output does not contain enough HTML indicators' },
+      { output: '<notarealtag>', reason: 'Output does not contain recognized HTML elements' },
       { output: '2 < 3 and 4 > 1', reason: 'Output does not start with an HTML tag or DOCTYPE' },
     ];
 

@@ -1,3 +1,5 @@
+import { JSDOM } from 'jsdom';
+
 import type { AssertionParams, GradingResult } from '../types';
 
 // Patterns that indicate HTML content
@@ -19,7 +21,7 @@ const HTML_PATTERNS = {
 };
 
 function containsHtml(text: string): boolean {
-  // Count different HTML indicators
+  // First try the pattern-based approach for performance
   let htmlIndicators = 0;
 
   // Check for paired tags (opening and closing)
@@ -64,8 +66,13 @@ function containsHtml(text: string): boolean {
   }
 
   // Require at least 2 indicators to consider it HTML
-  // This helps avoid false positives from things like "a < b" or "<example>"
-  return htmlIndicators >= 2;
+  if (htmlIndicators >= 2) {
+    return true;
+  }
+
+  // For edge cases, don't use jsdom as it's too permissive
+  // The pattern-based approach is sufficient for contains-html
+  return false;
 }
 
 function validateHtml(htmlString: string): { isValid: boolean; reason: string } {
@@ -93,8 +100,7 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
     return { isValid: false, reason: 'Output does not end with an HTML tag' };
   }
 
-  // Check for text content outside of tags
-  // Split by tags and check if there's any non-whitespace content outside
+  // Check for text content outside of tags using a simple regex approach first
   const tagPattern = /<[^>]+>/g;
   const textOutsideTags = trimmed.split(tagPattern).filter((text, index, arr) => {
     // First element is before first tag, last is after last tag
@@ -105,54 +111,67 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
   });
 
   if (textOutsideTags.length > 0) {
-    return { isValid: false, reason: 'Output contains non-HTML content outside of tags' };
+    return { isValid: false, reason: 'Output does not end with an HTML tag' };
   }
 
-  // Use the containsHtml function for additional validation
-  if (!containsHtml(trimmed)) {
-    return { isValid: false, reason: 'Output does not contain enough HTML indicators' };
-  }
+  try {
+    // Use jsdom to parse and validate HTML
+    const dom = new JSDOM(trimmed, {
+      // Don't execute scripts
+      runScripts: 'outside-only',
+      // Don't load external resources
+      resources: undefined,
+      // Pretend we're in a browser context
+      pretendToBeVisual: false,
+      // Don't include the jsdom implementation in the window
+      includeNodeLocations: false,
+    });
 
-  // Check for basic HTML structure
-  const hasOpeningTags = /<[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^>]*)?>/.test(trimmed);
+    const { document } = dom.window;
 
-  if (!hasOpeningTags) {
-    return { isValid: false, reason: 'Output does not contain any HTML opening tags' };
-  }
+    // Check if parsing resulted in a valid document
+    if (!document || !document.documentElement) {
+      return { isValid: false, reason: 'Failed to parse HTML' };
+    }
 
-  // Check for unclosed tags at the end
-  // If the last tag is an opening tag (not self-closing or void), ensure there's no content after it
-  const lastTag = trimmed.match(/<[^>]+>(?!.*<[^>]+>)/);
-  if (lastTag) {
-    const tag = lastTag[0];
-    const isOpeningTag = !tag.startsWith('</') && !tag.endsWith('/>');
-    const tagName = tag.match(/<([a-zA-Z][a-zA-Z0-9-]*)/)?.[1]?.toLowerCase();
-    const voidElements = [
-      'area',
-      'base',
-      'br',
-      'col',
-      'embed',
-      'hr',
-      'img',
-      'input',
-      'link',
-      'meta',
-      'source',
-      'track',
-      'wbr',
-    ];
+    // JSDOM wraps content in html/body tags, so we need to check the original content
 
-    if (isOpeningTag && tagName && !voidElements.includes(tagName)) {
-      // Check if there's content after this opening tag
-      const afterTag = trimmed.substring(trimmed.lastIndexOf(tag) + tag.length);
-      if (afterTag.trim()) {
-        return { isValid: false, reason: 'Output does not end with an HTML tag' };
+    // Check if jsdom had to wrap our content (meaning it wasn't a complete document)
+    const isFragment =
+      !trimmed.toLowerCase().includes('<body') && !trimmed.toLowerCase().includes('<html');
+
+    if (isFragment) {
+      // For fragments, check if jsdom modified the content significantly
+      // This catches cases like "<custom>" which jsdom auto-closes to "<custom></custom>"
+
+      // Check if it's a valid HTML fragment by ensuring it has known HTML tags
+      const hasKnownHtmlTags =
+        /<(div|span|p|a|img|h[1-6]|ul|ol|li|table|tr|td|th|form|input|button|script|style|link|meta|br|hr|strong|em|b|i|u|code|pre|blockquote|section|article|nav|header|footer|main|aside|abbr|address|area|audio|base|bdi|bdo|canvas|caption|cite|col|colgroup|data|datalist|dd|del|details|dfn|dialog|dl|dt|embed|fieldset|figcaption|figure|iframe|ins|kbd|label|legend|map|mark|menu|meter|noscript|object|optgroup|option|output|param|picture|progress|q|rp|rt|ruby|s|samp|select|small|source|sub|summary|sup|svg|template|textarea|time|title|track|var|video|wbr)\b/i.test(
+          trimmed,
+        );
+      if (!hasKnownHtmlTags) {
+        return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
       }
     }
-  }
 
-  return { isValid: true, reason: 'Output is valid HTML' };
+    // Check if there's any text content at the root level
+    if (isFragment && document.body) {
+      for (const node of document.body.childNodes) {
+        if (node.nodeType === 3 /* TEXT_NODE */ && node.textContent?.trim()) {
+          // There's text content outside of HTML elements
+          return { isValid: false, reason: 'Output contains non-HTML content outside of tags' };
+        }
+      }
+    }
+
+    return { isValid: true, reason: 'Output is valid HTML' };
+  } catch (error) {
+    // If jsdom fails to parse, it's not valid HTML
+    return {
+      isValid: false,
+      reason: `HTML parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    };
+  }
 }
 
 export const handleContainsHtml = ({
