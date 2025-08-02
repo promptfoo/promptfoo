@@ -66,13 +66,9 @@ export class AssetMetrics {
     return {
       ...this.metrics,
       saveSuccessRate:
-        this.metrics.saveAttempts > 0
-          ? this.metrics.saveSuccesses / this.metrics.saveAttempts
-          : 0,
+        this.metrics.saveAttempts > 0 ? this.metrics.saveSuccesses / this.metrics.saveAttempts : 0,
       loadSuccessRate:
-        this.metrics.loadAttempts > 0
-          ? this.metrics.loadSuccesses / this.metrics.loadAttempts
-          : 0,
+        this.metrics.loadAttempts > 0 ? this.metrics.loadSuccesses / this.metrics.loadAttempts : 0,
       averageAssetSize:
         this.metrics.saveSuccesses > 0
           ? this.metrics.totalBytesStored / this.metrics.saveSuccesses

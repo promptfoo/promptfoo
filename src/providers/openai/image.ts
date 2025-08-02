@@ -201,23 +201,17 @@ export async function processApiResponse(
         const timestamp = Date.now();
         const evalId = `eval-${timestamp}`;
         const resultId = `result-${timestamp}`;
-        
+
         // Save to asset store
         const assetStore = getMetricsAssetStore();
         const imageBuffer = Buffer.from(b64Data, 'base64');
-        
-        const metadata = await assetStore.save(
-          imageBuffer,
-          'image',
-          'image/png',
-          evalId,
-          resultId,
-        );
-        
+
+        const metadata = await assetStore.save(imageBuffer, 'image', 'image/png', evalId, resultId);
+
         // Return reference instead of base64
         const ellipsizedPrompt = ellipsize(prompt, 50);
         const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
-        
+
         return {
           output: `![${ellipsizedPrompt}](asset://${evalId}/${resultId}/${metadata.id})`,
           cached,

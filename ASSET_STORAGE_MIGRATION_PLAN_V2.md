@@ -15,12 +15,14 @@ This revised plan addresses storing large assets (images, audio) outside SQLite 
 ## Problem Statement
 
 ### Current Issues (Validated)
+
 - Large base64 images in SQLite JSON columns (up to 10MB per image)
 - Slow evaluation result queries when results contain images
 - Memory spikes when loading multiple image results
 - Database backups are unnecessarily large
 
 ### Non-Problems (Assumptions to Validate)
+
 - Asset deduplication (need data on actual duplication rates)
 - Complex access patterns (most assets accessed once?)
 - Scale issues (current volume unknown)
@@ -28,6 +30,7 @@ This revised plan addresses storing large assets (images, audio) outside SQLite 
 ## Phase 1: Minimal Viable Solution (Week 1)
 
 ### Goal
+
 Store new image/audio assets as files, keep everything else unchanged.
 
 ### Implementation
@@ -48,28 +51,28 @@ export interface AssetMetadata {
 export class AssetStore {
   private readonly baseDir: string;
   private readonly maxFileSize: number;
-  
+
   constructor() {
     this.baseDir = path.join(getConfigDirectoryPath(), 'assets');
     this.maxFileSize = getEnvInt('PROMPTFOO_MAX_ASSET_SIZE', 50 * 1024 * 1024); // 50MB
   }
-  
+
   async save(
-    data: Buffer, 
+    data: Buffer,
     type: 'image' | 'audio',
     mimeType: string,
     evalId: string,
-    resultId: string
+    resultId: string,
   ): Promise<AssetMetadata> {
     // Validate size
     if (data.length > this.maxFileSize) {
       throw new Error(`Asset too large: ${data.length} bytes (max: ${this.maxFileSize})`);
     }
-    
+
     // Simple directory structure: assets/{evalId}/{resultId}/
     const dir = path.join(this.baseDir, evalId, resultId);
     await fs.mkdir(dir, { recursive: true });
-    
+
     // Generate metadata
     const id = randomUUID();
     const hash = crypto.createHash('sha256').update(data).digest('hex');
@@ -79,32 +82,32 @@ export class AssetStore {
       mimeType,
       size: data.length,
       hash,
-      createdAt: Date.now()
+      createdAt: Date.now(),
     };
-    
+
     // Save file and metadata atomically
     const filePath = path.join(dir, id);
     const metaPath = `${filePath}.json`;
-    
+
     // Write to temp files first
     await fs.writeFile(`${filePath}.tmp`, data);
     await fs.writeFile(`${metaPath}.tmp`, JSON.stringify(metadata));
-    
+
     // Atomic rename
     await fs.rename(`${filePath}.tmp`, filePath);
     await fs.rename(`${metaPath}.tmp`, metaPath);
-    
+
     return metadata;
   }
-  
+
   async load(evalId: string, resultId: string, assetId: string): Promise<Buffer> {
     const filePath = path.join(this.baseDir, evalId, resultId, assetId);
-    
+
     // Security check
     if (!this.isPathSafe(filePath)) {
       throw new Error('Invalid asset path');
     }
-    
+
     try {
       return await fs.readFile(filePath);
     } catch (error) {
@@ -114,18 +117,18 @@ export class AssetStore {
       throw error;
     }
   }
-  
+
   async getMetadata(evalId: string, resultId: string, assetId: string): Promise<AssetMetadata> {
     const metaPath = path.join(this.baseDir, evalId, resultId, `${assetId}.json`);
-    
+
     if (!this.isPathSafe(metaPath)) {
       throw new Error('Invalid asset path');
     }
-    
+
     const data = await fs.readFile(metaPath, 'utf-8');
     return JSON.parse(data);
   }
-  
+
   private isPathSafe(requestedPath: string): boolean {
     const resolved = path.resolve(requestedPath);
     const baseResolved = path.resolve(this.baseDir);
@@ -167,32 +170,32 @@ export async function processApiResponse(
     // Handle base64 response with asset storage
     if (responseFormat === 'b64_json' && context?.evalId && context?.resultId) {
       const b64Data = data.data[0].b64_json;
-      
+
       // Check if asset storage is enabled
       const useAssetStorage = getEnvBool('PROMPTFOO_USE_ASSET_STORAGE', false);
-      
+
       if (useAssetStorage) {
         try {
           // Save to asset store
           const assetStore = getAssetStore();
           const imageBuffer = Buffer.from(b64Data, 'base64');
-          
+
           const metadata = await assetStore.save(
             imageBuffer,
             'image',
             'image/png',
             context.evalId,
-            context.resultId
+            context.resultId,
           );
-          
+
           // Return reference instead of base64
           return {
             output: `![${ellipsize(prompt, 50)}](asset://${context.evalId}/${context.resultId}/${metadata.id})`,
             cached,
             cost: cached ? 0 : calculateImageCost(model, size, quality, n),
             metadata: {
-              asset: metadata
-            }
+              asset: metadata,
+            },
           };
         } catch (error) {
           // Log error but fall back to base64
@@ -201,7 +204,7 @@ export async function processApiResponse(
         }
       }
     }
-    
+
     // Original base64 handling (fallback)
     const formattedOutput = formatOutput(data, prompt, responseFormat);
     if (typeof formattedOutput === 'object') {
@@ -229,37 +232,31 @@ export async function processApiResponse(
 // src/server/routes/assets.ts
 export function setupAssetRoutes(app: Express) {
   const assetStore = getAssetStore();
-  
+
   // Simple asset serving with security
   app.get('/api/eval/:evalId/result/:resultId/asset/:assetId', async (req, res) => {
     const { evalId, resultId, assetId } = req.params;
-    
+
     // Validate UUIDs
     if (!isValidUUID(evalId) || !isValidUUID(resultId) || !isValidUUID(assetId)) {
       return res.status(400).json({ error: 'Invalid ID format' });
     }
-    
+
     try {
       // Get metadata first
       const metadata = await assetStore.getMetadata(evalId, resultId, assetId);
-      
+
       // Set appropriate headers
       res.set({
         'Content-Type': metadata.mimeType,
         'Content-Length': metadata.size.toString(),
         'Cache-Control': 'private, max-age=3600', // 1 hour cache
-        'X-Asset-Hash': metadata.hash
+        'X-Asset-Hash': metadata.hash,
       });
-      
+
       // Stream the file
-      const filePath = path.join(
-        getConfigDirectoryPath(), 
-        'assets', 
-        evalId, 
-        resultId, 
-        assetId
-      );
-      
+      const filePath = path.join(getConfigDirectoryPath(), 'assets', evalId, resultId, assetId);
+
       res.sendFile(filePath, (err) => {
         if (err) {
           logger.error('Error serving asset:', err);
@@ -284,11 +281,11 @@ function renderOutput(output: string | any): React.ReactNode {
   if (typeof output === 'string') {
     // Check for asset references
     const assetMatch = output.match(/!\[([^\]]*)\]\(asset:\/\/([^/]+)\/([^/]+)\/([^)]+)\)/);
-    
+
     if (assetMatch) {
       const [, alt, evalId, resultId, assetId] = assetMatch;
       return (
-        <img 
+        <img
           src={`/api/eval/${evalId}/result/${resultId}/asset/${assetId}`}
           alt={alt}
           loading="lazy"
@@ -300,13 +297,13 @@ function renderOutput(output: string | any): React.ReactNode {
         />
       );
     }
-    
+
     // Handle legacy base64 images
     if (output.includes('data:image')) {
       return <img src={output} alt="Generated image" />;
     }
   }
-  
+
   // ... rest of rendering logic
 }
 ```
@@ -327,14 +324,14 @@ export class AssetMetrics {
     totalBytesStored: 0,
     largestAsset: 0,
   };
-  
+
   static getInstance(): AssetMetrics {
     if (!this.instance) {
       this.instance = new AssetMetrics();
     }
     return this.instance;
   }
-  
+
   recordSave(success: boolean, size?: number) {
     this.metrics.saveAttempts++;
     if (success && size) {
@@ -345,7 +342,7 @@ export class AssetMetrics {
       this.metrics.saveFailures++;
     }
   }
-  
+
   recordLoad(success: boolean) {
     this.metrics.loadAttempts++;
     if (success) {
@@ -354,12 +351,12 @@ export class AssetMetrics {
       this.metrics.loadFailures++;
     }
   }
-  
+
   getMetrics() {
     return {
       ...this.metrics,
-      saveSuccessRate: this.metrics.saveAttempts > 0 
-        ? this.metrics.saveSuccesses / this.metrics.saveAttempts 
+      saveSuccessRate: this.metrics.saveAttempts > 0
+        ? this.metrics.saveSuccesses / this.metrics.saveAttempts
         : 0,
       loadSuccessRate: this.metrics.loadAttempts > 0
         ? this.metrics.loadSuccesses / this.metrics.loadAttempts
@@ -393,43 +390,46 @@ import diskusage from 'diskusage';
 
 export class AssetMonitor {
   private checkInterval: NodeJS.Timer | null = null;
-  
+
   start() {
     // Check disk space every 5 minutes
-    this.checkInterval = setInterval(() => {
-      this.checkDiskSpace();
-    }, 5 * 60 * 1000);
-    
+    this.checkInterval = setInterval(
+      () => {
+        this.checkDiskSpace();
+      },
+      5 * 60 * 1000,
+    );
+
     // Initial check
     this.checkDiskSpace();
   }
-  
+
   stop() {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
     }
   }
-  
+
   private async checkDiskSpace() {
     try {
       const assetsPath = path.join(getConfigDirectoryPath(), 'assets');
       const disk = await diskusage.check(assetsPath);
-      
+
       const freePercentage = (disk.free / disk.total) * 100;
-      
+
       if (freePercentage < 10) {
         logger.error(`CRITICAL: Disk space low! Only ${freePercentage.toFixed(1)}% free`);
         // Could trigger alerts here
       } else if (freePercentage < 20) {
         logger.warn(`WARNING: Disk space getting low: ${freePercentage.toFixed(1)}% free`);
       }
-      
+
       // Log metrics
       logger.debug('Disk usage:', {
         total: `${(disk.total / 1e9).toFixed(2)} GB`,
         free: `${(disk.free / 1e9).toFixed(2)} GB`,
         used: `${((disk.total - disk.free) / 1e9).toFixed(2)} GB`,
-        freePercentage: `${freePercentage.toFixed(1)}%`
+        freePercentage: `${freePercentage.toFixed(1)}%`,
       });
     } catch (error) {
       logger.error('Failed to check disk space:', error);
@@ -451,24 +451,24 @@ class ResilientAssetStore extends AssetStore {
     mimeType: string,
     evalId: string,
     resultId: string,
-    retries: number = 3
+    retries: number = 3,
   ): Promise<AssetMetadata> {
     let lastError: Error | null = null;
-    
+
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         return await super.save(data, type, mimeType, evalId, resultId);
       } catch (error) {
         lastError = error as Error;
         logger.warn(`Asset save attempt ${attempt} failed:`, error);
-        
+
         if (attempt < retries) {
           // Exponential backoff
-          await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt)));
+          await new Promise((resolve) => setTimeout(resolve, 100 * Math.pow(2, attempt)));
         }
       }
     }
-    
+
     throw lastError || new Error('Asset save failed');
   }
 }
@@ -483,18 +483,18 @@ export class AssetBackup {
     const assetsDir = path.join(getConfigDirectoryPath(), 'assets');
     const backupDir = path.join(getConfigDirectoryPath(), 'backups', 'assets');
     const timestamp = new Date().toISOString().split('T')[0];
-    
+
     await fs.mkdir(backupDir, { recursive: true });
-    
+
     // Collect all metadata files
     const metadataFiles: string[] = [];
-    
+
     async function scanDir(dir: string) {
       const entries = await fs.readdir(dir, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
-        
+
         if (entry.isDirectory()) {
           await scanDir(fullPath);
         } else if (entry.name.endsWith('.json')) {
@@ -502,27 +502,27 @@ export class AssetBackup {
         }
       }
     }
-    
+
     await scanDir(assetsDir);
-    
+
     // Create backup archive
     const backupFile = path.join(backupDir, `metadata-${timestamp}.json`);
     const backup = {
       timestamp: new Date().toISOString(),
       version: 1,
       assetCount: metadataFiles.length,
-      metadata: [] as any[]
+      metadata: [] as any[],
     };
-    
+
     for (const file of metadataFiles) {
       const content = await fs.readFile(file, 'utf-8');
       const relativePath = path.relative(assetsDir, file);
       backup.metadata.push({
         path: relativePath,
-        data: JSON.parse(content)
+        data: JSON.parse(content),
       });
     }
-    
+
     await fs.writeFile(backupFile, JSON.stringify(backup, null, 2));
     logger.info(`Backed up ${metadataFiles.length} asset metadata files`);
   }
@@ -538,21 +538,21 @@ app.get('/api/health/assets', async (req, res) => {
     storage: 'unknown',
     diskSpace: 'unknown',
     writeTest: 'unknown',
-    metrics: null as any
+    metrics: null as any,
   };
-  
+
   try {
     // Check disk space
     const disk = await diskusage.check(path.join(getConfigDirectoryPath(), 'assets'));
     const freePercentage = (disk.free / disk.total) * 100;
-    checks.diskSpace = freePercentage > 20 ? 'healthy' : 
-                       freePercentage > 10 ? 'warning' : 'critical';
-    
+    checks.diskSpace =
+      freePercentage > 20 ? 'healthy' : freePercentage > 10 ? 'warning' : 'critical';
+
     // Test write capability
     const testId = `health-check-${Date.now()}`;
     const testData = Buffer.from('test');
     const assetStore = getAssetStore();
-    
+
     try {
       await assetStore.save(testData, 'image', 'image/png', 'health', testId);
       // Clean up test file
@@ -562,21 +562,21 @@ app.get('/api/health/assets', async (req, res) => {
     } catch (error) {
       checks.writeTest = 'failed';
     }
-    
+
     // Get metrics
     checks.metrics = AssetMetrics.getInstance().getMetrics();
-    
+
     // Overall status
-    checks.storage = checks.diskSpace === 'healthy' && checks.writeTest === 'healthy' 
-      ? 'healthy' : 'degraded';
-    
+    checks.storage =
+      checks.diskSpace === 'healthy' && checks.writeTest === 'healthy' ? 'healthy' : 'degraded';
+
     const statusCode = checks.storage === 'healthy' ? 200 : 503;
     res.status(statusCode).json(checks);
   } catch (error) {
     res.status(503).json({
       ...checks,
       storage: 'error',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -596,7 +596,7 @@ async saveWithDedup(
   resultId: string
 ): Promise<AssetMetadata> {
   const hash = crypto.createHash('sha256').update(data).digest('hex');
-  
+
   // Check if we already have this asset
   const existing = await this.findByHash(hash);
   if (existing) {
@@ -607,10 +607,10 @@ async saveWithDedup(
       originalPath: existing.path,
       hash: hash
     }));
-    
+
     return existing;
   }
-  
+
   // New asset, save normally
   return this.save(data, type, mimeType, evalId, resultId);
 }
@@ -623,7 +623,7 @@ async saveWithDedup(
 export class S3AssetStore implements AssetStoreInterface {
   private s3: S3Client;
   private bucket: string;
-  
+
   async save(/* same signature */): Promise<AssetMetadata> {
     // S3 implementation
     // But only add this when you actually need it!
@@ -633,7 +633,8 @@ export class S3AssetStore implements AssetStoreInterface {
 
 ## Migration Strategy
 
-### No Migration! 
+### No Migration!
+
 - Existing data stays in SQLite (it works!)
 - Only new evaluations use asset storage
 - Enable gradually with feature flag
@@ -671,16 +672,19 @@ export PROMPTFOO_USE_ASSET_STORAGE=false
 ## Success Metrics
 
 ### Primary Metrics (Must Improve)
+
 1. **P95 evaluation result load time** - Target: <100ms (from current ~500ms with images)
 2. **Memory usage during result viewing** - Target: 50% reduction
 3. **User-reported performance issues** - Target: 90% reduction
 
 ### Secondary Metrics (Monitor)
+
 1. **Disk usage growth rate** - Sustainable?
 2. **Asset serve success rate** - Target: >99.9%
 3. **Feature adoption rate** - Are users seeing benefits?
 
 ### Operational Metrics (Must Have)
+
 1. **Disk space remaining** - Alert at <20%
 2. **Asset save failures** - Alert at >1%
 3. **Asset serve latency** - Alert at P95 >500ms
@@ -696,27 +700,30 @@ export PROMPTFOO_USE_ASSET_STORAGE=false
 ## Recovery Procedures
 
 ### Asset Loss Recovery
+
 ```typescript
 // If an asset is lost, gracefully degrade
 if (assetNotFound) {
   // 1. Log the error with full context
   logger.error('Asset not found', { evalId, resultId, assetId });
-  
+
   // 2. Return placeholder
   return {
     output: '[Image not available]',
-    error: 'Asset could not be loaded'
+    error: 'Asset could not be loaded',
   };
 }
 ```
 
 ### Disk Full Recovery
+
 1. Alert ops team immediately
 2. Move old assets to archive storage
 3. Increase disk space
 4. Implement retention policy
 
 ### Corruption Recovery
+
 - Metadata in JSON files can be rebuilt from filenames
 - Use file command to detect MIME types
 - Size from filesystem
@@ -725,6 +732,7 @@ if (assetNotFound) {
 ## Development & Testing
 
 ### Local Development
+
 ```bash
 # Enable asset storage locally
 export PROMPTFOO_USE_ASSET_STORAGE=true
@@ -736,34 +744,35 @@ npm run dev
 ```
 
 ### Testing Strategy
+
 ```typescript
 // Unit tests for AssetStore
 describe('AssetStore', () => {
   it('saves and loads assets correctly', async () => {
     const store = new AssetStore();
     const data = Buffer.from('test image data');
-    
+
     const metadata = await store.save(data, 'image', 'image/png', 'eval1', 'result1');
     const loaded = await store.load('eval1', 'result1', metadata.id);
-    
+
     expect(loaded).toEqual(data);
   });
-  
+
   it('prevents path traversal attacks', async () => {
     const store = new AssetStore();
-    
-    await expect(
-      store.load('../../../etc', 'passwd', 'evil')
-    ).rejects.toThrow('Invalid asset path');
+
+    await expect(store.load('../../../etc', 'passwd', 'evil')).rejects.toThrow(
+      'Invalid asset path',
+    );
   });
-  
+
   it('handles disk full gracefully', async () => {
     // Mock fs to simulate ENOSPC error
     jest.spyOn(fs, 'writeFile').mockRejectedValue({ code: 'ENOSPC' });
-    
+
     const store = new AssetStore();
     await expect(
-      store.save(Buffer.from('data'), 'image', 'image/png', 'eval1', 'result1')
+      store.save(Buffer.from('data'), 'image', 'image/png', 'eval1', 'result1'),
     ).rejects.toThrow();
   });
 });
@@ -772,27 +781,32 @@ describe('AssetStore', () => {
 ## Documentation
 
 ### User-Facing Docs
+
 ```markdown
 # Asset Storage
 
-Promptfoo now stores large images and audio files separately from the database 
+Promptfoo now stores large images and audio files separately from the database
 for better performance.
 
 ## What's Changed?
+
 - Faster loading of evaluation results with images
 - Lower memory usage when viewing results
 - No changes to your workflow
 
 ## Troubleshooting
+
 - If images don't load, check your disk space
 - Assets are stored in ~/.promptfoo/assets/
 ```
 
 ### Ops Runbook
+
 ```markdown
 # Asset Storage Operations
 
 ## Monitoring
+
 - Dashboard: /admin/assets
 - Alerts configured in PagerDuty
 - Logs: grep "asset" in application logs
@@ -800,16 +814,19 @@ for better performance.
 ## Common Issues
 
 ### Disk Space Low
+
 1. Check current usage: `df -h ~/.promptfoo/assets`
 2. Find large evaluations: `du -sh ~/.promptfoo/assets/*/* | sort -h`
 3. Archive old evaluations if needed
 
 ### Asset Not Loading
+
 1. Check if file exists: `ls ~/.promptfoo/assets/{evalId}/{resultId}/{assetId}`
 2. Check permissions: `ls -la ~/.promptfoo/assets/`
 3. Check application logs for errors
 
 ### Performance Degradation
+
 1. Check disk I/O: `iostat -x 1`
 2. Check file count: `find ~/.promptfoo/assets -type f | wc -l`
 3. Consider enabling deduplication if >100k files
@@ -818,6 +835,7 @@ for better performance.
 ## Summary
 
 This revised plan:
+
 1. **Starts simple** - Basic file storage, no complexity
 2. **Measures everything** - Data-driven optimization
 3. **Fails gracefully** - Always has fallbacks

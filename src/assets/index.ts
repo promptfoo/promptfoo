@@ -27,7 +27,8 @@ export class AssetStore {
 
   constructor(options: AssetStoreOptions = {}) {
     this.baseDir = options.baseDir || path.join(getConfigDirectoryPath(), 'assets');
-    this.maxFileSize = options.maxFileSize || getEnvInt('PROMPTFOO_MAX_ASSET_SIZE', 50 * 1024 * 1024); // 50MB default
+    this.maxFileSize =
+      options.maxFileSize || getEnvInt('PROMPTFOO_MAX_ASSET_SIZE', 50 * 1024 * 1024); // 50MB default
   }
 
   async save(
@@ -39,9 +40,7 @@ export class AssetStore {
   ): Promise<AssetMetadata> {
     // Validate size
     if (data.length > this.maxFileSize) {
-      throw new Error(
-        `Asset too large: ${data.length} bytes (max: ${this.maxFileSize} bytes)`,
-      );
+      throw new Error(`Asset too large: ${data.length} bytes (max: ${this.maxFileSize} bytes)`);
     }
 
     // Validate IDs (basic security check)

@@ -1,0 +1,47 @@
+# Test configuration for asset storage feature
+# Run with: PROMPTFOO_USE_ASSET_STORAGE=true promptfoo eval -c test-asset-storage.yaml
+
+prompts:
+  - "Generate a colorful abstract painting with geometric shapes"
+  - "Create an image of a serene mountain landscape at sunset"
+
+providers:
+  - id: openai:dall-e-3
+    config:
+      response_format: b64_json
+      size: 1024x1024
+      quality: standard
+
+tests:
+  - vars:
+      style: "vibrant and modern"
+  - vars:
+      style: "peaceful and natural"
+
+defaultTest:
+  assert:
+    - type: is-valid-openai-function-call
+      value: not-applicable
+    - type: javascript
+      value: |
+        // Check if the output contains an asset reference
+        if (output.includes('asset://')) {
+          return {
+            pass: true,
+            score: 1.0,
+            reason: 'Image stored as asset successfully'
+          };
+        }
+        // Also accept base64 as fallback
+        if (output.includes('data:image')) {
+          return {
+            pass: true,
+            score: 0.5,
+            reason: 'Image stored as base64 (fallback)'
+          };
+        }
+        return {
+          pass: false,
+          score: 0,
+          reason: 'No image found in output'
+        };

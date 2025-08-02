@@ -37,6 +37,8 @@ import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
+import { getAssetMonitor } from '../assets/monitor';
+import { isAssetStorageEnabled } from '../assets';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
@@ -225,7 +227,7 @@ export function createApp() {
   app.use('/api/configs', configsRouter);
   app.use('/api/model-audit', modelAuditRouter);
   app.use('/api/traces', tracesRouter);
-  
+
   // Setup asset routes
   setupAssetRoutes(app);
 
@@ -279,6 +281,13 @@ export async function startServer(
   });
 
   await runDbMigrations();
+
+  // Start asset monitoring if enabled
+  if (isAssetStorageEnabled()) {
+    const assetMonitor = getAssetMonitor();
+    assetMonitor.start();
+    logger.info('Asset storage monitoring started');
+  }
 
   setupSignalWatcher(async () => {
     const latestEval = await Eval.latest();

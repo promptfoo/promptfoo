@@ -214,6 +214,29 @@ function EvalOutputCell({
         onClick={() => toggleLightbox(text)}
       />
     );
+  } else if (text?.match(/^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)/)) {
+    // Handle asset:// URLs
+    const assetMatch = text.match(/^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)/);
+    if (assetMatch) {
+      const [, alt, assetPath] = assetMatch;
+      const [evalId, resultId, assetId] = assetPath.split('/');
+      const assetUrl = `/api/eval/${evalId}/result/${resultId}/asset/${assetId}`;
+      node = (
+        <img
+          src={assetUrl}
+          alt={alt || output.prompt}
+          style={{ width: '100%' }}
+          onClick={() => toggleLightbox(assetUrl)}
+          onError={(e) => {
+            // Fallback to showing the markdown text if asset fails to load
+            const target = e.target as HTMLImageElement;
+            target.style.display = 'none';
+            const textNode = document.createTextNode(text);
+            target.parentNode?.insertBefore(textNode, target);
+          }}
+        />
+      );
+    }
   } else if (output.audio) {
     node = (
       <div className="audio-output">
@@ -236,15 +259,31 @@ function EvalOutputCell({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          img: ({ src, alt }) => (
-            <img
-              loading="lazy"
-              src={src}
-              alt={alt}
-              onClick={() => toggleLightbox(src)}
-              style={{ cursor: 'pointer' }}
-            />
-          ),
+          img: ({ src, alt }) => {
+            // Handle asset:// URLs in markdown
+            let finalSrc = src;
+            if (src?.startsWith('asset://')) {
+              const assetPath = src.replace('asset://', '');
+              const [evalId, resultId, assetId] = assetPath.split('/');
+              finalSrc = `/api/eval/${evalId}/result/${resultId}/asset/${assetId}`;
+            }
+            return (
+              <img
+                loading="lazy"
+                src={finalSrc}
+                alt={alt}
+                onClick={() => toggleLightbox(finalSrc)}
+                style={{ cursor: 'pointer' }}
+                onError={(e) => {
+                  // Fallback for failed asset loads
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const textNode = document.createTextNode(`[Failed to load image: ${alt || src}]`);
+                  target.parentNode?.insertBefore(textNode, target);
+                }}
+              />
+            );
+          },
         }}
       >
         {text}

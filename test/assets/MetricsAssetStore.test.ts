@@ -27,17 +27,19 @@ describe('MetricsAssetStore', () => {
   let tempDir: string;
   let store: MetricsAssetStore;
   let metrics: AssetMetrics;
-  const mockGetConfigDirectoryPath = jest.requireMock('../../src/util/config/manage').getConfigDirectoryPath;
+  const mockGetConfigDirectoryPath = jest.requireMock(
+    '../../src/util/config/manage',
+  ).getConfigDirectoryPath;
 
   beforeEach(async () => {
     // Create a temporary directory for testing
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-metrics-test-'));
     mockGetConfigDirectoryPath.mockReturnValue(tempDir);
-    
+
     // Reset metrics
     metrics = AssetMetrics.getInstance();
     metrics.reset();
-    
+
     // Create new MetricsAssetStore instance
     store = new MetricsAssetStore({
       baseDir: path.join(tempDir, 'assets'),
@@ -54,9 +56,9 @@ describe('MetricsAssetStore', () => {
       const data = Buffer.from('test data');
       const evalId = randomUUID();
       const resultId = randomUUID();
-      
+
       await store.save(data, 'image', 'image/png', evalId, resultId);
-      
+
       const metricsData = metrics.getMetrics();
       expect(metricsData.saveAttempts).toBe(1);
       expect(metricsData.saveSuccesses).toBe(1);
@@ -70,15 +72,15 @@ describe('MetricsAssetStore', () => {
       const invalidStore = new MetricsAssetStore({
         baseDir: '/invalid/path/that/does/not/exist',
       });
-      
+
       const data = Buffer.from('test data');
       const evalId = randomUUID();
       const resultId = randomUUID();
-      
+
       await expect(
-        invalidStore.save(data, 'image', 'image/png', evalId, resultId)
+        invalidStore.save(data, 'image', 'image/png', evalId, resultId),
       ).rejects.toThrow();
-      
+
       const metricsData = metrics.getMetrics();
       expect(metricsData.saveAttempts).toBe(1);
       expect(metricsData.saveSuccesses).toBe(0);
@@ -90,10 +92,11 @@ describe('MetricsAssetStore', () => {
       const data = Buffer.from('test data');
       const evalId = randomUUID();
       const resultId = randomUUID();
-      
+
       // Mock the parent save method to fail twice, then succeed
       let attempts = 0;
-      jest.spyOn(Object.getPrototypeOf(Object.getPrototypeOf(store)), 'save')
+      jest
+        .spyOn(Object.getPrototypeOf(Object.getPrototypeOf(store)), 'save')
         .mockImplementation(async () => {
           attempts++;
           if (attempts < 3) {
@@ -108,15 +111,15 @@ describe('MetricsAssetStore', () => {
             createdAt: Date.now(),
           };
         });
-      
+
       const start = Date.now();
       await store.save(data, 'image', 'image/png', evalId, resultId);
       const duration = Date.now() - start;
-      
+
       // Should have retried with backoff (100ms + 200ms = 300ms minimum)
       expect(attempts).toBe(3);
       expect(duration).toBeGreaterThanOrEqual(300);
-      
+
       const metricsData = metrics.getMetrics();
       expect(metricsData.saveSuccesses).toBe(1);
     });
@@ -133,11 +136,9 @@ describe('MetricsAssetStore', () => {
       const evalId = randomUUID();
       const resultId = randomUUID();
       const assetId = randomUUID();
-      
-      await expect(
-        store.load(evalId, resultId, assetId)
-      ).rejects.toThrow('Asset not found');
-      
+
+      await expect(store.load(evalId, resultId, assetId)).rejects.toThrow('Asset not found');
+
       const metricsData = metrics.getMetrics();
       expect(metricsData.loadAttempts).toBe(1);
       expect(metricsData.loadSuccesses).toBe(0);

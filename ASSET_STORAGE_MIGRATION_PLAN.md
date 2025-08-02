@@ -43,36 +43,36 @@ This document outlines a comprehensive plan to migrate Promptfoo's asset storage
 ```typescript
 interface AssetReference {
   // Core fields
-  id: string;              // UUID for the asset reference
+  id: string; // UUID for the asset reference
   type: 'image' | 'audio' | 'document' | 'video';
-  hash: string;            // SHA-256 content hash
-  path: string;            // Relative path within assets directory
-  
+  hash: string; // SHA-256 content hash
+  path: string; // Relative path within assets directory
+
   // Metadata
-  size: number;            // File size in bytes
-  mimeType: string;        // MIME type (e.g., 'image/png')
-  createdAt: string;       // ISO timestamp
-  
+  size: number; // File size in bytes
+  mimeType: string; // MIME type (e.g., 'image/png')
+  createdAt: string; // ISO timestamp
+
   // Type-specific metadata
   metadata?: {
     // For images
     width?: number;
     height?: number;
-    format?: string;      // 'png', 'jpeg', 'webp'
-    
+    format?: string; // 'png', 'jpeg', 'webp'
+
     // For audio
-    duration?: number;    // Duration in seconds
+    duration?: number; // Duration in seconds
     sampleRate?: number;
     channels?: number;
-    
+
     // For all types
     originalPrompt?: string;
     generationParams?: Record<string, any>;
   };
-  
+
   // Storage info
   storage: {
-    backend: 'local' | 's3' | 'gcs';  // Future-proofing
+    backend: 'local' | 's3' | 'gcs'; // Future-proofing
     compression?: 'gzip' | 'none';
     encrypted?: boolean;
   };
@@ -129,25 +129,24 @@ CREATE INDEX idx_eval_results_assets_asset_id ON eval_results_assets(asset_id);
 export class AssetManager {
   private readonly assetsDir: string;
   private readonly metadataCache: LRUCache<string, AssetReference>;
-  
+
   constructor(config?: AssetManagerConfig) {
-    this.assetsDir = config?.assetsDir || 
-      path.join(getConfigDirectoryPath(), 'assets');
+    this.assetsDir = config?.assetsDir || path.join(getConfigDirectoryPath(), 'assets');
     this.metadataCache = new LRUCache({ max: 1000 });
   }
-  
+
   async saveAsset(input: SaveAssetInput): Promise<AssetReference> {
     // Implementation details below
   }
-  
+
   async getAsset(hashOrId: string): Promise<Buffer> {
     // Implementation details below
   }
-  
+
   async getAssetMetadata(hashOrId: string): Promise<AssetReference> {
     // Implementation details below
   }
-  
+
   async deleteUnreferencedAssets(): Promise<number> {
     // Garbage collection implementation
   }
@@ -162,25 +161,25 @@ export class LocalAssetStorage implements AssetStorage {
   async save(data: Buffer, reference: AssetReference): Promise<void> {
     const fullPath = this.getFullPath(reference);
     await fs.mkdir(path.dirname(fullPath), { recursive: true });
-    
+
     // Save with atomic write (write to temp, then rename)
     const tempPath = `${fullPath}.tmp`;
     await fs.writeFile(tempPath, data);
     await fs.rename(tempPath, fullPath);
-    
+
     // Save metadata
     await this.saveMetadata(reference);
   }
-  
+
   async load(reference: AssetReference): Promise<Buffer> {
     const fullPath = this.getFullPath(reference);
     return await fs.readFile(fullPath);
   }
-  
+
   async exists(hash: string): Promise<boolean> {
     // Check if asset with hash exists
   }
-  
+
   private getFullPath(reference: AssetReference): string {
     const date = new Date(reference.createdAt);
     return path.join(
@@ -190,7 +189,7 @@ export class LocalAssetStorage implements AssetStorage {
       (date.getMonth() + 1).toString().padStart(2, '0'),
       date.getDate().toString().padStart(2, '0'),
       reference.hash.substring(0, 2),
-      `${reference.hash}.${this.getExtension(reference)}`
+      `${reference.hash}.${this.getExtension(reference)}`,
     );
   }
 }
@@ -204,10 +203,10 @@ export class LocalAssetStorage implements AssetStorage {
 // src/types/providers.ts
 export interface ProviderResponse {
   // Existing fields...
-  
+
   // New asset reference field
   assets?: AssetReference[];
-  
+
   // Deprecated fields (will be removed in Phase 4)
   /** @deprecated Use assets instead */
   isBase64?: boolean;
@@ -228,7 +227,7 @@ export async function processApiResponse(
   if (responseFormat === 'b64_json') {
     const b64Data = data.data[0].b64_json;
     const imageBuffer = Buffer.from(b64Data, 'base64');
-    
+
     // Save asset using AssetManager
     const assetRef = await assetManager.saveAsset({
       data: imageBuffer,
@@ -243,10 +242,10 @@ export async function processApiResponse(
           size: size,
           quality: quality,
           style: data.data[0].style,
-        }
-      }
+        },
+      },
     });
-    
+
     return {
       output: `![${ellipsize(prompt, 50)}](asset://${assetRef.id})`,
       assets: [assetRef],
@@ -280,14 +279,14 @@ export async function up(db: Database) {
       ref_count INTEGER DEFAULT 0
     );
   `);
-  
+
   // Create indexes
   await db.exec(`
     CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(hash);
     CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
     CREATE INDEX IF NOT EXISTS idx_assets_created_at ON assets(created_at);
   `);
-  
+
   // Create junction table
   await db.exec(`
     CREATE TABLE IF NOT EXISTS eval_results_assets (
@@ -311,19 +310,22 @@ export class AssetMigrator {
     const batchSize = options.batchSize || 100;
     let offset = 0;
     let migrated = 0;
-    
+
     while (true) {
-      const results = await db.query(`
+      const results = await db.query(
+        `
         SELECT id, response 
         FROM eval_results 
         WHERE response LIKE '%b64_json%' 
            OR response LIKE '%data:image%'
            OR (response->>'$.audio.data') IS NOT NULL
         LIMIT ? OFFSET ?
-      `, [batchSize, offset]);
-      
+      `,
+        [batchSize, offset],
+      );
+
       if (results.length === 0) break;
-      
+
       for (const result of results) {
         try {
           const migrationResult = await this.migrateResult(result);
@@ -335,18 +337,18 @@ export class AssetMigrator {
           if (!options.continueOnError) throw error;
         }
       }
-      
+
       offset += batchSize;
       logger.info(`Migrated ${migrated} assets so far...`);
     }
-    
+
     return { totalMigrated: migrated };
   }
-  
+
   private async migrateResult(result: any) {
     const response = JSON.parse(result.response);
     const assets: AssetReference[] = [];
-    
+
     // Migrate base64 images
     if (response.output?.includes('data:image')) {
       const base64Match = response.output.match(/data:image\/(\w+);base64,([^"'\s]+)/);
@@ -354,24 +356,21 @@ export class AssetMigrator {
         const [, format, b64Data] = base64Match;
         const asset = await this.saveBase64Asset(b64Data, 'image', `image/${format}`);
         assets.push(asset);
-        
+
         // Update response to use asset reference
-        response.output = response.output.replace(
-          base64Match[0],
-          `asset://${asset.id}`
-        );
+        response.output = response.output.replace(base64Match[0], `asset://${asset.id}`);
       }
     }
-    
+
     // Migrate audio data
     if (response.audio?.data) {
       const asset = await this.saveBase64Asset(
         response.audio.data,
         'audio',
-        response.audio.format || 'audio/mpeg'
+        response.audio.format || 'audio/mpeg',
       );
       assets.push(asset);
-      
+
       // Update response
       response.audio = {
         ...response.audio,
@@ -379,12 +378,12 @@ export class AssetMigrator {
         data: undefined, // Remove base64 data
       };
     }
-    
+
     // Update database
     if (assets.length > 0) {
       await this.updateResultWithAssets(result.id, response, assets);
     }
-    
+
     return { assetsMigrated: assets.length };
   }
 }
@@ -404,15 +403,15 @@ export function setupAssetRoutes(app: Express) {
       if (!asset) {
         return res.status(404).json({ error: 'Asset not found' });
       }
-      
+
       // Set cache headers
       res.set({
         'Cache-Control': 'public, max-age=31536000, immutable',
         'Content-Type': asset.mimeType,
         'Content-Length': asset.size.toString(),
-        'ETag': `"${asset.hash}"`,
+        ETag: `"${asset.hash}"`,
       });
-      
+
       // Stream the file
       const stream = await assetManager.getAssetStream(asset.id);
       stream.pipe(res);
@@ -421,16 +420,14 @@ export function setupAssetRoutes(app: Express) {
       res.status(500).json({ error: 'Internal server error' });
     }
   });
-  
+
   // Bulk asset info endpoint
   app.post('/api/assets/bulk-info', async (req, res) => {
     const { ids } = req.body;
-    const assets = await Promise.all(
-      ids.map(id => assetManager.getAssetMetadata(id))
-    );
+    const assets = await Promise.all(ids.map((id) => assetManager.getAssetMetadata(id)));
     res.json({ assets: assets.filter(Boolean) });
   });
-  
+
   // Asset upload endpoint (for future use)
   app.post('/api/assets/upload', upload.single('file'), async (req, res) => {
     // Implementation for manual asset uploads
@@ -446,7 +443,7 @@ export function AssetDisplay({ assetId, type, alt }: AssetDisplayProps) {
   const [assetUrl, setAssetUrl] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
-  
+
   useEffect(() => {
     async function loadAsset() {
       try {
@@ -457,17 +454,17 @@ export function AssetDisplay({ assetId, type, alt }: AssetDisplayProps) {
           setLoading(false);
           return;
         }
-        
+
         // Fetch from server
         const response = await fetch(`/api/assets/${assetId}`);
         if (!response.ok) throw new Error('Failed to load asset');
-        
+
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
-        
+
         // Cache for future use
         await assetCache.set(assetId, url);
-        
+
         setAssetUrl(url);
       } catch (err) {
         setError(err.message);
@@ -475,19 +472,19 @@ export function AssetDisplay({ assetId, type, alt }: AssetDisplayProps) {
         setLoading(false);
       }
     }
-    
+
     loadAsset();
-    
+
     return () => {
       if (assetUrl && assetUrl.startsWith('blob:')) {
         URL.revokeObjectURL(assetUrl);
       }
     };
   }, [assetId]);
-  
+
   if (loading) return <AssetSkeleton type={type} />;
   if (error) return <AssetError error={error} />;
-  
+
   switch (type) {
     case 'image':
       return <img src={assetUrl} alt={alt} loading="lazy" />;
@@ -515,24 +512,24 @@ export class AssetDeduplicator {
       GROUP BY hash
       HAVING count > 1
     `);
-    
+
     let spaceSaved = 0;
     let assetsMerged = 0;
-    
+
     for (const dup of duplicates) {
       const ids = dup.ids.split(',');
       const primaryId = ids[0];
-      
+
       // Update all references to point to primary asset
       for (let i = 1; i < ids.length; i++) {
         await this.mergeAssetReferences(ids[i], primaryId);
         await this.deleteAsset(ids[i]);
         assetsMerged++;
       }
-      
+
       spaceSaved += dup.total_size - dup.size;
     }
-    
+
     return { assetsMerged, spaceSaved };
   }
 }
@@ -544,21 +541,24 @@ export class AssetDeduplicator {
 export class AssetGarbageCollector {
   async collectGarbage(options: GCOptions = {}): Promise<GCResult> {
     const minAge = options.minAgeHours || 24;
-    const cutoffTime = Date.now() - (minAge * 60 * 60 * 1000);
-    
+    const cutoffTime = Date.now() - minAge * 60 * 60 * 1000;
+
     // Find unreferenced assets
-    const unreferenced = await db.query(`
+    const unreferenced = await db.query(
+      `
       SELECT a.* 
       FROM assets a
       LEFT JOIN eval_results_assets era ON a.id = era.asset_id
       WHERE era.asset_id IS NULL
         AND a.created_at < ?
         AND a.ref_count = 0
-    `, [cutoffTime]);
-    
+    `,
+      [cutoffTime],
+    );
+
     let deletedCount = 0;
     let spaceSaved = 0;
-    
+
     for (const asset of unreferenced) {
       try {
         await assetManager.deleteAsset(asset.id);
@@ -568,10 +568,10 @@ export class AssetGarbageCollector {
         logger.error(`Failed to delete asset ${asset.id}:`, error);
       }
     }
-    
+
     // Clean up empty directories
     await this.cleanEmptyDirectories();
-    
+
     return { deletedCount, spaceSaved };
   }
 }
@@ -632,7 +632,7 @@ interface AssetMetrics {
   averageAssetSize: number;
   deduplicationRatio: number;
   accessPatterns: {
-    hot: number;  // Accessed in last 24h
+    hot: number; // Accessed in last 24h
     warm: number; // Accessed in last week
     cold: number; // Not accessed in last week
   };
@@ -661,6 +661,7 @@ const FEATURE_FLAGS = {
 ### 2. Dual-Write Period
 
 During migration, write to both systems:
+
 - New assets go to file storage
 - Keep base64 in DB as fallback
 - Gradually migrate old data
@@ -682,36 +683,42 @@ npm run build
 ## Timeline and Milestones
 
 ### Week 1-2: Foundation
+
 - [x] Design asset storage architecture
 - [ ] Implement AssetManager core
 - [ ] Create database migrations
 - [ ] Unit tests for asset operations
 
 ### Week 2-3: Integration
+
 - [ ] Update OpenAI image provider
 - [ ] Update audio providers
 - [ ] Integration tests
 - [ ] Performance benchmarks
 
 ### Week 3-4: Migration
+
 - [ ] Build migration tools
 - [ ] Test migration on sample data
 - [ ] Create rollback procedures
 - [ ] Documentation
 
 ### Week 4-5: API/UI
+
 - [ ] Asset serving endpoints
 - [ ] Frontend components
 - [ ] Update result viewers
 - [ ] End-to-end tests
 
 ### Week 5-6: Optimization
+
 - [ ] Implement deduplication
 - [ ] Add garbage collection
 - [ ] Performance tuning
 - [ ] Load testing
 
 ### Week 6+: Rollout
+
 - [ ] Gradual rollout with feature flags
 - [ ] Monitor metrics
 - [ ] Gather feedback

@@ -18,60 +18,57 @@ export function setupAssetRoutes(app: Express): void {
   const assetStore = getMetricsAssetStore();
 
   // Serve individual assets
-  app.get('/api/eval/:evalId/result/:resultId/asset/:assetId', async (req: Request, res: Response) => {
-    // Check if asset storage is enabled
-    if (!isAssetStorageEnabled()) {
-      return res.status(404).json({ error: 'Asset storage is not enabled' });
-    }
-
-    const { evalId, resultId, assetId } = req.params;
-
-    // Validate UUIDs
-    if (!isValidUUID(evalId) || !isValidUUID(resultId) || !isValidUUID(assetId)) {
-      return res.status(400).json({ error: 'Invalid ID format' });
-    }
-
-    try {
-      // Get metadata first to set proper headers
-      const metadata = await assetStore.getMetadata(evalId, resultId, assetId);
-
-      // Set appropriate headers
-      res.set({
-        'Content-Type': metadata.mimeType,
-        'Content-Length': metadata.size.toString(),
-        'Cache-Control': 'private, max-age=3600', // 1 hour cache
-        'X-Asset-Hash': metadata.hash,
-        'X-Asset-Type': metadata.type,
-      });
-
-      // Construct the file path
-      const filePath = path.join(
-        getConfigDirectoryPath(),
-        'assets',
-        evalId,
-        resultId,
-        assetId,
-      );
-
-      // Use Express's sendFile for efficient streaming
-      res.sendFile(filePath, (err) => {
-        if (err) {
-          logger.error('Error serving asset:', err);
-          if (!res.headersSent) {
-            res.status(404).json({ error: 'Asset not found' });
-          }
-        }
-      });
-    } catch (error) {
-      logger.error('Asset serving error:', error);
-      
-      if ((error as any).message === 'Asset metadata not found') {
-        res.status(404).json({ error: 'Asset not found' });
-      } else {
-        res.status(500).json({ error: 'Internal server error' });
+  app.get(
+    '/api/eval/:evalId/result/:resultId/asset/:assetId',
+    async (req: Request, res: Response) => {
+      // Check if asset storage is enabled
+      if (!isAssetStorageEnabled()) {
+        return res.status(404).json({ error: 'Asset storage is not enabled' });
       }
-    }
-  });
+
+      const { evalId, resultId, assetId } = req.params;
+
+      // Validate UUIDs
+      if (!isValidUUID(evalId) || !isValidUUID(resultId) || !isValidUUID(assetId)) {
+        return res.status(400).json({ error: 'Invalid ID format' });
+      }
+
+      try {
+        // Get metadata first to set proper headers
+        const metadata = await assetStore.getMetadata(evalId, resultId, assetId);
+
+        // Set appropriate headers
+        res.set({
+          'Content-Type': metadata.mimeType,
+          'Content-Length': metadata.size.toString(),
+          'Cache-Control': 'private, max-age=3600', // 1 hour cache
+          'X-Asset-Hash': metadata.hash,
+          'X-Asset-Type': metadata.type,
+        });
+
+        // Construct the file path
+        const filePath = path.join(getConfigDirectoryPath(), 'assets', evalId, resultId, assetId);
+
+        // Use Express's sendFile for efficient streaming
+        res.sendFile(filePath, (err) => {
+          if (err) {
+            logger.error('Error serving asset:', err);
+            if (!res.headersSent) {
+              res.status(404).json({ error: 'Asset not found' });
+            }
+          }
+        });
+      } catch (error) {
+        logger.error('Asset serving error:', error);
+
+        if ((error as any).message === 'Asset metadata not found') {
+          res.status(404).json({ error: 'Asset not found' });
+        } else {
+          res.status(500).json({ error: 'Internal server error' });
+        }
+      }
+    },
+  );
 
   // Asset metrics endpoint
   app.get('/api/assets/metrics', async (req: Request, res: Response) => {
@@ -102,24 +99,18 @@ export function setupAssetRoutes(app: Express): void {
       // Check if we can write (simple test)
       const testId = `health-check-${Date.now()}`;
       const testData = Buffer.from('health check test');
-      
+
       try {
-        const metadata = await assetStore.save(
-          testData,
-          'image',
-          'image/png',
-          'health',
-          testId,
-        );
-        
+        const metadata = await assetStore.save(testData, 'image', 'image/png', 'health', testId);
+
         // Try to read it back
         await assetStore.load('health', testId, metadata.id);
-        
+
         // Clean up - best effort
         const fs = await import('fs/promises');
         const testPath = path.join(getConfigDirectoryPath(), 'assets', 'health', testId);
         await fs.rm(testPath, { recursive: true, force: true }).catch(() => {});
-        
+
         health.status = 'healthy';
       } catch (error) {
         logger.error('Asset health check write test failed:', error);
