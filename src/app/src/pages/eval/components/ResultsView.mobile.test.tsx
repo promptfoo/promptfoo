@@ -1,6 +1,6 @@
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
@@ -138,7 +138,7 @@ vi.mock('@mui/material/styles', () => ({
     },
     shadows: Array(25).fill('0px 0px 0px rgba(0,0,0,0.2)'),
   }),
-  styled: () => () => () => null,
+  styled: () => () => ({ children, ...props }: any) => <div {...props}>{children}</div>,
   alpha: vi.fn((color: string, opacity: number) => color),
 }));
 
@@ -259,7 +259,7 @@ describe('ResultsView - Mobile Viewport', () => {
   });
 
   describe('Responsive stack behavior', () => {
-    it('should show controls when expanded on mobile', () => {
+    it('should show controls when expanded on mobile', async () => {
       // Set mobile viewport
       mockUseMediaQuery.mockReturnValue(true);
       mockTopAreaCollapsed = false;
@@ -267,7 +267,9 @@ describe('ResultsView - Mobile Viewport', () => {
       renderResultsView();
 
       // Controls should be visible when expanded
-      expect(screen.getByPlaceholderText('Search or select an eval...')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search or select an eval...')).toBeInTheDocument();
+      });
       expect(screen.getByText('Eval actions')).toBeInTheDocument();
     });
 

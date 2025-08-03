@@ -1,6 +1,6 @@
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -139,7 +139,7 @@ vi.mock('@mui/material/styles', () => ({
     },
     shadows: Array(25).fill('0px 0px 0px rgba(0,0,0,0.2)'),
   }),
-  styled: () => () => () => null,
+  styled: () => () => ({ children, ...props }: any) => <div {...props}>{children}</div>,
   alpha: vi.fn((color: string, opacity: number) => color),
 }));
 
@@ -238,11 +238,23 @@ describe('ResultsView - Collapse Button', () => {
   });
 
   describe('Content visibility based on collapse state', () => {
-    it('should show controls when not collapsed', () => {
-      renderResultsView();
+    it('should show controls when not collapsed', async () => {
+      const { container } = renderResultsView();
+
+      // Debug: log what's rendered
+      await waitFor(() => {
+        // Check if the collapse button exists first
+        expect(screen.getByLabelText('Collapse controls')).toBeInTheDocument();
+      });
 
       // Should show search field and other controls
-      expect(screen.getByPlaceholderText('Search or select an eval...')).toBeInTheDocument();
+      await waitFor(() => {
+        const searchInput = screen.queryByPlaceholderText('Search or select an eval...');
+        if (!searchInput) {
+          console.log('Container HTML:', container.innerHTML);
+        }
+        expect(searchInput).toBeInTheDocument();
+      });
       expect(screen.getByText('Eval actions')).toBeInTheDocument();
     });
 
