@@ -64,7 +64,7 @@ export async function cleanupTestDatabase() {
       await fs.unlink(dbPath).catch(() => {});
       await fs.unlink(`${dbPath}-wal`).catch(() => {});
       await fs.unlink(`${dbPath}-shm`).catch(() => {});
-    } catch (error) {
+    } catch (_error) {
       // Ignore cleanup errors
     }
 
