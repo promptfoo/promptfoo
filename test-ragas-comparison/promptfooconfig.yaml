@@ -1,0 +1,8 @@
+# Promptfoo configuration for testing
+defaultProviders:
+  - id: openai:gpt-4o-mini
+    config:
+      apiKey: ${OPENAI_API_KEY}
+
+# If no API key, we can mock the responses
+# For noise sensitivity, we just need claim extraction and verification

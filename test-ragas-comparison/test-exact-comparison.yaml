@@ -1,0 +1,75 @@
+description: Exact comparison test with RAGAS original implementation
+
+providers:
+  - id: openai:gpt-4o
+    config:
+      temperature: 0
+      max_tokens: 4096
+      seed: 42
+
+# Use the same grading provider for all assertions
+defaultTest:
+  options:
+    provider: 
+      text:
+        id: openai:gpt-4o
+        config:
+          temperature: 0
+          max_tokens: 4096
+          seed: 42
+      embedding:
+        id: openai:embeddings:text-embedding-ada-002
+
+prompts:
+  - "{{answer}}"  # We'll provide pre-generated answers to match RAGAS test
+
+tests:
+  # Test 1: Basic Context Recall
+  - vars:
+      query: "What is the capital of France?"
+      context: "France is a country in Western Europe. Paris is the capital and largest city of France, with a population of over 2 million people in the city proper."
+      answer: "The capital of France is Paris."
+    assert:
+      - type: context-recall
+        value: "Paris is the capital of France"
+        threshold: 0
+      - type: context-relevance
+        threshold: 0
+      - type: answer-relevance
+        threshold: 0
+      - type: context-faithfulness
+        threshold: 0
+
+  # Test 2: No Relevant Context
+  - vars:
+      query: "What is the population of Tokyo?"
+      context: "Tokyo is the capital of Japan. Mount Fuji is the highest mountain in Japan. Sushi is a popular Japanese dish."
+      answer: "The context provided does not include information about the population of Tokyo. Therefore, I cannot provide an answer to that question based on the given context."
+    assert:
+      - type: context-recall
+        value: "The population of Tokyo is approximately 14 million in the city proper."
+        threshold: 0
+      - type: context-relevance
+        threshold: 0
+      - type: answer-relevance
+        threshold: 0
+      - type: context-faithfulness
+        threshold: 0
+
+  # Test 3: Multiple Facts
+  - vars:
+      query: "What are Einstein's major contributions?"
+      context: "Albert Einstein was a German-born theoretical physicist. He developed the theory of relativity. He won the Nobel Prize in Physics in 1921. His formula E=mc² is very famous."
+      answer: "Einstein's major contributions include the development of the theory of relativity, which transformed our understanding of space, time, and gravity. Additionally, he is well-known for his famous equation E=mc², which describes the equivalence of mass and energy."
+    assert:
+      - type: context-recall
+        value: "Einstein developed the theory of relativity. He won the Nobel Prize for the photoelectric effect. He created the formula E=mc². He was born in Germany."
+        threshold: 0
+      - type: context-relevance
+        threshold: 0
+      - type: answer-relevance  
+        threshold: 0
+      - type: context-faithfulness
+        threshold: 0
+
+outputPath: promptfoo_comparison_results.json

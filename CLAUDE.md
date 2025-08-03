@@ -74,6 +74,7 @@ When the CI style check is failing, run these commands to fix style issues:
 ## Testing in Development
 
 When testing changes during development, use the local build:
+
 ```bash
 npm run local -- eval -c path/to/config.yaml
 ```

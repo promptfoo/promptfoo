@@ -7,6 +7,7 @@ Enhanced existing RAGAS-ported metrics in promptfoo to provide detailed metadata
 ## Changes Made
 
 ### 1. Answer-Relevance Metadata
+
 - **File**: `src/matchers.ts` - `matchesAnswerRelevance` function
 - **Enhancement**: Added metadata showing:
   - All 3 generated questions
@@ -15,13 +16,14 @@ Enhanced existing RAGAS-ported metrics in promptfoo to provide detailed metadata
   - Threshold value
 
 Example output:
+
 ```json
 {
   "generatedQuestions": [
     {
       "question": "What is the capital of France?",
       "similarity": 0.9999999999999999
-    },
+    }
     // ... 2 more questions
   ],
   "averageSimilarity": 0.9999999999999999,
@@ -30,7 +32,8 @@ Example output:
 ```
 
 ### 2. Context-Recall Metadata
-- **Files**: 
+
+- **Files**:
   - `src/matchers.ts` - `matchesContextRecall` function
   - `src/assertions/contextRecall.ts` - Handler to preserve metadata
 - **Enhancement**: Added metadata showing:
@@ -40,13 +43,14 @@ Example output:
   - Overall score
 
 Example output:
+
 ```json
 {
   "sentenceAttributions": [
     {
       "sentence": "Paris is the capital of France",
       "attributed": true
-    },
+    }
     // ... more sentences
   ],
   "totalSentences": 10,
@@ -56,7 +60,8 @@ Example output:
 ```
 
 ### 3. Context-Relevance Metadata
-- **Files**: 
+
+- **Files**:
   - `src/matchers.ts` - `matchesContextRelevance` function
   - `src/assertions/contextRelevance.ts` - Handler to preserve metadata
 - **Enhancement**: Added metadata showing:
@@ -67,11 +72,10 @@ Example output:
   - Overall score
 
 Example output:
+
 ```json
 {
-  "extractedSentences": [
-    "Paris is the capital and largest city of France..."
-  ],
+  "extractedSentences": ["Paris is the capital and largest city of France..."],
   "totalSentences": 1,
   "relevantSentences": 1,
   "insufficientInformation": false,
@@ -89,16 +93,17 @@ Example output:
 ## Testing
 
 Test configuration (`test-ragas-metadata.yaml`) demonstrates all metadata features:
+
 ```yaml
 tests:
   - vars:
-      query: "What is the capital of France?"
-      context: "France is a country in Western Europe..."
+      query: 'What is the capital of France?'
+      context: 'France is a country in Western Europe...'
     assert:
       - type: answer-relevance
         threshold: 0.7
       - type: context-recall
-        value: "Paris is the capital of France"
+        value: 'Paris is the capital of France'
         threshold: 0.8
       - type: context-relevance
         threshold: 0.8

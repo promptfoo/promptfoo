@@ -1,0 +1,356 @@
+{
+  "evalId": "eval-SLu-2025-08-02T22:46:35",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-08-02T22:46:35.231Z",
+    "prompts": [
+      {
+        "raw": "{{output}}",
+        "label": "{{output}}",
+        "id": "343155ae77c81fd6d016484b639909bc6f4e68f7730061d1d2a8d7e707456d32",
+        "provider": "echo",
+        "metrics": {
+          "score": 0,
+          "testPassCount": 0,
+          "testFailCount": 0,
+          "testErrorCount": 2,
+          "assertPassCount": 0,
+          "assertFailCount": 0,
+          "totalLatencyMs": 2,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "error": "Error: API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.\n\nError: API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.\n    at OpenAiChatCompletionProvider.callApi (/Users/mdangelo/projects/promptfoo/src/providers/openai/chat.ts:315:13)\n    at matchesNoiseSensitivity (/Users/mdangelo/projects/promptfoo/src/matchers.ts:1430:43)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at handleNoiseSensitivity (/Users/mdangelo/projects/promptfoo/src/assertions/noiseSensitivity.ts:67:18)\n    at runAssertion (/Users/mdangelo/projects/promptfoo/src/assertions/index.ts:338:20)\n    at /Users/mdangelo/projects/promptfoo/src/assertions/index.ts:418:22",
+        "gradingResult": null,
+        "id": "5e1c53f3-31df-4399-8acf-b6c8ab80d221",
+        "latencyMs": 0,
+        "namedScores": {},
+        "prompt": {
+          "raw": "The capital of France is Paris. Berlin is the capital of Germany.",
+          "label": "{{output}}"
+        },
+        "promptId": "343155ae77c81fd6d016484b639909bc6f4e68f7730061d1d2a8d7e707456d32",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Test Case 1: Capital of France",
+          "vars": {
+            "query": "What is the capital of France?",
+            "output": "The capital of France is Paris. Berlin is the capital of Germany.",
+            "context": "Paris is the capital of France. Berlin is the capital of Germany.",
+            "contextChunks": [
+              {
+                "text": "Paris is the capital of France.",
+                "relevant": true
+              },
+              {
+                "text": "Berlin is the capital of Germany.",
+                "relevant": false
+              }
+            ]
+          },
+          "assert": [
+            {
+              "type": "noise-sensitivity",
+              "value": "The capital of France is Paris.",
+              "threshold": 1,
+              "config": {
+                "mode": "relevant",
+                "contextChunks": "{{contextChunks}}"
+              }
+            },
+            {
+              "type": "noise-sensitivity",
+              "value": "The capital of France is Paris.",
+              "threshold": 1,
+              "config": {
+                "mode": "irrelevant",
+                "contextChunks": "{{contextChunks}}"
+              }
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "query": "What is the capital of France?",
+          "output": "The capital of France is Paris. Berlin is the capital of Germany.",
+          "context": "Paris is the capital of France. Berlin is the capital of Germany.",
+          "contextChunks": [
+            {
+              "text": "Paris is the capital of France.",
+              "relevant": true
+            },
+            {
+              "text": "Berlin is the capital of Germany.",
+              "relevant": false
+            }
+          ]
+        },
+        "metadata": {},
+        "failureReason": 2
+      },
+      {
+        "cost": 0,
+        "error": "Error: API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.\n\nError: API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.\n    at OpenAiChatCompletionProvider.callApi (/Users/mdangelo/projects/promptfoo/src/providers/openai/chat.ts:315:13)\n    at matchesNoiseSensitivity (/Users/mdangelo/projects/promptfoo/src/matchers.ts:1430:43)\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at handleNoiseSensitivity (/Users/mdangelo/projects/promptfoo/src/assertions/noiseSensitivity.ts:67:18)\n    at runAssertion (/Users/mdangelo/projects/promptfoo/src/assertions/index.ts:338:20)\n    at /Users/mdangelo/projects/promptfoo/src/assertions/index.ts:418:22",
+        "gradingResult": null,
+        "id": "d1881068-3231-4553-9ea1-97cc09bc791e",
+        "latencyMs": 2,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Python is widely used for machine learning. It has libraries like TensorFlow and PyTorch. JavaScript is used for web development.",
+          "label": "{{output}}"
+        },
+        "promptId": "343155ae77c81fd6d016484b639909bc6f4e68f7730061d1d2a8d7e707456d32",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Test Case 2: ML Programming Language",
+          "vars": {
+            "query": "What programming language is best for machine learning?",
+            "output": "Python is widely used for machine learning. It has libraries like TensorFlow and PyTorch. JavaScript is used for web development.",
+            "context": "Python is the most popular language for machine learning with libraries like TensorFlow and PyTorch. JavaScript is primarily used for web development and frontend programming. Java is used for enterprise applications.",
+            "contextChunks": [
+              {
+                "text": "Python is the most popular language for machine learning with libraries like TensorFlow and PyTorch.",
+                "relevant": true
+              },
+              {
+                "text": "JavaScript is primarily used for web development and frontend programming.",
+                "relevant": false
+              },
+              {
+                "text": "Java is used for enterprise applications.",
+                "relevant": false
+              }
+            ]
+          },
+          "assert": [
+            {
+              "type": "noise-sensitivity",
+              "value": "Python is widely used for machine learning due to its extensive libraries like TensorFlow, PyTorch, and scikit-learn.",
+              "threshold": 1,
+              "config": {
+                "mode": "relevant",
+                "contextChunks": "{{contextChunks}}"
+              }
+            },
+            {
+              "type": "noise-sensitivity",
+              "value": "Python is widely used for machine learning due to its extensive libraries like TensorFlow, PyTorch, and scikit-learn.",
+              "threshold": 1,
+              "config": {
+                "mode": "irrelevant",
+                "contextChunks": "{{contextChunks}}"
+              }
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "query": "What programming language is best for machine learning?",
+          "output": "Python is widely used for machine learning. It has libraries like TensorFlow and PyTorch. JavaScript is used for web development.",
+          "context": "Python is the most popular language for machine learning with libraries like TensorFlow and PyTorch. JavaScript is primarily used for web development and frontend programming. Java is used for enterprise applications.",
+          "contextChunks": [
+            {
+              "text": "Python is the most popular language for machine learning with libraries like TensorFlow and PyTorch.",
+              "relevant": true
+            },
+            {
+              "text": "JavaScript is primarily used for web development and frontend programming.",
+              "relevant": false
+            },
+            {
+              "text": "Java is used for enterprise applications.",
+              "relevant": false
+            }
+          ]
+        },
+        "metadata": {},
+        "failureReason": 2
+      }
+    ],
+    "stats": {
+      "successes": 0,
+      "failures": 0,
+      "errors": 2,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 0,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "prompts": [
+      "{{output}}"
+    ],
+    "providers": [
+      {
+        "id": "echo"
+      }
+    ],
+    "tests": [
+      {
+        "description": "Test Case 1: Capital of France",
+        "vars": {
+          "query": "What is the capital of France?",
+          "output": "The capital of France is Paris. Berlin is the capital of Germany.",
+          "context": "Paris is the capital of France. Berlin is the capital of Germany.",
+          "contextChunks": [
+            {
+              "text": "Paris is the capital of France.",
+              "relevant": true
+            },
+            {
+              "text": "Berlin is the capital of Germany.",
+              "relevant": false
+            }
+          ]
+        },
+        "assert": [
+          {
+            "type": "noise-sensitivity",
+            "value": "The capital of France is Paris.",
+            "threshold": 1,
+            "config": {
+              "mode": "relevant",
+              "contextChunks": "{{contextChunks}}"
+            }
+          },
+          {
+            "type": "noise-sensitivity",
+            "value": "The capital of France is Paris.",
+            "threshold": 1,
+            "config": {
+              "mode": "irrelevant",
+              "contextChunks": "{{contextChunks}}"
+            }
+          }
+        ]
+      },
+      {
+        "description": "Test Case 2: ML Programming Language",
+        "vars": {
+          "query": "What programming language is best for machine learning?",
+          "output": "Python is widely used for machine learning. It has libraries like TensorFlow and PyTorch. JavaScript is used for web development.",
+          "context": "Python is the most popular language for machine learning with libraries like TensorFlow and PyTorch. JavaScript is primarily used for web development and frontend programming. Java is used for enterprise applications.",
+          "contextChunks": [
+            {
+              "text": "Python is the most popular language for machine learning with libraries like TensorFlow and PyTorch.",
+              "relevant": true
+            },
+            {
+              "text": "JavaScript is primarily used for web development and frontend programming.",
+              "relevant": false
+            },
+            {
+              "text": "Java is used for enterprise applications.",
+              "relevant": false
+            }
+          ]
+        },
+        "assert": [
+          {
+            "type": "noise-sensitivity",
+            "value": "Python is widely used for machine learning due to its extensive libraries like TensorFlow, PyTorch, and scikit-learn.",
+            "threshold": 1,
+            "config": {
+              "mode": "relevant",
+              "contextChunks": "{{contextChunks}}"
+            }
+          },
+          {
+            "type": "noise-sensitivity",
+            "value": "Python is widely used for machine learning due to its extensive libraries like TensorFlow, PyTorch, and scikit-learn.",
+            "threshold": 1,
+            "config": {
+              "mode": "irrelevant",
+              "contextChunks": "{{contextChunks}}"
+            }
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": true,
+    "outputPath": [
+      "results.json"
+    ],
+    "extensions": [],
+    "metadata": {}
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.117.4",
+    "nodeVersion": "v22.14.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-08-02T22:46:51.150Z",
+    "evaluationCreatedAt": "2025-08-02T22:46:35.231Z"
+  }
+}

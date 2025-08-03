@@ -1,0 +1,394 @@
+{
+  "evalId": "eval-Fdn-2025-08-03T00:50:33",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-08-03T00:50:33.032Z",
+    "prompts": [
+      {
+        "raw": "{{answer}}",
+        "label": "{{answer}}",
+        "id": "557aa7663dd953f3e4ca594ef26122f301f7dba28ca413f5a7d7ce3258bd5e94",
+        "provider": "openai:gpt-4o",
+        "metrics": {
+          "score": 0.9999997733430943,
+          "testPassCount": 1,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 4,
+          "assertFailCount": 0,
+          "totalLatencyMs": 881,
+          "tokenUsage": {
+            "prompt": 14,
+            "completion": 12,
+            "cached": 0,
+            "total": 26,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 1729,
+              "prompt": 1648,
+              "completion": 81,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0.00015500000000000003
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0.00015500000000000003,
+        "gradingResult": {
+          "pass": true,
+          "score": 0.9999997733430943,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 1729,
+            "prompt": 1648,
+            "completion": 81,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "assertion": {
+                "type": "context-recall",
+                "value": "Paris is the capital of France.",
+                "threshold": 0
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "Recall 1.00 is >= 0",
+              "tokensUsed": {
+                "total": 532,
+                "prompt": 510,
+                "completion": 22,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              },
+              "metadata": {
+                "context": "Paris is the capital of France.",
+                "sentenceAttributions": [
+                  {
+                    "sentence": "Paris is the capital of France.",
+                    "attributed": true
+                  }
+                ],
+                "totalSentences": 1,
+                "attributedSentences": 1,
+                "score": 1
+              }
+            },
+            {
+              "assertion": {
+                "type": "context-relevance",
+                "threshold": 0
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "Relevance 1.00 is >= 0",
+              "tokensUsed": {
+                "total": 99,
+                "prompt": 92,
+                "completion": 7,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              },
+              "metadata": {
+                "context": "Paris is the capital of France.",
+                "extractedSentences": [
+                  "Paris is the capital of France."
+                ],
+                "totalContextSentences": 1,
+                "relevantSentenceCount": 1,
+                "insufficientInformation": false,
+                "score": 1
+              }
+            },
+            {
+              "assertion": {
+                "type": "answer-relevance",
+                "threshold": 0
+              },
+              "pass": true,
+              "score": 0.9999990933723772,
+              "reason": "Relevance 1.00 is greater than threshold 0",
+              "tokensUsed": {
+                "total": 391,
+                "prompt": 370,
+                "completion": 21,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              },
+              "metadata": {
+                "generatedQuestions": [
+                  {
+                    "question": "What is the capital of France?",
+                    "similarity": 0.9999999999999998
+                  },
+                  {
+                    "question": "What is the capital of France?",
+                    "similarity": 0.9999986400585661
+                  },
+                  {
+                    "question": "What is the capital of France?",
+                    "similarity": 0.9999986400585661
+                  }
+                ],
+                "averageSimilarity": 0.9999990933723772,
+                "threshold": 0
+              }
+            },
+            {
+              "assertion": {
+                "type": "context-faithfulness",
+                "threshold": 0
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "Faithfulness 1.00 is >= 0",
+              "tokensUsed": {
+                "total": 707,
+                "prompt": 676,
+                "completion": 31,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              },
+              "metadata": {
+                "context": "Paris is the capital of France."
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "e0789fbc-d998-4375-9561-72ad8a6fc52b",
+        "latencyMs": 881,
+        "namedScores": {},
+        "prompt": {
+          "raw": "The capital of France is Paris.",
+          "label": "{{answer}}"
+        },
+        "promptId": "557aa7663dd953f3e4ca594ef26122f301f7dba28ca413f5a7d7ce3258bd5e94",
+        "promptIdx": 0,
+        "provider": {
+          "id": "openai:gpt-4o",
+          "label": ""
+        },
+        "response": {
+          "output": "Yes, that's correct. The capital of France is Paris.",
+          "tokenUsage": {
+            "total": 26,
+            "prompt": 14,
+            "completion": 12,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          },
+          "cached": false,
+          "finishReason": "stop",
+          "cost": 0.00015500000000000003
+        },
+        "score": 0.9999997733430943,
+        "success": true,
+        "testCase": {
+          "vars": {
+            "query": "What is the capital of France?",
+            "context": "Paris is the capital of France.",
+            "answer": "The capital of France is Paris."
+          },
+          "assert": [
+            {
+              "type": "context-recall",
+              "value": "Paris is the capital of France.",
+              "threshold": 0
+            },
+            {
+              "type": "context-relevance",
+              "threshold": 0
+            },
+            {
+              "type": "answer-relevance",
+              "threshold": 0
+            },
+            {
+              "type": "context-faithfulness",
+              "threshold": 0
+            }
+          ],
+          "options": {
+            "provider": {
+              "text": {
+                "id": "openai:gpt-4o",
+                "config": {
+                  "temperature": 0,
+                  "max_tokens": 1000,
+                  "seed": 42
+                }
+              },
+              "embedding": {
+                "id": "openai:embeddings:text-embedding-ada-002"
+              }
+            }
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "query": "What is the capital of France?",
+          "context": "Paris is the capital of France.",
+          "answer": "The capital of France is Paris."
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 1,
+      "failures": 0,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 14,
+        "completion": 12,
+        "cached": 0,
+        "total": 26,
+        "numRequests": 1,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 1729,
+          "prompt": 1648,
+          "completion": 81,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "Controlled test matching RAGAS exactly",
+    "prompts": [
+      "{{answer}}"
+    ],
+    "providers": [
+      {
+        "id": "openai:gpt-4o",
+        "config": {
+          "temperature": 0,
+          "max_tokens": 1000,
+          "seed": 42
+        }
+      }
+    ],
+    "tests": [
+      {
+        "vars": {
+          "query": "What is the capital of France?",
+          "context": "Paris is the capital of France.",
+          "answer": "The capital of France is Paris."
+        },
+        "assert": [
+          {
+            "type": "context-recall",
+            "value": "Paris is the capital of France.",
+            "threshold": 0
+          },
+          {
+            "type": "context-relevance",
+            "threshold": 0
+          },
+          {
+            "type": "answer-relevance",
+            "threshold": 0
+          },
+          {
+            "type": "context-faithfulness",
+            "threshold": 0
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": true,
+    "defaultTest": {
+      "options": {
+        "provider": {
+          "text": {
+            "id": "openai:gpt-4o",
+            "config": {
+              "temperature": 0,
+              "max_tokens": 1000,
+              "seed": 42
+            }
+          },
+          "embedding": {
+            "id": "openai:embeddings:text-embedding-ada-002"
+          }
+        }
+      },
+      "vars": {},
+      "assert": [],
+      "metadata": {}
+    },
+    "outputPath": [
+      "promptfoo_controlled_results.json"
+    ],
+    "extensions": [],
+    "metadata": {}
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.117.4",
+    "nodeVersion": "v22.14.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-08-03T00:50:37.010Z",
+    "evaluationCreatedAt": "2025-08-03T00:50:33.032Z"
+  }
+}
