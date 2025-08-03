@@ -9,13 +9,15 @@ This PR enhances the existing RAGAS-ported metrics in promptfoo to provide detai
 ### 1. Enhanced Metadata for All RAGAS Metrics
 
 #### Answer-Relevance
+
 - **File**: `src/matchers.ts`
 - **Change**: Added metadata showing all 3 generated questions with individual similarity scores
 - **Example output**:
+
 ```json
 {
   "generatedQuestions": [
-    {"question": "What is the capital of France?", "similarity": 0.999},
+    { "question": "What is the capital of France?", "similarity": 0.999 }
     // ... 2 more questions
   ],
   "averageSimilarity": 0.999,
@@ -23,14 +25,16 @@ This PR enhances the existing RAGAS-ported metrics in promptfoo to provide detai
 }
 ```
 
-#### Context-Recall  
+#### Context-Recall
+
 - **Files**: `src/matchers.ts`, `src/assertions/contextRecall.ts`
 - **Change**: Added sentence-level attribution details
 - **Example output**:
+
 ```json
 {
   "sentenceAttributions": [
-    {"sentence": "Paris is the capital of France", "attributed": true},
+    { "sentence": "Paris is the capital of France", "attributed": true }
     // ... more sentences
   ],
   "totalSentences": 10,
@@ -40,9 +44,11 @@ This PR enhances the existing RAGAS-ported metrics in promptfoo to provide detai
 ```
 
 #### Context-Relevance
+
 - **Files**: `src/matchers.ts`, `src/assertions/contextRelevance.ts`
 - **Change**: Added extracted sentence details and fixed scoring algorithm
 - **Example output**:
+
 ```json
 {
   "extractedSentences": ["Paris is the capital..."],
@@ -86,6 +92,7 @@ Simple test case scores with GPT-4o:
 ### Key Finding
 
 When using the same LLM configuration, promptfoo produces identical results to RAGAS. Previous differences were due to:
+
 - Using different models (gpt-4o-mini vs gpt-4o)
 - LLM verbosity differences
 - Temperature variations
@@ -93,11 +100,13 @@ When using the same LLM configuration, promptfoo produces identical results to R
 ## Behavioral Changes
 
 ### Breaking Changes
+
 1. **Context-Relevance Scores**: Will be significantly lower (and more accurate)
    - Old: Always returned ~1.0 due to bug
    - New: Returns actual ratio of relevant/total sentences
 
 ### Non-Breaking Changes
+
 1. **Metadata Addition**: All metrics now return additional metadata
 2. **Backward Compatibility**: Core assertion logic unchanged
 3. **API Compatibility**: No changes to configuration or usage
@@ -114,14 +123,15 @@ When using the same LLM configuration, promptfoo produces identical results to R
 ## Migration Guide
 
 For users who have context-relevance assertions:
+
 ```yaml
 # Old (with inflated scores due to bug)
 - type: context-relevance
-  threshold: 0.9  # Often passed due to bug
+  threshold: 0.9 # Often passed due to bug
 
 # New (adjust threshold for accurate scoring)
 - type: context-relevance
-  threshold: 0.5  # More realistic threshold
+  threshold: 0.5 # More realistic threshold
 ```
 
 ## Documentation Updates
