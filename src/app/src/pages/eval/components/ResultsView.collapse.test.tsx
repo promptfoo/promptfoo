@@ -139,7 +139,10 @@ vi.mock('@mui/material/styles', () => ({
     },
     shadows: Array(25).fill('0px 0px 0px rgba(0,0,0,0.2)'),
   }),
-  styled: () => () => ({ children, ...props }: any) => <div {...props}>{children}</div>,
+  styled:
+    () =>
+    () =>
+    ({ children, ...props }: any) => <div {...props}>{children}</div>,
   alpha: vi.fn((color: string, opacity: number) => color),
 }));
 
