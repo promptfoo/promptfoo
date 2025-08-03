@@ -128,7 +128,7 @@ async function generateSvgTemplate(title, breadcrumbs = [], routePath = '') {
         ? `
     <style type="text/css">
       @font-face {
-        font-family: 'InterSemiBold';
+        font-family: 'InterSemiBold, sans-serif';
         src: url(data:font/truetype;charset=utf-8;base64,${fontBase64}) format('truetype');
         font-weight: 600;
         font-style: normal;
@@ -182,16 +182,16 @@ async function generateSvgTemplate(title, breadcrumbs = [], routePath = '') {
     ${logoBase64 ? `<image href="${logoBase64}" width="64" height="64" opacity="0.9"/>` : ''}
     
     <!-- Brand name -->
-    <text x="80" y="32" font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="28" font-weight="600" fill="#ff7a7a">promptfoo</text>
+    <text x="80" y="32" font-family="${fontBase64 ? 'InterSemiBold, sans-serif' : 'sans-serif'}" font-size="28" font-weight="600" fill="#ff7a7a">promptfoo</text>
     
     <!-- Page type badge -->
     <rect x="250" y="8" width="${pageType.length * 10 + 20}" height="32" rx="16" fill="rgba(229, 58, 58, 0.15)" stroke="#e53a3a" stroke-width="1"/>
-    <text x="${250 + (pageType.length * 10 + 20) / 2}" y="28" text-anchor="middle" font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="14" font-weight="600" fill="#ff7a7a">${pageType}</text>
+    <text x="${250 + (pageType.length * 10 + 20) / 2}" y="28" text-anchor="middle" font-family="${fontBase64 ? 'InterSemiBold, sans-serif' : 'sans-serif'}" font-size="14" font-weight="600" fill="#ff7a7a">${pageType}</text>
   </g>
   
   <!-- Breadcrumbs with better styling -->
   <g transform="translate(80, 180)">
-    <text font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="20" fill="rgba(255,255,255,0.5)" letter-spacing="0.5">${breadcrumbText}</text>
+    <text font-family="${fontBase64 ? 'InterSemiBold, sans-serif' : 'sans-serif'}" font-size="20" fill="rgba(255,255,255,0.5)" letter-spacing="0.5">${breadcrumbText}</text>
   </g>
   
   <!-- Main title with better positioning -->
@@ -199,15 +199,15 @@ async function generateSvgTemplate(title, breadcrumbs = [], routePath = '') {
     ${titleLines
       .map(
         (line, index) => `
-    <text x="0" y="${index * (fontSize * 1.3)}" font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="${fontSize}" font-weight="600" fill="white">${line}</text>`,
+    <text x="0" y="${index * (fontSize * 1.3)}" font-family="${fontBase64 ? 'InterSemiBold, sans-serif' : 'sans-serif'}" font-size="${fontSize}" font-weight="600" fill="white">${line}</text>`,
       )
       .join('')}
   </g>
   
   <!-- Bottom section with call-to-action -->
   <g transform="translate(80, ${HEIGHT - 100})">
-    <text font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="18" fill="rgba(255,255,255,0.6)">Secure and reliable LLM applications</text>
-    <text x="0" y="30" font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="16" fill="rgba(255,122,122,0.8)">promptfoo.dev</text>
+    <text font-family="${fontBase64 ? 'InterSemiBold, sans-serif' : 'sans-serif'}" font-size="18" fill="rgba(255,255,255,0.6)">Secure and reliable LLM applications</text>
+    <text x="0" y="30" font-family="${fontBase64 ? 'InterSemiBold, sans-serif' : 'sans-serif'}" font-size="16" fill="rgba(255,122,122,0.8)">promptfoo.dev</text>
   </g>
   
   <!-- Decorative elements -->
