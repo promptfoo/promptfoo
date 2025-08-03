@@ -14,10 +14,10 @@ export function readGlobalConfig(): GlobalConfig {
   if ((global as any).__mockGlobalConfig) {
     return (global as any).__mockGlobalConfig;
   }
-  
+
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
   let globalConfig: GlobalConfig = { id: randomUUID() };
-  
+
   if (fs.existsSync(configFilePath)) {
     try {
       globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
@@ -28,7 +28,7 @@ export function readGlobalConfig(): GlobalConfig {
       globalConfig = { ...globalConfig, id: randomUUID() };
     }
   }
-  
+
   return globalConfig;
 }
 
