@@ -83,7 +83,7 @@ export class Telemetry {
           // Silently ignore flush errors
         });
       } catch (error) {
-        logger.debug(`PostHog identify error: ${error}`);
+        logger.debug(`PostHog identify error: ${error instanceof Error ? error.toString() : error}`);
       }
     }
 
@@ -140,7 +140,7 @@ export class Telemetry {
           // Silently ignore flush errors
         });
       } catch (error) {
-        logger.debug(`PostHog capture error: ${error}`);
+        logger.debug(`PostHog capture error: ${error instanceof Error ? error.toString() : error}`);
       }
     }
 
