@@ -4,7 +4,7 @@ import * as path from 'path';
 import yaml from 'js-yaml';
 
 // Re-use the actual type
-import type { GlobalConfig } from '../../globalConfig/globalConfig';
+import type { GlobalConfig } from '../../configTypes';
 
 // Get config directory from environment or use default
 const configDir = process.env.PROMPTFOO_CONFIG_DIR || './.local/jest/config';
@@ -21,7 +21,7 @@ export function readGlobalConfig(): GlobalConfig {
   if (fs.existsSync(configFilePath)) {
     try {
       globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
-    } catch (err) {
+    } catch (_err) {
       // Ignore errors in test environment
     }
     if (!globalConfig.id) {
@@ -53,4 +53,4 @@ export function maybeReadGlobalConfig(): GlobalConfig | null {
 }
 
 // Re-export the type
-export type { GlobalConfig };
+export type { GlobalConfig } from '../../configTypes';
