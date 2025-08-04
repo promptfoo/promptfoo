@@ -371,13 +371,13 @@ export async function showCommand(program: Command) {
           .orderBy(desc(modelAuditScansTable.createdAt))
           .limit(1)
           .get();
-        
+
         if (!latestScan) {
           logger.error('No model audit scans found');
           process.exitCode = 1;
           return;
         }
-        
+
         return handleScan(latestScan.id);
       }
       return handleScan(id);

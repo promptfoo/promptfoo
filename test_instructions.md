@@ -5,17 +5,20 @@ This document provides comprehensive test instructions for the model audit persi
 ## Prerequisites
 
 1. Ensure you're on the feature branch:
+
 ```bash
 git checkout feat/model-audit-persistent-storage
 ```
 
 2. Install dependencies and build:
+
 ```bash
 npm install
 npm run build
 ```
 
 3. Start the local development environment:
+
 ```bash
 npm run dev
 ```
@@ -23,6 +26,8 @@ npm run dev
 **Note:** All CLI commands use `npm run local --` to run the local development version instead of the globally installed version.
 
 ## Test Plan
+
+**Note:** ModelAudit scans serialized model files (e.g., `.pkl`, `.h5`, `.pt`, `.onnx`, `.safetensors`), not Python source files. The test instructions use `.pkl` files as examples.
 
 ### 1. Database Migration Test
 
@@ -41,11 +46,26 @@ sqlite3 ~/.promptfoo/promptfoo.db "SELECT name FROM sqlite_master WHERE type='ta
 #### 2.1 Basic Model Scan (saves by default)
 
 ```bash
-# Create a test Python file
-echo "import torch\nmodel = torch.nn.Linear(10, 10)" > test_model.py
+# Create a test model file (pickle format)
+python -c "
+import pickle
+import numpy as np
+
+# Create a simple model (sklearn-like)
+class SimpleModel:
+    def __init__(self):
+        self.weights = np.random.rand(10, 10)
+
+    def predict(self, X):
+        return X @ self.weights
+
+model = SimpleModel()
+with open('test_model.pkl', 'wb') as f:
+    pickle.dump(model, f)
+"
 
 # Run a basic scan (saves to database by default)
-npm run local -- scan-model test_model.py
+npm run local -- scan-model test_model.pkl
 
 # Run a scan without saving to database
 npm run local -- scan-model test_model.py --no-write
@@ -55,10 +75,10 @@ npm run local -- scan-model test_model.py --no-write
 
 ```bash
 # Scan with description (saves by default)
-npm run local -- scan-model test_model.py --description "Test scan of linear model"
+npm run local -- scan-model test_model.pkl --description "Test scan of pickled model"
 
 # Scan multiple files with description
-npm run local -- scan-model test_model.py examples/ --description "Multi-path scan test"
+npm run local -- scan-model test_model.pkl examples/ --description "Multi-path scan test"
 ```
 
 #### 2.3 List Saved Scans
@@ -83,6 +103,9 @@ npm run local -- show scan <scan-id>
 
 # Or use the shorthand
 npm run local -- show <scan-id>
+
+# Show the most recent scan
+npm run local -- show scan latest
 ```
 
 #### 2.5 Export Scan
@@ -93,6 +116,9 @@ npm run local -- export <scan-id> -o exported_scan.json
 
 # Export to stdout
 npm run local -- export <scan-id>
+
+# Export the most recent scan
+npm run local -- export latest -o latest_scan.json
 ```
 
 #### 2.6 Import Scan
@@ -129,7 +155,7 @@ Keep the dev server running (`npm run dev`) and open http://localhost:3000/model
 
 1. **Add a path to scan:**
    - Click "Add Path"
-   - Enter a file path (e.g., `test_model.py`)
+   - Enter a file path (e.g., `test_model.pkl`)
    - Verify the path is validated and added to the list
 
 2. **Add a description:**
@@ -249,8 +275,8 @@ npm run local -- scan-model /path/to/large/ml/project --description "Performance
 # List many scans
 # First create multiple scans
 for i in {1..20}; do
-  echo "model_$i = torch.nn.Linear(10, 10)" > model_$i.py
-  npm run local -- scan-model model_$i.py --description "Test $i"
+  python -c "import pickle; pickle.dump({'model': $i}, open('model_$i.pkl', 'wb'))"
+  npm run local -- scan-model model_$i.pkl --description "Test $i"
 done
 
 # Then list with pagination
@@ -261,7 +287,7 @@ npm run local -- list scans -n 10
 
 ```bash
 # Remove test files
-rm -f test_model.py model_*.py exported_scan.json eval.json bad.json
+rm -f test_model.pkl model_*.pkl exported_scan.json eval.json bad.json
 
 # Delete all test scans (optional)
 npm run local -- delete scan --all
@@ -274,12 +300,14 @@ npm run local -- delete scan --all
 1. ✅ Scans save by default with unique IDs in format `scan-XXX-YYYY-MM-DDTHH:mm:ss`
 2. ✅ The `--no-write` flag prevents saving to database
 3. ✅ Scan results persist across application restarts
-3. ✅ UI shows scan history with proper pagination
-4. ✅ Export/import maintains data integrity
+4. ✅ UI shows scan history with proper pagination
+5. ✅ Export/import maintains data integrity
 6. ✅ Delete operations work for individual and bulk deletion
 7. ✅ API validates scan ID format (must start with 'scan-')
 8. ✅ Pagination parameters are validated (limit 1-100, offset >= 0)
 9. ✅ Type safety is maintained (no TypeScript errors)
+10. ✅ ModelAudit and promptfoo versions are recorded with each scan
+11. ✅ `latest` alias works for show and export commands
 
 ### Known Limitations
 
@@ -292,11 +320,13 @@ npm run local -- delete scan --all
 If you encounter issues:
 
 1. **ModelAudit not installed:**
+
    ```bash
    pip install modelaudit
    ```
 
 2. **Database issues:**
+
    ```bash
    # Reset database (WARNING: deletes all data)
    rm ~/.promptfoo/promptfoo.db
@@ -304,6 +334,7 @@ If you encounter issues:
    ```
 
 3. **Build issues:**
+
    ```bash
    npm run build:clean
    npm run build

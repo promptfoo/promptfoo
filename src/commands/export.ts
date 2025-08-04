@@ -20,7 +20,7 @@ export function exportCommand(program: Command) {
           // Export model audit scan
           const db = getDb();
           let scanResult;
-          
+
           if (id === 'latest') {
             // Get the most recent scan
             scanResult = await db
@@ -38,7 +38,11 @@ export function exportCommand(program: Command) {
           }
 
           if (!scanResult) {
-            logger.error(id === 'latest' ? 'No model audit scans found' : `No model audit scan found with ID ${id}`);
+            logger.error(
+              id === 'latest'
+                ? 'No model audit scans found'
+                : `No model audit scan found with ID ${id}`,
+            );
             process.exit(1);
           }
 
@@ -55,11 +59,7 @@ export function exportCommand(program: Command) {
           };
 
           if (cmdObj.output) {
-            await fs.writeFile(
-              cmdObj.output,
-              JSON.stringify(exportData, null, 2),
-              'utf-8',
-            );
+            await fs.writeFile(cmdObj.output, JSON.stringify(exportData, null, 2), 'utf-8');
             logger.info(
               `Model audit scan with ID ${id} has been successfully exported to ${cmdObj.output}.`,
             );

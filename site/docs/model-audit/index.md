@@ -178,8 +178,8 @@ See the [Advanced Usage](./usage.md) guide for detailed authentication setup for
 
 | Option                 | Description                                                      |
 | ---------------------- | ---------------------------------------------------------------- |
-| `--description`, `-d`  | Add a description to the saved scan                             |
-| `--no-write`          | Skip saving scan results to database                            |
+| `--description`, `-d`  | Add a description to the saved scan                              |
+| `--no-write`           | Skip saving scan results to database                             |
 | `--blacklist`, `-b`    | Additional blacklist patterns to check against model names       |
 | `--format`, `-f`       | Output format (`text` or `json`) [default: text]                 |
 | `--output`, `-o`       | Output file path (prints to stdout if not specified)             |
@@ -252,6 +252,7 @@ promptfoo import scan-results.json --force  # Overwrite if exists
 ### Web Interface History
 
 The web interface at `/model-audit` includes a History tab that provides:
+
 - Visual scan history with filtering
 - Click to view historical scan results
 - Delete scans from the UI
