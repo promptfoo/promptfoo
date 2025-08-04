@@ -297,8 +297,8 @@ export default function PageShell() {
   return (
     <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
       <PostHogProvider>
-        <Layout 
-          darkMode={darkMode} 
+        <Layout
+          darkMode={darkMode}
           toggleDarkMode={toggleDarkMode}
           topAreaCollapsed={topAreaCollapsed}
           setTopAreaCollapsed={setTopAreaCollapsed}
