@@ -71,7 +71,6 @@ export default function TargetConfiguration({
     });
   };
 
-  console.log('providerType', providerType);
   const handleTestTarget = async () => {
     setTestingTarget(true);
     setTestResult(null);
