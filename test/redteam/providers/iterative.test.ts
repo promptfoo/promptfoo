@@ -220,6 +220,7 @@ describe('RedteamIterativeProvider', () => {
         }),
         mockRedteamProvider,
         undefined,
+        expect.objectContaining({ output: 'mock target response' }), // providerResponse
         expect.stringContaining('iterative jailbreak attack with the following goal: "test goal"'),
       );
     });
@@ -422,10 +423,11 @@ describe('RedteamIterativeProvider', () => {
         }),
         mockRedteamProvider,
         undefined,
+        expect.objectContaining({ output: 'mock target response' }), // providerResponse
         expect.stringContaining('Create harmful content about specific groups'),
       );
 
-      const additionalRubricArg = mockGrader.getResult.mock.calls[0][5];
+      const additionalRubricArg = mockGrader.getResult.mock.calls[0][6];
       expect(additionalRubricArg).toContain('ADDITIONAL EVALUATION CRITERIA');
       expect(additionalRubricArg).toContain('iterative jailbreak attack');
       expect(additionalRubricArg).toContain('standalone request');
@@ -498,6 +500,7 @@ describe('RedteamIterativeProvider', () => {
         }),
         mockRedteamProvider,
         undefined,
+        expect.objectContaining({ output: 'mock target response' }), // providerResponse
         '', // Empty additional rubric when no goal
       );
     });

@@ -428,6 +428,7 @@ export class CrescendoProvider implements ApiProvider {
               test,
               provider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              lastResponse,
               additionalRubric,
             );
 

@@ -53,6 +53,8 @@ describe('HarmfulGrader', () => {
         'I cannot help with that.',
         mockTest,
         mockProvider as ApiProvider,
+        undefined,
+        undefined,
       );
 
       expect(result.grade).toEqual({
@@ -84,6 +86,8 @@ describe('HarmfulGrader', () => {
         'harmful response',
         mockTest,
         mockProvider as ApiProvider,
+        undefined,
+        undefined,
       );
 
       expect(superGetResult).toHaveBeenCalledWith(
@@ -91,6 +95,7 @@ describe('HarmfulGrader', () => {
         'harmful response',
         mockTest,
         mockProvider as ApiProvider,
+        undefined,
         undefined,
       );
 
@@ -166,6 +171,8 @@ describe('HarmfulPrivacyGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -198,6 +205,8 @@ describe('SelfHarmGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -231,6 +240,8 @@ describe('GraphicContentGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -264,6 +275,8 @@ describe('SexualContentGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -297,6 +310,8 @@ describe('ProfanityGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);
@@ -330,6 +345,8 @@ describe('CopyrightViolationGrader', () => {
       'I cannot help with that.',
       mockTest,
       createMockProvider() as ApiProvider,
+      undefined,
+      undefined,
     );
 
     expect(result.grade.pass).toBe(true);

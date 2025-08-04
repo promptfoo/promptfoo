@@ -397,6 +397,7 @@ export const HttpProviderConfigSchema = z.object({
       LegacySignatureAuthSchema,
     ])
     .optional(),
+  includeRawResponse: z.boolean().optional(),
 });
 
 type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -857,6 +858,10 @@ export class HttpProvider implements ApiProvider {
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
+    // For backwards compatibility, enable includeRawResponse when responseParser is used
+    if (this.config.responseParser && this.config.includeRawResponse === undefined) {
+      this.config.includeRawResponse = true;
+    }
     this.url = this.config.url || url;
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
@@ -1122,14 +1127,16 @@ export class HttpProvider implements ApiProvider {
     );
 
     const ret: ProviderResponse = {};
-    ret.raw = response.data;
-    ret.metadata = {
-      http: {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers || {},
-      },
-    };
+    if (context?.debug || this.config.includeRawResponse) {
+      ret.raw = response.data;
+      ret.metadata = {
+        http: {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers || {},
+        },
+      };
+    }
 
     const rawText = response.data as string;
     let parsedData;
@@ -1225,10 +1232,14 @@ export class HttpProvider implements ApiProvider {
       parsedData = null;
     }
     const ret: ProviderResponse = {};
-    if (context?.debug) {
+    if (context?.debug || this.config.includeRawResponse) {
       ret.raw = response.data;
       ret.metadata = {
-        headers: response.headers,
+        http: {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers || {},
+        },
       };
     }
 

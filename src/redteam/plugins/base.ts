@@ -10,6 +10,7 @@ import type {
   AtomicTestCase,
   GradingResult,
   PluginConfig,
+  ProviderResponse,
   ResultSuggestion,
   TestCase,
 } from '../../types';
@@ -393,6 +394,7 @@ export abstract class RedteamGraderBase {
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
     renderedValue: AssertionValue | undefined,
+    providerResponse: ProviderResponse | undefined,
     additionalRubric?: string,
   ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
@@ -406,6 +408,7 @@ export abstract class RedteamGraderBase {
         ? maybeLoadToolsFromExternalFile(provider.config.tools)
         : undefined,
       value: renderedValue,
+      providerResponseRaw: providerResponse?.raw,
       testVars: test.vars ?? {},
     };
     // Grader examples are appended to all rubrics if present.

@@ -568,6 +568,7 @@ describe('RedteamGoatProvider', () => {
         test: any,
         provider: any,
         value: any,
+        providerResponse: any,
         additionalRubric?: string,
       ) => {
         capturedAdditionalRubric = additionalRubric;
