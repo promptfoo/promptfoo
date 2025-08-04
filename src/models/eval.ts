@@ -485,8 +485,8 @@ export default class Eval {
         } else if (type === 'strategy' && operator === 'equals') {
           const sanitizedValue = value.replace(/'/g, "''");
           if (sanitizedValue === 'basic') {
-            // Basic is represented by NULL in the metadata.strategyId field
-            condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
+            // Basic can be represented by NULL, '', or 'basic'
+            condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '' OR json_extract(metadata, '$.strategyId') = 'basic')`;
           } else {
             // Strategy ID is stored in metadata.strategyId
             condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
