@@ -179,7 +179,7 @@ interface TableState {
   };
 }
 
-interface SettingsState {
+export interface SettingsState {
   maxTextLength: number;
   setMaxTextLength: (maxTextLength: number) => void;
   wordBreak: 'break-word' | 'break-all';
