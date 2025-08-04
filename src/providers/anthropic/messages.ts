@@ -90,7 +90,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     if (this.mcpClient) {
       mcpTools = transformMCPToolsToAnthropic(this.mcpClient.getAllTools());
     }
-    const fileTools = maybeLoadToolsFromExternalFile(this.config.tools) || [];
+    const fileTools = await maybeLoadToolsFromExternalFile(this.config.tools) || [];
     const allTools = [...mcpTools, ...fileTools];
 
     const params: Anthropic.MessageCreateParams = {

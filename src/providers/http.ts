@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import fs from 'fs';
+import { promises as fs } from 'fs';
 import http from 'http';
 import path from 'path';
 
@@ -139,7 +139,7 @@ export async function generateSignature(
       case 'pem': {
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = resolveFilePath(signatureAuth.privateKeyPath);
-          privateKey = fs.readFileSync(resolvedPath, 'utf8');
+          privateKey = await fs.readFile(resolvedPath, 'utf8');
         } else {
           privateKey = signatureAuth.privateKey;
         }
@@ -165,7 +165,7 @@ export async function generateSignature(
 
         const jks = jksModule as any;
         const resolvedPath = resolveFilePath(signatureAuth.keystorePath);
-        const keystoreData = fs.readFileSync(resolvedPath);
+        const keystoreData = await fs.readFile(resolvedPath);
 
         const keystore = jks.toPem(keystoreData, keystorePassword);
 
@@ -256,14 +256,18 @@ export async function generateSignature(
 
           try {
             // Read the private key directly from the key file
-            if (!fs.existsSync(resolvedKeyPath)) {
+            try {
+              await fs.access(resolvedKeyPath);
+            } catch {
               throw new Error(`Key file not found: ${resolvedKeyPath}`);
             }
-            if (!fs.existsSync(resolvedCertPath)) {
+            try {
+              await fs.access(resolvedCertPath);
+            } catch {
               throw new Error(`Certificate file not found: ${resolvedCertPath}`);
             }
 
-            privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
+            privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
             logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
           } catch (err) {
             logger.error(`Error loading certificate/key files: ${String(err)}`);
@@ -852,7 +856,7 @@ export class HttpProvider implements ApiProvider {
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
 
-  constructor(url: string, options: ProviderOptions) {
+  private constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
@@ -865,9 +869,8 @@ export class HttpProvider implements ApiProvider {
     this.transformRequest = createTransformRequest(this.config.transformRequest);
     this.validateStatus = createValidateStatus(this.config.validateStatus);
 
-    if (this.config.request) {
-      this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
-    } else {
+    // Note: request loading moved to static create method
+    if (!this.config.request) {
       invariant(
         this.config.body || this.config.method === 'GET',
         `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
@@ -875,6 +878,16 @@ export class HttpProvider implements ApiProvider {
         )}`,
       );
     }
+  }
+
+  static async create(url: string, options: ProviderOptions): Promise<HttpProvider> {
+    const provider = new HttpProvider(url, options);
+    if (provider.config.request) {
+      provider.config.request = (await maybeLoadFromExternalFile(
+        provider.config.request,
+      )) as string;
+    }
+    return provider;
   }
 
   id(): string {

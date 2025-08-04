@@ -31,7 +31,7 @@ export function authCommand(program: Command) {
           token = cmdObj.apiKey;
           const { user } = await cloudConfig.validateAndSetApiToken(token, apiHost);
           // Store token in global config and handle email sync
-          const existingEmail = getUserEmail();
+          const existingEmail = await getUserEmail();
           if (existingEmail && existingEmail !== user.email) {
             logger.info(
               chalk.yellow(
@@ -39,7 +39,7 @@ export function authCommand(program: Command) {
               ),
             );
           }
-          setUserEmail(user.email);
+          await setUserEmail(user.email);
           logger.info(chalk.green('Successfully logged in'));
           return;
         } else {

@@ -278,7 +278,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       await this.initializationPromise;
     }
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
-    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+    const { contents, systemInstruction } = await geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       this.config.systemInstruction,
@@ -287,7 +287,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
     const allTools = [
       ...mcpTools,
-      ...(this.config.tools ? loadFile(this.config.tools, context?.vars) : []),
+      ...(this.config.tools ? await loadFile(this.config.tools, context?.vars) : []),
     ];
     // --- End MCP tool injection logic ---
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent

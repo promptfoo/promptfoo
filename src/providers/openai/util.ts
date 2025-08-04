@@ -433,7 +433,7 @@ export interface OpenAiTool {
   function: OpenAiFunction;
 }
 
-export function validateFunctionCall(
+export async function validateFunctionCall(
   output: string | object,
   functions?: OpenAiFunction[],
   vars?: Record<string, string | object>,
@@ -453,9 +453,9 @@ export function validateFunctionCall(
   }
 
   // Parse function call and validate it against schema
-  const interpolatedFunctions = maybeLoadFromExternalFile(
+  const interpolatedFunctions = (await maybeLoadFromExternalFile(
     renderVarsInObject(functions, vars),
-  ) as OpenAiFunction[];
+  )) as OpenAiFunction[];
   const functionArgs = JSON.parse(functionCall.arguments);
   const functionName = functionCall.name;
   const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;

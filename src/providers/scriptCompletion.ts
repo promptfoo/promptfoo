@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
-import fs from 'fs';
+import { promises as fs, existsSync, statSync, readFileSync } from 'fs';
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
@@ -38,16 +38,22 @@ export function parseScriptParts(scriptPath: string): string[] {
   return scriptParts;
 }
 
-export function getFileHashes(scriptParts: string[]): string[] {
+export async function getFileHashes(scriptParts: string[]): Promise<string[]> {
   const fileHashes: string[] = [];
 
   for (const part of scriptParts) {
     const cleanPart = part.replace(/^['"]|['"]$/g, '');
-    if (fs.existsSync(cleanPart) && fs.statSync(cleanPart).isFile()) {
-      const fileContent = fs.readFileSync(cleanPart);
-      const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
-      fileHashes.push(fileHash);
-      logger.debug(`File hash for ${cleanPart}: ${fileHash}`);
+    try {
+      await fs.access(cleanPart);
+      const stats = await fs.stat(cleanPart);
+      if (stats.isFile()) {
+        const fileContent = await fs.readFile(cleanPart);
+        const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
+        fileHashes.push(fileHash);
+        logger.debug(`File hash for ${cleanPart}: ${fileHash}`);
+      }
+    } catch {
+      // File doesn't exist or can't be accessed, skip it
     }
   }
 
@@ -66,7 +72,7 @@ export class ScriptCompletionProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const scriptParts = parseScriptParts(this.scriptPath);
-    const fileHashes = getFileHashes(scriptParts);
+    const fileHashes = await getFileHashes(scriptParts);
 
     if (fileHashes.length === 0) {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);

@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { promises as fs } from 'fs';
 import * as path from 'path';
 
 import { stringify } from 'csv-stringify/sync';
@@ -117,8 +117,10 @@ export async function writeOutput(
 
   // Ensure the directory exists
   const outputDir = path.dirname(outputPath);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
+  try {
+    await fs.access(outputDir);
+  } catch {
+    await fs.mkdir(outputDir, { recursive: true });
   }
 
   const metadata = createOutputMetadata(evalRecord);
@@ -130,7 +132,7 @@ export async function writeOutput(
     const headerCsv = stringify([
       [...headers.vars, ...headers.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`)],
     ]);
-    fs.writeFileSync(outputPath, headerCsv);
+    await fs.writeFile(outputPath, headerCsv);
 
     // Write body rows in batches
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
@@ -148,11 +150,11 @@ export async function writeOutput(
           return [...row.vars, ...row.outputs.map(outputToSimpleString)];
         }),
       );
-      fs.appendFileSync(outputPath, batchCsv);
+      await fs.appendFile(outputPath, batchCsv);
     }
   } else if (outputExtension === 'json') {
     const summary = await evalRecord.toEvaluateSummary();
-    fs.writeFileSync(
+    await fs.writeFile(
       outputPath,
       JSON.stringify(
         {
@@ -168,7 +170,7 @@ export async function writeOutput(
     );
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
-    fs.writeFileSync(
+    await fs.writeFile(
       outputPath,
       yaml.dump({
         evalId: evalRecord.id,
@@ -182,7 +184,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
-    const template = fs.readFileSync(`${getDirectory()}/tableOutput.html`, 'utf-8');
+    const template = await fs.readFile(`${getDirectory()}/tableOutput.html`, 'utf-8');
     const htmlTable = [
       [
         ...table.head.vars,
@@ -195,11 +197,11 @@ export async function writeOutput(
       table: htmlTable,
       results: summary,
     });
-    fs.writeFileSync(outputPath, htmlOutput);
+    await fs.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
       const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
-      fs.appendFileSync(outputPath, text);
+      await fs.appendFile(outputPath, text);
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
@@ -216,7 +218,7 @@ export async function writeOutput(
         shareableUrl: shareableUrl || undefined,
       },
     });
-    fs.writeFileSync(outputPath, xmlData);
+    await fs.writeFile(outputPath, xmlData);
   }
 }
 
@@ -235,7 +237,7 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
 
   switch (ext) {
     case 'json':
-      return JSON.parse(fs.readFileSync(outputPath, 'utf-8')) as OutputFile;
+      return JSON.parse(await fs.readFile(outputPath, 'utf-8')) as OutputFile;
     default:
       throw new Error(`Unsupported output file format: ${ext} currently only supports json`);
   }
@@ -388,15 +390,15 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
  * @param promptPath - The path or glob pattern.
  * @returns Parsed details including function name, file extension, and directory status.
  */
-export function parsePathOrGlob(
+export async function parsePathOrGlob(
   basePath: string,
   promptPath: string,
-): {
+): Promise<{
   extension?: string;
   functionName?: string;
   isPathPattern: boolean;
   filePath: string;
-} {
+}> {
   if (promptPath.startsWith('file://')) {
     promptPath = promptPath.slice('file://'.length);
   }
@@ -418,7 +420,7 @@ export function parsePathOrGlob(
   // verify that filename without function exists
   let stats;
   try {
-    stats = fs.statSync(path.join(basePath, filename));
+    stats = await fs.stat(path.join(basePath, filename));
   } catch (err) {
     if (getEnvBool('PROMPTFOO_STRICT_FILES')) {
       throw err;
@@ -458,9 +460,9 @@ export function isRunningUnderNpx(): boolean {
  * @param vars - Variables to use for rendering.
  * @returns The processed tools configuration with variables rendered and content loaded from files if needed.
  */
-export function maybeLoadToolsFromExternalFile(
+export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, string | object>,
-): any {
+): Promise<any> {
   return maybeLoadFromExternalFile(renderVarsInObject(tools, vars));
 }

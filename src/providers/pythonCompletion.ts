@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { promises as fs } from 'fs';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
@@ -35,15 +35,13 @@ export class PythonProvider implements ApiProvider {
     runPath: string,
     private options?: ProviderOptions,
   ) {
-    const { filePath: providerPath, functionName } = parsePathOrGlob(
-      options?.config.basePath || '',
-      runPath,
-    );
-    this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
-    this.functionName = functionName || null;
+    // Note: parsePathOrGlob is now async, so we'll need to handle it differently
+    this.scriptPath = runPath;
+    this.functionName = null;
     this.id = () => options?.id ?? `python:${this.scriptPath}:${this.functionName || 'default'}`;
     this.label = options?.label;
     this.config = options?.config ?? {};
+    // Will initialize scriptPath and functionName in initialize()
   }
 
   id() {
@@ -69,6 +67,14 @@ export class PythonProvider implements ApiProvider {
     // Start initialization and store the promise
     this.initializationPromise = (async () => {
       try {
+        // Parse the path to get the actual script path and function name
+        const { filePath: providerPath, functionName } = await parsePathOrGlob(
+          this.options?.config.basePath || '',
+          this.scriptPath,
+        );
+        this.scriptPath = path.relative(this.options?.config.basePath || '', providerPath);
+        this.functionName = functionName || null;
+        
         this.config = await processConfigFileReferences(
           this.config,
           this.options?.config.basePath || '',
@@ -105,7 +111,7 @@ export class PythonProvider implements ApiProvider {
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
-    const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
+    const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
     // Create cache key including the function name to ensure different functions don't share caches
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(

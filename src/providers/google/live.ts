@@ -104,7 +104,7 @@ export class GoogleLiveProvider implements ApiProvider {
       );
     }
 
-    const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+    const { contents, systemInstruction } = await geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       this.config.systemInstruction,
@@ -250,7 +250,7 @@ export class GoogleLiveProvider implements ApiProvider {
         safeResolve(result);
       };
 
-      ws.onopen = () => {
+      ws.onopen = async () => {
         logger.debug('WebSocket connection is opening...');
         const {
           speechConfig,
@@ -299,7 +299,9 @@ export class GoogleLiveProvider implements ApiProvider {
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
             ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
+            ...(this.config.tools
+              ? { tools: await loadFile(this.config.tools, context?.vars) }
+              : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
             ...(outputAudioTranscription
               ? { output_audio_transcription: outputAudioTranscription }

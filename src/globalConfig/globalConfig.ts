@@ -3,7 +3,7 @@
  * ~/.promptfoo/promptfoo.yaml by default.
  */
 import { randomUUID } from 'crypto';
-import fs from 'fs';
+import { promises as fs } from 'fs';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
@@ -11,28 +11,31 @@ import { getConfigDirectoryPath } from '../util/config/manage';
 
 import type { GlobalConfig } from '../configTypes';
 
-export function writeGlobalConfig(config: GlobalConfig): void {
-  fs.writeFileSync(
+export async function writeGlobalConfig(config: GlobalConfig): Promise<void> {
+  await fs.writeFile(
     path.join(getConfigDirectoryPath(true), 'promptfoo.yaml') /* createIfNotExists */,
     yaml.dump(config),
   );
 }
 
-export function readGlobalConfig(): GlobalConfig {
+export async function readGlobalConfig(): Promise<GlobalConfig> {
   const configDir = getConfigDirectoryPath();
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
   let globalConfig: GlobalConfig = { id: randomUUID() };
-  if (fs.existsSync(configFilePath)) {
-    globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
+  try {
+    await fs.access(configFilePath);
+    globalConfig = (yaml.load(await fs.readFile(configFilePath, 'utf-8')) as GlobalConfig) || {};
     if (!globalConfig?.id) {
       globalConfig = { ...globalConfig, id: randomUUID() };
-      writeGlobalConfig(globalConfig);
+      await writeGlobalConfig(globalConfig);
     }
-  } else {
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
+  } catch {
+    try {
+      await fs.access(configDir);
+    } catch {
+      await fs.mkdir(configDir, { recursive: true });
     }
-    fs.writeFileSync(configFilePath, yaml.dump(globalConfig));
+    await fs.writeFile(configFilePath, yaml.dump(globalConfig));
   }
 
   return globalConfig;
@@ -42,8 +45,8 @@ export function readGlobalConfig(): GlobalConfig {
  * Merges the top-level keys into existing config.
  * @param partialConfig New keys to merge into the existing config.
  */
-export function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): void {
-  const currentConfig = readGlobalConfig();
+export async function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): Promise<void> {
+  const currentConfig = await readGlobalConfig();
   // Create a shallow copy of the current config
   const updatedConfig = { ...currentConfig };
 
@@ -58,5 +61,5 @@ export function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): 
     }
   });
 
-  writeGlobalConfig(updatedConfig);
+  await writeGlobalConfig(updatedConfig);
 }

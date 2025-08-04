@@ -119,7 +119,7 @@ async function processPrompt(
     functionName?: string;
     isPathPattern: boolean;
     filePath: string;
-  } = parsePathOrGlob(basePath, prompt.raw);
+  } = await parsePathOrGlob(basePath, prompt.raw);
 
   if (isPathPattern && maxRecursionDepth > 0) {
     const globbedPath = globSync(filePath.replace(/\\/g, '/'), {

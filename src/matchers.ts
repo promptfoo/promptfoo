@@ -387,7 +387,7 @@ async function loadRubricPrompt(
     rubricPrompt = await loadFromJavaScriptFile(filePath, functionName, []);
   } else {
     // Load from external file if needed
-    rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
+    rubricPrompt = await maybeLoadFromExternalFile(rubricPrompt);
   }
 
   if (typeof rubricPrompt === 'object') {

@@ -11,34 +11,34 @@ import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from '.
 
 import type { GlobalConfig } from '../configTypes';
 
-export function getUserId(): string {
-  let globalConfig = readGlobalConfig();
+export async function getUserId(): Promise<string> {
+  let globalConfig = await readGlobalConfig();
   if (!globalConfig?.id) {
     const newId = randomUUID();
     globalConfig = { ...globalConfig, id: newId };
-    writeGlobalConfig(globalConfig);
+    await writeGlobalConfig(globalConfig);
     return newId;
   }
 
   return globalConfig.id;
 }
 
-export function getUserEmail(): string | null {
-  const globalConfig = readGlobalConfig();
+export async function getUserEmail(): Promise<string | null> {
+  const globalConfig = await readGlobalConfig();
   return globalConfig?.account?.email || null;
 }
 
-export function setUserEmail(email: string) {
+export async function setUserEmail(email: string): Promise<void> {
   const config: Partial<GlobalConfig> = { account: { email } };
-  writeGlobalConfigPartial(config);
+  await writeGlobalConfigPartial(config);
 }
 
-export function getAuthor(): string | null {
-  return getEnvString('PROMPTFOO_AUTHOR') || getUserEmail() || null;
+export async function getAuthor(): Promise<string | null> {
+  return getEnvString('PROMPTFOO_AUTHOR') || await getUserEmail() || null;
 }
 
-export function isLoggedIntoCloud(): boolean {
-  const userEmail = getUserEmail();
+export async function isLoggedIntoCloud(): Promise<boolean> {
+  const userEmail = await getUserEmail();
   return !!userEmail && !isCI();
 }
 
@@ -54,7 +54,7 @@ interface EmailStatusResult {
  * Used by both CLI and server routes
  */
 export async function checkEmailStatus(): Promise<EmailStatusResult> {
-  const userEmail = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
+  const userEmail = isCI() ? 'ci-placeholder@promptfoo.dev' : await getUserEmail();
 
   if (!userEmail) {
     return {
@@ -96,7 +96,7 @@ export async function checkEmailStatus(): Promise<EmailStatusResult> {
 
 export async function promptForEmailUnverified() {
   const { default: telemetry } = await import('../telemetry');
-  let email = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
+  let email = isCI() ? 'ci-placeholder@promptfoo.dev' : await getUserEmail();
   if (!email) {
     await telemetry.record('feature_used', {
       feature: 'promptForEmailUnverified',
@@ -109,7 +109,7 @@ export async function promptForEmailUnverified() {
         return result.success || result.error.errors[0].message;
       },
     });
-    setUserEmail(email);
+    await setUserEmail(email);
     await telemetry.record('feature_used', {
       feature: 'userCompletedPromptForEmailUnverified',
     });

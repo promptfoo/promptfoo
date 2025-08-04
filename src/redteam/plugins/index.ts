@@ -177,9 +177,6 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(AegisPlugin, 'aegis'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
-  createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
-    invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
-  ),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
   createPluginFactory(PlinyPlugin, 'pliny'),
   createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
@@ -342,8 +339,32 @@ remotePlugins.push(
   ),
 );
 
+// Add IntentPlugin with special handling for factory pattern
+const intentPluginFactory: PluginFactory = {
+  key: 'intent',
+  validate: (config: PluginConfig) => {
+    invariant(config.intent, 'Intent plugin requires `config.intent` to be set');
+  },
+  action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
+    if (!shouldGenerateRemote()) {
+      logger.debug(`Using local redteam generation for intent`);
+      const plugin = await IntentPlugin.create(provider, purpose, injectVar, config);
+      return plugin.generateTests(n, delayMs);
+    }
+    const testCases = await fetchRemoteTestCases('intent', purpose, injectVar, n, config ?? {});
+    return testCases.map((testCase) => ({
+      ...testCase,
+      metadata: {
+        ...testCase.metadata,
+        pluginId: getShortPluginId('intent'),
+      },
+    }));
+  },
+};
+
 export const Plugins: PluginFactory[] = [
   ...pluginFactories,
+  intentPluginFactory,
   ...piiPlugins,
   ...biasPlugins,
   ...remotePlugins,

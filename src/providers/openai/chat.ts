@@ -180,7 +180,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
@@ -211,7 +211,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
     const fileTools = config.tools
-      ? maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
+      ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
@@ -240,7 +240,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFile(
+            functions: await maybeLoadFromExternalFile(
               renderVarsInObject(config.functions, context?.vars),
             ),
           }
@@ -251,7 +251,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
       ...(config.response_format
         ? {
-            response_format: maybeLoadFromExternalFile(
+            response_format: await maybeLoadFromExternalFile(
               renderVarsInObject(config.response_format, context?.vars),
             ),
           }
@@ -317,7 +317,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
     logger.debug(`Calling ${this.getApiUrl()} API: ${JSON.stringify(body)}`);
 
     let data, status, statusText;

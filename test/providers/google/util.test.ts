@@ -111,7 +111,7 @@ describe('util', () => {
       },
     ];
 
-    it('should validate Vertex/AIS format function call', () => {
+    it('should validate Vertex/AIS format function call', async () => {
       const output = [
         {
           functionCall: {
@@ -120,10 +120,10 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+      await expect(validateFunctionCall(output, mockFunctions)).resolves.not.toThrow();
     });
 
-    it('should validate Live format function call', () => {
+    it('should validate Live format function call', async () => {
       const output = {
         toolCall: {
           functionCalls: [
@@ -134,10 +134,10 @@ describe('util', () => {
           ],
         },
       };
-      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+      await expect(validateFunctionCall(output, mockFunctions)).resolves.not.toThrow();
     });
 
-    it('should validate empty function args', () => {
+    it('should validate empty function args', async () => {
       const output = [
         {
           functionCall: {
@@ -146,10 +146,10 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+      await expect(validateFunctionCall(output, mockFunctions)).resolves.not.toThrow();
     });
 
-    it('should validate function with no parameters', () => {
+    it('should validate function with no parameters', async () => {
       const output = [
         {
           functionCall: {
@@ -158,19 +158,19 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
+      await expect(validateFunctionCall(output, mockFunctions)).resolves.not.toThrow();
     });
 
-    it('should throw error for invalid function call format', () => {
+    it('should throw error for invalid function call format', async () => {
       const output = {
         invalidFormat: true,
       };
-      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+      await expect(validateFunctionCall(output, mockFunctions)).rejects.toThrow(
         'Google did not return a valid-looking function call',
       );
     });
 
-    it('should throw error for non-existent function', () => {
+    it('should throw error for non-existent function', async () => {
       const output = [
         {
           functionCall: {
@@ -179,12 +179,12 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+      await expect(validateFunctionCall(output, mockFunctions)).rejects.toThrow(
         'Called "nonExistentFunction", but there is no function with that name',
       );
     });
 
-    it('should throw error for invalid args', () => {
+    it('should throw error for invalid args', async () => {
       const output = [
         {
           functionCall: {
@@ -193,10 +193,10 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(/does not match schema/);
+      await expect(validateFunctionCall(output, mockFunctions)).rejects.toThrow(/does not match schema/);
     });
 
-    it('should throw error when schema compilation fails', () => {
+    it('should throw error when schema compilation fails', async () => {
       const output = [
         {
           functionCall: {
@@ -205,12 +205,12 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+      await expect(validateFunctionCall(output, mockFunctions)).rejects.toThrow(
         /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
       );
     });
 
-    it('should throw error when propertyOrdering references invalid property', () => {
+    it('should throw error when propertyOrdering references invalid property', async () => {
       const output = [
         {
           functionCall: {
@@ -219,7 +219,7 @@ describe('util', () => {
           },
         },
       ];
-      expect(() => validateFunctionCall(output, mockFunctions)).toThrow(
+      await expect(validateFunctionCall(output, mockFunctions)).rejects.toThrow(
         /Tool schema doesn't compile with ajv:.*If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call/,
       );
     });
@@ -831,7 +831,7 @@ describe('util', () => {
           '  }\n' +
           ']',
       };
-      const result = loadFile(config_var, context_vars);
+      const result = await loadFile(config_var, context_vars);
       expect(result).toEqual(JSON.parse(context_vars.tool_file));
     });
 
@@ -852,7 +852,7 @@ describe('util', () => {
 
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       jest.spyOn(fs, 'readFileSync').mockReturnValue(tools);
-      const result = loadFile(config_var, context_vars);
+      const result = await loadFile(config_var, context_vars);
       expect(result).toEqual(JSON.parse(tools));
       expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'));
       expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'), 'utf8');
@@ -866,7 +866,7 @@ describe('util', () => {
         { role: 'user', content: [{ text: 'user message' }] },
       ];
 
-      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+      const { contents, systemInstruction } = await geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         {},
         undefined,
@@ -879,7 +879,7 @@ describe('util', () => {
     it('should handle system messages in config', async () => {
       const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
 
-      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+      const { contents, systemInstruction } = await geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         {},
         { parts: [{ text: 'system instruction' }] },
@@ -892,7 +892,7 @@ describe('util', () => {
     it('should handle system messages in variables', async () => {
       const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
 
-      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+      const { contents, systemInstruction } = await geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         { system_instruction: 'system instruction' },
         { parts: [{ text: '{{system_instruction}}' }] },
@@ -905,7 +905,7 @@ describe('util', () => {
     it('should handle string system messages in config', async () => {
       const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
 
-      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+      const { contents, systemInstruction } = await geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         {},
         'system instruction',
@@ -921,7 +921,7 @@ describe('util', () => {
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       jest.spyOn(fs, 'readFileSync').mockReturnValue(system_instruction);
 
-      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+      const { contents, systemInstruction } = await geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
         { system_instruction: 'file://system_instruction.json' },
         '{{system_instruction}}',
@@ -935,7 +935,7 @@ describe('util', () => {
       const validBase64Image =
         '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=';
 
-      it('should preserve text formatting when no images are present', () => {
+      it('should preserve text formatting when no images are present', async () => {
         const prompt = JSON.stringify([
           {
             role: 'user',
@@ -951,7 +951,7 @@ describe('util', () => {
           someVar: 'not an image',
         };
 
-        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        const { contents } = await geminiFormatAndSystemInstructions(prompt, contextVars);
 
         expect(contents).toEqual([
           {
@@ -965,7 +965,7 @@ describe('util', () => {
         ]);
       });
 
-      it('should preserve text formatting when no context variables are provided', () => {
+      it('should preserve text formatting when no context variables are provided', async () => {
         const prompt = JSON.stringify([
           {
             role: 'user',
@@ -977,7 +977,7 @@ describe('util', () => {
           },
         ]);
 
-        const { contents } = geminiFormatAndSystemInstructions(prompt);
+        const { contents } = await geminiFormatAndSystemInstructions(prompt);
 
         expect(contents).toEqual([
           {
@@ -991,7 +991,7 @@ describe('util', () => {
         ]);
       });
 
-      it('should convert base64 images from context variables while preserving other text', () => {
+      it('should convert base64 images from context variables while preserving other text', async () => {
         const prompt = JSON.stringify([
           {
             role: 'user',
@@ -1007,7 +1007,7 @@ describe('util', () => {
           image1: validBase64Image,
         };
 
-        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        const { contents } = await geminiFormatAndSystemInstructions(prompt, contextVars);
 
         expect(contents).toEqual([
           {
@@ -1030,7 +1030,7 @@ describe('util', () => {
         ]);
       });
 
-      it('should handle multiple images mixed with text', () => {
+      it('should handle multiple images mixed with text', async () => {
         const image1 = validBase64Image;
         const image2 =
           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAGA5w5EQwA7BHigu/QKBgAAAABJRU5ErkJggg==';
@@ -1051,7 +1051,7 @@ describe('util', () => {
           image2: image2,
         };
 
-        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        const { contents } = await geminiFormatAndSystemInstructions(prompt, contextVars);
 
         expect(contents).toEqual([
           {
@@ -1083,7 +1083,7 @@ describe('util', () => {
         ]);
       });
 
-      it('should preserve complex formatting with whitespace and empty lines', () => {
+      it('should preserve complex formatting with whitespace and empty lines', async () => {
         const prompt = JSON.stringify([
           {
             role: 'user',
@@ -1099,7 +1099,7 @@ describe('util', () => {
           notAnImage: 'just text',
         };
 
-        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        const { contents } = await geminiFormatAndSystemInstructions(prompt, contextVars);
 
         expect(contents).toEqual([
           {
@@ -1113,7 +1113,7 @@ describe('util', () => {
         ]);
       });
 
-      it('should handle edge case with image at the beginning', () => {
+      it('should handle edge case with image at the beginning', async () => {
         const prompt = JSON.stringify([
           {
             role: 'user',
@@ -1129,7 +1129,7 @@ describe('util', () => {
           image1: validBase64Image,
         };
 
-        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        const { contents } = await geminiFormatAndSystemInstructions(prompt, contextVars);
 
         expect(contents).toEqual([
           {
@@ -1149,7 +1149,7 @@ describe('util', () => {
         ]);
       });
 
-      it('should handle edge case with image at the end', () => {
+      it('should handle edge case with image at the end', async () => {
         const prompt = JSON.stringify([
           {
             role: 'user',
@@ -1165,7 +1165,7 @@ describe('util', () => {
           image1: validBase64Image,
         };
 
-        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        const { contents } = await geminiFormatAndSystemInstructions(prompt, contextVars);
 
         expect(contents).toEqual([
           {
@@ -1185,7 +1185,7 @@ describe('util', () => {
         ]);
       });
 
-      it('should handle non-text parts without modification', () => {
+      it('should handle non-text parts without modification', async () => {
         const prompt = JSON.stringify([
           {
             role: 'user',
@@ -1207,7 +1207,7 @@ describe('util', () => {
           image1: validBase64Image,
         };
 
-        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        const { contents } = await geminiFormatAndSystemInstructions(prompt, contextVars);
 
         expect(contents).toEqual([
           {
@@ -1227,7 +1227,7 @@ describe('util', () => {
         ]);
       });
 
-      it('should handle empty text parts', () => {
+      it('should handle empty text parts', async () => {
         const prompt = JSON.stringify([
           {
             role: 'user',
@@ -1243,7 +1243,7 @@ describe('util', () => {
           image1: validBase64Image,
         };
 
-        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        const { contents } = await geminiFormatAndSystemInstructions(prompt, contextVars);
 
         expect(contents).toEqual([
           {

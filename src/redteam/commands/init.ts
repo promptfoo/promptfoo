@@ -550,9 +550,9 @@ export async function redteamInit(directory: string | undefined) {
   );
   if (hasHarmfulPlugin) {
     recordOnboardingStep('collect email');
-    const { hasHarmfulRedteamConsent } = readGlobalConfig();
+    const { hasHarmfulRedteamConsent } = await readGlobalConfig();
     if (!hasHarmfulRedteamConsent) {
-      const existingEmail = getUserEmail();
+      const existingEmail = await getUserEmail();
       let email = existingEmail;
       if (!existingEmail) {
         logger.info(
@@ -568,7 +568,7 @@ export async function redteamInit(directory: string | undefined) {
             return value.includes('@') || 'Please enter a valid email address';
           },
         });
-        setUserEmail(email);
+        await setUserEmail(email);
       }
 
       if (email) {
@@ -576,7 +576,7 @@ export async function redteamInit(directory: string | undefined) {
           await telemetry.saveConsent(email, {
             source: 'redteam init',
           });
-          writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
+          await writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
         } catch (err) {
           logger.debug(`Failed to save consent: ${(err as Error).message}`);
         }

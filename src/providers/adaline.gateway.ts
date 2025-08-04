@@ -380,7 +380,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           this.modelName,
           this.providerOptions,
         );
-        const { body } = openAiProvider.getOpenAiBody(prompt, context, callApiOptions);
+        const { body } = await openAiProvider.getOpenAiBody(prompt, context, callApiOptions);
         // create a temp gateway openai model to transform the body to gateway types
         const gatewayOpenAiDummyModel = new GatewayOpenAI().chatModel({
           modelName: 'gpt-4o',

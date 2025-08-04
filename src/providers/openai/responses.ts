@@ -73,7 +73,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
@@ -113,7 +113,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Load response_format from external file if needed, similar to chat provider
     const responseFormat = config.response_format
-      ? maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
+      ? await maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
       : undefined;
 
     let textFormat;
@@ -127,7 +127,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
         // IMPORTANT: json_object format requires the word 'json' in the input prompt
       } else if (responseFormat.type === 'json_schema') {
-        const schema = maybeLoadFromExternalFile(
+        const schema = await maybeLoadFromExternalFile(
           renderVarsInObject(
             responseFormat.schema || responseFormat.json_schema?.schema,
             context?.vars,
@@ -163,7 +163,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(config.tools
-        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
+        ? { tools: await maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
@@ -215,7 +215,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       );
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     // Validate deep research models have required tools
     const isDeepResearchModel = this.modelName.includes('deep-research');

@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
-import fs from 'fs';
+import { promises as fs } from 'fs';
 
 import * as cacheModule from '../../src/cache';
 import {
@@ -9,7 +9,13 @@ import {
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
 
-jest.mock('fs');
+jest.mock('fs', () => ({
+  promises: {
+    access: jest.fn(),
+    stat: jest.fn(),
+    readFile: jest.fn(),
+  },
+}));
 jest.mock('crypto');
 jest.mock('child_process');
 jest.mock('../../src/cache');
@@ -33,15 +39,19 @@ describe('getFileHashes', () => {
     jest.clearAllMocks();
   });
 
-  it('should return file hashes for existing files', () => {
+  it('should return file hashes for existing files', async () => {
     const scriptParts = ['file1.js', 'file2.js', 'nonexistent.js'];
     const mockFileContent1 = 'content1';
     const mockFileContent2 = 'content2';
     const mockHash1 = 'hash1';
     const mockHash2 = 'hash2';
 
-    jest.mocked(fs.existsSync).mockImplementation((path) => path !== 'nonexistent.js');
-    jest.mocked(fs.statSync).mockReturnValue({
+    jest.mocked(fs.access).mockImplementation(async (path) => {
+      if (path === 'nonexistent.js') {
+        throw new Error('File not found');
+      }
+    });
+    jest.mocked(fs.stat).mockResolvedValue({
       isFile: () => true,
       isDirectory: () => false,
       isBlockDevice: () => false,
@@ -49,13 +59,13 @@ describe('getFileHashes', () => {
       isSymbolicLink: () => false,
       isFIFO: () => false,
       isSocket: () => false,
-    } as fs.Stats);
-    jest.mocked(fs.readFileSync).mockImplementation((path) => {
+    } as any);
+    jest.mocked(fs.readFile).mockImplementation(async (path) => {
       if (path === 'file1.js') {
-        return mockFileContent1;
+        return Buffer.from(mockFileContent1);
       }
       if (path === 'file2.js') {
-        return mockFileContent2;
+        return Buffer.from(mockFileContent2);
       }
       throw new Error('File not found');
     });
@@ -70,23 +80,23 @@ describe('getFileHashes', () => {
       .mockReturnValueOnce(mockHash2);
     jest.mocked(crypto.createHash).mockReturnValue(mockHashUpdate);
 
-    const result = getFileHashes(scriptParts);
+    const result = await getFileHashes(scriptParts);
 
     expect(result).toEqual([mockHash1, mockHash2]);
-    expect(fs.existsSync).toHaveBeenCalledTimes(3);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+    expect(fs.access).toHaveBeenCalledTimes(3);
+    expect(fs.readFile).toHaveBeenCalledTimes(2);
     expect(crypto.createHash).toHaveBeenCalledTimes(2);
   });
 
-  it('should return an empty array for non-existent files', () => {
+  it('should return an empty array for non-existent files', async () => {
     const scriptParts = ['nonexistent1.js', 'nonexistent2.js'];
-    jest.mocked(fs.existsSync).mockReturnValue(false);
+    jest.mocked(fs.access).mockRejectedValue(new Error('File not found'));
 
-    const result = getFileHashes(scriptParts);
+    const result = await getFileHashes(scriptParts);
 
     expect(result).toEqual([]);
-    expect(fs.existsSync).toHaveBeenCalledTimes(2);
-    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(fs.access).toHaveBeenCalledTimes(2);
+    expect(fs.readFile).not.toHaveBeenCalled();
     expect(crypto.createHash).not.toHaveBeenCalled();
   });
 });

@@ -31,58 +31,83 @@ export class CloudConfig {
     apiHost: string;
     apiKey?: string;
   };
+  private initialized: boolean = false;
+  private initPromise: Promise<void> | null = null;
 
   constructor() {
-    const savedConfig = readGlobalConfig()?.cloud || {};
     this.config = {
-      appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
-      apiHost: savedConfig.apiHost || API_HOST,
-      apiKey: savedConfig.apiKey,
+      appUrl: 'https://www.promptfoo.app',
+      apiHost: API_HOST,
+      apiKey: undefined,
     };
   }
 
-  isEnabled(): boolean {
+  private async initialize(): Promise<void> {
+    if (this.initialized) return;
+    if (this.initPromise) return this.initPromise;
+    
+    this.initPromise = (async () => {
+      const savedConfig = (await readGlobalConfig())?.cloud || {};
+      this.config = {
+        appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
+        apiHost: savedConfig.apiHost || API_HOST,
+        apiKey: savedConfig.apiKey,
+      };
+      this.initialized = true;
+    })();
+    
+    return this.initPromise;
+  }
+
+  async isEnabled(): Promise<boolean> {
+    await this.initialize();
     return !!this.config.apiKey;
   }
 
-  setApiHost(apiHost: string): void {
+  async setApiHost(apiHost: string): Promise<void> {
+    await this.initialize();
     this.config.apiHost = apiHost;
-    this.saveConfig();
+    await this.saveConfig();
   }
 
-  setApiKey(apiKey: string): void {
+  async setApiKey(apiKey: string): Promise<void> {
+    await this.initialize();
     this.config.apiKey = apiKey;
-    this.saveConfig();
+    await this.saveConfig();
   }
 
-  getApiKey(): string | undefined {
+  async getApiKey(): Promise<string | undefined> {
+    await this.initialize();
     return this.config.apiKey;
   }
 
-  getApiHost(): string {
+  async getApiHost(): Promise<string> {
+    await this.initialize();
     return this.config.apiHost;
   }
 
-  setAppUrl(appUrl: string): void {
+  async setAppUrl(appUrl: string): Promise<void> {
+    await this.initialize();
     this.config.appUrl = appUrl;
-    this.saveConfig();
+    await this.saveConfig();
   }
 
-  getAppUrl(): string {
+  async getAppUrl(): Promise<string> {
+    await this.initialize();
     return this.config.appUrl;
   }
 
-  delete(): void {
-    writeGlobalConfigPartial({ cloud: {} });
+  async delete(): Promise<void> {
+    await writeGlobalConfigPartial({ cloud: {} });
   }
 
-  private saveConfig(): void {
-    writeGlobalConfigPartial({ cloud: this.config });
-    this.reload();
+  private async saveConfig(): Promise<void> {
+    await writeGlobalConfigPartial({ cloud: this.config });
+    await this.reload();
   }
 
-  private reload(): void {
-    const savedConfig = readGlobalConfig()?.cloud || {};
+  private async reload(): Promise<void> {
+    const savedConfig = (await readGlobalConfig())?.cloud || {};
     this.config = {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost || API_HOST,
@@ -110,9 +135,9 @@ export class CloudConfig {
       }
 
       const { user, organization, app } = await response.json();
-      this.setApiKey(token);
-      this.setApiHost(apiHost);
-      this.setAppUrl(app.url);
+      await this.setApiKey(token);
+      await this.setApiHost(apiHost);
+      await this.setAppUrl(app.url);
 
       logger.info(chalk.green.bold('Successfully logged in'));
       logger.info(chalk.dim('Logged in as:'));

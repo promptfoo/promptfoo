@@ -18,10 +18,12 @@ const CustomPluginDefinitionSchema = z
 
 type CustomPluginDefinition = z.infer<typeof CustomPluginDefinitionSchema>;
 
-export function loadCustomPluginDefinition(filePath: string): CustomPluginDefinition {
+export async function loadCustomPluginDefinition(
+  filePath: string,
+): Promise<CustomPluginDefinition> {
   logger.debug(`Loading custom plugin from ${filePath}`);
 
-  const result = CustomPluginDefinitionSchema.safeParse(maybeLoadFromExternalFile(filePath));
+  const result = CustomPluginDefinitionSchema.safeParse(await maybeLoadFromExternalFile(filePath));
   if (!result.success) {
     const validationError = fromError(result.error);
     throw new Error(
@@ -46,9 +48,24 @@ export class CustomPlugin extends RedteamPluginBase {
     return this.definition.id || `promptfoo:redteam:custom`;
   }
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, filePath: string) {
+  private constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    definition: CustomPluginDefinition,
+  ) {
     super(provider, purpose, injectVar);
-    this.definition = loadCustomPluginDefinition(filePath);
+    this.definition = definition;
+  }
+
+  static async create(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    filePath: string,
+  ): Promise<CustomPlugin> {
+    const definition = await loadCustomPluginDefinition(filePath);
+    return new CustomPlugin(provider, purpose, injectVar, definition);
   }
 
   protected async getTemplate(): Promise<string> {

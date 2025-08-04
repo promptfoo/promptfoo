@@ -805,7 +805,12 @@ export async function synthesize({
       };
     } else if (plugin.id.startsWith('file://')) {
       try {
-        const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
+        const customPlugin = await CustomPlugin.create(
+          redteamProvider,
+          purpose,
+          injectVar,
+          plugin.id,
+        );
         const customTests = await customPlugin.generateTests(plugin.numTests, delay);
 
         // Add metadata to each test case

@@ -1,4 +1,4 @@
-﻿import fs from 'fs';
+﻿import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 
@@ -151,7 +151,7 @@ export async function runPython(
   };
 
   try {
-    await fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
+    await fs.writeFile(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
 
     await new Promise<void>((resolve, reject) => {
@@ -178,7 +178,7 @@ export async function runPython(
       }
     });
 
-    const output = await fs.readFileSync(outputPath, 'utf-8');
+    const output = await fs.readFile(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
 
     let result: { type: 'final_result'; data: any } | undefined;
@@ -214,9 +214,9 @@ export async function runPython(
     );
   } finally {
     await Promise.all(
-      [tempJsonPath, outputPath].map((file) => {
+      [tempJsonPath, outputPath].map(async (file) => {
         try {
-          fs.unlinkSync(file);
+          await fs.unlink(file);
         } catch (error) {
           logger.error(`Error removing ${file}: ${error}`);
         }

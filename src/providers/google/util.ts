@@ -374,7 +374,7 @@ export function normalizeTools(tools: Tool[]): Tool[] {
   });
 }
 
-export function loadFile(
+export async function loadFile(
   config_var: Tool[] | string | undefined,
   context_vars: Record<string, string | object> | undefined,
 ) {
@@ -384,7 +384,9 @@ export function loadFile(
   // 2. In a test variable that is used in the provider via a nunjucks:
   //    context_vars will contain a string of the contents of the file with whitespace.
   //    This will be inserted into the nunjucks in contfig_tools and the output needs to be parsed.
-  const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
+  const fileContents = await maybeLoadFromExternalFile(
+    renderVarsInObject(config_var, context_vars),
+  );
   if (typeof fileContents === 'string') {
     try {
       const parsedContents = JSON.parse(fileContents);
@@ -526,14 +528,14 @@ function processImagesInContents(
   });
 }
 
-export function geminiFormatAndSystemInstructions(
+export async function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, string | object>,
   configSystemInstruction?: Content | string,
-): {
+): Promise<{
   contents: GeminiFormat;
   systemInstruction: Content | { parts: [Part, ...Part[]] } | undefined;
-} {
+}> {
   let contents: GeminiFormat = parseChatPrompt(prompt, [
     {
       parts: [
@@ -561,7 +563,7 @@ export function geminiFormatAndSystemInstructions(
 
     // Load SI from file
     if (typeof configSystemInstruction === 'string') {
-      systemInstruction = loadFile(configSystemInstruction, contextVars);
+      systemInstruction = await loadFile(configSystemInstruction, contextVars);
     }
 
     // Format SI if string was not a filepath above
@@ -652,7 +654,7 @@ export function parseStringObject(input: string | any) {
   return input;
 }
 
-export function validateFunctionCall(
+export async function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
   vars?: Record<string, string | object>,
@@ -678,7 +680,7 @@ export function validateFunctionCall(
     );
   }
 
-  const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  const interpolatedFunctions = (await loadFile(functions, vars)) as Tool[];
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema

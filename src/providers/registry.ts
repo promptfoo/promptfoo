@@ -964,7 +964,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      return new HttpProvider(providerPath, providerOptions);
+      return HttpProvider.create(providerPath, providerOptions);
     },
   },
   {

@@ -432,33 +432,33 @@ describe('validateFunctionCall', () => {
     },
   };
 
-  it('should validate valid function call', () => {
+  it('should validate valid function call', async () => {
     const functionCall = {
       name: 'testFunction',
       arguments: JSON.stringify({ foo: 'test', bar: 123 }),
     };
 
-    expect(() => validateFunctionCall(functionCall, [sampleFunction], {})).not.toThrow();
+    await expect(validateFunctionCall(functionCall, [sampleFunction], {})).resolves.not.toThrow();
   });
 
-  it('should throw error for invalid function name', () => {
+  it('should throw error for invalid function name', async () => {
     const functionCall = {
       name: 'nonexistentFunction',
       arguments: JSON.stringify({ foo: 'test' }),
     };
 
-    expect(() => validateFunctionCall(functionCall, [sampleFunction], {})).toThrow(
+    await expect(validateFunctionCall(functionCall, [sampleFunction], {})).rejects.toThrow(
       'Called "nonexistentFunction", but there is no function with that name',
     );
   });
 
-  it('should throw error for invalid arguments', () => {
+  it('should throw error for invalid arguments', async () => {
     const functionCall = {
       name: 'testFunction',
       arguments: JSON.stringify({ bar: 'not a number' }),
     };
 
-    expect(() => validateFunctionCall(functionCall, [sampleFunction], {})).toThrow(
+    await expect(validateFunctionCall(functionCall, [sampleFunction], {})).rejects.toThrow(
       /Call to "testFunction" does not match schema/,
     );
   });

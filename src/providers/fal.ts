@@ -68,7 +68,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     };
     const cacheKey = `fal:${this.modelName}:${JSON.stringify(input)}`;
     if (isCacheEnabled()) {
-      cache = getCache();
+      cache = await getCache();
       const cachedResponse = await cache.get<string>(cacheKey);
       response = cachedResponse ? JSON.parse(cachedResponse) : undefined;
       cached = response !== undefined;

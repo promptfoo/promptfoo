@@ -1,4 +1,5 @@
-import fs from 'fs';
+import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import * as path from 'path';
 
 import { parse as csvParse } from 'csv-parse/sync';
@@ -37,12 +38,16 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  *
  * @throws {Error} If the specified file does not exist.
  */
-export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
+export async function maybeLoadFromExternalFile(
+  filePath: string | object | Function | undefined | null,
+): Promise<any> {
   if (Array.isArray(filePath)) {
-    return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path);
-      return content;
-    });
+    return Promise.all(
+      filePath.map(async (path) => {
+        const content: any = await maybeLoadFromExternalFile(path);
+        return content;
+      }),
+    );
   }
 
   if (typeof filePath !== 'string') {
@@ -76,7 +81,7 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
     // Load all matched files and combine their contents
     const allContents: any[] = [];
     for (const matchedFile of matchedFiles) {
-      const contents = fs.readFileSync(matchedFile, 'utf8');
+      const contents = await fs.readFile(matchedFile, 'utf8');
       if (matchedFile.endsWith('.json')) {
         const parsed = JSON.parse(contents);
         if (Array.isArray(parsed)) {
@@ -114,11 +119,11 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
 
   // Original single file logic
   const finalPath = resolvedPath;
-  if (!fs.existsSync(finalPath)) {
+  if (!existsSync(finalPath)) {
     throw new Error(`File does not exist: ${finalPath}`);
   }
 
-  const contents = fs.readFileSync(finalPath, 'utf8');
+  const contents = await fs.readFile(finalPath, 'utf8');
   if (finalPath.endsWith('.json')) {
     return JSON.parse(contents);
   }
@@ -154,14 +159,14 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
   return path.join(process.cwd(), filePath);
 }
 
-export function maybeLoadConfigFromExternalFile(config: any): any {
+export async function maybeLoadConfigFromExternalFile(config: any): Promise<any> {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item));
+    return Promise.all(config.map((item) => maybeLoadConfigFromExternalFile(item)));
   }
   if (config && typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
-      result[key] = maybeLoadConfigFromExternalFile(config[key]);
+      result[key] = await maybeLoadConfigFromExternalFile(config[key]);
     }
     return result;
   }

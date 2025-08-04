@@ -21,12 +21,28 @@ export class IntentPlugin extends RedteamPluginBase {
   static readonly canGenerateRemote = false;
   private intents: (string | string[])[];
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
+  private constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    config: PluginConfig,
+    intents: (string | string[])[],
+  ) {
     super(provider, purpose, injectVar, config);
+    this.intents = intents;
+  }
+
+  static async create(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    config: PluginConfig,
+  ): Promise<IntentPlugin> {
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
     // Handle both string and array configs
-    const loadedIntents = maybeLoadFromExternalFile(config.intent) as (string | string[])[];
-    this.intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
+    const loadedIntents = (await maybeLoadFromExternalFile(config.intent)) as (string | string[])[];
+    const intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
+    return new IntentPlugin(provider, purpose, injectVar, config, intents);
   }
 
   protected async getTemplate(): Promise<string> {
