@@ -33,7 +33,7 @@ import Tooltip from '@mui/material/Tooltip';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
@@ -533,11 +533,6 @@ export default function ResultsView({
     };
   }, []);
 
-  // Check if navigation is visible
-  const location = useLocation();
-  const isEvalResultsPage = location.pathname.startsWith('/eval/');
-  const isNavigationHidden = isEvalResultsPage && topAreaCollapsed;
-
   return (
     <>
       <Box
@@ -547,9 +542,8 @@ export default function ResultsView({
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
-          height: isNavigationHidden ? '100vh' : 'calc(100vh - 64px)', // Adjust height based on navigation visibility
-          overflow: 'hidden', // Prevent any overflow from the container itself
-          transition: 'height 0.3s ease', // Smooth transition when navigation appears/disappears
+          height: '100%',
+          minHeight: '100vh',
         }}
       >
         <Box
@@ -595,10 +589,9 @@ export default function ResultsView({
         </Box>
         <Box
           sx={{
-            transition: 'all 0.3s ease',
-            overflow: topAreaCollapsed ? 'hidden' : 'visible',
+            overflow: 'hidden',
             height: topAreaCollapsed ? 0 : 'auto',
-            flexShrink: 0,
+            transition: 'height 0.3s ease',
           }}
         >
           {
