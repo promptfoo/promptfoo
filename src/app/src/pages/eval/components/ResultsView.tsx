@@ -533,23 +533,33 @@ export default function ResultsView({
     };
   }, []);
 
+  /**
+   * Calculate container height once on mount to prevent layout shifts.
+   * This fixes an issue where the pagination footer would jump when the header
+   * collapses/expands. By setting a fixed height on initial render, the container
+   * maintains its size regardless of header state changes.
+   */
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [containerHeight, setContainerHeight] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (containerRef.current && !containerHeight) {
+      const top = containerRef.current.getBoundingClientRect().top;
+      setContainerHeight(`calc(100vh - ${top}px)`);
+    }
+  }, [containerHeight]);
+
   return (
     <>
       <Box
         id="results-view-container"
+        ref={containerRef}
         px={2}
         sx={{
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
-        }}
-        ref={(el: HTMLDivElement | null) => {
-          const top = el?.getBoundingClientRect().top;
-          if (top) {
-            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-            el.style.height = `calc(100vh - ${top}px)`;
-          }
+          height: containerHeight || 'auto',
         }}
       >
         <Box
@@ -593,8 +603,14 @@ export default function ResultsView({
             </IconButton>
           </Tooltip>
         </Box>
-        <Box sx={{ transition: 'all 0.3s ease' }}>
-          {!topAreaCollapsed && (
+        <Box
+          sx={{
+            transition: 'all 0.3s ease',
+            overflow: topAreaCollapsed ? 'hidden' : 'visible',
+            height: topAreaCollapsed ? 0 : 'auto',
+          }}
+        >
+          {
             <>
               <ResponsiveStack
                 direction="row"
@@ -925,7 +941,7 @@ export default function ResultsView({
                 <ResultsCharts handleHideCharts={() => setRenderResultsCharts(false)} />
               )}
             </>
-          )}
+          }
         </Box>
         <ResultsTable
           maxTextLength={maxTextLength}
