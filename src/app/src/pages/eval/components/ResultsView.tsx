@@ -33,7 +33,7 @@ import Tooltip from '@mui/material/Tooltip';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
@@ -533,6 +533,11 @@ export default function ResultsView({
     };
   }, []);
 
+  // Check if navigation is visible
+  const location = useLocation();
+  const isEvalResultsPage = location.pathname.startsWith('/eval/');
+  const isNavigationHidden = isEvalResultsPage && topAreaCollapsed;
+
   return (
     <>
       <Box
@@ -542,8 +547,9 @@ export default function ResultsView({
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
-          height: 'calc(100vh - 64px)', // Account for navigation bar
+          height: isNavigationHidden ? '100vh' : 'calc(100vh - 64px)', // Adjust height based on navigation visibility
           overflow: 'hidden', // Prevent any overflow from the container itself
+          transition: 'height 0.3s ease', // Smooth transition when navigation appears/disappears
         }}
       >
         <Box
