@@ -533,33 +533,17 @@ export default function ResultsView({
     };
   }, []);
 
-  /**
-   * Calculate container height once on mount to prevent layout shifts.
-   * This fixes an issue where the pagination footer would jump when the header
-   * collapses/expands. By setting a fixed height on initial render, the container
-   * maintains its size regardless of header state changes.
-   */
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const [containerHeight, setContainerHeight] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (containerRef.current && !containerHeight) {
-      const top = containerRef.current.getBoundingClientRect().top;
-      setContainerHeight(`calc(100vh - ${top}px)`);
-    }
-  }, [containerHeight]);
-
   return (
     <>
       <Box
         id="results-view-container"
-        ref={containerRef}
         px={2}
         sx={{
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
-          height: containerHeight || 'auto',
+          height: 'calc(100vh - 64px)', // Account for navigation bar
+          overflow: 'hidden', // Prevent any overflow from the container itself
         }}
       >
         <Box
@@ -608,6 +592,7 @@ export default function ResultsView({
             transition: 'all 0.3s ease',
             overflow: topAreaCollapsed ? 'hidden' : 'visible',
             height: topAreaCollapsed ? 0 : 'auto',
+            flexShrink: 0,
           }}
         >
           {
@@ -943,19 +928,21 @@ export default function ResultsView({
             </>
           }
         </Box>
-        <ResultsTable
-          maxTextLength={maxTextLength}
-          columnVisibility={currentColumnState.columnVisibility}
-          wordBreak={wordBreak}
-          showStats={showInferenceDetails}
-          filterMode={filterMode}
-          failureFilter={failureFilter}
-          debouncedSearchText={debouncedSearchValue}
-          onFailureFilterToggle={handleFailureFilterToggle}
-          onSearchTextChange={handleSearchTextChange}
-          setFilterMode={setFilterMode}
-          zoom={resultsTableZoom}
-        />
+        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <ResultsTable
+            maxTextLength={maxTextLength}
+            columnVisibility={currentColumnState.columnVisibility}
+            wordBreak={wordBreak}
+            showStats={showInferenceDetails}
+            filterMode={filterMode}
+            failureFilter={failureFilter}
+            debouncedSearchText={debouncedSearchValue}
+            onFailureFilterToggle={handleFailureFilterToggle}
+            onSearchTextChange={handleSearchTextChange}
+            setFilterMode={setFilterMode}
+            zoom={resultsTableZoom}
+          />
+        </Box>
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
