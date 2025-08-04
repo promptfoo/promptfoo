@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { getDb } from '../database';
 import { modelAuditScansTable } from '../database/tables';
 import logger from '../logger';
