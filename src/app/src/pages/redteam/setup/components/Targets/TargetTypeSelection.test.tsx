@@ -69,7 +69,7 @@ describe('TargetTypeSelection', () => {
       providerType: 'http', // Set to 'http' to ensure collapsed view
       setProviderType: mockSetProviderType,
     });
-    
+
     renderComponent();
 
     // Initially, no footer Next button should be present
@@ -149,7 +149,7 @@ describe('TargetTypeSelection', () => {
       providerType: 'http', // Set to 'http' to ensure collapsed view
       setProviderType: mockSetProviderType,
     });
-    
+
     renderComponent();
 
     const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
