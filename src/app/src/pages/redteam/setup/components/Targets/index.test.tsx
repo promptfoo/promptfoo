@@ -1,12 +1,10 @@
 import React from 'react';
 
+import { useTelemetry } from '@app/hooks/useTelemetry';
+import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import userEvent from '@testing-library/user-event';
-
-import { useTelemetry } from '@app/hooks/useTelemetry';
-import { callApi } from '@app/utils/api';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import Targets from './index';
@@ -219,10 +217,10 @@ describe('Targets Component', () => {
 
     renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
 
-    const nextButton = screen.getByRole('button', { name: /Next/i });
+    const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
     expect(nextButton).toBeDisabled();
 
-    const targetNameInput = screen.getByLabelText(/Target Name/i);
+    const targetNameInput = screen.getByLabelText(/Provider Name/i);
     fireEvent.change(targetNameInput, { target: { value: 'My Test API' } });
 
     const urlInput = screen.getByLabelText(/URL/i);
@@ -252,25 +250,27 @@ describe('Targets Component', () => {
 
     renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
 
-    const user = userEvent.setup();
+    // Component starts in collapsed view showing HTTP provider, click Change to expand
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
 
-    const targetTypeSelect = screen.getByLabelText(/Target Type/i);
-    await user.click(targetTypeSelect);
-    const websocketOption = screen.getByRole('option', { name: /websocket/i });
-    await user.click(websocketOption);
+    const websocketProviderCard = screen
+      .getByText('WebSocket Endpoint')
+      .closest('div[class*="MuiPaper-root"]');
+    fireEvent.click(websocketProviderCard!);
 
     const webSocketURLInput = screen.getByLabelText(/WebSocket URL/i);
-    await user.type(webSocketURLInput, 'wss://example.com/ws');
+    fireEvent.change(webSocketURLInput, { target: { value: 'wss://example.com/ws' } });
 
-    const targetNameInput = screen.getByLabelText(/Target Name/i);
-    await user.type(targetNameInput, 'My WebSocket Target');
+    const targetNameInput = screen.getByLabelText(/Provider Name/i);
+    fireEvent.change(targetNameInput, { target: { value: 'My WebSocket Target' } });
 
-    const nextButton = screen.getByRole('button', { name: /Next/i });
+    const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
     await waitFor(() => {
       expect(nextButton).not.toBeDisabled();
     });
 
-    await user.click(nextButton);
+    fireEvent.click(nextButton);
     expect(mockOnNext).toHaveBeenCalledTimes(1);
   });
 
@@ -341,10 +341,14 @@ describe('Targets Component', () => {
 
     renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
 
-    const targetTypeSelect = screen.getByLabelText(/Target Type/i);
-    fireEvent.mouseDown(targetTypeSelect);
-    const websocketOption = screen.getByText(/WebSocket/i);
-    fireEvent.click(websocketOption);
+    // Component starts in collapsed view showing HTTP provider, click Change to expand
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    const websocketProviderCard = screen
+      .getByText('WebSocket Endpoint')
+      .closest('div[class*="MuiPaper-root"]');
+    fireEvent.click(websocketProviderCard!);
 
     await waitFor(() => {
       expect(mockUpdateConfig).toHaveBeenCalledWith(
@@ -381,10 +385,10 @@ describe('Targets Component', () => {
 
     renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
 
-    const targetNameInput = screen.getByLabelText(/Target Name/i);
+    const targetNameInput = screen.getByLabelText(/Provider Name/i);
     const urlInput = screen.getByLabelText(/URL/i);
-    const nextButton = screen.getByRole('button', { name: /Next/i });
-    const backButton = screen.getByRole('button', { name: /Back/i });
+    const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
+    const backButton = screen.getAllByRole('button', { name: /Back/i })[0];
 
     fireEvent.change(targetNameInput, { target: { value: initialTargetName } });
     fireEvent.change(urlInput, { target: { value: initialTargetURL } });

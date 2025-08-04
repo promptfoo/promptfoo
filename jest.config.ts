@@ -23,6 +23,9 @@ const config: Config = {
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
   },
+  // Use a more conservative worker pool configuration to prevent segmentation faults
+  maxWorkers: '50%',
+  workerIdleMemoryLimit: '1GB',
 };
 
 export default config;
