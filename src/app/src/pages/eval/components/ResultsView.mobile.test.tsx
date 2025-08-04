@@ -27,6 +27,10 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => vi.fn(),
     useSearchParams: () => [new URLSearchParams(''), vi.fn()],
+    useOutletContext: () => ({
+      topAreaCollapsed: mockTopAreaCollapsed,
+      setTopAreaCollapsed: mockSetTopAreaCollapsed,
+    }),
   };
 });
 
@@ -58,8 +62,6 @@ const mockTable = {
 
 vi.mock('./store', () => ({
   useResultsViewSettingsStore: vi.fn(() => ({
-    topAreaCollapsed: mockTopAreaCollapsed,
-    setTopAreaCollapsed: mockSetTopAreaCollapsed,
     maxTextLength: 250,
     wordBreak: 'break-word',
     showInferenceDetails: true,
