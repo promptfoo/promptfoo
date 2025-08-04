@@ -1,6 +1,7 @@
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import fs from 'fs';
 
 import chalk from 'chalk';
 import { getDb } from '../database';
@@ -10,6 +11,12 @@ import logger from '../logger';
 import { createScanId } from '../models/modelAuditScan';
 import type { Command } from 'commander';
 import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
+
+// Get promptfoo version from package.json
+const promptfooPackage = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'),
+);
+const PROMPTFOO_VERSION = promptfooPackage.version;
 
 const execAsync = promisify(exec);
 
@@ -97,6 +104,18 @@ export function modelScanCommand(program: Command): void {
       }
 
       logger.info(`Running model scan on: ${paths.join(', ')}`);
+
+      // Get ModelAudit version
+      let modelAuditVersion: string | undefined;
+      try {
+        const versionResult = await execAsync('modelaudit --version');
+        const versionMatch = versionResult.stdout.match(/modelaudit(?:,)? version (\S+)/i);
+        if (versionMatch) {
+          modelAuditVersion = versionMatch[1];
+        }
+      } catch (error) {
+        logger.debug(`Failed to get ModelAudit version: ${error}`);
+      }
 
       // If writing is enabled (default), capture output to save to database
       if (options.write !== false) {
@@ -186,6 +205,8 @@ export function modelScanCommand(program: Command): void {
                       verbose: options.verbose || false,
                     },
                   },
+                  modelAuditVersion: modelAuditVersion || null,
+                  promptfooVersion: PROMPTFOO_VERSION,
                 })
                 .run();
 

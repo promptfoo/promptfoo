@@ -60,9 +60,14 @@ export async function handleScanDeleteAll() {
     return;
   }
 
-  const db = getDb();
-  const result = await db.delete(modelAuditScansTable).run();
-  logger.info(`All model audit scans have been deleted (${result.changes} scans removed).`);
+  try {
+    const db = getDb();
+    const result = await db.delete(modelAuditScansTable).run();
+    logger.info(`All model audit scans have been deleted (${result.changes} scans removed).`);
+  } catch (error) {
+    logger.error(`Could not delete model audit scans:\n${error}`);
+    process.exit(1);
+  }
 }
 
 export function deleteCommand(program: Command) {

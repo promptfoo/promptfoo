@@ -71,6 +71,8 @@ export function importCommand(program: Command) {
               primaryPath: data.primaryPath,
               results: data.results,
               config: data.config,
+              modelAuditVersion: data.modelAuditVersion || null,
+              promptfooVersion: data.promptfooVersion || null,
             })
             .run();
 

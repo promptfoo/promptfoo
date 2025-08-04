@@ -328,8 +328,14 @@ export const modelAuditScansTable = sqliteTable(
     author: text('author'),
     description: text('description'),
     primaryPath: text('primary_path').notNull(),
-    results: text('results', { mode: 'json' }).notNull(),
-    config: text('config', { mode: 'json' }).notNull(),
+    results: text('results', { mode: 'json' })
+      .$type<import('../types/modelAudit').ModelAuditScanResults>()
+      .notNull(),
+    config: text('config', { mode: 'json' })
+      .$type<import('../types/modelAudit').ModelAuditScanConfig>()
+      .notNull(),
+    modelAuditVersion: text('model_audit_version'),
+    promptfooVersion: text('promptfoo_version'),
   },
   (table) => ({
     createdAtIdx: index('model_audit_scans_created_at_idx').on(table.createdAt),

@@ -168,7 +168,12 @@ jobs:
           pip install modelaudit[all]
 
       - name: Scan models
-        run: promptfoo scan-model models/ --format json --output scan-results.json
+        run: |
+          # Scan with description for tracking
+          promptfoo scan-model models/ \
+            --format json \
+            --output scan-results.json \
+            --description "CI scan for PR #${{ github.event.pull_request.number }}"
 
       - name: Check for critical issues
         run: |
@@ -465,4 +470,52 @@ SCANNER_REGISTRY.append(CustomModelScanner)
 # Now you can use it
 from modelaudit.core import scan_model_directory_or_file
 results = scan_model_directory_or_file("path/to/custom_model.mymodel")
+```
+
+## Persistent Storage API
+
+Saved scans can be accessed programmatically via the REST API:
+
+```bash
+# List all scans
+curl http://localhost:15500/api/model-audit/scans
+
+# Get paginated results
+curl "http://localhost:15500/api/model-audit/scans?limit=10&offset=0"
+
+# Get specific scan
+curl http://localhost:15500/api/model-audit/scans/scan-ABC-2025-01-04T12:00:00
+
+# Delete scan
+curl -X DELETE http://localhost:15500/api/model-audit/scans/scan-ABC-2025-01-04T12:00:00
+
+# Delete all scans
+curl -X DELETE http://localhost:15500/api/model-audit/scans
+```
+
+### API Response Format
+
+```json
+{
+  "scans": [
+    {
+      "id": "scan-ABC-2025-01-04T12:00:00",
+      "createdAt": "2025-01-04T12:00:00Z",
+      "config": {
+        "paths": ["model.pkl"],
+        "timeout": 300
+      },
+      "results": {
+        "issues": [],
+        "success": true,
+        "duration": 0.123
+      },
+      "author": "alice",
+      "description": "Pre-release security check",
+      "modelAuditVersion": "0.1.5",
+      "promptfooVersion": "0.117.0"
+    }
+  ],
+  "total": 42
+}
 ```

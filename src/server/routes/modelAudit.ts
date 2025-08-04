@@ -15,6 +15,12 @@ import { createScanId } from '../../models/modelAuditScan';
 import type { Request, Response } from 'express';
 import type { ModelAuditIssue, ModelAuditScanResults } from '../../types/modelAudit';
 
+// Get promptfoo version from package.json
+const promptfooPackage = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '..', '..', '..', 'package.json'), 'utf8'),
+);
+const PROMPTFOO_VERSION = promptfooPackage.version;
+
 const execAsync = promisify(exec);
 export const modelAuditRouter = Router();
 
@@ -25,6 +31,7 @@ async function saveScanToDatabase(
   options: any,
   transformedResults: ModelAuditScanResults,
   description?: string,
+  modelAuditVersion?: string,
 ): Promise<void> {
   const db = getDb();
   await db
@@ -40,6 +47,8 @@ async function saveScanToDatabase(
         paths: resolvedPaths,
         options: options,
       },
+      modelAuditVersion: modelAuditVersion || null,
+      promptfooVersion: PROMPTFOO_VERSION,
     })
     .run();
 }
@@ -314,6 +323,18 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
 
     logger.info(`Running model scan on: ${resolvedPaths.join(', ')}`);
 
+    // Get ModelAudit version
+    let modelAuditVersion: string | undefined;
+    try {
+      const versionResult = await execAsync('modelaudit --version');
+      const versionMatch = versionResult.stdout.match(/modelaudit(?:,)? version (\S+)/i);
+      if (versionMatch) {
+        modelAuditVersion = versionMatch[1];
+      }
+    } catch (error) {
+      logger.debug(`Failed to get ModelAudit version: ${error}`);
+    }
+
     // Track the scan
     telemetry.record('webui_api', {
       event: 'model_scan',
@@ -392,6 +413,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
               options,
               transformedResults,
               req.body.description,
+              modelAuditVersion,
             );
             logger.info(`Saved model audit scan with ID: ${scanId}`);
           } catch (dbError) {
@@ -501,6 +523,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
               options,
               fallbackResults,
               req.body.description,
+              modelAuditVersion,
             );
             logger.info(`Saved model audit scan with ID: ${scanId}`);
           } catch (dbError) {

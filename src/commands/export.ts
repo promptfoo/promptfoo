@@ -5,7 +5,8 @@ import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { writeOutput, createOutputMetadata } from '../util';
 import type { Command } from 'commander';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
+import fs from 'fs/promises';
 
 export function exportCommand(program: Command) {
   program
@@ -15,17 +16,29 @@ export function exportCommand(program: Command) {
     .action(async (id, cmdObj) => {
       try {
         // Check if this is a model audit scan ID
-        if (id.startsWith('scan-')) {
+        if (id.startsWith('scan-') || id === 'latest') {
           // Export model audit scan
           const db = getDb();
-          const scanResult = await db
-            .select()
-            .from(modelAuditScansTable)
-            .where(eq(modelAuditScansTable.id, id))
-            .get();
+          let scanResult;
+          
+          if (id === 'latest') {
+            // Get the most recent scan
+            scanResult = await db
+              .select()
+              .from(modelAuditScansTable)
+              .orderBy(desc(modelAuditScansTable.createdAt))
+              .limit(1)
+              .get();
+          } else {
+            scanResult = await db
+              .select()
+              .from(modelAuditScansTable)
+              .where(eq(modelAuditScansTable.id, id))
+              .get();
+          }
 
           if (!scanResult) {
-            logger.error(`No model audit scan found with ID ${id}`);
+            logger.error(id === 'latest' ? 'No model audit scans found' : `No model audit scan found with ID ${id}`);
             process.exit(1);
           }
 
@@ -37,11 +50,12 @@ export function exportCommand(program: Command) {
             primaryPath: scanResult.primaryPath,
             results: scanResult.results,
             config: scanResult.config,
+            modelAuditVersion: scanResult.modelAuditVersion,
+            promptfooVersion: scanResult.promptfooVersion,
           };
 
           if (cmdObj.output) {
-            const fs = await import('fs');
-            await fs.promises.writeFile(
+            await fs.writeFile(
               cmdObj.output,
               JSON.stringify(exportData, null, 2),
               'utf-8',

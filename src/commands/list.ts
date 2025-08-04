@@ -210,7 +210,11 @@ export function listCommand(program: Command) {
           path: scan.primaryPath,
           author: scan.author || '-',
           issues: issueDisplay,
-          description: scan.description || '-',
+          description: scan.description
+            ? scan.description.length > 30
+              ? scan.description.slice(0, 30) + '...'
+              : scan.description
+            : '-',
         };
       });
 

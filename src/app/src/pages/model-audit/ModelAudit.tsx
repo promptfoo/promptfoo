@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   CheckCircle as CheckCircleIcon,
@@ -33,8 +33,8 @@ import type { ScanApiResponse, StoredScan } from './ModelAudit.types';
 import { useModelAuditStore } from './store';
 
 export default function ModelAudit() {
-  const [snackbarOpen, setSnackbarOpen] = React.useState(false);
-  const [snackbarMessage, setSnackbarMessage] = React.useState('');
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   const {
     // State

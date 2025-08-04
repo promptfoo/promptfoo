@@ -34,6 +34,15 @@ And displays the results:
 
 ![model scan results](/img/docs/modelaudit/model-audit-results.png)
 
+## Key Features
+
+- **Static Security Scanning**: Detect malicious code, backdoors, and vulnerabilities in model files
+- **Persistent Storage**: Automatically save scan results with full history tracking
+- **15+ Format Support**: Scan PyTorch, TensorFlow, ONNX, Keras, and more
+- **Web Interface**: Visual scanning interface with history and results visualization
+- **CI/CD Integration**: Automate security checks in your ML pipelines
+- **Remote Scanning**: Scan models directly from HuggingFace, S3, GCS, and other sources
+
 ## Purpose
 
 AI/ML models can introduce security risks through:
@@ -105,6 +114,22 @@ docker run --rm -v $(pwd):/data ghcr.io/promptfoo/modelaudit:latest scan /data/m
 promptfoo scan-model [OPTIONS] PATH...
 ```
 
+### Quick Start
+
+```bash
+# Scan a model (automatically saved to history)
+promptfoo scan-model model.pkl
+
+# Scan with description
+promptfoo scan-model model.pkl --description "Production model v2.0"
+
+# View scan history
+promptfoo list scans
+
+# View latest scan results
+promptfoo show scan latest
+```
+
 ### Examples
 
 ```bash
@@ -153,6 +178,8 @@ See the [Advanced Usage](./usage.md) guide for detailed authentication setup for
 
 | Option                 | Description                                                      |
 | ---------------------- | ---------------------------------------------------------------- |
+| `--description`, `-d`  | Add a description to the saved scan                             |
+| `--no-write`          | Skip saving scan results to database                            |
 | `--blacklist`, `-b`    | Additional blacklist patterns to check against model names       |
 | `--format`, `-f`       | Output format (`text` or `json`) [default: text]                 |
 | `--output`, `-o`       | Output file path (prints to stdout if not specified)             |
@@ -176,7 +203,61 @@ Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual 
 - Visual file/directory selection with current working directory context
 - GUI configuration for all scan options (blacklist patterns, timeouts, file limits)
 - Live scanning progress and tabbed results display with severity color coding
-- Scan history and automatic installation detection
+- **Scan History**: View and manage all saved scans with filtering and search
+- Automatic installation detection
+
+## Persistent Storage
+
+All scans are automatically saved to a local database for historical tracking and compliance. Key capabilities:
+
+- **Automatic saving** of all scan results (use `--no-write` to disable)
+- **History management** with `list scans`, `show scan`, and `delete scan` commands
+- **Export/Import** for sharing and archiving scan results
+- **Version tracking** of both ModelAudit and Promptfoo versions
+
+### Managing Scan History
+
+```bash
+# List all saved scans
+promptfoo list scans
+
+# Show 5 most recent scans
+promptfoo list scans -n 5
+
+# View specific scan details
+promptfoo show scan scan-ABC-2025-01-04T12:00:00
+
+# View most recent scan
+promptfoo show scan latest
+
+# Delete a specific scan
+promptfoo delete scan scan-ABC-2025-01-04T12:00:00
+
+# Delete all scans (with confirmation)
+promptfoo delete scan --all
+```
+
+### Export and Import
+
+```bash
+# Export scan results
+promptfoo export scan-ABC-2025-01-04T12:00:00 -o scan-results.json
+promptfoo export latest -o latest-scan.json
+
+# Import scan results
+promptfoo import scan-results.json
+promptfoo import scan-results.json --force  # Overwrite if exists
+```
+
+### Web Interface History
+
+The web interface at `/model-audit` includes a History tab that provides:
+- Visual scan history with filtering
+- Click to view historical scan results
+- Delete scans from the UI
+- View scan descriptions and metadata
+
+Scan data is stored in `~/.promptfoo/promptfoo.db` in the `model_audit_scans` table.
 
 ## Supported Formats
 

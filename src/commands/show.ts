@@ -189,6 +189,12 @@ export async function handleScan(id: string) {
   logger.info(`  Author: ${scan.author || 'Unknown'}`);
   logger.info(`  Description: ${scan.description || 'No description'}`);
   logger.info(`  Primary Path: ${scan.primaryPath}`);
+  if (scan.modelAuditVersion) {
+    logger.info(`  ModelAudit Version: ${scan.modelAuditVersion}`);
+  }
+  if (scan.promptfooVersion) {
+    logger.info(`  Promptfoo Version: ${scan.promptfooVersion}`);
+  }
 
   // Configuration
   logger.info('\n' + chalk.bold('Configuration:'));
@@ -224,11 +230,11 @@ export async function handleScan(id: string) {
     logger.info('\n' + chalk.bold('Issue Details:'));
 
     // Group issues by severity
+    const SEVERITY_ORDER = { error: 0, warning: 1, info: 2, debug: 3 } as const;
     const sortedIssues = [...issues].sort((a, b) => {
-      const severityOrder = { error: 0, warning: 1, info: 2, debug: 3 };
       return (
-        (severityOrder[a.severity as keyof typeof severityOrder] || 999) -
-        (severityOrder[b.severity as keyof typeof severityOrder] || 999)
+        (SEVERITY_ORDER[a.severity as keyof typeof SEVERITY_ORDER] || 999) -
+        (SEVERITY_ORDER[b.severity as keyof typeof SEVERITY_ORDER] || 999)
       );
     });
 
@@ -355,5 +361,25 @@ export async function showCommand(program: Command) {
   showCommand
     .command('scan <id>')
     .description('Show details of a specific model audit scan')
-    .action(handleScan);
+    .action(async (id: string) => {
+      if (id === 'latest') {
+        // Get the most recent scan
+        const db = getDb();
+        const latestScan = await db
+          .select()
+          .from(modelAuditScansTable)
+          .orderBy(desc(modelAuditScansTable.createdAt))
+          .limit(1)
+          .get();
+        
+        if (!latestScan) {
+          logger.error('No model audit scans found');
+          process.exitCode = 1;
+          return;
+        }
+        
+        return handleScan(latestScan.id);
+      }
+      return handleScan(id);
+    });
 }
