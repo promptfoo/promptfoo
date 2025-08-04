@@ -2,20 +2,20 @@
 # Run with: PROMPTFOO_USE_ASSET_STORAGE=true promptfoo eval -c test-audio-asset-storage.yaml
 
 prompts:
-  - "Say hello world in a friendly voice"
-  - "Count from one to five slowly"
+  - 'Say hello world in a friendly voice'
+  - 'Count from one to five slowly'
 
 providers:
   - id: hyperbolic:audio:melo
     config:
-      voice: "EN-US"
+      voice: 'EN-US'
       speed: 1.0
 
 tests:
   - vars:
-      tone: "cheerful"
+      tone: 'cheerful'
   - vars:
-      tone: "calm"
+      tone: 'calm'
 
 defaultTest:
   assert:

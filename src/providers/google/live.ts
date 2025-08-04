@@ -10,6 +10,9 @@ import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { geminiFormatAndSystemInstructions, loadFile } from './util';
+import { isAssetStorageEnabled } from '../../assets';
+import { getAssetStore } from '../../assets';
+import { isValidEvalId, isValidResultId } from '../../util/ids';
 
 import type {
   ApiProvider,
@@ -241,11 +244,72 @@ export class GoogleLiveProvider implements ApiProvider {
         };
 
         if (hasAudioContent) {
-          result.audio = {
-            data: this.convertPcmToWav(response_audio_total),
-            format: 'wav',
-            transcript: response_audio_transcript || response_text_total || undefined,
-          };
+          const wavData = this.convertPcmToWav(response_audio_total);
+          const wavBuffer = Buffer.from(wavData, 'base64');
+          const transcript = response_audio_transcript || response_text_total || undefined;
+
+          // Check if asset storage is enabled and we have context
+          if (isAssetStorageEnabled() && context?.vars?.__evalId && context?.vars?.__resultId) {
+            try {
+              const evalId = context.vars.__evalId as string;
+              const resultId = context.vars.__resultId as string;
+              
+              // Validate IDs
+              if (!isValidEvalId(evalId)) {
+                logger.warn(`Invalid evalId format: ${evalId}`);
+                throw new Error('Invalid evalId format');
+              }
+              if (!isValidResultId(resultId)) {
+                logger.warn(`Invalid resultId format: ${resultId}`);
+                throw new Error('Invalid resultId format');
+              }
+              
+              const assetStore = getAssetStore();
+
+              const metadata = await assetStore.save(
+                wavBuffer,
+                'audio',
+                'audio/wav',
+                evalId,
+                resultId,
+              );
+
+              logger.debug(
+                `Saved Google Live audio to asset storage: ${metadata.id} (${metadata.size} bytes)`,
+              );
+
+              // Include transcript in the output for better visibility
+              const transcriptText = transcript ? `\n\nTranscript: ${transcript}` : '';
+              result.output = {
+                text: `[Audio](promptfoo://${evalId}/${resultId}/${metadata.id})${transcriptText}`,
+                toolCall: { functionCalls: function_calls_total },
+                statefulApiState,
+                ...(thinking && { thinking }),
+              };
+              result.metadata = {
+                asset: metadata,
+                transcript,
+              };
+            } catch (error) {
+              logger.warn(
+                'Failed to save Google Live audio to asset storage, falling back to base64:',
+                error,
+              );
+              // Fall through to original format
+              result.audio = {
+                data: wavData,
+                format: 'wav',
+                transcript,
+              };
+            }
+          } else {
+            // Original behavior when asset storage is not enabled
+            result.audio = {
+              data: wavData,
+              format: 'wav',
+              transcript,
+            };
+          }
         }
         safeResolve(result);
       };

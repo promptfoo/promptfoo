@@ -5,7 +5,8 @@ import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { formatOpenAiError } from './util';
 import { isAssetStorageEnabled } from '../../assets';
-import { getMetricsAssetStore } from '../../assets/store';
+import { getAssetStore } from '../../assets';
+import { isValidEvalId, isValidResultId } from '../../util/ids';
 
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
@@ -180,6 +181,7 @@ export async function processApiResponse(
   size: string,
   quality?: string,
   n: number = 1,
+  context?: CallApiContextParams,
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
@@ -190,20 +192,31 @@ export async function processApiResponse(
 
   try {
     // Check if we should use asset storage for base64 images
-    if (responseFormat === 'b64_json' && isAssetStorageEnabled()) {
+    const useAssetStorage = responseFormat === 'b64_json' && isAssetStorageEnabled() && 
+      context?.vars?.__evalId && context?.vars?.__resultId;
+      
+    if (useAssetStorage) {
       const b64Data = data.data[0].b64_json;
       if (!b64Data) {
         return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
       }
 
       try {
-        // Use timestamp-based IDs for now since we don't have evalId/resultId
-        const timestamp = Date.now();
-        const evalId = `eval-${timestamp}`;
-        const resultId = `result-${timestamp}`;
+        const evalId = context!.vars!.__evalId as string;
+        const resultId = context!.vars!.__resultId as string;
+        
+        // Validate IDs
+        if (!isValidEvalId(evalId)) {
+          logger.warn(`Invalid evalId format: ${evalId}`);
+          throw new Error('Invalid evalId format');
+        }
+        if (!isValidResultId(resultId)) {
+          logger.warn(`Invalid resultId format: ${resultId}`);
+          throw new Error('Invalid resultId format');
+        }
 
         // Save to asset store
-        const assetStore = getMetricsAssetStore();
+        const assetStore = getAssetStore();
         const imageBuffer = Buffer.from(b64Data, 'base64');
 
         const metadata = await assetStore.save(imageBuffer, 'image', 'image/png', evalId, resultId);
@@ -213,7 +226,7 @@ export async function processApiResponse(
         const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
 
         return {
-          output: `![${ellipsizedPrompt}](asset://${evalId}/${resultId}/${metadata.id})`,
+          output: `![${ellipsizedPrompt}](promptfoo://${evalId}/${resultId}/${metadata.id})`,
           cached,
           cost,
           metadata: {
@@ -338,6 +351,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       size,
       config.quality,
       config.n || 1,
+      context,
     );
   }
 }

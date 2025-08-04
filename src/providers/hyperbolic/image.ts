@@ -2,6 +2,9 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { isAssetStorageEnabled } from '../../assets';
+import { getAssetStore } from '../../assets';
+import { isValidEvalId, isValidResultId } from '../../util/ids';
 
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
@@ -272,6 +275,56 @@ export class HyperbolicImageProvider implements ApiProvider {
 
       const imageData = data.images[0].image;
       const cost = cached ? 0 : this.calculateImageCost();
+
+      // Check if asset storage is enabled and we have context
+      if (isAssetStorageEnabled() && context?.vars?.__evalId && context?.vars?.__resultId) {
+        try {
+          const evalId = context.vars.__evalId as string;
+          const resultId = context.vars.__resultId as string;
+          
+          // Validate IDs
+          if (!isValidEvalId(evalId)) {
+            logger.warn(`Invalid evalId format: ${evalId}`);
+            throw new Error('Invalid evalId format');
+          }
+          if (!isValidResultId(resultId)) {
+            logger.warn(`Invalid resultId format: ${resultId}`);
+            throw new Error('Invalid resultId format');
+          }
+          
+          const assetStore = getAssetStore();
+          const imageBuffer = Buffer.from(imageData, 'base64');
+
+          // Detect MIME type from base64 header
+          let mimeType = 'image/jpeg'; // Default
+          if (imageData.startsWith('/9j/')) {
+            mimeType = 'image/jpeg';
+          } else if (imageData.startsWith('iVBORw0KGgo')) {
+            mimeType = 'image/png';
+          } else if (imageData.startsWith('UklGR')) {
+            mimeType = 'image/webp';
+          }
+
+          const metadata = await assetStore.save(imageBuffer, 'image', mimeType, evalId, resultId);
+
+          logger.debug(
+            `Saved Hyperbolic image to asset storage: ${metadata.id} (${metadata.size} bytes)`,
+          );
+
+          // Return markdown image with asset URL
+          return {
+            output: `![${prompt}](promptfoo://${evalId}/${resultId}/${metadata.id})`,
+            cached,
+            cost,
+          };
+        } catch (error) {
+          logger.warn(
+            'Failed to save Hyperbolic image to asset storage, falling back to base64:',
+            error,
+          );
+          // Fall through to original format
+        }
+      }
 
       // Format the output for proper rendering
       const formattedOutput = formatHyperbolicImageOutput(imageData, prompt, responseFormat);

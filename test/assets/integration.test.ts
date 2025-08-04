@@ -5,8 +5,7 @@ import express from 'express';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 
-import { AssetStore } from '../../src/assets';
-import { getMetricsAssetStore } from '../../src/assets/store';
+import { AssetStore, getAssetStore } from '../../src/assets';
 import { AssetMetrics } from '../../src/assets/metrics';
 import { setupAssetRoutes } from '../../src/server/routes/assets';
 
@@ -61,7 +60,7 @@ describe('Asset Storage Integration', () => {
     setupAssetRoutes(app);
 
     // Create asset store
-    assetStore = getMetricsAssetStore();
+    assetStore = getAssetStore();
   });
 
   afterEach(async () => {

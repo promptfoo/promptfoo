@@ -4,6 +4,9 @@ import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { getGoogleClient } from './util';
 import { sleep } from '../../util/time';
+import { isAssetStorageEnabled } from '../../assets';
+import { getAssetStore } from '../../assets';
+import { isValidEvalId, isValidResultId } from '../../util/ids';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
@@ -72,13 +75,13 @@ export class GoogleImageProvider implements ApiProvider {
 
     if (projectId) {
       // Use Vertex AI if project ID is available
-      return this.callVertexApi(prompt);
+      return this.callVertexApi(prompt, context);
     }
 
     // Otherwise, try Google AI Studio with API key
     const apiKey = this.getApiKey();
     if (apiKey) {
-      return this.callGeminiApi(prompt);
+      return this.callGeminiApi(prompt, context);
     }
 
     // If neither is available, provide helpful error
@@ -90,7 +93,10 @@ export class GoogleImageProvider implements ApiProvider {
     };
   }
 
-  private async callVertexApi(prompt: string): Promise<ProviderResponse> {
+  private async callVertexApi(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const location =
       this.config.region ||
       getEnvString('GOOGLE_LOCATION') ||
@@ -145,7 +151,7 @@ export class GoogleImageProvider implements ApiProvider {
         'Vertex AI API call',
       );
 
-      return this.processResponse(response.data, false);
+      return this.processResponse(response.data, false, context);
     } catch (err: any) {
       if (err.response?.data?.error) {
         return {
@@ -158,7 +164,10 @@ export class GoogleImageProvider implements ApiProvider {
     }
   }
 
-  private async callGeminiApi(prompt: string): Promise<ProviderResponse> {
+  private async callGeminiApi(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
@@ -212,7 +221,7 @@ export class GoogleImageProvider implements ApiProvider {
         'Google AI Studio API call',
       );
 
-      return this.processResponse(response.data, response.cached);
+      return this.processResponse(response.data, response.cached, context);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -220,7 +229,11 @@ export class GoogleImageProvider implements ApiProvider {
     }
   }
 
-  private processResponse(data: any, cached?: boolean): ProviderResponse {
+  private async processResponse(
+    data: any,
+    cached?: boolean,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     logger.debug(`Response data: ${JSON.stringify(data).substring(0, 200)}...`);
 
     if (!data || typeof data !== 'object') {
@@ -247,6 +260,10 @@ export class GoogleImageProvider implements ApiProvider {
     // Get cost per image from model prices
     const costPerImage = this.getCost();
 
+    // Check if asset storage is enabled and we have context
+    const useAssetStorage =
+      isAssetStorageEnabled() && context?.vars?.__evalId && context?.vars?.__resultId;
+
     for (const prediction of data.predictions) {
       // Handle both response structures (Vertex AI and Google AI Studio)
       const imageData = (prediction as ImagePrediction).image || (prediction as ImagePrediction);
@@ -254,8 +271,50 @@ export class GoogleImageProvider implements ApiProvider {
       const mimeType = imageData.mimeType || 'image/png';
 
       if (base64Image) {
-        // Return as markdown image with data URL
-        imageOutputs.push(`![Generated Image](data:${mimeType};base64,${base64Image})`);
+        if (useAssetStorage) {
+          try {
+            const evalId = context!.vars!.__evalId as string;
+            const resultId = context!.vars!.__resultId as string;
+            
+            // Validate IDs
+            if (!isValidEvalId(evalId)) {
+              logger.warn(`Invalid evalId format: ${evalId}`);
+              throw new Error('Invalid evalId format');
+            }
+            if (!isValidResultId(resultId)) {
+              logger.warn(`Invalid resultId format: ${resultId}`);
+              throw new Error('Invalid resultId format');
+            }
+            
+            const assetStore = getAssetStore();
+            const imageBuffer = Buffer.from(base64Image, 'base64');
+
+            const metadata = await assetStore.save(
+              imageBuffer,
+              'image',
+              mimeType,
+              evalId,
+              resultId,
+            );
+
+            logger.debug(
+              `Saved Google image to asset storage: ${metadata.id} (${metadata.size} bytes)`,
+            );
+            imageOutputs.push(
+              `![Generated Image](promptfoo://${evalId}/${resultId}/${metadata.id})`,
+            );
+          } catch (error) {
+            logger.warn(
+              'Failed to save Google image to asset storage, falling back to base64:',
+              error,
+            );
+            // Fallback to base64
+            imageOutputs.push(`![Generated Image](data:${mimeType};base64,${base64Image})`);
+          }
+        } else {
+          // Return as markdown image with data URL
+          imageOutputs.push(`![Generated Image](data:${mimeType};base64,${base64Image})`);
+        }
         totalCost += costPerImage;
       }
     }

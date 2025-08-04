@@ -47,7 +47,7 @@ export class AssetCleanup {
     try {
       await this.scanDirectory(assetsPath, maxAgeDays, orphanedOnly, dryRun, result);
     } catch (error) {
-      if ((error as any).code === 'ENOENT') {
+      if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
         logger.info('No assets directory found, nothing to clean up');
         return result;
       }
@@ -55,9 +55,13 @@ export class AssetCleanup {
     }
 
     if (dryRun) {
-      logger.info(`[DRY RUN] Would delete ${result.deletedFiles} files, freeing ${this.formatBytes(result.freedBytes)}`);
+      logger.info(
+        `[DRY RUN] Would delete ${result.deletedFiles} files, freeing ${this.formatBytes(result.freedBytes)}`,
+      );
     } else {
-      logger.info(`Cleaned up ${result.deletedFiles} files, freed ${this.formatBytes(result.freedBytes)}`);
+      logger.info(
+        `Cleaned up ${result.deletedFiles} files, freed ${this.formatBytes(result.freedBytes)}`,
+      );
     }
 
     return result;
@@ -125,7 +129,7 @@ export class AssetCleanup {
         const metadataPath = `${filePath}.meta.json`;
         try {
           await fs.access(metadataPath);
-          
+
           // Metadata exists, check age if not orphaned-only mode
           if (!orphanedOnly && ageInDays > maxAgeDays) {
             shouldDelete = true;
@@ -151,10 +155,10 @@ export class AssetCleanup {
             }
           }
         }
-        
+
         result.deletedFiles++;
         result.freedBytes += stats.size;
-        
+
         logger.debug(
           `${dryRun ? '[DRY RUN] Would delete' : 'Deleted'} ${filePath} (${reason}, ${this.formatBytes(stats.size)})`,
         );
@@ -198,11 +202,11 @@ export class AssetCleanup {
     };
 
     const assetsPath = path.join(getConfigDirectoryPath(), 'assets');
-    
+
     try {
       await this.collectStats(assetsPath, stats);
     } catch (error) {
-      if ((error as any).code !== 'ENOENT') {
+      if (!(error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT')) {
         throw error;
       }
     }

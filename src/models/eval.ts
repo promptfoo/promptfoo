@@ -19,6 +19,8 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { isAssetStorageEnabled } from '../assets';
+import { getAssetStore } from '../assets';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -724,13 +726,56 @@ export default class Eval {
         }))
       : this.prompts;
 
+    // Get results
+    let results = this.results.map((r) => r.toEvaluateResult());
+
+    // If asset storage is enabled, inline assets for export/sharing
+    if (isAssetStorageEnabled()) {
+      logger.debug('Inlining assets for export/sharing');
+      results = await this.inlineAssetsInResults(results);
+    }
+
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult()),
+      results,
       stats,
     };
+  }
+
+  private async inlineAssetsInResults(results: EvaluateResult[]): Promise<EvaluateResult[]> {
+    const assetStore = getAssetStore();
+    const assetUrlRegex = /promptfoo:\/\/([^/]+)\/([^/]+)\/([^)\s]+)/g;
+
+    for (const result of results) {
+      if (result.response?.output && typeof result.response.output === 'string') {
+        const matches = [...result.response.output.matchAll(assetUrlRegex)];
+
+        for (const match of matches) {
+          const [fullMatch, evalId, resultId, assetId] = match;
+          try {
+            const metadata = await assetStore.getMetadata(evalId, resultId, assetId);
+            const data = await assetStore.load(evalId, resultId, assetId);
+            const dataUrl = `data:${metadata.mimeType};base64,${data.toString('base64')}`;
+
+            result.response.output = result.response.output.replace(fullMatch, dataUrl);
+            logger.debug(`Inlined asset ${assetId} (${metadata.size} bytes)`);
+          } catch (error) {
+            logger.warn(`Failed to inline asset ${fullMatch}: ${error}`);
+            // Leave the asset URL as-is if we can't load it
+          }
+        }
+      }
+
+      // Also check for audio in the response
+      if (result.response?.audio?.data && typeof result.response.audio.data === 'string') {
+        // Audio data is already base64, no need to convert
+        logger.debug('Audio data already in base64 format');
+      }
+    }
+
+    return results;
   }
 
   async toResultsFile(): Promise<ResultsFile> {

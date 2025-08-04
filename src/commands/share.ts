@@ -133,6 +133,17 @@ export function shareCommand(program: Command) {
           }
         }
 
+        // Check if asset storage is enabled and warn user
+        const { isAssetStorageEnabled } = await import('../assets');
+        if (isAssetStorageEnabled()) {
+          logger.info(
+            chalk.yellow(
+              '\n⚠️  Asset storage is enabled. Large media files will be converted to base64 for sharing.\n' +
+                '   This may take additional time for evaluations with many images or audio files.\n',
+            ),
+          );
+        }
+
         await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
       },
     );

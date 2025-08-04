@@ -1,21 +1,15 @@
 import * as path from 'path';
 import type { Express, Request, Response } from 'express';
 
-import { getMetricsAssetStore } from '../../assets/store';
+import { getAssetStore } from '../../assets';
 import { isAssetStorageEnabled } from '../../assets';
 import { AssetMetrics } from '../../assets/metrics';
 import logger from '../../logger';
 import { getConfigDirectoryPath } from '../../util/config/manage';
-
-// UUID validation regex
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isValidUUID(id: string): boolean {
-  return UUID_REGEX.test(id);
-}
+import { isValidEvalId, isValidResultId, isValidAssetId } from '../../util/ids';
 
 export function setupAssetRoutes(app: Express): void {
-  const assetStore = getMetricsAssetStore();
+  const assetStore = getAssetStore();
 
   // Serve individual assets
   app.get(
@@ -29,7 +23,7 @@ export function setupAssetRoutes(app: Express): void {
       const { evalId, resultId, assetId } = req.params;
 
       // Validate UUIDs
-      if (!isValidUUID(evalId) || !isValidUUID(resultId) || !isValidUUID(assetId)) {
+      if (!isValidEvalId(evalId) || !isValidResultId(resultId) || !isValidAssetId(assetId)) {
         return res.status(400).json({ error: 'Invalid ID format' });
       }
 
@@ -46,11 +40,26 @@ export function setupAssetRoutes(app: Express): void {
           'X-Asset-Type': metadata.type,
         });
 
-        // Construct the file path
-        const filePath = path.join(getConfigDirectoryPath(), 'assets', evalId, resultId, assetId);
+        // Check if this is a deduplicated asset
+        let actualPath: string;
+        if (metadata.dedupedFrom) {
+          // This is a deduplicated reference, resolve to the original file
+          const [origEvalId, origResultId, origAssetId] = metadata.dedupedFrom.split('/');
+          actualPath = path.join(
+            getConfigDirectoryPath(),
+            'assets',
+            origEvalId,
+            origResultId,
+            origAssetId,
+          );
+          logger.debug(`Serving deduplicated asset from ${metadata.dedupedFrom}`);
+        } else {
+          // Normal asset path
+          actualPath = path.join(getConfigDirectoryPath(), 'assets', evalId, resultId, assetId);
+        }
 
         // Use Express's sendFile for efficient streaming
-        res.sendFile(filePath, (err) => {
+        res.sendFile(actualPath, (err) => {
           if (err) {
             logger.error('Error serving asset:', err);
             if (!res.headersSent) {

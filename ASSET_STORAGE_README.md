@@ -22,6 +22,8 @@ Promptfoo now supports storing large assets (images, audio) as files on disk ins
 - `PROMPTFOO_MAX_ASSET_SIZE` - Maximum asset size in bytes (default: `52428800` / 50MB)
 - `PROMPTFOO_ASSET_DISK_WARNING_THRESHOLD` - Disk space warning threshold percentage (default: `20`)
 - `PROMPTFOO_ASSET_DISK_CRITICAL_THRESHOLD` - Disk space critical threshold percentage (default: `10`)
+- `PROMPTFOO_ASSET_DEDUPLICATION` - Enable/disable deduplication (default: `true`)
+- `PROMPTFOO_ASSET_MAX_AGE_DAYS` - Default maximum age for cleanup (default: `30`)
 
 ### Storage Location
 
@@ -55,8 +57,8 @@ providers:
 
 Assets are referenced using a special URL format:
 
-- Images: `![alt text](asset://eval-id/result-id/asset-id)`
-- Audio: `[Audio](asset://eval-id/result-id/asset-id)`
+- Images: `![alt text](promptfoo://eval-id/result-id/asset-id)`
+- Audio: `[Audio](promptfoo://eval-id/result-id/asset-id)`
 
 These are automatically converted to API URLs when displayed in the UI.
 
@@ -120,13 +122,55 @@ Returns:
 }
 ```
 
-## Migration
+## Asset Deduplication
 
-Currently, only new assets are stored as files. Existing base64 assets in the database remain unchanged. This allows for:
+The asset storage system automatically detects duplicate content and avoids storing multiple copies:
 
-- Risk-free testing
-- Gradual rollout
-- No data migration required
+- Uses SHA-256 content hashing
+- Creates references to existing assets instead of duplicates
+- Maintains a deduplication index for fast lookups
+- Transparent to users - deduplicated assets load normally
+
+### Deduplication Commands
+
+```bash
+# View deduplication statistics
+promptfoo assets stats
+
+# Rebuild deduplication index (if corrupted)
+promptfoo assets rebuild-index
+```
+
+## Migration Tool
+
+Migrate existing base64 assets from your database to file storage:
+
+### Migration Commands
+
+```bash
+# Estimate migration impact (dry run)
+promptfoo assets migrate --dry-run
+
+# Migrate all assets
+promptfoo assets migrate
+
+# Migrate specific evaluations
+promptfoo assets migrate --eval-id eval-123 eval-456
+
+# Migrate assets created after a date
+promptfoo assets migrate --after "2024-01-01"
+
+# Migrate with custom batch size
+promptfoo assets migrate --batch-size 50
+```
+
+### Migration Features
+
+- **Safe Migration**: Creates asset files without removing originals until successful
+- **Progress Tracking**: Shows real-time progress during migration
+- **Selective Migration**: Filter by evaluation ID or date range
+- **Automatic Deduplication**: Migrated assets are deduplicated automatically
+- **Space Estimation**: Preview space savings before migrating
 
 ## Fallback Behavior
 
@@ -167,10 +211,6 @@ promptfoo assets cleanup --max-age 7
 - `--dry-run`: Show what would be deleted without actually deleting
 - `--max-age <days>`: Delete assets older than specified days (default: 30)
 - `--orphaned-only`: Only delete files without metadata
-
-### Environment Variables
-
-- `PROMPTFOO_ASSET_MAX_AGE_DAYS`: Default maximum age for cleanup (default: 30)
 
 ## Troubleshooting
 

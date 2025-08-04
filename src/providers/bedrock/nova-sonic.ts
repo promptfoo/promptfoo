@@ -12,6 +12,9 @@ import { take } from 'rxjs/operators';
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
+import { isAssetStorageEnabled } from '../../assets';
+import { getAssetStore } from '../../assets';
+import { isValidEvalId, isValidResultId } from '../../util/ids';
 
 import type {
   ApiProvider,
@@ -402,31 +405,94 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       }
 
       const audioConfig = this.config?.audioOutputConfiguration || DEFAULT_CONFIG.audio.output;
-      const audioOutput =
-        hasAudioContent && audioContent
-          ? {
-              audio: {
-                data: this.convertRawToWav(
-                  Buffer.from(audioContent, 'base64'),
-                  audioConfig.sampleRateHertz,
-                  audioConfig.sampleSizeBits,
-                  audioConfig.channelCount,
-                ).toString('base64'),
-                format: 'wav',
-                transcript: assistantTranscript,
-              },
-              userTranscript,
-            }
-          : {};
 
+      // Process audio data if available
+      if (hasAudioContent && audioContent) {
+        const wavBuffer = this.convertRawToWav(
+          Buffer.from(audioContent, 'base64'),
+          audioConfig.sampleRateHertz,
+          audioConfig.sampleSizeBits,
+          audioConfig.channelCount,
+        );
+
+        // Check if asset storage is enabled and we have context
+        if (isAssetStorageEnabled() && context?.vars?.__evalId && context?.vars?.__resultId) {
+          try {
+            const evalId = context.vars.__evalId as string;
+            const resultId = context.vars.__resultId as string;
+            
+            // Validate IDs
+            if (!isValidEvalId(evalId)) {
+              logger.warn(`Invalid evalId format: ${evalId}`);
+              throw new Error('Invalid evalId format');
+            }
+            if (!isValidResultId(resultId)) {
+              logger.warn(`Invalid resultId format: ${resultId}`);
+              throw new Error('Invalid resultId format');
+            }
+            
+            const assetStore = getAssetStore();
+
+            const metadata = await assetStore.save(
+              wavBuffer,
+              'audio',
+              'audio/wav',
+              evalId,
+              resultId,
+            );
+
+            logger.debug(
+              `Saved Bedrock Nova Sonic audio to asset storage: ${metadata.id} (${metadata.size} bytes)`,
+            );
+
+            return {
+              output: `[Audio](promptfoo://${evalId}/${resultId}/${metadata.id})\n\nTranscript: ${assistantTranscript || '[No transcript]'}`,
+              cached: false,
+              tokenUsage: createEmptyTokenUsage(),
+              metadata: {
+                asset: metadata,
+                transcript: assistantTranscript,
+                userTranscript,
+                functionCallOccurred,
+              },
+            };
+          } catch (error) {
+            logger.warn(
+              'Failed to save Bedrock Nova Sonic audio to asset storage, falling back to base64:',
+              error,
+            );
+            // Fall through to original format
+          }
+        }
+
+        // Fallback to base64 format
+        const audioOutput = {
+          audio: {
+            data: wavBuffer.toString('base64'),
+            format: 'wav',
+            transcript: assistantTranscript,
+          },
+          userTranscript,
+        };
+
+        return {
+          output: assistantTranscript || '[No response received from API]',
+          ...audioOutput,
+          tokenUsage: createEmptyTokenUsage(),
+          cached: false,
+          metadata: {
+            ...audioOutput,
+            functionCallOccurred,
+          },
+        };
+      }
+
+      // No audio content, just return text
       return {
         output: assistantTranscript || '[No response received from API]',
-        ...audioOutput,
-        // TODO: Add proper token usage tracking
         tokenUsage: createEmptyTokenUsage(),
         cached: false,
         metadata: {
-          ...audioOutput,
           functionCallOccurred,
         },
       };

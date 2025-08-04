@@ -214,9 +214,9 @@ function EvalOutputCell({
         onClick={() => toggleLightbox(text)}
       />
     );
-  } else if (text?.match(/^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)/)) {
-    // Handle image asset:// URLs
-    const assetMatch = text.match(/^!\[([^\]]*)\]\(asset:\/\/([^)]+)\)/);
+  } else if (text?.match(/^!\[([^\]]*)\]\(promptfoo:\/\/([^)]+)\)/)) {
+    // Handle image promptfoo:// URLs
+    const assetMatch = text.match(/^!\[([^\]]*)\]\(promptfoo:\/\/([^)]+)\)/);
     if (assetMatch) {
       const [, alt, assetPath] = assetMatch;
       const [evalId, resultId, assetId] = assetPath.split('/');
@@ -237,9 +237,9 @@ function EvalOutputCell({
         />
       );
     }
-  } else if (text?.match(/^\[Audio\]\(asset:\/\/([^)]+)\)/)) {
-    // Handle audio asset:// URLs
-    const assetMatch = text.match(/^\[Audio\]\(asset:\/\/([^)]+)\)/);
+  } else if (text?.match(/^\[Audio\]\(promptfoo:\/\/([^)]+)\)/)) {
+    // Handle audio promptfoo:// URLs
+    const assetMatch = text.match(/^\[Audio\]\(promptfoo:\/\/([^)]+)\)/);
     if (assetMatch) {
       const [, assetPath] = assetMatch;
       const [evalId, resultId, assetId] = assetPath.split('/');
@@ -276,10 +276,10 @@ function EvalOutputCell({
         remarkPlugins={[remarkGfm]}
         components={{
           img: ({ src, alt }) => {
-            // Handle asset:// URLs in markdown
+            // Handle promptfoo:// URLs in markdown
             let finalSrc = src;
-            if (src?.startsWith('asset://')) {
-              const assetPath = src.replace('asset://', '');
+            if (src?.startsWith('promptfoo://')) {
+              const assetPath = src.replace('promptfoo://', '');
               const [evalId, resultId, assetId] = assetPath.split('/');
               finalSrc = `/api/eval/${evalId}/result/${resultId}/asset/${assetId}`;
             }

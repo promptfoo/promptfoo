@@ -7,6 +7,7 @@ import { assetsCommand } from './commands/assets';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
+import { dbCommand } from './commands/db/optimize';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
@@ -103,6 +104,7 @@ async function main() {
   authCommand(program);
   cacheCommand(program);
   configCommand(program);
+  dbCommand(program);
   debugCommand(program, defaultConfig, defaultConfigPath);
   deleteCommand(program);
   exportCommand(program);

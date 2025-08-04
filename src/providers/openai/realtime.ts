@@ -3,6 +3,9 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util';
 import { OpenAiGenericProvider } from '.';
 import { OPENAI_REALTIME_MODELS } from './util';
+import { isAssetStorageEnabled } from '../../assets';
+import { getAssetStore } from '../../assets';
+import { isValidEvalId, isValidResultId } from '../../util/ids';
 
 import type {
   CallApiContextParams,
@@ -716,13 +719,91 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       // If the response has audio data, format it according to the promptfoo audio interface
       if (result.metadata?.audio) {
-        // Convert Buffer to base64 string for the audio data
         const audioDataBase64 = result.metadata.audio.data;
+        const audioFormat = result.metadata.audio.format || 'wav';
+        const transcript = result.output;
 
+        // Check if asset storage is enabled and we have context
+        if (isAssetStorageEnabled() && context?.vars?.__evalId && context?.vars?.__resultId) {
+          try {
+            const evalId = context.vars.__evalId as string;
+            const resultId = context.vars.__resultId as string;
+            
+            // Validate IDs
+            if (!isValidEvalId(evalId)) {
+              logger.warn(`Invalid evalId format: ${evalId}`);
+              throw new Error('Invalid evalId format');
+            }
+            if (!isValidResultId(resultId)) {
+              logger.warn(`Invalid resultId format: ${resultId}`);
+              throw new Error('Invalid resultId format');
+            }
+            
+            const assetStore = getAssetStore();
+            const audioBuffer = Buffer.from(audioDataBase64, 'base64');
+
+            // Determine MIME type based on format
+            let mimeType = 'audio/wav';
+            if (
+              audioFormat === 'pcm16' ||
+              audioFormat === 'g711_ulaw' ||
+              audioFormat === 'g711_alaw'
+            ) {
+              mimeType = 'audio/raw'; // Raw audio formats
+            }
+
+            const assetMetadata = await assetStore.save(
+              audioBuffer,
+              'audio',
+              mimeType,
+              evalId,
+              resultId,
+            );
+
+            logger.debug(
+              `Saved OpenAI realtime audio to asset storage: ${assetMetadata.id} (${assetMetadata.size} bytes)`,
+            );
+
+            // Include transcript in the output for better visibility
+            const transcriptText = transcript ? `\n\nTranscript: ${transcript}` : '';
+
+            return {
+              output: `[Audio](promptfoo://${evalId}/${resultId}/${assetMetadata.id})${transcriptText}`,
+              tokenUsage: result.tokenUsage,
+              cached: result.cached,
+              metadata: {
+                ...metadata,
+                asset: assetMetadata,
+                transcript,
+              },
+            };
+          } catch (error) {
+            logger.warn(
+              'Failed to save OpenAI realtime audio to asset storage, falling back to base64:',
+              error,
+            );
+            // Fall through to original format
+          }
+        }
+
+        // Original behavior when asset storage is not enabled or fails
         metadata.audio = {
           data: audioDataBase64,
-          format: result.metadata.audio.format,
-          transcript: result.output, // Use the text output as transcript
+          format: audioFormat,
+          transcript,
+        };
+
+        return {
+          output: finalOutput,
+          tokenUsage: result.tokenUsage,
+          cached: result.cached,
+          metadata,
+          // Add audio at top level if available (EvalOutputCell expects this)
+          audio: {
+            data: audioDataBase64,
+            format: audioFormat,
+            transcript,
+          },
         };
       }
 
@@ -731,14 +812,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         tokenUsage: result.tokenUsage,
         cached: result.cached,
         metadata,
-        // Add audio at top level if available (EvalOutputCell expects this)
-        ...(result.metadata?.audio && {
-          audio: {
-            data: result.metadata.audio.data,
-            format: result.metadata.audio.format,
-            transcript: result.output, // Use the text output as transcript
-          },
-        }),
       };
     } catch (err) {
       const errorMessage = `WebSocket error: ${String(err)}`;

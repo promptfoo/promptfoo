@@ -130,7 +130,7 @@ describe('AssetStore', () => {
       const resultId = randomUUID();
       const assetId = randomUUID();
 
-      await expect(assetStore.load(evalId, resultId, assetId)).rejects.toThrow('Asset not found');
+      await expect(assetStore.load(evalId, resultId, assetId)).rejects.toThrow('Asset metadata not found');
     });
 
     it('should prevent path traversal attacks', async () => {

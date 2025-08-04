@@ -142,7 +142,7 @@ export class AssetMonitor {
       const size = await this.getDirectorySize(assetsPath);
       return size;
     } catch (error) {
-      if ((error as any).code === 'ENOENT') {
+      if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
         return 0; // Directory doesn't exist yet
       }
       throw error;

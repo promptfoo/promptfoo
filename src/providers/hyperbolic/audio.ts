@@ -3,7 +3,8 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { isAssetStorageEnabled } from '../../assets';
-import { getMetricsAssetStore } from '../../assets/store';
+import { getAssetStore } from '../../assets';
+import { isValidEvalId, isValidResultId } from '../../util/ids';
 
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
@@ -169,10 +170,21 @@ export class HyperbolicAudioProvider implements ApiProvider {
         data.audio
       ) {
         try {
-          const assetStore = getMetricsAssetStore();
-          const audioBuffer = Buffer.from(data.audio, 'base64');
           const evalId = context.vars.__evalId as string;
           const resultId = context.vars.__resultId as string;
+          
+          // Validate IDs
+          if (!isValidEvalId(evalId)) {
+            logger.warn(`Invalid evalId format: ${evalId}`);
+            throw new Error('Invalid evalId format');
+          }
+          if (!isValidResultId(resultId)) {
+            logger.warn(`Invalid resultId format: ${resultId}`);
+            throw new Error('Invalid resultId format');
+          }
+          
+          const assetStore = getAssetStore();
+          const audioBuffer = Buffer.from(data.audio, 'base64');
 
           const metadata = await assetStore.save(
             audioBuffer,
@@ -185,7 +197,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
           logger.debug(`Saved audio to asset storage: ${metadata.id} (${metadata.size} bytes)`);
 
           return {
-            output: `[Audio](asset://${evalId}/${resultId}/${metadata.id})`,
+            output: `[Audio](promptfoo://${evalId}/${resultId}/${metadata.id})`,
             cached,
             cost,
             metadata: { asset: metadata },
