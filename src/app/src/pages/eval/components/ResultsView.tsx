@@ -537,7 +537,6 @@ export default function ResultsView({
     <>
       <Box
         id="results-view-container"
-        px={2}
         sx={{
           display: 'flex',
           flexDirection: 'column',
@@ -592,6 +591,7 @@ export default function ResultsView({
             overflow: 'hidden',
             height: topAreaCollapsed ? 0 : 'auto',
             transition: 'height 0.3s ease',
+            px: 2,
           }}
         >
           {

@@ -1185,7 +1185,6 @@ function ResultsTable({
       <Box
         className="pagination"
         px={2}
-        mx={-2}
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -1195,7 +1194,7 @@ function ResultsTable({
           backgroundColor: 'background.paper',
           borderTop: '1px solid',
           borderColor: 'divider',
-          width: '100vw',
+          width: '100%',
           boxShadow: 3,
         }}
       >
