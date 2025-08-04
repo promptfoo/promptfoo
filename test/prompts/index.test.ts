@@ -553,7 +553,7 @@ describe('readPrompts', () => {
       Explain {{topic}} in simple terms
       Write a poem about {{topic}}
     `;
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fsPromises.readFile).mockResolvedValueOnce(csvContent);
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
 
     const result = await readPrompts(['test.csv']);
@@ -579,7 +579,7 @@ describe('readPrompts', () => {
       Explain {{topic}} in simple terms
       Write a poem about {{topic}}
     `;
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fsPromises.readFile).mockResolvedValueOnce(csvContent);
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
 
     const result = await readPrompts(['test.csv']);
@@ -606,7 +606,7 @@ describe('readPrompts', () => {
       Explain {{topic}} in simple terms,Simple Explanation
       Write a poem about {{topic}},Poetry Generator
     `;
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fsPromises.readFile).mockResolvedValueOnce(csvContent);
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
 
     const result = await readPrompts(['test.csv']);
@@ -911,7 +911,7 @@ describe('processPrompts', () => {
     const csvContent = `prompt,label
 Tell me about {{topic}},Basic Query
 Explain {{topic}} in simple terms,Simple Explanation`;
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(csvContent);
+    jest.mocked(fsPromises.readFile).mockResolvedValueOnce(csvContent);
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
 
     const result = await processPrompts(['test.csv']);

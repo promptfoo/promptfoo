@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import { parse } from 'csv-parse/sync';
 import { getEnvBool, getEnvString } from '../../envars';
@@ -20,7 +20,7 @@ export async function processCsvPrompts(
   filePath: string,
   basePrompt: Partial<Prompt>,
 ): Promise<Prompt[]> {
-  const content = fs.readFileSync(filePath, 'utf8');
+  const content = await fs.readFile(filePath, 'utf8');
 
   const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
   const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);

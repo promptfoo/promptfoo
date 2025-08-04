@@ -1,11 +1,11 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import dedent from 'ts-dedent';
 import { processCsvPrompts } from '../../../src/prompts/processors/csv';
 
 import type { Prompt } from '../../../src/types';
 
-jest.mock('fs');
+jest.mock('fs/promises');
 
 describe('processCsvPrompts', () => {
   beforeEach(() => {
@@ -20,7 +20,7 @@ describe('processCsvPrompts', () => {
       Write a poem about {{topic}}
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    jest.mocked(fs.readFile).mockResolvedValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -48,7 +48,7 @@ describe('processCsvPrompts', () => {
       Write a poem about {{topic}}
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    jest.mocked(fs.readFile).mockResolvedValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -77,7 +77,7 @@ describe('processCsvPrompts', () => {
       Write a poem about {{topic}},Poetry Generator
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    jest.mocked(fs.readFile).mockResolvedValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -104,7 +104,7 @@ describe('processCsvPrompts', () => {
       This is a very long prompt that should be truncated for the label
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    jest.mocked(fs.readFile).mockResolvedValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -123,7 +123,7 @@ describe('processCsvPrompts', () => {
       Tell me about {{topic}}
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    jest.mocked(fs.readFile).mockResolvedValue(csvContent);
 
     const basePrompt: Partial<Prompt> = {
       label: 'Base Label',
@@ -150,7 +150,7 @@ describe('processCsvPrompts', () => {
       Write a poem about {{topic}},Poetry Generator
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    jest.mocked(fs.readFile).mockResolvedValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -174,7 +174,7 @@ describe('processCsvPrompts', () => {
       Explain {{topic}} in simple terms;Simple Explanation
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    jest.mocked(fs.readFile).mockResolvedValue(csvContent);
     process.env.PROMPTFOO_CSV_DELIMITER = ';';
 
     const result = await processCsvPrompts('prompts.csv', {});
@@ -195,7 +195,7 @@ describe('processCsvPrompts', () => {
   });
 
   it('should handle empty files', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValue('');
+    jest.mocked(fs.readFile).mockResolvedValue('');
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -210,7 +210,7 @@ describe('processCsvPrompts', () => {
       "Another line
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    jest.mocked(fs.readFile).mockResolvedValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -228,7 +228,7 @@ describe('processCsvPrompts', () => {
       Another prompt line
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    jest.mocked(fs.readFile).mockResolvedValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 

@@ -149,7 +149,7 @@ async function processPrompt(
   }
 
   if (extension === '.csv') {
-    return processCsvPrompts(filePath, prompt);
+    return await processCsvPrompts(filePath, prompt);
   }
   if (extension === '.j2') {
     return processJinjaFile(filePath, prompt);
