@@ -542,8 +542,8 @@ export default function ResultsView({
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
-          height: '100%',
-          minHeight: '100vh',
+          height: '100vh',
+          overflow: 'hidden',
         }}
       >
         <Box
@@ -927,7 +927,15 @@ export default function ResultsView({
             </>
           }
         </Box>
-        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <Box
+          sx={{
+            flexGrow: 1,
+            minHeight: 0,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           <ResultsTable
             maxTextLength={maxTextLength}
             columnVisibility={currentColumnState.columnVisibility}

@@ -1187,8 +1187,6 @@ function ResultsTable({
         px={2}
         mx={-2}
         sx={{
-          position: 'sticky',
-          bottom: 0,
           display: 'flex',
           alignItems: 'center',
           gap: 2,
@@ -1199,7 +1197,6 @@ function ResultsTable({
           borderColor: 'divider',
           width: '100vw',
           boxShadow: 3,
-          zIndex: 10,
         }}
       >
         <Box>
