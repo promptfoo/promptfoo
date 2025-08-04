@@ -43,6 +43,40 @@ jest.mock('fs', () => ({
   })),
 }));
 
+// Mock fs/promises operations
+jest.mock('fs/promises', () => ({
+  readFile: jest.fn((path: string) => {
+    if (path.includes('.py')) {
+      return Promise.resolve('def get_prompt(context):\n    return "Test prompt"');
+    }
+    if (path.includes('.js')) {
+      return Promise.resolve('module.exports = function() { return "JS prompt"; };');
+    }
+    if (path.includes('.txt')) {
+      return Promise.resolve('Text file content');
+    }
+    if (path.includes('.json')) {
+      return Promise.resolve('{"key": "value"}');
+    }
+    if (path.includes('.jsonl')) {
+      return Promise.resolve('[{"key1": "value1"}]\n[{"key2": "value2"}]');
+    }
+    if (path.includes('.yaml') || path.includes('.yml')) {
+      return Promise.resolve('key: value');
+    }
+    if (path.includes('.md')) {
+      return Promise.resolve('# Markdown content');
+    }
+    if (path.includes('.j2')) {
+      return Promise.resolve('Template: {{ variable }}');
+    }
+    if (path.includes('.csv')) {
+      return Promise.resolve('prompt,label\n"Test prompt","Test label"');
+    }
+    return Promise.resolve('');
+  }),
+}));
+
 // Mock glob results
 jest.mock('glob', () => ({
   globSync: jest.fn((pattern: string) => {

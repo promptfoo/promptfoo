@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import yaml from 'js-yaml';
 import logger from '../../logger';
@@ -15,8 +15,11 @@ import type { Prompt } from '../../types';
  * @returns An array of `Prompt` objects extracted from the YAML file.
  * @throws Will throw an error if the file cannot be read or parsed.
  */
-export function processYamlFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const fileContents = fs.readFileSync(filePath, 'utf8');
+export async function processYamlFile(
+  filePath: string,
+  prompt: Partial<Prompt>,
+): Promise<Prompt[]> {
+  const fileContents = await fs.readFile(filePath, 'utf8');
   let maybeParsed: string | undefined = fileContents;
   try {
     maybeParsed = JSON.stringify(yaml.load(fileContents));

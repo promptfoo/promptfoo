@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import type { Prompt } from '../../types';
 
@@ -8,8 +8,11 @@ import type { Prompt } from '../../types';
  * @param prompt - The raw prompt data.
  * @returns Array of prompts extracted from the file.
  */
-export function processJsonlFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
+export async function processJsonlFile(
+  filePath: string,
+  prompt: Partial<Prompt>,
+): Promise<Prompt[]> {
+  const fileContent = await fs.readFile(filePath, 'utf-8');
   const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
   const containsMultiple = jsonLines.length > 1;
   return jsonLines.map((json) => ({

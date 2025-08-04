@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import { PROMPT_DELIMITER } from '../constants';
 
@@ -10,8 +10,11 @@ import type { Prompt } from '../../types';
  * @param prompt - The raw prompt data.
  * @returns Array of prompts extracted from the file.
  */
-export function processTxtFile(filePath: string, { label }: Partial<Prompt>): Prompt[] {
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
+export async function processTxtFile(
+  filePath: string,
+  { label }: Partial<Prompt>,
+): Promise<Prompt[]> {
+  const fileContent = await fs.readFile(filePath, 'utf-8');
 
   const lines = fileContent.split(/\r?\n/);
   const prompts: Prompt[] = [];

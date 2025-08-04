@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import { PythonShell } from 'python-shell';
 import { getEnvString } from '../../envars';
@@ -82,12 +82,12 @@ export const pythonPromptFunctionLegacy = async (
  * @param functionName - Optional function name to execute.
  * @returns Array of prompts extracted or executed from the file.
  */
-export function processPythonFile(
+export async function processPythonFile(
   filePath: string,
   prompt: Partial<Prompt>,
   functionName: string | undefined,
-): Prompt[] {
-  const fileContent = fs.readFileSync(filePath, 'utf-8');
+): Promise<Prompt[]> {
+  const fileContent = await fs.readFile(filePath, 'utf-8');
   const label =
     prompt.label ?? (functionName ? `${filePath}:${functionName}` : `${filePath}: ${fileContent}`);
   return [

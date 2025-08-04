@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import type { Prompt } from '../../types';
 
@@ -10,8 +10,11 @@ import type { Prompt } from '../../types';
  * @param prompt - The raw prompt data.
  * @returns Array of one `Prompt` object.
  */
-export function processJinjaFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const content = fs.readFileSync(filePath, 'utf8');
+export async function processJinjaFile(
+  filePath: string,
+  prompt: Partial<Prompt>,
+): Promise<Prompt[]> {
+  const content = await fs.readFile(filePath, 'utf8');
   return [
     {
       raw: content,

@@ -1,14 +1,17 @@
 # Migration Plan: fs to fs/promises
 
 ## Overview
+
 This document outlines the plan to migrate from synchronous fs operations to async fs/promises across the promptfoo codebase. We'll migrate one file at a time, testing after each change.
 
 ## Already Migrated
+
 - ✅ `src/commands/init.ts` - Already uses `fs/promises`
 
 ## Files to Migrate (46 total)
 
 ### Priority 1: Simple Files (Low Risk)
+
 These files have minimal fs operations and are good starting points:
 
 1. **src/prompts/processors/markdown.ts**
@@ -40,6 +43,7 @@ These files have minimal fs operations and are good starting points:
    - Single read operation
 
 ### Priority 2: Utility Files (Medium Risk)
+
 These are heavily used utilities that need careful migration:
 
 8. **src/util/file.ts**
@@ -56,6 +60,7 @@ These are heavily used utilities that need careful migration:
     - Single read for loading assertions
 
 ### Priority 3: Cache and Database (Medium Risk)
+
 11. **src/cache.ts**
     - `existsSync` (line 26)
     - `mkdirSync` (line 28)
@@ -67,6 +72,7 @@ These are heavily used utilities that need careful migration:
     - Database signaling
 
 ### Priority 4: Configuration Files (High Risk)
+
 These handle configuration and need careful async handling:
 
 13. **src/globalConfig/globalConfig.ts**
@@ -88,11 +94,13 @@ These handle configuration and need careful async handling:
     - Config management
 
 ### Priority 5: Test Case Management (High Risk)
+
 16. **src/util/testCaseReader.ts**
     - `readFileSync` (lines 46, 141, 184, 198, 214, 247, 350, 353)
     - Multiple reads, critical for test loading
 
 ### Priority 6: Command Files (High Risk)
+
 17. **src/commands/eval.ts**
     - `existsSync` (line 135)
     - `statSync` (line 135)
@@ -117,6 +125,7 @@ These handle configuration and need careful async handling:
     - Dataset generation
 
 ### Priority 7: Red Team Commands (High Risk)
+
 22. **src/redteam/commands/init.ts**
     - `existsSync` (line 212)
     - `mkdirSync` (line 213)
@@ -148,6 +157,7 @@ These handle configuration and need careful async handling:
     - `existsSync` (line 88)
 
 ### Priority 8: Provider Files (High Risk)
+
 28. **src/providers/index.ts**
     - `readFileSync` (lines 57, 159)
     - Provider loading
@@ -176,6 +186,7 @@ These handle configuration and need careful async handling:
     - HTTP provider with cert loading
 
 ### Priority 9: Python Integration (High Risk)
+
 33. **src/python/wrapper.ts**
     - `writeFileSync` (line 25)
     - `unlinkSync` (line 34)
@@ -188,6 +199,7 @@ These handle configuration and need careful async handling:
     - Python execution utilities
 
 ### Priority 10: Strategy Files (Medium Risk)
+
 35. **src/redteam/strategies/simpleImage.ts**
     - `writeFileSync` (line 188)
     - Image generation
@@ -201,6 +213,7 @@ These handle configuration and need careful async handling:
     - Video generation with temp files
 
 ### Priority 11: Plugin Files (Low Risk)
+
 37. **src/redteam/plugins/donotanswer.ts**
     - `readFileSync` (line 54)
     - Dataset loading
@@ -210,6 +223,7 @@ These handle configuration and need careful async handling:
     - Dataset loading
 
 ### Priority 12: Large/Complex Files (Very High Risk)
+
 39. **src/util/index.ts**
     - `existsSync` (line 120)
     - `mkdirSync` (line 121)
@@ -234,12 +248,14 @@ These handle configuration and need careful async handling:
     - Onboarding flow
 
 ### Priority 13: Server Routes (High Risk)
+
 43. **src/server/routes/modelAudit.ts**
     - `existsSync` (lines 54, 120)
     - `statSync` (line 60)
     - Server endpoint
 
 ### Priority 14: MCP Tools (Low Risk)
+
 44. **src/commands/mcp/tools/generateDataset.ts**
     - `writeFileSync` (line 101)
     - Tool output
@@ -300,6 +316,7 @@ await fs.mkdir(path, { recursive: true });
 ```
 
 ## Notes
+
 - Some files may require significant refactoring to properly handle async operations
 - Watch for cascading effects where making one function async requires updating all callers
 - Consider using `node:fs/promises` prefix during migration for clarity

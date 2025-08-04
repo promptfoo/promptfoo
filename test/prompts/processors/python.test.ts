@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 
 import dedent from 'dedent';
 import {
@@ -7,7 +7,7 @@ import {
   pythonPromptFunctionLegacy,
 } from '../../../src/prompts/processors/python';
 
-jest.mock('fs');
+jest.mock('fs/promises');
 jest.mock('../../../src/prompts/processors/python', () => {
   const actual = jest.requireActual('../../../src/prompts/processors/python');
   return {
@@ -18,14 +18,14 @@ jest.mock('../../../src/prompts/processors/python', () => {
 });
 
 describe('processPythonFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockReadFile = jest.mocked(fs.readFile);
 
-  it('should process a valid Python file without a function name or label', () => {
+  it('should process a valid Python file without a function name or label', async () => {
     const filePath = 'file.py';
     const fileContent = 'print("Hello, world!")';
-    mockReadFileSync.mockReturnValue(fileContent);
+    mockReadFile.mockResolvedValue(fileContent);
     jest.mocked(pythonPromptFunctionLegacy).mockResolvedValueOnce('mocked result');
-    expect(processPythonFile(filePath, {}, undefined)).toEqual([
+    expect(await processPythonFile(filePath, {}, undefined)).toEqual([
       {
         function: expect.any(Function),
         label: `${filePath}: ${fileContent}`,
@@ -34,14 +34,14 @@ describe('processPythonFile', () => {
     ]);
   });
 
-  it('should process a valid Python file with a function name without a label', () => {
+  it('should process a valid Python file with a function name without a label', async () => {
     const filePath = 'file.py';
     const fileContent = dedent`
     def testFunction(context):
       print("Hello, world!")`;
-    mockReadFileSync.mockReturnValue(fileContent);
+    mockReadFile.mockResolvedValue(fileContent);
     jest.mocked(pythonPromptFunction).mockResolvedValueOnce('mocked result');
-    expect(processPythonFile(filePath, {}, 'testFunction')).toEqual([
+    expect(await processPythonFile(filePath, {}, 'testFunction')).toEqual([
       {
         function: expect.any(Function),
         raw: fileContent,
@@ -50,12 +50,12 @@ describe('processPythonFile', () => {
     ]);
   });
 
-  it('should process a valid Python file with a label without a function name', () => {
+  it('should process a valid Python file with a label without a function name', async () => {
     const filePath = 'file.py';
     const fileContent = 'print("Hello, world!")';
-    mockReadFileSync.mockReturnValue(fileContent);
+    mockReadFile.mockResolvedValue(fileContent);
     jest.mocked(pythonPromptFunctionLegacy).mockResolvedValueOnce('mocked result');
-    expect(processPythonFile(filePath, { label: 'Label' }, undefined)).toEqual([
+    expect(await processPythonFile(filePath, { label: 'Label' }, undefined)).toEqual([
       {
         function: expect.any(Function),
         label: `Label`,
@@ -64,14 +64,14 @@ describe('processPythonFile', () => {
     ]);
   });
 
-  it('should process a valid Python file with a label and function name', () => {
+  it('should process a valid Python file with a label and function name', async () => {
     const filePath = 'file.py';
     const fileContent = dedent`
     def testFunction(context):
       print("Hello, world!")`;
-    mockReadFileSync.mockReturnValue(fileContent);
+    mockReadFile.mockResolvedValue(fileContent);
     jest.mocked(pythonPromptFunction).mockResolvedValueOnce('mocked result');
-    expect(processPythonFile(filePath, { label: 'Label' }, 'testFunction')).toEqual([
+    expect(await processPythonFile(filePath, { label: 'Label' }, 'testFunction')).toEqual([
       {
         function: expect.any(Function),
         label: `Label`,
@@ -80,13 +80,13 @@ describe('processPythonFile', () => {
     ]);
   });
 
-  it('should process a valid Python file with config', () => {
+  it('should process a valid Python file with config', async () => {
     const filePath = 'file.py';
     const fileContent = 'print("Hello, world!")';
-    mockReadFileSync.mockReturnValue(fileContent);
+    mockReadFile.mockResolvedValue(fileContent);
     jest.mocked(pythonPromptFunctionLegacy).mockResolvedValueOnce('mocked result');
     const config = { key: 'value' };
-    expect(processPythonFile(filePath, { config }, undefined)).toEqual([
+    expect(await processPythonFile(filePath, { config }, undefined)).toEqual([
       {
         function: expect.any(Function),
         label: `${filePath}: ${fileContent}`,
