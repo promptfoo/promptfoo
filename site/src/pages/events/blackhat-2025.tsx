@@ -315,7 +315,7 @@ export default function BlackHat2025(): JSX.Element {
                 <div className={styles.statLabel}>Open Source Users</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>27</div>
+                <div className={styles.statNumber}>44</div>
                 <div className={styles.statLabel}>Fortune 500 Companies</div>
               </div>
               <div className={styles.stat}>
