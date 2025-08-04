@@ -537,13 +537,17 @@ export default function ResultsView({
     <>
       <Box
         id="results-view-container"
+        px={2}
         sx={{
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
-          height: '100vh',
-          overflow: 'hidden',
         }}
+        ref={React.useCallback((el: HTMLDivElement | null) => {
+          if (el) {
+            el.style.height = `calc(100vh - ${el.getBoundingClientRect().top}px)`;
+          }
+        }, [])}
       >
         <Box
           sx={{
@@ -591,7 +595,6 @@ export default function ResultsView({
             overflow: 'hidden',
             height: topAreaCollapsed ? 0 : 'auto',
             transition: 'height 0.3s ease',
-            px: 2,
           }}
         >
           {
