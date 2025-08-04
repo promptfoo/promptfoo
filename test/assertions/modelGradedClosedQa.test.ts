@@ -6,12 +6,15 @@ import type nunjucks from 'nunjucks';
 import type { AssertionParams } from '../../src/types';
 
 jest.mock('../../src/matchers');
-jest.mock('../../src/util/templates');
+jest.mock('../../src/util/templates', () => ({
+  getNunjucksEngine: jest.fn(),
+}));
 
 describe('handleModelGradedClosedQa', () => {
+  let mockNunjucksEnv: any;
+
   beforeEach(() => {
-    jest.resetAllMocks();
-    const mockNunjucksEnv = {
+    mockNunjucksEnv = {
       options: { autoescape: true },
       render: jest.fn(),
       renderString: jest.fn().mockImplementation((str) => str),
@@ -34,6 +37,10 @@ describe('handleModelGradedClosedQa', () => {
       score: 1,
       reason: 'test reason',
     });
+  });
+
+  afterEach(() => {
+    mockNunjucksEnv = null;
   });
 
   it('should validate string value', async () => {
@@ -126,25 +133,8 @@ describe('handleModelGradedClosedQa', () => {
   });
 
   it('should process rubricPrompt with nunjucks if provided', async () => {
-    const mockRenderString = jest.fn().mockReturnValue('rendered rubric');
-    const mockNunjucksEnv = {
-      options: { autoescape: true },
-      render: jest.fn(),
-      renderString: mockRenderString,
-      addFilter: jest.fn(),
-      getFilter: jest.fn(),
-      hasExtension: jest.fn(),
-      addExtension: jest.fn(),
-      removeExtension: jest.fn(),
-      getExtension: jest.fn(),
-      addGlobal: jest.fn(),
-      getGlobal: jest.fn(),
-      getTemplate: jest.fn(),
-      express: jest.fn(),
-      on: jest.fn(),
-    } as unknown as nunjucks.Environment;
-
-    jest.mocked(getNunjucksEngine).mockReturnValue(mockNunjucksEnv);
+    // Update the existing mock's renderString to return the rendered rubric
+    mockNunjucksEnv.renderString = jest.fn().mockReturnValue('rendered rubric');
 
     const params: AssertionParams = {
       assertion: { type: 'model-graded-closedqa' },
@@ -175,7 +165,9 @@ describe('handleModelGradedClosedQa', () => {
 
     await handleModelGradedClosedQa(params);
 
-    expect(mockRenderString).toHaveBeenCalledWith('test rubric {{ var }}', { var: 'value' });
+    expect(mockNunjucksEnv.renderString).toHaveBeenCalledWith('test rubric {{ var }}', {
+      var: 'value',
+    });
   });
 
   it('should call matchesClosedQa with correct parameters', async () => {
