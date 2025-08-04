@@ -45,7 +45,7 @@
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.0",
     "jsdom": "^26.1.0",
-    "posthog-js": "^1.258.3",
+    "posthog-js": "^1.258.5",
     "prismjs": "^1.30.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -56,11 +56,11 @@
     "recharts": "^2.15.4",
     "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.1",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.2",
     "use-debounce": "^10.0.5",
     "vite": "^6.3.5",
     "vite-plugin-node-polyfills": "^0.24.0",
     "vitest": "^3.2.4",
-    "zustand": "^5.0.6"
+    "zustand": "^5.0.7"
   }
 }
