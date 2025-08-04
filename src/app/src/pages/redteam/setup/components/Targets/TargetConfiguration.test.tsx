@@ -1,6 +1,6 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, queryByRole } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import TargetConfiguration from './TargetConfiguration';
@@ -61,6 +61,9 @@ describe('TargetConfiguration', () => {
         prompts: [],
       },
       updateConfig: mockUpdateConfig,
+      updatePlugins: vi.fn(),
+      setFullConfig: vi.fn(),
+      resetConfig: vi.fn(),
     });
   });
 
@@ -82,5 +85,107 @@ describe('TargetConfiguration', () => {
       expect(onNextMock).toHaveBeenCalledTimes(1);
       expect(onBackMock).not.toHaveBeenCalled();
     });
+  });
+
+  describe('TestTargetConfiguration rendering', () => {
+    it('should render TestTargetConfiguration when providerType is "http"', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: { id: 'test-provider', label: 'Test Provider', config: {} },
+          extensions: [],
+          prompts: [],
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'http',
+        updatePlugins: vi.fn(),
+        setFullConfig: vi.fn(),
+        resetConfig: vi.fn(),
+      });
+
+      renderWithTheme(
+        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
+      );
+
+      const testTargetConfiguration = screen.getByTestId('mock-test-target-configuration');
+      expect(testTargetConfiguration).toBeVisible();
+    });
+
+    it('should not render TestTargetConfiguration when providerType is not "http"', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          target: { id: 'test-provider', label: 'Test Provider', config: {} },
+          extensions: [],
+          prompts: [],
+        },
+        updateConfig: mockUpdateConfig,
+        providerType: 'openai',
+        updatePlugins: vi.fn(),
+        setFullConfig: vi.fn(),
+        resetConfig: vi.fn(),
+      });
+
+      renderWithTheme(
+        <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
+      );
+
+      const testTargetConfiguration = screen.queryByTestId('mock-test-target-configuration');
+      expect(testTargetConfiguration).toBeNull();
+    });
+  });
+
+  it('should render TestTargetConfiguration when providerType is "http" but selectedTarget.id is not "http"', () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: { id: 'test-provider', label: 'Test Provider', config: {} },
+        extensions: [],
+        prompts: [],
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: 'http',
+    });
+
+    renderWithTheme(
+      <TargetConfiguration onNext={vi.fn()} onBack={vi.fn()} setupModalOpen={false} />,
+    );
+
+    const testTargetConfiguration = screen.getByTestId('mock-test-target-configuration');
+    expect(testTargetConfiguration).toBeInTheDocument();
+  });
+
+  it('should not display the documentation alert when providerType is undefined', () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: { id: 'test-provider', label: 'Test Provider', config: {} },
+        extensions: [],
+        prompts: [],
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: undefined,
+    });
+
+    const { container } = renderWithTheme(
+      <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
+    );
+
+    const alert = queryByRole(container, 'alert');
+    expect(alert).toBeNull();
+  });
+
+  it('should render correctly when providerType is "go"', () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: { id: 'test-provider', label: 'Test Provider', config: {} },
+        extensions: [],
+        prompts: [],
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: 'go',
+    });
+
+    renderWithTheme(
+      <TargetConfiguration onNext={onNextMock} onBack={onBackMock} setupModalOpen={false} />,
+    );
+
+    expect(screen.getByText(/Configure Target:/i)).toBeInTheDocument();
   });
 });
