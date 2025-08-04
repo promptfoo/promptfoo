@@ -44,8 +44,8 @@ export function modelScanCommand(program: Command): void {
     .option('-v, --verbose', 'Enable verbose output')
     .option('--max-file-size <bytes>', 'Maximum file size to scan in bytes')
     .option('--max-total-size <bytes>', 'Maximum total bytes to scan before stopping')
-    .option('--save', 'Save scan results to database')
-    .option('-d, --description <text>', 'Description for the scan (when saving)')
+    .option('--no-write', 'Do not save scan results to database')
+    .option('-d, --description <text>', 'Description for the scan')
     .action(async (paths: string[], options) => {
       if (!paths || paths.length === 0) {
         logger.error(
@@ -72,8 +72,8 @@ export function modelScanCommand(program: Command): void {
         });
       }
 
-      // Force JSON format if saving to database
-      const outputFormat = options.save ? 'json' : options.format || 'text';
+      // Force JSON format if writing to database
+      const outputFormat = options.write !== false ? 'json' : options.format || 'text';
       args.push('--format', outputFormat);
 
       if (options.output) {
@@ -98,8 +98,8 @@ export function modelScanCommand(program: Command): void {
 
       logger.info(`Running model scan on: ${paths.join(', ')}`);
 
-      // If saving, capture output to save to database
-      if (options.save) {
+      // If writing is enabled (default), capture output to save to database
+      if (options.write !== false) {
         let stdout = '';
 
         const modelAudit = spawn('modelaudit', args);
