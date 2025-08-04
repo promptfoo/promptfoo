@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs';
 
 import yaml from 'js-yaml';
 import logger from '../../logger';

@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import * as fs from 'fs';
+import fs from 'fs';
 import path from 'path';
 
 import chalk from 'chalk';

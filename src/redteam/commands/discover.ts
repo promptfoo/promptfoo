@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import * as fs from 'fs';
+import fs from 'fs';
 
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';

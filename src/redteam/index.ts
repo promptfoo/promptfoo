@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs';
 
 import async from 'async';
 import chalk from 'chalk';

@@ -3,7 +3,7 @@
  * ~/.promptfoo/promptfoo.yaml by default.
  */
 import { randomUUID } from 'crypto';
-import * as fs from 'fs';
+import fs from 'fs';
 import * as path from 'path';
 
 import yaml from 'js-yaml';

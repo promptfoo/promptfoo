@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs';
 
 import chalk from 'chalk';
 import yaml from 'js-yaml';
