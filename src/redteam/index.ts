@@ -395,17 +395,14 @@ export function calculateTotalTests(
 
   let effectiveStrategyCount: number;
 
-  if (isBasicStrategyDefined) {
-    if (includeBasicTests) {
-      effectiveStrategyCount = strategies.length;
-    } else {
-      // Basic strategy is explicitly disabled, so we don't count it
-      effectiveStrategyCount = strategies.length - 1;
-    }
-  } else if (includeBasicTests) {
+  if (isBasicStrategyDefined && !includeBasicTests) {
+    // Basic strategy is explicitly disabled, so we don't count it
+    effectiveStrategyCount = strategies.length - 1;
+  } else if (!isBasicStrategyDefined && includeBasicTests) {
     // Basic strategy is implicitly enabled
     effectiveStrategyCount = strategies.length + 1;
   } else {
+    // Either basic is defined and enabled, or not defined and disabled
     effectiveStrategyCount = strategies.length;
   }
 
