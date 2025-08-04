@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -31,6 +32,10 @@ jest.mock('fs', () => {
     writeFileSync: jest.fn(),
   };
 });
+
+jest.mock('fs/promises', () => ({
+  readFile: jest.fn(),
+}));
 
 jest.mock('python-shell');
 jest.mock('../../src/esm', () => {
@@ -336,9 +341,9 @@ describe('readPrompts', () => {
 
   it('should read a markdown file', async () => {
     const mdContent = '# Test Heading\n\nThis is a test markdown file.';
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(mdContent);
     jest.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     jest.mocked(maybeFilePath).mockReturnValueOnce(true);
+    jest.mocked(fsPromises.readFile).mockResolvedValueOnce(mdContent);
 
     await expect(readPrompts('test.md')).resolves.toEqual([
       {
@@ -346,8 +351,8 @@ describe('readPrompts', () => {
         label: 'test.md: # Test Heading\n\nThis is a test markdown file....',
       },
     ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.md', 'utf8');
+    expect(fsPromises.readFile).toHaveBeenCalledTimes(1);
+    expect(fsPromises.readFile).toHaveBeenCalledWith('test.md', 'utf8');
   });
 
   it('should read a Jinja2 file', async () => {

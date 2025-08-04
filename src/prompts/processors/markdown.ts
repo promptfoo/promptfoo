@@ -1,9 +1,9 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import type { Prompt } from '../../types';
 
-export function processMarkdownFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const content = fs.readFileSync(filePath, 'utf8');
+export async function processMarkdownFile(filePath: string, prompt: Partial<Prompt>): Promise<Prompt[]> {
+  const content = await fs.readFile(filePath, 'utf8');
   return [
     {
       raw: content,

@@ -164,7 +164,7 @@ async function processPrompt(
     return processJsFile(filePath, prompt, functionName);
   }
   if (extension === '.md') {
-    return processMarkdownFile(filePath, prompt);
+    return await processMarkdownFile(filePath, prompt);
   }
   if (extension === '.py') {
     return processPythonFile(filePath, prompt, functionName);
