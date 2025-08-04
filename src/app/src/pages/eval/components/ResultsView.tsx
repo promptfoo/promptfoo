@@ -247,7 +247,12 @@ export default function ResultsView({
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { topAreaCollapsed, setTopAreaCollapsed } = useResultsViewSettingsStore();
 
-  // Auto-collapse on mobile
+  /**
+   * Auto-collapse header on mobile devices for better screen real estate usage.
+   * Note: This only triggers if the header is not already collapsed. Once a user
+   * manually expands the header on mobile, it will remain expanded until they
+   * manually collapse it again or navigate away and return.
+   */
   React.useEffect(() => {
     if (isMobile && !topAreaCollapsed) {
       setTopAreaCollapsed(true);

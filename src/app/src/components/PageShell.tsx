@@ -234,7 +234,17 @@ const createAppTheme = (darkMode: boolean) =>
 const lightTheme = createAppTheme(false);
 const darkTheme = createAppTheme(true);
 
-function Layout({ darkMode, toggleDarkMode }: { darkMode: boolean; toggleDarkMode: () => void }) {
+/**
+ * AppLayout component that manages the application's main layout structure.
+ * Controls navigation visibility based on route and collapse state.
+ */
+function AppLayout({
+  darkMode,
+  toggleDarkMode,
+}: {
+  darkMode: boolean;
+  toggleDarkMode: () => void;
+}) {
   const location = useLocation();
   const topAreaCollapsed = useResultsViewSettingsStore((state) => state.topAreaCollapsed);
 
@@ -291,7 +301,7 @@ export default function PageShell() {
   return (
     <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
       <PostHogProvider>
-        <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+        <AppLayout darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
       </PostHogProvider>
     </ThemeProvider>
   );
