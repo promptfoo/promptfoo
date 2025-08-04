@@ -36,6 +36,12 @@ vi.mock('./PostHogPageViewTracker', () => ({
   PostHogPageViewTracker: () => <div data-testid="posthog-tracker" />,
 }));
 
+// Mock the store
+const mockUseResultsViewSettingsStore = vi.fn();
+vi.mock('@app/pages/eval/components/store', () => ({
+  useResultsViewSettingsStore: (...args: any[]) => mockUseResultsViewSettingsStore(...args),
+}));
+
 vi.mock('@mui/material/useMediaQuery');
 
 const renderPageShell = (initialPath = '/') => {
@@ -53,13 +59,32 @@ const renderPageShell = (initialPath = '/') => {
 };
 
 describe('PageShell - Navigation Visibility', () => {
+  beforeEach(() => {
+    // Default mock implementation - return false for topAreaCollapsed
+    mockUseResultsViewSettingsStore.mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') {
+        // Zustand selector pattern
+        return selector({ topAreaCollapsed: false });
+      }
+      // Full state
+      return { topAreaCollapsed: false };
+    });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
   });
 
-  describe('Initial navigation visibility', () => {
-    it('should show navigation by default on eval pages', async () => {
+  describe('Navigation visibility based on topAreaCollapsed', () => {
+    it('should show navigation when topAreaCollapsed is false', async () => {
+      mockUseResultsViewSettingsStore.mockImplementation((selector?: any) => {
+        if (typeof selector === 'function') {
+          return selector({ topAreaCollapsed: false });
+        }
+        return { topAreaCollapsed: false };
+      });
+
       renderPageShell('/eval/123');
 
       await waitFor(() => {
@@ -67,16 +92,30 @@ describe('PageShell - Navigation Visibility', () => {
       });
     });
 
-    it('should show navigation on non-eval pages', async () => {
-      renderPageShell('/evals');
+    it('should hide navigation on eval pages when topAreaCollapsed is true', async () => {
+      mockUseResultsViewSettingsStore.mockImplementation((selector?: any) => {
+        if (typeof selector === 'function') {
+          return selector({ topAreaCollapsed: true });
+        }
+        return { topAreaCollapsed: true };
+      });
+
+      renderPageShell('/eval/123');
 
       await waitFor(() => {
-        expect(screen.getByTestId('navigation')).toBeInTheDocument();
+        expect(screen.queryByTestId('navigation')).not.toBeInTheDocument();
       });
     });
 
-    it('should show navigation on home page', async () => {
-      renderPageShell('/');
+    it('should always show navigation on non-eval pages even when topAreaCollapsed is true', async () => {
+      mockUseResultsViewSettingsStore.mockImplementation((selector?: any) => {
+        if (typeof selector === 'function') {
+          return selector({ topAreaCollapsed: true });
+        }
+        return { topAreaCollapsed: true };
+      });
+
+      renderPageShell('/evals');
 
       await waitFor(() => {
         expect(screen.getByTestId('navigation')).toBeInTheDocument();

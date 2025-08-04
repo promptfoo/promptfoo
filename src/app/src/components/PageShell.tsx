@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
+import { useResultsViewSettingsStore } from '@app/pages/eval/components/store';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { Outlet, useLocation } from 'react-router-dom';
@@ -233,15 +234,9 @@ const createAppTheme = (darkMode: boolean) =>
 const lightTheme = createAppTheme(false);
 const darkTheme = createAppTheme(true);
 
-interface LayoutProps {
-  darkMode: boolean;
-  toggleDarkMode: () => void;
-  topAreaCollapsed: boolean;
-  setTopAreaCollapsed: (collapsed: boolean) => void;
-}
-
-function Layout({ darkMode, toggleDarkMode, topAreaCollapsed, setTopAreaCollapsed }: LayoutProps) {
+function Layout({ darkMode, toggleDarkMode }: { darkMode: boolean; toggleDarkMode: () => void }) {
   const location = useLocation();
+  const topAreaCollapsed = useResultsViewSettingsStore((state) => state.topAreaCollapsed);
 
   // Only hide navigation on eval results pages
   const isEvalResultsPage = location.pathname.startsWith('/eval/');
@@ -252,7 +247,7 @@ function Layout({ darkMode, toggleDarkMode, topAreaCollapsed, setTopAreaCollapse
       {!shouldHideNavigation && (
         <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
       )}
-      <Outlet context={{ topAreaCollapsed, setTopAreaCollapsed }} />
+      <Outlet />
       <PostHogPageViewTracker />
     </div>
   );
@@ -261,7 +256,6 @@ function Layout({ darkMode, toggleDarkMode, topAreaCollapsed, setTopAreaCollapse
 export default function PageShell() {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
-  const [topAreaCollapsed, setTopAreaCollapsed] = useState(false);
 
   useEffect(() => {
     // Initialize from localStorage, fallback to system preference
@@ -297,12 +291,7 @@ export default function PageShell() {
   return (
     <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
       <PostHogProvider>
-        <Layout
-          darkMode={darkMode}
-          toggleDarkMode={toggleDarkMode}
-          topAreaCollapsed={topAreaCollapsed}
-          setTopAreaCollapsed={setTopAreaCollapsed}
-        />
+        <Layout darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
       </PostHogProvider>
     </ThemeProvider>
   );

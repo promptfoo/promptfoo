@@ -33,7 +33,7 @@ import Tooltip from '@mui/material/Tooltip';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
-import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
@@ -245,10 +245,7 @@ export default function ResultsView({
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const { topAreaCollapsed, setTopAreaCollapsed } = useOutletContext<{
-    topAreaCollapsed: boolean;
-    setTopAreaCollapsed: (collapsed: boolean) => void;
-  }>();
+  const { topAreaCollapsed, setTopAreaCollapsed } = useResultsViewSettingsStore();
 
   // Auto-collapse on mobile
   React.useEffect(() => {
