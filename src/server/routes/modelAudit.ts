@@ -5,8 +5,13 @@ import path from 'path';
 import { promisify } from 'util';
 
 import { Router } from 'express';
+import { desc, eq, sql } from 'drizzle-orm';
+import { getDb } from '../../database';
+import { modelAuditScansTable } from '../../database/tables';
+import { getAuthor } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { createScanId } from '../../models/modelAuditScan';
 import type { Request, Response } from 'express';
 
 const execAsync = promisify(exec);
@@ -68,6 +73,102 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
     });
   } catch (error) {
     logger.error(`Error checking path: ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// List model audit scans
+modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = Number(req.query.limit) || 20;
+    const offset = Number(req.query.offset) || 0;
+    const db = getDb();
+
+    const scans = await db
+      .select({
+        id: modelAuditScansTable.id,
+        createdAt: modelAuditScansTable.createdAt,
+        author: modelAuditScansTable.author,
+        description: modelAuditScansTable.description,
+        primaryPath: modelAuditScansTable.primaryPath,
+        // Extract issue counts from JSON for the list view
+        issueCount: sql`json_array_length(json_extract(results, '$.issues'))`,
+        criticalCount: sql`(
+          SELECT COUNT(*) 
+          FROM json_each(json_extract(results, '$.issues')) 
+          WHERE json_extract(value, '$.severity') = 'error'
+        )`,
+        warningCount: sql`(
+          SELECT COUNT(*) 
+          FROM json_each(json_extract(results, '$.issues')) 
+          WHERE json_extract(value, '$.severity') = 'warning'
+        )`,
+      })
+      .from(modelAuditScansTable)
+      .orderBy(desc(modelAuditScansTable.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all();
+
+    // Get total count for pagination
+    const totalCount = await db.select({ count: sql`COUNT(*)` }).from(modelAuditScansTable).get();
+
+    res.json({
+      scans,
+      total: totalCount?.count || 0,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    logger.error(`Error listing model audit scans: ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get specific model audit scan
+modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const db = getDb();
+
+    const scan = await db
+      .select()
+      .from(modelAuditScansTable)
+      .where(eq(modelAuditScansTable.id, id))
+      .get();
+
+    if (!scan) {
+      res.status(404).json({ error: 'Scan not found' });
+      return;
+    }
+
+    res.json(scan);
+  } catch (error) {
+    logger.error(`Error getting model audit scan: ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Delete model audit scan
+modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const db = getDb();
+
+    const result = await db
+      .delete(modelAuditScansTable)
+      .where(eq(modelAuditScansTable.id, id))
+      .run();
+
+    if (result.changes === 0) {
+      res.status(404).json({ error: 'Scan not found' });
+      return;
+    }
+
+    logger.info(`Deleted model audit scan: ${id}`);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error(`Error deleting model audit scan: ${error}`);
     res.status(500).json({ error: String(error) });
   }
 });
@@ -195,7 +296,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       });
     });
 
-    modelAudit.on('close', (code) => {
+    modelAudit.on('close', async (code) => {
       // ModelAudit returns exit code 1 when it finds issues, which is expected
       if (code === 0 || code === 1) {
         try {
@@ -231,7 +332,36 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
             scannedFilesList,
           };
 
-          res.json(transformedResults);
+          // Save scan results to database
+          let scanId: string | undefined;
+          try {
+            const db = getDb();
+            scanId = createScanId();
+
+            await db
+              .insert(modelAuditScansTable)
+              .values({
+                id: scanId,
+                createdAt: Date.now(),
+                author: getAuthor(),
+                description: req.body.description || null,
+                primaryPath: resolvedPaths[0],
+                results: transformedResults,
+                config: {
+                  paths: resolvedPaths,
+                  options: options,
+                },
+              })
+              .run();
+
+            logger.info(`Saved model audit scan with ID: ${scanId}`);
+          } catch (dbError) {
+            logger.error(`Failed to save scan results to database: ${dbError}`);
+            scanId = undefined; // Clear scanId if save failed
+            // Don't fail the request if DB save fails - user still gets results
+          }
+
+          res.json({ ...transformedResults, scanId });
         } catch (parseError) {
           logger.debug(`Failed to parse JSON from stdout: ${parseError}`);
           logger.debug(`stdout: ${stdout}`);
@@ -313,14 +443,45 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
             }
           });
 
-          res.json({
+          const fallbackResults = {
             path: resolvedPaths[0],
             issues,
             success: true,
             scannedFiles: scannedFilesList.length || resolvedPaths.length,
             scannedFilesList: scannedFilesList.length > 0 ? scannedFilesList : undefined,
             rawOutput: stdout,
-          });
+          };
+
+          // Save scan results to database
+          let scanId: string | undefined;
+          try {
+            const db = getDb();
+            scanId = createScanId();
+
+            await db
+              .insert(modelAuditScansTable)
+              .values({
+                id: scanId,
+                createdAt: Date.now(),
+                author: getAuthor(),
+                description: req.body.description || null,
+                primaryPath: resolvedPaths[0],
+                results: fallbackResults,
+                config: {
+                  paths: resolvedPaths,
+                  options: options,
+                },
+              })
+              .run();
+
+            logger.info(`Saved model audit scan with ID: ${scanId}`);
+          } catch (dbError) {
+            logger.error(`Failed to save scan results to database: ${dbError}`);
+            scanId = undefined; // Clear scanId if save failed
+            // Don't fail the request if DB save fails - user still gets results
+          }
+
+          res.json({ ...fallbackResults, scanId });
         }
       } else {
         // Only treat codes other than 0 and 1 as actual errors

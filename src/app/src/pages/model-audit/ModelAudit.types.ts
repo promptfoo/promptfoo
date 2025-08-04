@@ -35,3 +35,38 @@ export interface ScanResult {
   rawOutput?: string;
   scannedFilesList?: string[];
 }
+
+export interface ScanHistoryItem {
+  id: string;
+  createdAt: number;
+  author: string | null;
+  description: string | null;
+  primaryPath: string;
+  issueCount: number;
+  criticalCount: number;
+  warningCount: number;
+}
+
+export interface StoredScan {
+  id: string;
+  createdAt: number;
+  author: string | null;
+  description: string | null;
+  primaryPath: string;
+  results: ScanResult;
+  config: {
+    paths: string[];
+    options: ScanOptions;
+  };
+}
+
+export interface ScanApiResponse extends ScanResult {
+  scanId?: string;
+}
+
+export interface ScanListApiResponse {
+  scans: ScanHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}

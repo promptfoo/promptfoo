@@ -1,4 +1,7 @@
 import chalk from 'chalk';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../database';
+import { modelAuditScansTable } from '../database/tables';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
@@ -154,6 +157,129 @@ export async function handleDataset(id: string) {
   );
 }
 
+export async function handleScan(id: string) {
+  telemetry.record('command_used', {
+    name: 'show scan',
+  });
+
+  const db = getDb();
+  const scan = await db
+    .select()
+    .from(modelAuditScansTable)
+    .where(eq(modelAuditScansTable.id, id))
+    .get();
+
+  if (!scan) {
+    logger.error(`No model audit scan found with ID ${id}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const results = scan.results as any;
+  const config = scan.config as any;
+
+  printBorder();
+  logger.info(chalk.bold.cyan(`Model Audit Scan: ${scan.id}`));
+  printBorder();
+
+  // Basic information
+  logger.info(chalk.bold('Scan Information:'));
+  logger.info(`  Date: ${new Date(scan.createdAt).toLocaleString()}`);
+  logger.info(`  Author: ${scan.author || 'Unknown'}`);
+  logger.info(`  Description: ${scan.description || 'No description'}`);
+  logger.info(`  Primary Path: ${scan.primaryPath}`);
+
+  // Configuration
+  logger.info('\n' + chalk.bold('Configuration:'));
+  logger.info(`  Paths Scanned: ${config.paths?.join(', ') || scan.primaryPath}`);
+  if (config.options?.blacklist?.length > 0) {
+    logger.info(`  Blacklist Patterns: ${config.options.blacklist.join(', ')}`);
+  }
+  logger.info(`  Timeout: ${config.options?.timeout || 300} seconds`);
+
+  // Results summary
+  logger.info('\n' + chalk.bold('Results Summary:'));
+  logger.info(`  Files Scanned: ${results.scannedFiles || 0}`);
+  logger.info(`  Total Files: ${results.totalFiles || 0}`);
+  if (results.duration) {
+    logger.info(`  Duration: ${results.duration.toFixed(3)} seconds`);
+  }
+
+  // Issues
+  const issues = results.issues || [];
+  const criticalCount = issues.filter((i: any) => i.severity === 'error').length;
+  const warningCount = issues.filter((i: any) => i.severity === 'warning').length;
+  const infoCount = issues.filter((i: any) => i.severity === 'info').length;
+
+  logger.info('\n' + chalk.bold('Security Issues:'));
+  logger.info(`  Total Issues: ${issues.length}`);
+  if (issues.length > 0) {
+    logger.info(`  Critical: ${criticalCount}`);
+    logger.info(`  Warnings: ${warningCount}`);
+    logger.info(`  Info: ${infoCount}`);
+  }
+
+  if (issues.length > 0) {
+    logger.info('\n' + chalk.bold('Issue Details:'));
+
+    // Group issues by severity
+    const sortedIssues = [...issues].sort((a: any, b: any) => {
+      const severityOrder = { error: 0, warning: 1, info: 2, debug: 3 };
+      return (
+        (severityOrder[a.severity as keyof typeof severityOrder] || 999) -
+        (severityOrder[b.severity as keyof typeof severityOrder] || 999)
+      );
+    });
+
+    sortedIssues.forEach((issue: any, index: number) => {
+      const severityColor =
+        issue.severity === 'error'
+          ? chalk.red
+          : issue.severity === 'warning'
+            ? chalk.yellow
+            : chalk.blue;
+
+      logger.info(
+        `\n  ${index + 1}. ${severityColor(`[${issue.severity.toUpperCase()}]`)} ${issue.message}`,
+      );
+
+      if (issue.location) {
+        logger.info(`     Location: ${issue.location}`);
+      }
+
+      if (issue.details) {
+        logger.info(`     Details:`);
+        Object.entries(issue.details).forEach(([key, value]) => {
+          if (key !== 'why' && value !== null && value !== undefined) {
+            logger.info(`       - ${key}: ${JSON.stringify(value)}`);
+          }
+        });
+      }
+
+      if (issue.why) {
+        logger.info(`     ${chalk.dim('Why: ' + issue.why)}`);
+      }
+    });
+  } else {
+    logger.info(chalk.green('\n✓ No security issues detected!'));
+  }
+
+  // Scanned files list (if available)
+  if (results.scannedFilesList && results.scannedFilesList.length > 0) {
+    logger.info('\n' + chalk.bold('Scanned Files:'));
+    results.scannedFilesList.slice(0, 10).forEach((file: string) => {
+      logger.info(`  - ${file}`);
+    });
+    if (results.scannedFilesList.length > 10) {
+      logger.info(`  ... and ${results.scannedFilesList.length - 10} more files`);
+    }
+  }
+
+  printBorder();
+  logger.info(`Run ${chalk.green('promptfoo list scans')} to see all model audit scans.`);
+  logger.info(`Run ${chalk.green('promptfoo export ' + id)} to export this scan to a file.`);
+}
+
 export async function showCommand(program: Command) {
   const showCommand = program
     .command('show [id]')
@@ -190,6 +316,11 @@ export async function showCommand(program: Command) {
         return handleDataset(id);
       }
 
+      // Check if it's a scan ID
+      if (id.startsWith('scan-')) {
+        return handleScan(id);
+      }
+
       logger.error(`No resource found with ID ${id}`);
       process.exitCode = 1;
     });
@@ -219,4 +350,9 @@ export async function showCommand(program: Command) {
     .command('dataset <id>')
     .description('Show details of a specific dataset')
     .action(handleDataset);
+
+  showCommand
+    .command('scan <id>')
+    .description('Show details of a specific model audit scan')
+    .action(handleScan);
 }

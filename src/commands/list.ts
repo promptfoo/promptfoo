@@ -1,4 +1,7 @@
 import chalk from 'chalk';
+import { desc } from 'drizzle-orm';
+import { getDb } from '../database';
+import { modelAuditScansTable } from '../database/tables';
 import logger from '../logger';
 import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
@@ -161,5 +164,66 @@ export function listCommand(program: Command) {
       logger.info(
         `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
       );
+    });
+
+  listCommand
+    .command('scans')
+    .description('List model audit scans')
+    .option('-n <limit>', 'Number of scans to display')
+    .option('--ids-only', 'Only show scan IDs')
+    .action(async (cmdObj: { n?: string; idsOnly?: boolean }) => {
+      telemetry.record('command_used', {
+        name: 'list scans',
+      });
+
+      const db = getDb();
+      const limit = Number(cmdObj.n) || 25;
+
+      const scans = await db
+        .select()
+        .from(modelAuditScansTable)
+        .orderBy(desc(modelAuditScansTable.createdAt))
+        .limit(limit)
+        .all();
+
+      if (scans.length === 0) {
+        logger.info('No model audit scans found.');
+        return;
+      }
+
+      if (cmdObj.idsOnly) {
+        scans.forEach((scan) => logger.info(scan.id));
+        return;
+      }
+
+      const tableData = scans.map((scan) => {
+        const results = scan.results as any;
+        const issueCount = results.issues?.length || 0;
+        const criticalCount =
+          results.issues?.filter((i: any) => i.severity === 'error').length || 0;
+        const issueDisplay =
+          issueCount === 0 ? '✓ Clean' : `${issueCount} (${criticalCount} critical)`;
+
+        return {
+          id: scan.id,
+          date: new Date(scan.createdAt).toLocaleString(),
+          path: scan.primaryPath,
+          author: scan.author || '-',
+          issues: issueDisplay,
+          description: scan.description || '-',
+        };
+      });
+
+      const columnWidths = {
+        id: 30,
+        date: 20,
+        path: 30,
+        author: 20,
+        issues: 15,
+        description: 30,
+      };
+
+      logger.info(wrapTable(tableData, columnWidths) as string);
+      logger.info(`\nShowing ${scans.length} scan${scans.length !== 1 ? 's' : ''}`);
     });
 }

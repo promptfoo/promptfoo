@@ -318,6 +318,26 @@ export const llmOutputsRelations = relations(llmOutputs, ({ one }) => ({
 }));
 */
 
+// ------------ Model Audit Scans ------------
+
+export const modelAuditScansTable = sqliteTable(
+  'model_audit_scans',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    author: text('author'),
+    description: text('description'),
+    primaryPath: text('primary_path').notNull(),
+    results: text('results', { mode: 'json' }).notNull(),
+    config: text('config', { mode: 'json' }).notNull(),
+  },
+  (table) => ({
+    createdAtIdx: index('model_audit_scans_created_at_idx').on(table.createdAt),
+    authorIdx: index('model_audit_scans_author_idx').on(table.author),
+    primaryPathIdx: index('model_audit_scans_primary_path_idx').on(table.primaryPath),
+  }),
+);
+
 // ------------ Traces ------------
 
 export const tracesTable = sqliteTable(
