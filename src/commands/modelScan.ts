@@ -9,6 +9,7 @@ import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { createScanId } from '../models/modelAuditScan';
 import type { Command } from 'commander';
+import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
 
 const execAsync = promisify(exec);
 
@@ -130,16 +131,25 @@ export function modelScanCommand(program: Command): void {
                 throw new Error('No JSON found in output');
               }
 
-              const scanResults = JSON.parse(jsonMatch[0]);
+              let scanResults;
+              try {
+                scanResults = JSON.parse(jsonMatch[0]);
+              } catch (parseErr) {
+                logger.error(`Invalid JSON format in scan output: ${parseErr}`);
+                throw new Error('Invalid JSON format in scan output');
+              }
 
               // Map critical to error for consistency
-              const mappedIssues = (scanResults.issues || []).map((issue: any) => ({
-                ...issue,
-                severity: issue.severity === 'critical' ? 'error' : issue.severity,
-              }));
+              const mappedIssues = (scanResults.issues || []).map(
+                (issue: ModelAuditIssue) =>
+                  ({
+                    ...issue,
+                    severity: issue.severity === 'critical' ? 'error' : issue.severity,
+                  }) as ModelAuditIssue,
+              );
 
               // Transform results
-              const transformedResults = {
+              const transformedResults: ModelAuditScanResults = {
                 path: paths[0],
                 issues: mappedIssues,
                 success: true,
@@ -167,9 +177,11 @@ export function modelScanCommand(program: Command): void {
                     options: {
                       blacklist: options.blacklist || [],
                       timeout: options.timeout,
-                      maxFileSize: options.maxFileSize ? parseInt(options.maxFileSize) : undefined,
+                      maxFileSize: options.maxFileSize
+                        ? parseInt(options.maxFileSize, 10)
+                        : undefined,
                       maxTotalSize: options.maxTotalSize
-                        ? parseInt(options.maxTotalSize)
+                        ? parseInt(options.maxTotalSize, 10)
                         : undefined,
                       verbose: options.verbose || false,
                     },

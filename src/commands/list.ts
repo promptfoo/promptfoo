@@ -10,6 +10,7 @@ import { printBorder, setupEnv } from '../util';
 import { sha256 } from '../util/createHash';
 import { getPrompts, getTestCases } from '../util/database';
 import type { Command } from 'commander';
+import type { ModelAuditScanResults } from '../types/modelAudit';
 
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');
@@ -197,10 +198,9 @@ export function listCommand(program: Command) {
       }
 
       const tableData = scans.map((scan) => {
-        const results = scan.results as any;
+        const results = scan.results as ModelAuditScanResults;
         const issueCount = results.issues?.length || 0;
-        const criticalCount =
-          results.issues?.filter((i: any) => i.severity === 'error').length || 0;
+        const criticalCount = results.issues?.filter((i) => i.severity === 'error').length || 0;
         const issueDisplay =
           issueCount === 0 ? '✓ Clean' : `${issueCount} (${criticalCount} critical)`;
 

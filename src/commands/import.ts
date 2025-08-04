@@ -8,6 +8,7 @@ import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
 import type { Command } from 'commander';
+import type { ModelAuditScanResults, ModelAuditScanConfig } from '../types/modelAudit';
 
 export function importCommand(program: Command) {
   program
@@ -23,6 +24,35 @@ export function importCommand(program: Command) {
         // Check if this is a model audit scan (has scan- prefix ID)
         if (data.id && data.id.startsWith('scan-')) {
           logger.debug('Importing model audit scan');
+
+          // Validate required fields
+          if (!data.primaryPath || typeof data.primaryPath !== 'string') {
+            throw new Error('Invalid model audit scan: missing or invalid primaryPath');
+          }
+          if (!data.results || typeof data.results !== 'object') {
+            throw new Error('Invalid model audit scan: missing or invalid results');
+          }
+          if (!data.config || typeof data.config !== 'object') {
+            throw new Error('Invalid model audit scan: missing or invalid config');
+          }
+
+          // Validate results structure
+          const results = data.results as ModelAuditScanResults;
+          if (!Array.isArray(results.issues)) {
+            throw new Error('Invalid model audit scan: results.issues must be an array');
+          }
+          if (typeof results.scannedFiles !== 'number') {
+            throw new Error('Invalid model audit scan: results.scannedFiles must be a number');
+          }
+
+          // Validate config structure
+          const config = data.config as ModelAuditScanConfig;
+          if (!Array.isArray(config.paths)) {
+            throw new Error('Invalid model audit scan: config.paths must be an array');
+          }
+          if (!config.options || typeof config.options !== 'object') {
+            throw new Error('Invalid model audit scan: config.options must be an object');
+          }
 
           // Check if scan already exists
           if (cmdObj.force) {

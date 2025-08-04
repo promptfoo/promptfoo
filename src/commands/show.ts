@@ -10,6 +10,7 @@ import { printBorder, setupEnv } from '../util';
 import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/database';
 import invariant from '../util/invariant';
 import type { Command } from 'commander';
+import type { ModelAuditScanResults, ModelAuditScanConfig } from '../types/modelAudit';
 
 export async function handlePrompt(id: string) {
   telemetry.record('command_used', {
@@ -175,8 +176,8 @@ export async function handleScan(id: string) {
     return;
   }
 
-  const results = scan.results as any;
-  const config = scan.config as any;
+  const results = scan.results as ModelAuditScanResults;
+  const config = scan.config as ModelAuditScanConfig;
 
   printBorder();
   logger.info(chalk.bold.cyan(`Model Audit Scan: ${scan.id}`));
@@ -192,7 +193,7 @@ export async function handleScan(id: string) {
   // Configuration
   logger.info('\n' + chalk.bold('Configuration:'));
   logger.info(`  Paths Scanned: ${config.paths?.join(', ') || scan.primaryPath}`);
-  if (config.options?.blacklist?.length > 0) {
+  if (config.options?.blacklist && config.options.blacklist.length > 0) {
     logger.info(`  Blacklist Patterns: ${config.options.blacklist.join(', ')}`);
   }
   logger.info(`  Timeout: ${config.options?.timeout || 300} seconds`);
@@ -207,9 +208,9 @@ export async function handleScan(id: string) {
 
   // Issues
   const issues = results.issues || [];
-  const criticalCount = issues.filter((i: any) => i.severity === 'error').length;
-  const warningCount = issues.filter((i: any) => i.severity === 'warning').length;
-  const infoCount = issues.filter((i: any) => i.severity === 'info').length;
+  const criticalCount = issues.filter((i) => i.severity === 'error').length;
+  const warningCount = issues.filter((i) => i.severity === 'warning').length;
+  const infoCount = issues.filter((i) => i.severity === 'info').length;
 
   logger.info('\n' + chalk.bold('Security Issues:'));
   logger.info(`  Total Issues: ${issues.length}`);
@@ -223,7 +224,7 @@ export async function handleScan(id: string) {
     logger.info('\n' + chalk.bold('Issue Details:'));
 
     // Group issues by severity
-    const sortedIssues = [...issues].sort((a: any, b: any) => {
+    const sortedIssues = [...issues].sort((a, b) => {
       const severityOrder = { error: 0, warning: 1, info: 2, debug: 3 };
       return (
         (severityOrder[a.severity as keyof typeof severityOrder] || 999) -
@@ -231,7 +232,7 @@ export async function handleScan(id: string) {
       );
     });
 
-    sortedIssues.forEach((issue: any, index: number) => {
+    sortedIssues.forEach((issue, index) => {
       const severityColor =
         issue.severity === 'error'
           ? chalk.red

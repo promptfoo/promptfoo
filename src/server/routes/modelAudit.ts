@@ -13,9 +13,36 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { createScanId } from '../../models/modelAuditScan';
 import type { Request, Response } from 'express';
+import type { ModelAuditIssue, ModelAuditScanResults } from '../../types/modelAudit';
 
 const execAsync = promisify(exec);
 export const modelAuditRouter = Router();
+
+// Helper function to save scan results to database
+async function saveScanToDatabase(
+  scanId: string,
+  resolvedPaths: string[],
+  options: any,
+  transformedResults: ModelAuditScanResults,
+  description?: string,
+): Promise<void> {
+  const db = getDb();
+  await db
+    .insert(modelAuditScansTable)
+    .values({
+      id: scanId,
+      createdAt: Date.now(),
+      author: getAuthor(),
+      description: description || null,
+      primaryPath: resolvedPaths[0],
+      results: transformedResults,
+      config: {
+        paths: resolvedPaths,
+        options: options,
+      },
+    })
+    .run();
+}
 
 // Check if modelaudit is installed
 modelAuditRouter.get('/check-installed', async (req: Request, res: Response): Promise<void> => {
@@ -80,8 +107,14 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 // List model audit scans
 modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
   try {
-    const limit = Number(req.query.limit) || 20;
-    const offset = Number(req.query.offset) || 0;
+    // Validate and sanitize pagination parameters
+    let limit = Number(req.query.limit) || 20;
+    let offset = Number(req.query.offset) || 0;
+
+    // Ensure valid bounds
+    limit = Math.max(1, Math.min(100, limit)); // Between 1 and 100
+    offset = Math.max(0, offset); // Non-negative
+
     const db = getDb();
 
     const scans = await db
@@ -129,6 +162,13 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
 modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+
+    // Validate scan ID format
+    if (!id || typeof id !== 'string' || !id.startsWith('scan-')) {
+      res.status(400).json({ error: 'Invalid scan ID format' });
+      return;
+    }
+
     const db = getDb();
 
     const scan = await db
@@ -153,6 +193,13 @@ modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<
 modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+
+    // Validate scan ID format
+    if (!id || typeof id !== 'string' || !id.startsWith('scan-')) {
+      res.status(400).json({ error: 'Invalid scan ID format' });
+      return;
+    }
+
     const db = getDb();
 
     const result = await db
@@ -310,18 +357,21 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           const scanResults = JSON.parse(jsonMatch[0]);
 
           // Map 'critical' severity to 'error' for frontend compatibility
-          const mappedIssues = (scanResults.issues || []).map((issue: any) => ({
-            ...issue,
-            severity: issue.severity === 'critical' ? 'error' : issue.severity,
-          }));
+          const mappedIssues = (scanResults.issues || []).map(
+            (issue: ModelAuditIssue) =>
+              ({
+                ...issue,
+                severity: issue.severity === 'critical' ? 'error' : issue.severity,
+              }) as ModelAuditIssue,
+          );
 
           // Extract list of scanned files from assets
           const scannedFilesList = scanResults.assets
-            ? scanResults.assets.map((asset: any) => asset.path)
+            ? scanResults.assets.map((asset: { path: string }) => asset.path)
             : undefined;
 
           // Transform the results into our expected format
-          const transformedResults = {
+          const transformedResults: ModelAuditScanResults = {
             path: resolvedPaths[0], // Primary resolved path
             issues: mappedIssues,
             success: true,
@@ -335,25 +385,14 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           // Save scan results to database
           let scanId: string | undefined;
           try {
-            const db = getDb();
             scanId = createScanId();
-
-            await db
-              .insert(modelAuditScansTable)
-              .values({
-                id: scanId,
-                createdAt: Date.now(),
-                author: getAuthor(),
-                description: req.body.description || null,
-                primaryPath: resolvedPaths[0],
-                results: transformedResults,
-                config: {
-                  paths: resolvedPaths,
-                  options: options,
-                },
-              })
-              .run();
-
+            await saveScanToDatabase(
+              scanId,
+              resolvedPaths,
+              options,
+              transformedResults,
+              req.body.description,
+            );
             logger.info(`Saved model audit scan with ID: ${scanId}`);
           } catch (dbError) {
             logger.error(`Failed to save scan results to database: ${dbError}`);
@@ -367,7 +406,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           logger.debug(`stdout: ${stdout}`);
           logger.debug(`stderr: ${stderr}`);
           // If JSON parsing fails, parse text output
-          const issues: Array<{ severity: string; message: string; location?: string }> = [];
+          const issues: ModelAuditIssue[] = [];
 
           // Parse the log format output
           const lines = stdout.split('\n');
@@ -380,26 +419,26 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
 
             if (warningMatch) {
               issues.push({
-                severity: 'warning',
+                severity: 'warning' as const,
                 message: warningMatch[2],
                 location: warningMatch[1],
               });
             } else if (errorMatch) {
               issues.push({
-                severity: 'error',
+                severity: 'error' as const,
                 message: errorMatch[2],
                 location: errorMatch[1],
               });
             } else if (criticalMatch) {
               // Map critical to error for frontend compatibility
               issues.push({
-                severity: 'error',
+                severity: 'error' as const,
                 message: criticalMatch[2],
                 location: criticalMatch[1],
               });
             } else if (infoMatch) {
               issues.push({
-                severity: 'info',
+                severity: 'info' as const,
                 message: infoMatch[2],
                 location: infoMatch[1],
               });
@@ -408,7 +447,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
               const parts = line.split(' - WARNING - ');
               if (parts[1]) {
                 issues.push({
-                  severity: 'warning',
+                  severity: 'warning' as const,
                   message: parts[1],
                 });
               }
@@ -417,7 +456,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
               const parts = line.split(' - ERROR - ');
               if (parts[1]) {
                 issues.push({
-                  severity: 'error',
+                  severity: 'error' as const,
                   message: parts[1],
                 });
               }
@@ -426,7 +465,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
               const parts = line.split(' - CRITICAL - ');
               if (parts[1]) {
                 issues.push({
-                  severity: 'error',
+                  severity: 'error' as const,
                   message: parts[1],
                 });
               }
@@ -443,7 +482,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
             }
           });
 
-          const fallbackResults = {
+          const fallbackResults: ModelAuditScanResults = {
             path: resolvedPaths[0],
             issues,
             success: true,
@@ -455,25 +494,14 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           // Save scan results to database
           let scanId: string | undefined;
           try {
-            const db = getDb();
             scanId = createScanId();
-
-            await db
-              .insert(modelAuditScansTable)
-              .values({
-                id: scanId,
-                createdAt: Date.now(),
-                author: getAuthor(),
-                description: req.body.description || null,
-                primaryPath: resolvedPaths[0],
-                results: fallbackResults,
-                config: {
-                  paths: resolvedPaths,
-                  options: options,
-                },
-              })
-              .run();
-
+            await saveScanToDatabase(
+              scanId,
+              resolvedPaths,
+              options,
+              fallbackResults,
+              req.body.description,
+            );
             logger.info(`Saved model audit scan with ID: ${scanId}`);
           } catch (dbError) {
             logger.error(`Failed to save scan results to database: ${dbError}`);

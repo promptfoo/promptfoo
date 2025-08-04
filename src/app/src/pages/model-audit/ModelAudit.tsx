@@ -88,7 +88,11 @@ export default function ModelAudit() {
       const data: ScanApiResponse = await response.json();
 
       if (!response.ok) {
-        throw new Error((data as any).error || 'Failed to run security scan');
+        const error =
+          data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+            ? data.error
+            : 'Failed to run security scan';
+        throw new Error(error);
       }
 
       // Extract scanId from response safely
