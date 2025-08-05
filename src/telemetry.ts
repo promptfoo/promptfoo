@@ -4,10 +4,10 @@ import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
 import { getEnvBool, isCI } from './envars';
-import { fetchWithTimeout } from './fetch';
 import { POSTHOG_KEY } from './generated-constants';
 import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
+import { fetchWithTimeout } from './util/fetch';
 
 export const TelemetryEventSchema = z.object({
   event: z.enum([

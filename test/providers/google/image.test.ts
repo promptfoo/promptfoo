@@ -19,6 +19,14 @@ describe('GoogleImageProvider', () => {
     process.env.GOOGLE_API_KEY = 'test-api-key';
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     delete process.env.GEMINI_API_KEY;
+    // Set default mock return to avoid undefined errors
+    mockFetchWithCache.mockResolvedValue({
+      data: {},
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      cached: false,
+    });
   });
 
   afterEach(() => {

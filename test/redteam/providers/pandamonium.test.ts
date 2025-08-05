@@ -1,14 +1,14 @@
 // We are mocking the dynamic import of runEval inside callTarget.
 import { runEval } from '../../../src/evaluator';
-import { fetchWithRetries } from '../../../src/fetch';
 import RedteamPandamoniumProvider from '../../../src/redteam/providers/pandamonium';
 
 import type { AtomicTestCase, RunEvalOptions } from '../../../src/types';
+import { fetchWithRetries } from '../../../src/util/fetch';
 
 jest.mock('../../../src/evaluator', () => ({
   runEval: jest.fn(),
 }));
-jest.mock('../../../src/fetch', () => ({
+jest.mock('../../../src/util/fetch/index.ts', () => ({
   fetchWithRetries: jest.fn(),
 }));
 // Dummy target provider stub

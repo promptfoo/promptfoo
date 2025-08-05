@@ -1,5 +1,5 @@
 import { clearCache } from '../../src/cache';
-import * as fetchModule from '../../src/fetch';
+import * as fetchModule from '../../src/util/fetch';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
@@ -9,7 +9,7 @@ jest.mock('../../src/util', () => ({
   renderVarsInObject: jest.fn((x) => x),
 }));
 
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/fetch');
 
 describe('OpenRouter', () => {
   const mockedFetchWithRetries = jest.mocked(fetchModule.fetchWithRetries);
