@@ -5,7 +5,7 @@ import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { writeOutput, createOutputMetadata } from '../util';
 import type { Command } from 'commander';
-import { eq, desc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import fs from 'fs/promises';
 
 export function exportCommand(program: Command) {
@@ -16,33 +16,17 @@ export function exportCommand(program: Command) {
     .action(async (id, cmdObj) => {
       try {
         // Check if this is a model audit scan ID
-        if (id.startsWith('scan-') || id === 'latest') {
+        if (id.startsWith('scan-')) {
           // Export model audit scan
           const db = getDb();
-          let scanResult;
-
-          if (id === 'latest') {
-            // Get the most recent scan
-            scanResult = await db
-              .select()
-              .from(modelAuditScansTable)
-              .orderBy(desc(modelAuditScansTable.createdAt))
-              .limit(1)
-              .get();
-          } else {
-            scanResult = await db
-              .select()
-              .from(modelAuditScansTable)
-              .where(eq(modelAuditScansTable.id, id))
-              .get();
-          }
+          const scanResult = await db
+            .select()
+            .from(modelAuditScansTable)
+            .where(eq(modelAuditScansTable.id, id))
+            .get();
 
           if (!scanResult) {
-            logger.error(
-              id === 'latest'
-                ? 'No model audit scans found'
-                : `No model audit scan found with ID ${id}`,
-            );
+            logger.error(`No model audit scan found with ID ${id}`);
             process.exit(1);
           }
 
