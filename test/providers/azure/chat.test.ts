@@ -1027,11 +1027,8 @@ describe('AzureChatCompletionProvider', () => {
       const result = await providerWithCallbacks.callApi('Add numbers with invalid JSON');
 
       expect(result.error).toBeUndefined();
-      // When callback fails, Azure Chat returns the raw function call object
-      expect(result.output).toEqual({
-        name: 'addNumbers',
-        arguments: 'invalid json',
-      });
+      // When callback fails, it returns the stringified function call
+      expect(result.output).toBe('{"name":"addNumbers","arguments":"invalid json"}');
     });
 
     it('should handle legacy function_call format', async () => {

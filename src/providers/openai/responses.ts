@@ -334,11 +334,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             continue;
           }
           
-          const { result: functionResult } = await this.functionCallbackHandler.processFunctionCall(
+          result = await this.functionCallbackHandler.processCalls(
             item,
             config.functionToolCallbacks,
           );
-          result = functionResult;
         } else if (item.type === 'message' && item.role === 'assistant') {
           if (item.content) {
             for (const contentItem of item.content) {
@@ -357,11 +356,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                   data.annotations.push(...contentItem.annotations);
                 }
               } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-                const { result: functionResult } = await this.functionCallbackHandler.processFunctionCall(
+                result = await this.functionCallbackHandler.processCalls(
                   contentItem,
                   config.functionToolCallbacks,
                 );
-                result = functionResult;
               } else if (contentItem.type === 'refusal') {
                 refusal = contentItem.refusal;
                 isRefusal = true;

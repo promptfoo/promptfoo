@@ -274,31 +274,21 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           const toolCalls = message.tool_calls;
           const functionCall = message.function_call;
           
+          // Process function/tool calls if callbacks are configured
           if (config.functionToolCallbacks && (toolCalls || functionCall)) {
-            // Handle based on what's present
-            if (toolCalls && functionCall) {
-              // Both present - combine them
-              const allCalls = [...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]), functionCall];
-              const { output: processedOutput } = await this.functionCallbackHandler.processMultipleFunctionCalls(
-                allCalls,
-                config.functionToolCallbacks,
-              );
-              output = processedOutput;
-            } else if (toolCalls) {
-              // Only tool_calls
-              const { output: processedOutput } = await this.functionCallbackHandler.processMultipleFunctionCalls(
-                toolCalls,
-                config.functionToolCallbacks,
-              );
-              output = processedOutput;
-            } else {
-              // Only function_call
-              const { output: processedOutput } = await this.functionCallbackHandler.processMultipleFunctionCalls(
-                functionCall,
-                config.functionToolCallbacks,
-              );
-              output = processedOutput;
+            // Combine all calls into a single array for processing
+            const allCalls = [];
+            if (toolCalls) {
+              allCalls.push(...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]));
             }
+            if (functionCall) {
+              allCalls.push(functionCall);
+            }
+            
+            output = await this.functionCallbackHandler.processCalls(
+              allCalls.length === 1 ? allCalls[0] : allCalls,
+              config.functionToolCallbacks,
+            );
           } else {
             // No callbacks configured, return raw tool/function calls
             output = toolCalls ?? functionCall;

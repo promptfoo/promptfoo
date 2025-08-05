@@ -651,12 +651,12 @@ export class AzureAssistantProvider extends AzureGenericProvider {
                   logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
 
                   // Use the shared FunctionCallbackHandler with context
-                  const outputResult = await this.functionCallbackHandler.executeCallback(
-                    functionName,
-                    functionArgs,
+                  const result = await this.functionCallbackHandler.processCall(
+                    { name: functionName, arguments: functionArgs },
                     this.assistantConfig.functionToolCallbacks,
                     callbackContext,
                   );
+                  const outputResult = result.output;
 
                   logger.debug(`Function ${functionName} result: ${outputResult}`);
                   return {
