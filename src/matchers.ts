@@ -981,13 +981,17 @@ export async function matchesAnswerRelevance(
   const inputEmbedding = inputEmbeddingResp.embedding;
 
   const similarities: number[] = [];
+  const questionsWithScores: { question: string; similarity: number }[] = [];
+
   for (const question of candidateQuestions) {
     const resp = await embeddingProvider.callEmbeddingApi(question);
     accumulateTokens(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
     }
-    similarities.push(cosineSimilarity(inputEmbedding, resp.embedding));
+    const questionSimilarity = cosineSimilarity(inputEmbedding, resp.embedding);
+    similarities.push(questionSimilarity);
+    questionsWithScores.push({ question, similarity: questionSimilarity });
   }
 
   const similarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
@@ -996,12 +1000,20 @@ export async function matchesAnswerRelevance(
     2,
   )} is greater than threshold ${threshold}`;
   const lessThanReason = `Relevance ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+
+  const metadata = {
+    generatedQuestions: questionsWithScores,
+    averageSimilarity: similarity,
+    threshold,
+  };
+
   if (pass) {
     return {
       pass: true,
       score: similarity,
       reason: greaterThanReason,
       tokensUsed,
+      metadata,
     };
   }
   return {
@@ -1009,6 +1021,7 @@ export async function matchesAnswerRelevance(
     score: similarity,
     reason: lessThanReason,
     tokensUsed,
+    metadata,
   };
 }
 
@@ -1040,12 +1053,33 @@ export async function matchesContextRecall(
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
   const sentences = splitIntoSentences(resp.output);
-  const numerator = sentences.reduce(
-    (acc, sentence) => acc + (sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN) ? 1 : 0),
-    0,
-  );
-  const score = numerator / sentences.length;
+  const sentenceAttributions: { sentence: string; attributed: boolean }[] = [];
+  let numerator = 0;
+
+  for (const sentence of sentences) {
+    const isAttributed = sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN);
+    if (isAttributed) {
+      numerator++;
+    }
+    // Extract the actual sentence content without the classification part
+    const sentenceMatch = sentence.match(/^\d+\.\s*([^\.]+\.)/);
+    const cleanSentence = sentenceMatch ? sentenceMatch[1].trim() : sentence.split('.')[0].trim();
+    sentenceAttributions.push({
+      sentence: cleanSentence,
+      attributed: isAttributed,
+    });
+  }
+
+  const score = sentences.length > 0 ? numerator / sentences.length : 0;
   const pass = score >= threshold - Number.EPSILON;
+
+  const metadata = {
+    sentenceAttributions,
+    totalSentences: sentences.length,
+    attributedSentences: numerator,
+    score,
+  };
+
   return {
     pass,
     score,
@@ -1064,6 +1098,7 @@ export async function matchesContextRecall(
         rejectedPrediction: 0,
       },
     },
+    metadata,
   };
 }
 
@@ -1092,13 +1127,38 @@ export async function matchesContextRelevance(
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
-  const sentences = splitIntoSentences(resp.output);
-  const numerator = sentences.reduce(
-    (acc, sentence) => acc + (sentence.includes(CONTEXT_RELEVANCE_BAD) ? 0 : 1),
-    0,
-  );
-  const score = numerator / sentences.length;
+
+  // Split the original context into sentences to get the total count
+  const contextSentences = splitIntoSentences(context);
+  const totalContextSentences = contextSentences.length;
+
+  // Parse the LLM's response to get relevant sentences
+  const extractedSentences = splitIntoSentences(resp.output);
+  const relevantSentences: string[] = [];
+  const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
+
+  let numerator = 0;
+  if (insufficientInformation) {
+    // If the entire response is "Insufficient Information", no sentences are relevant
+    numerator = 0;
+  } else {
+    // Count the extracted sentences as relevant
+    numerator = extractedSentences.length;
+    relevantSentences.push(...extractedSentences);
+  }
+
+  // RAGAS calculates: relevant sentences / total sentences in context
+  const score = totalContextSentences > 0 ? numerator / totalContextSentences : 0;
   const pass = score >= threshold - Number.EPSILON;
+
+  const metadata = {
+    extractedSentences: relevantSentences,
+    totalContextSentences,
+    relevantSentenceCount: numerator,
+    insufficientInformation,
+    score,
+  };
+
   return {
     pass,
     score,
@@ -1117,6 +1177,7 @@ export async function matchesContextRelevance(
         rejectedPrediction: 0,
       },
     },
+    metadata,
   };
 }
 

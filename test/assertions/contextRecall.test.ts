@@ -15,7 +15,20 @@ describe('handleContextRecall', () => {
   });
 
   it('should pass when context recall is above threshold', async () => {
-    const mockResult = { pass: true, score: 0.9, reason: 'Context contains expected information' };
+    const mockResult = {
+      pass: true,
+      score: 0.9,
+      reason: 'Context contains expected information',
+      metadata: {
+        sentenceAttributions: [
+          { sentence: 'Test sentence 1', attributed: true },
+          { sentence: 'Test sentence 2', attributed: false },
+        ],
+        totalSentences: 2,
+        attributedSentences: 1,
+        score: 0.9,
+      },
+    };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
@@ -52,6 +65,14 @@ describe('handleContextRecall', () => {
     expect(result.reason).toBe('Context contains expected information');
     expect(result.metadata).toBeDefined();
     expect(result.metadata?.context).toBe('test context');
+    // Verify metadata from matcher is preserved
+    expect(result.metadata?.sentenceAttributions).toEqual([
+      { sentence: 'Test sentence 1', attributed: true },
+      { sentence: 'Test sentence 2', attributed: false },
+    ]);
+    expect(result.metadata?.totalSentences).toBe(2);
+    expect(result.metadata?.attributedSentences).toBe(1);
+    expect(result.metadata?.score).toBe(0.9);
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
       'Expected fact',

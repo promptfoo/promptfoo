@@ -71,6 +71,16 @@ When the CI style check is failing, run these commands to fix style issues:
 
 - `promptfoo` or `pf` - Access the CLI tool
 
+## Testing in Development
+
+When testing changes during development, use the local build:
+
+```bash
+npm run local -- eval -c path/to/config.yaml
+```
+
+This ensures you're testing with your current changes instead of the installed version.
+
 ## Code Style Guidelines
 
 - Use TypeScript with strict type checking
