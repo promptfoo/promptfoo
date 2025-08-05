@@ -1,0 +1,47 @@
+# Example: Search Rubric Assertion
+# This example demonstrates how to use the search-rubric assertion type
+# to verify current information from the web
+
+prompts:
+  - 'What is the current stock price of Apple (AAPL)?'
+  - 'Who is the current CEO of {{company}}?'
+  - 'What is the weather like in {{city}} today?'
+
+providers:
+  # Anthropic with web search tool
+  - id: anthropic:messages:claude-sonnet-4-20250514
+    config:
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 5
+
+  # OpenAI with web search tool
+  - id: openai:responses:o4-mini
+    config:
+      tools:
+        - type: web_search_preview
+
+  # Perplexity with built-in search
+  - perplexity:sonar
+
+tests:
+  - vars:
+      company: 'Microsoft'
+    assert:
+      - type: search-rubric
+        value: 'Names the current CEO of {{company}} correctly'
+
+  - vars:
+      city: 'San Francisco'
+    assert:
+      - type: search-rubric
+        value: |
+          Provides current weather for {{city}} including:
+          - Temperature with units (F or C)
+          - General conditions (sunny, cloudy, rainy, etc.)
+
+  - assert:
+      - type: search-rubric
+        value: 'States the current Apple (AAPL) stock price within 5% accuracy'
+        threshold: 0.8
