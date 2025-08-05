@@ -264,24 +264,32 @@ export function maybeCoerceToGeminiFormat(contents: any): {
 }
 
 let cachedAuth: GoogleAuth | undefined;
-export async function getGoogleClient() {
+export async function getGoogleClient({ credentials }: { credentials?: string } = {}) {
   if (!cachedAuth) {
     let GoogleAuth;
     try {
       const importedModule = await import('google-auth-library');
       GoogleAuth = importedModule.GoogleAuth;
+      cachedAuth = new GoogleAuth({
+        scopes: 'https://www.googleapis.com/auth/cloud-platform',
+      });
     } catch {
       throw new Error(
         'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
       );
     }
-    cachedAuth = new GoogleAuth({
-      scopes: 'https://www.googleapis.com/auth/cloud-platform',
-    });
   }
-  const client = await cachedAuth.getClient();
-  const projectId = await cachedAuth.getProjectId();
-  return { client, projectId };
+  if (credentials) {
+    try {
+      return cachedAuth.fromJSON(JSON.parse(credentials));
+    } catch (error) {
+      logger.error(`[Vertex] Could not load credentials: ${error}`);
+      throw new Error(`[Vertex] Could not load credentials: ${error}`);
+    }
+  } else {
+    // Load from env var if credentials are not provided
+    return await cachedAuth.getClient();
+  }
 }
 
 export async function hasGoogleDefaultCredentials() {
