@@ -543,17 +543,20 @@ export default function ResultsView({
           flexDirection: 'column',
           position: 'relative',
         }}
-        ref={React.useCallback((el: HTMLDivElement | null) => {
-          if (el) {
-            // Recalculate when navigation visibility changes
-            const recalculate = () => {
-              el.style.height = `calc(100vh - ${el.getBoundingClientRect().top}px)`;
-            };
-            recalculate();
-            // Also recalculate after a short delay to account for navigation transition
-            setTimeout(recalculate, 100);
-          }
-        }, [topAreaCollapsed])}
+        ref={React.useCallback(
+          (el: HTMLDivElement | null) => {
+            if (el) {
+              // Recalculate when navigation visibility changes
+              const recalculate = () => {
+                el.style.height = `calc(100vh - ${el.getBoundingClientRect().top}px)`;
+              };
+              recalculate();
+              // Also recalculate after a short delay to account for navigation transition
+              setTimeout(recalculate, 100);
+            }
+          },
+          [topAreaCollapsed],
+        )}
       >
         <Box
           sx={{
