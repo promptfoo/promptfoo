@@ -275,56 +275,30 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           const functionCall = message.function_call;
           
           if (config.functionToolCallbacks && (toolCalls || functionCall)) {
-            const results: string[] = [];
-            let hasSuccessfulCallback = false;
-            
-            // Handle tool_calls array
-            if (toolCalls && Array.isArray(toolCalls)) {
-              for (const toolCall of toolCalls) {
-                if (toolCall.type === 'function' && 
-                    toolCall.function?.name && 
-                    config.functionToolCallbacks[toolCall.function.name]) {
-                  try {
-                    const functionResult = await this.functionCallbackHandler.executeCallback(
-                      toolCall.function.name,
-                      toolCall.function.arguments || '{}',
-                      config.functionToolCallbacks,
-                    );
-                    results.push(functionResult);
-                    hasSuccessfulCallback = true;
-                  } catch (error) {
-                    logger.debug(
-                      `Function callback failed for ${toolCall.function.name} with error ${error}, falling back to original output`,
-                    );
-                    results.push(JSON.stringify(toolCall));
-                  }
-                } else {
-                  results.push(JSON.stringify(toolCall));
-                }
-              }
+            // Handle based on what's present
+            if (toolCalls && functionCall) {
+              // Both present - combine them
+              const allCalls = [...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]), functionCall];
+              const { output: processedOutput } = await this.functionCallbackHandler.processMultipleFunctionCalls(
+                allCalls,
+                config.functionToolCallbacks,
+              );
+              output = processedOutput;
+            } else if (toolCalls) {
+              // Only tool_calls
+              const { output: processedOutput } = await this.functionCallbackHandler.processMultipleFunctionCalls(
+                toolCalls,
+                config.functionToolCallbacks,
+              );
+              output = processedOutput;
+            } else {
+              // Only function_call
+              const { output: processedOutput } = await this.functionCallbackHandler.processMultipleFunctionCalls(
+                functionCall,
+                config.functionToolCallbacks,
+              );
+              output = processedOutput;
             }
-            
-            // Handle single function_call
-            if (functionCall && functionCall.name && config.functionToolCallbacks[functionCall.name]) {
-              try {
-                const functionResult = await this.functionCallbackHandler.executeCallback(
-                  functionCall.name,
-                  functionCall.arguments || '{}',
-                  config.functionToolCallbacks,
-                );
-                results.push(functionResult);
-                hasSuccessfulCallback = true;
-              } catch (error) {
-                logger.debug(
-                  `Function callback failed for ${functionCall.name} with error ${error}, falling back to original output`,
-                );
-                results.push(JSON.stringify(functionCall));
-              }
-            } else if (functionCall) {
-              results.push(JSON.stringify(functionCall));
-            }
-            
-            output = hasSuccessfulCallback && results.length > 0 ? results.join('\n') : (toolCalls ?? functionCall);
           } else {
             // No callbacks configured, return raw tool/function calls
             output = toolCalls ?? functionCall;
