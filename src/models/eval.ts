@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import { updateSignalFile } from '../database/signal';
@@ -55,28 +55,59 @@ export function createEvalId(createdAt: Date = new Date()) {
 
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
+    if (evals.length === 0) {
+      return {};
+    }
+
     const db = getDb();
-    // Use sql template for safe query execution
-    const queryStr = `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
-FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`;
-    const results: { key: string; eval_id: string }[] = await db.all(sql.raw(queryStr));
-    const vars = results.reduce((acc: Record<string, string[]>, r) => {
-      acc[r.eval_id] = acc[r.eval_id] || [];
-      acc[r.eval_id].push(r.key);
-      return acc;
-    }, {});
+    // Build a safe query using drizzle-orm's query builder
+    const evalIds = evals.map((e) => e.id);
+    const results = await db
+      .select({
+        eval_id: evalResultsTable.evalId,
+        test_case: evalResultsTable.testCase,
+      })
+      .from(evalResultsTable)
+      .where(inArray(evalResultsTable.evalId, evalIds));
+
+    // Process the results to extract vars
+    const vars: Record<string, string[]> = {};
+    for (const result of results) {
+      const testCase = result.test_case as any;
+      if (testCase?.vars && typeof testCase.vars === 'object') {
+        vars[result.eval_id] = vars[result.eval_id] || [];
+        vars[result.eval_id].push(...Object.keys(testCase.vars));
+      }
+    }
+
+    // Deduplicate vars per eval
+    for (const evalId in vars) {
+      vars[evalId] = [...new Set(vars[evalId])];
+    }
+
     return vars;
   }
 
   static async getVarsFromEval(evalId: string) {
     const db = getDb();
-    // Use sql template for safe query execution
-    const queryStr = `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
-    FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`;
-    const results: { key: string }[] = await db.all(sql.raw(queryStr));
-    const vars = results.map((r) => r.key);
+    // Use drizzle-orm query builder for safety
+    const results = await db
+      .select({
+        test_case: evalResultsTable.testCase,
+      })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, evalId));
 
-    return vars;
+    // Extract unique vars from all test cases
+    const varsSet = new Set<string>();
+    for (const result of results) {
+      const testCase = result.test_case as any;
+      if (testCase?.vars && typeof testCase.vars === 'object') {
+        Object.keys(testCase.vars).forEach((key) => varsSet.add(key));
+      }
+    }
+
+    return Array.from(varsSet);
   }
 
   static async setVars(evalId: string, vars: string[]) {
