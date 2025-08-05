@@ -827,6 +827,8 @@ Configuration values can be set in multiple ways, with the following precedence 
 3. Adjust `numTests` for individual plugins based on importance
 4. Run a red team eval and generate additional tests as needed
 
+For more information, see [Best Practices](/docs/red-team/troubleshooting/best-practices/).
+
 ## Example Configurations
 
 ### Basic Configuration

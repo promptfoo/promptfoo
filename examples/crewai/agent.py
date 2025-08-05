@@ -72,7 +72,7 @@ async def run_recruitment_agent(prompt, model="openai:gpt-4.1"):
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working
-        result = crew.kickoff(inputs={"job_requirements": prompt})
+        crew.kickoff(inputs={"job_requirements": prompt})
 
         # The result might be a string, or an object with a 'raw' attribute.
         output_text = ""

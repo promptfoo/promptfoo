@@ -46,7 +46,7 @@ export default function TargetConfiguration({
   } | null>(null);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
-  const [testingEnabled, setTestingEnabled] = useState(selectedTarget.id === 'http');
+  const [testingEnabled, setTestingEnabled] = useState(providerType === 'http');
   const [validationErrors, setValidationErrors] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState<boolean>(false);
 
@@ -60,7 +60,7 @@ export default function TargetConfiguration({
   useEffect(() => {
     updateConfig('target', selectedTarget);
     setPromptRequired(requiresPrompt(selectedTarget));
-    setTestingEnabled(selectedTarget.id === 'http');
+    setTestingEnabled(providerType === 'http');
   }, [selectedTarget, updateConfig]);
 
   const handleProviderChange = (provider: ProviderOptions) => {
@@ -190,13 +190,13 @@ export default function TargetConfiguration({
         )}
 
         {/* Documentation Alert for specific providers */}
-        {hasSpecificDocumentation(selectedTarget.id) && (
+        {hasSpecificDocumentation(providerType) && (
           <Alert severity="info" sx={{ mb: 2 }}>
             <Box>
               <Typography variant="body2">
                 Need help configuring {selectedTarget.label || selectedTarget.id}?{' '}
                 <Link
-                  href={getProviderDocumentationUrl(selectedTarget.id)}
+                  href={getProviderDocumentationUrl(providerType)}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
