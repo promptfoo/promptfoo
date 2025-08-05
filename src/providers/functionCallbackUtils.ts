@@ -55,9 +55,7 @@ export class FunctionCallbackHandler {
         isError: false,
       };
     } catch (error) {
-      logger.debug(
-        `Function callback failed for ${functionInfo.name}: ${error}`,
-      );
+      logger.debug(`Function callback failed for ${functionInfo.name}: ${error}`);
       // Return original call on error
       return {
         output: typeof call === 'string' ? call : JSON.stringify(call),
@@ -86,29 +84,31 @@ export class FunctionCallbackHandler {
 
     const isArray = Array.isArray(calls);
     const callsArray = isArray ? calls : [calls];
-    
+
     const results = await Promise.all(
-      callsArray.map(call => this.processCall(call, callbacks, context))
+      callsArray.map((call) => this.processCall(call, callbacks, context)),
     );
 
     // If any callback succeeded, return processed results
-    const hasSuccess = results.some(r => !r.isError && r.output !== JSON.stringify(callsArray[results.indexOf(r)]));
-    
+    const hasSuccess = results.some(
+      (r) => !r.isError && r.output !== JSON.stringify(callsArray[results.indexOf(r)]),
+    );
+
     if (hasSuccess) {
-      const outputs = results.map(r => r.output);
+      const outputs = results.map((r) => r.output);
       // For single call with successful callback, return just the output
       if (!isArray && outputs.length === 1) {
         return outputs[0];
       }
       // For multiple calls, join string results
-      return outputs.every(o => typeof o === 'string') ? outputs.join('\n') : outputs;
+      return outputs.every((o) => typeof o === 'string') ? outputs.join('\n') : outputs;
     }
 
     // All failed or no callbacks - return stringified results
     if (!isArray && results.length === 1) {
       return results[0].output;
     }
-    
+
     // For arrays, return the original array
     return calls;
   }
@@ -151,10 +151,10 @@ export class FunctionCallbackHandler {
   ): Promise<string> {
     // Get or load the callback
     let callback = this.loadedCallbacks[functionName];
-    
+
     if (!callback) {
       const callbackConfig = callbacks[functionName];
-      
+
       if (typeof callbackConfig === 'string') {
         // String callback - either file reference or inline code
         if (callbackConfig.startsWith('file://')) {
@@ -168,7 +168,7 @@ export class FunctionCallbackHandler {
       } else {
         throw new Error(`Invalid callback configuration for ${functionName}`);
       }
-      
+
       // Cache for future use
       this.loadedCallbacks[functionName] = callback;
     }
@@ -195,14 +195,16 @@ export class FunctionCallbackHandler {
 
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(`Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`);
-      
+      logger.debug(
+        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
+      );
+
       const mod = await importModule(resolvedPath);
       const func = functionName && mod[functionName] ? mod[functionName] : mod.default || mod;
 
       if (typeof func !== 'function') {
         throw new Error(
-          `Expected ${resolvedPath}${functionName ? `:${functionName}` : ''} to export a function, got ${typeof func}`
+          `Expected ${resolvedPath}${functionName ? `:${functionName}` : ''} to export a function, got ${typeof func}`,
         );
       }
 

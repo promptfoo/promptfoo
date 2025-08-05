@@ -333,7 +333,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           if (item.status === 'completed' && (!item.arguments || item.arguments === '{}')) {
             continue;
           }
-          
+
           result = await this.functionCallbackHandler.processCalls(
             item,
             config.functionToolCallbacks,

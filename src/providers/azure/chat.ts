@@ -273,7 +273,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           // Handle tool_calls and function_call
           const toolCalls = message.tool_calls;
           const functionCall = message.function_call;
-          
+
           // Process function/tool calls if callbacks are configured
           if (config.functionToolCallbacks && (toolCalls || functionCall)) {
             // Combine all calls into a single array for processing
@@ -284,7 +284,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             if (functionCall) {
               allCalls.push(functionCall);
             }
-            
+
             output = await this.functionCallbackHandler.processCalls(
               allCalls.length === 1 ? allCalls[0] : allCalls,
               config.functionToolCallbacks,

@@ -101,7 +101,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     this.assistantConfig = options.config || {};
   }
 
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -656,6 +655,21 @@ export class AzureAssistantProvider extends AzureGenericProvider {
                     this.assistantConfig.functionToolCallbacks,
                     callbackContext,
                   );
+                  
+                  // Check if the callback had an error
+                  if (result.isError) {
+                    // Extract error from the stringified output if possible
+                    try {
+                      const parsedOutput = JSON.parse(result.output);
+                      if (parsedOutput.arguments) {
+                        // This is the original function call, extract the error from executeCallback
+                        throw new Error('Function callback failed');
+                      }
+                    } catch {
+                      throw new Error('Function callback failed');
+                    }
+                  }
+                  
                   const outputResult = result.output;
 
                   logger.debug(`Function ${functionName} result: ${outputResult}`);
@@ -667,7 +681,9 @@ export class AzureAssistantProvider extends AzureGenericProvider {
                   logger.error(`Error calling function ${functionName}: ${error}`);
                   return {
                     tool_call_id: toolCall.id,
-                    output: JSON.stringify({ error: String(error) }),
+                    output: JSON.stringify({
+                      error: `Error in ${functionName}: ${error instanceof Error ? error.message : String(error)}`,
+                    }),
                   };
                 }
               }),

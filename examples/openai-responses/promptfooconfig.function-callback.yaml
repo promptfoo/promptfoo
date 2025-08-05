@@ -39,18 +39,18 @@ tests:
       b: 6
     assert:
       - type: equals
-        value: "11"
-  
+        value: '11'
+
   - vars:
       a: 123
       b: 456
     assert:
       - type: equals
-        value: "579"
-  
+        value: '579'
+
   - vars:
       a: -10
       b: 20
     assert:
       - type: equals
-        value: "10"
+        value: '10'
