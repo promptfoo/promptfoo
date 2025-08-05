@@ -655,21 +655,12 @@ export class AzureAssistantProvider extends AzureGenericProvider {
                     this.assistantConfig.functionToolCallbacks,
                     callbackContext,
                   );
-                  
+
                   // Check if the callback had an error
                   if (result.isError) {
-                    // Extract error from the stringified output if possible
-                    try {
-                      const parsedOutput = JSON.parse(result.output);
-                      if (parsedOutput.arguments) {
-                        // This is the original function call, extract the error from executeCallback
-                        throw new Error('Function callback failed');
-                      }
-                    } catch {
-                      throw new Error('Function callback failed');
-                    }
+                    throw new Error('Function callback failed');
                   }
-                  
+
                   const outputResult = result.output;
 
                   logger.debug(`Function ${functionName} result: ${outputResult}`);

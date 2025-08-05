@@ -91,7 +91,7 @@ export class FunctionCallbackHandler {
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(
-      (r) => !r.isError && r.output !== JSON.stringify(callsArray[results.indexOf(r)]),
+      (r, index) => !r.isError && r.output !== JSON.stringify(callsArray[index]),
     );
 
     if (hasSuccess) {
