@@ -22,7 +22,11 @@ describe('ProviderTypeSelector', () => {
     };
 
     renderWithTheme(
-      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="http"
+      />,
     );
 
     // Component should start in collapsed state showing the selected provider
@@ -234,7 +238,11 @@ describe('ProviderTypeSelector', () => {
     };
 
     renderWithTheme(
-      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="anthropic"
+      />,
     );
 
     // Should show collapsed view with selected provider
@@ -255,5 +263,189 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('OpenAI')).toBeVisible();
     expect(screen.getByText('Anthropic')).toBeVisible();
     expect(screen.getByRole('button', { name: 'All Categories' })).toBeVisible();
+  });
+
+  it("should call setProvider with the correct Go provider configuration when the 'Go Provider' card is selected", () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'http',
+      label: 'My Test Provider',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="http"
+      />,
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    const goProviderCard = screen.getByText('Go Provider').closest('div[class*="MuiPaper-root"]');
+    expect(goProviderCard).toBeInTheDocument();
+
+    if (goProviderCard) {
+      fireEvent.click(goProviderCard);
+    }
+
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      {
+        id: 'file:///path/to/your/script.go',
+        config: {},
+        label: 'My Test Provider',
+      },
+      'go',
+    );
+
+    expect(screen.getByText('Go Provider')).toBeVisible();
+    expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
+  });
+
+  it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'file:///path/to/your/script.go',
+      label: 'My Go Provider',
+      config: {
+        providerType: 'go',
+      },
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="go"
+      />,
+    );
+
+    expect(screen.getByText('Go Provider')).toBeVisible();
+    expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
+  });
+
+  it('should initialize correctly when providerType is undefined but provider.id is set', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'openai:gpt-4.1',
+      label: 'My OpenAI Provider',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType={undefined}
+      />,
+    );
+
+    expect(screen.getByText('OpenAI')).toBeVisible();
+    expect(screen.getByText('GPT models including GPT-4.1 and reasoning models')).toBeVisible();
+  });
+
+  it('should correctly update provider configuration when switching from Go provider to HTTP provider', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'file:///path/to/your/script.go',
+      label: 'My Go Provider',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="go"
+      />,
+    );
+
+    expect(screen.getByText('Go Provider')).toBeVisible();
+    expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
+
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    const httpProviderCard = screen
+      .getByText('HTTP/HTTPS Endpoint')
+      .closest('div[class*="MuiPaper-root"]');
+    expect(httpProviderCard).toBeInTheDocument();
+
+    if (httpProviderCard) {
+      fireEvent.click(httpProviderCard);
+    }
+
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      {
+        id: 'http',
+        label: 'My Go Provider',
+        config: {
+          url: '',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: '{{prompt}}',
+          }),
+        },
+      },
+      'http',
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+  });
+
+  it('should update the UI when the providerType prop changes after initial render', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'http',
+      label: 'My Test Provider',
+      config: {},
+    };
+
+    const { rerender } = renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="http"
+      />,
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+
+    rerender(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="python"
+      />,
+    );
+
+    expect(screen.getByText('Python Provider')).toBeVisible();
+    expect(screen.getByText('Custom Python provider for specialized integrations')).toBeVisible();
+  });
+
+  it('should handle the case where providerType is set to a value that does not exist in allProviderOptions array without crashing, and default to http', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="nonexistent-provider"
+      />,
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
   });
 });

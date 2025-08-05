@@ -55,6 +55,21 @@ describe('TargetTypeSelection', () => {
   });
 
   it('should allow user to enter name, reveal types, select one, and proceed', async () => {
+    // For this test, we need providerType to be set to 'http' after initialization
+    const mockSetProviderType = vi.fn();
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: {
+          id: 'http',
+          label: '',
+          config: {},
+        },
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: 'http', // Set to 'http' to ensure collapsed view
+      setProviderType: mockSetProviderType,
+    });
+
     renderComponent();
 
     // Initially, no footer Next button should be present
@@ -85,7 +100,13 @@ describe('TargetTypeSelection', () => {
     expect(footerNextButton).toBeEnabled();
 
     // After target type section is revealed, component defaults to HTTP provider in collapsed state
-    // Click "Change" button to expand the provider selector
+    // Wait a moment for the provider selector to initialize
+    await waitFor(() => {
+      // Check if we're in collapsed view by looking for the checkmark icon and HTTP provider text
+      expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeInTheDocument();
+    });
+
+    // The Change button should be visible in the collapsed view
     const changeButton = await screen.findByRole('button', { name: 'Change' });
     fireEvent.click(changeButton);
 
@@ -114,6 +135,21 @@ describe('TargetTypeSelection', () => {
   });
 
   it('should update the selectedTarget and providerType when a new provider type is selected and record telemetry event', async () => {
+    // For this test, we need providerType to be set to 'http' after initialization
+    const mockSetProviderType = vi.fn();
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: {
+          id: 'http',
+          label: '',
+          config: {},
+        },
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: 'http', // Set to 'http' to ensure collapsed view
+      setProviderType: mockSetProviderType,
+    });
+
     renderComponent();
 
     const nameInput = screen.getByRole('textbox', { name: 'Target Name' });

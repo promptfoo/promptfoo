@@ -36,6 +36,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-all](#contains-all)                                   | output contains all list of substrings                             |
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
+| [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
 | [contains-xml](#contains-xml)                                   | output contains valid xml                                          |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
@@ -45,6 +46,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
 | [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
+| [is-html](#is-html)                                             | output is valid HTML                                               |
 | [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
 | [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
@@ -126,8 +128,6 @@ assert:
 
 For case insensitive matching, use `icontains-any`.
 
-For case insensitive matching, use `icontains-all`.
-
 ### Regex
 
 The `regex` assertion checks if the LLM output matches the provided regular expression.
@@ -198,6 +198,54 @@ assert:
 ```
 
 See also: [`is-json`](#is-json)
+
+### Contains-Html
+
+The `contains-html` assertion checks if the LLM output contains HTML content. This is useful when you want to verify that the model has generated HTML markup, even if it's embedded within other text.
+
+Example:
+
+```yaml
+assert:
+  - type: contains-html
+```
+
+The assertion uses multiple indicators to detect HTML:
+
+- Opening and closing tags (e.g., `<div>`, `</div>`)
+- Self-closing tags (e.g., `<br />`, `<img />`)
+- HTML entities (e.g., `&amp;`, `&nbsp;`, `&#123;`)
+- HTML attributes (e.g., `class="example"`, `id="test"`)
+- HTML comments (e.g., `<!-- comment -->`)
+- DOCTYPE declarations
+
+This assertion requires at least two HTML indicators to avoid false positives from text like "a < b" or email addresses.
+
+### Is-Html
+
+The `is-html` assertion checks if the entire LLM output is valid HTML (not just contains HTML fragments). The output must start and end with HTML tags, with no non-HTML content outside the tags.
+
+Example:
+
+```yaml
+assert:
+  - type: is-html
+```
+
+This assertion will pass for:
+
+- Complete HTML documents: `<!DOCTYPE html><html>...</html>`
+- HTML fragments: `<div>Content</div>`
+- Multiple elements: `<h1>Title</h1><p>Paragraph</p>`
+- Self-closing tags: `<img src="test.jpg" />`
+
+It will fail for:
+
+- Plain text: `Just text`
+- Mixed content: `Text before <div>HTML</div> text after`
+- XML documents: `<?xml version="1.0"?><root>...</root>`
+- Incomplete HTML: `<div>Unclosed div`
+- Non-HTML content with HTML inside: `Here is some HTML: <div>test</div>`
 
 ### Contains-Sql
 

@@ -27,7 +27,7 @@ export default function HomepageFeatures() {
       description: (
         <>
           <p>
-            Adopted by <strong>27 Fortune 500 companies</strong> shipping apps to hundreds of
+            Adopted by <strong>44 Fortune 500 companies</strong> shipping apps to hundreds of
             millions of users.
           </p>
           <p>
