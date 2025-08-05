@@ -1,7 +1,8 @@
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as os from 'os';
 import * as path from 'path';
+
+import yaml from 'js-yaml';
 import {
   getConfigDirectoryPath,
   setConfigDirectoryPath,
@@ -21,6 +22,7 @@ describe('config management', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     jest.mocked(os.homedir).mockReturnValue('/home/user');
+    setConfigDirectoryPath(undefined);
   });
 
   describe('getConfigDirectoryPath', () => {
@@ -114,11 +116,12 @@ describe('config management', () => {
     });
 
     it('should handle empty yaml content', () => {
-      jest.spyOn(yaml, 'dump').mockReturnValue('');
+      const yamlDumpSpy = jest.spyOn(yaml, 'dump').mockReturnValue('');
       const config = { description: 'test' };
       const result = writePromptfooConfig(config, outputPath);
       expect(result).toEqual(config);
       expect(fs.writeFileSync).not.toHaveBeenCalled();
+      yamlDumpSpy.mockRestore();
     });
   });
 });

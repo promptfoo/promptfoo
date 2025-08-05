@@ -71,7 +71,6 @@ Edit the `promptfooconfig.yaml` file to define your comparison.
 
 1. **Test Cases**:
    Now, define your test cases. In this specific example, each test case includes:
-
    - The riddle text (assigned to the `riddle` variable)
    - Specific assertions for that test case (optional)
 

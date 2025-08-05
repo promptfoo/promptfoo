@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+
 import CrispChat from '@app/components/CrispChat';
 import ErrorBoundary from '@app/components/ErrorBoundary';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
@@ -14,6 +15,7 @@ import StrategyIcon from '@mui/icons-material/Psychology';
 import ReviewIcon from '@mui/icons-material/RateReview';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SaveIcon from '@mui/icons-material/Save';
+import SettingsIcon from '@mui/icons-material/Settings';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -23,26 +25,29 @@ import DialogTitle from '@mui/material/DialogTitle';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
+import { styled } from '@mui/material/styles';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { styled } from '@mui/material/styles';
-import type { RedteamStrategy } from '@promptfoo/types';
+import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { customTargetOption, predefinedTargets } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
 import Review from './components/Review';
 import Setup from './components/Setup';
 import Strategies from './components/Strategies';
-import Targets from './components/Targets';
-import { predefinedTargets, customTargetOption } from './components/constants';
+import TargetConfiguration from './components/Targets/TargetConfiguration';
+import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
-import type { RedteamUITarget } from './types';
-import type { Config } from './types';
 import { generateOrderedYaml } from './utils/yamlHelpers';
+import type { RedteamStrategy } from '@promptfoo/types';
+
+import type { Config, RedteamUITarget } from './types';
 import './page.css';
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
@@ -126,6 +131,7 @@ function CustomTabPanel(props: TabPanelProps) {
       hidden={value !== index}
       id={`vertical-tabpanel-${index}`}
       aria-labelledby={`vertical-tab-${index}`}
+      sx={{ padding: 0 }}
       {...other}
     >
       {value === index && children}
@@ -143,8 +149,8 @@ function a11yProps(index: number) {
 const Root = styled(Box)(({ theme }) => ({
   display: 'flex',
   backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
-  minHeight: '100vh',
-  position: 'relative',
+  position: 'fixed',
+  width: '100%',
 }));
 
 const OuterSidebarContainer = styled(Box)(({ theme }) => ({
@@ -182,7 +188,6 @@ const TabContent = styled(Box)(({ theme }) => ({
   flexGrow: 1,
   display: 'flex',
   flexDirection: 'column',
-  padding: '24px',
   position: 'relative',
   transition: theme.transitions.create('margin', {
     easing: theme.transitions.easing.sharp,
@@ -252,6 +257,7 @@ const StatusSection = styled(Box)(({ theme }) => ({
 
 export default function RedTeamSetupPage() {
   // --- Hooks ---
+  usePageMeta({ title: 'Red team setup', description: 'Configure red team testing' });
   const location = useLocation();
   const navigate = useNavigate();
   const { recordEvent } = useTelemetry();
@@ -281,12 +287,21 @@ export default function RedTeamSetupPage() {
 
   const lastSavedConfig = useRef<string>('');
 
+  // Track funnel on initial load
+  useEffect(() => {
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_setup_started',
+      source: 'webui',
+    });
+  }, []);
+
   // Handle browser back/forward
   useEffect(() => {
     const hash = location.hash.replace('#', '');
     if (hash) {
       const newValue = Number.parseInt(hash, 10);
-      if (!Number.isNaN(newValue) && newValue >= 0 && newValue <= 4) {
+      if (!Number.isNaN(newValue) && newValue >= 0 && newValue <= 5) {
         setValue(newValue);
       } else {
         setValue(0);
@@ -324,6 +339,16 @@ export default function RedTeamSetupPage() {
     updateHash(newValue);
     setValue(newValue);
     window.scrollTo({ top: 0 });
+
+    // Track funnel progress
+    const steps = ['target_type', 'target_config', 'purpose', 'plugins', 'strategies', 'review'];
+    if (newValue < steps.length) {
+      recordEvent('funnel', {
+        type: 'redteam',
+        step: `webui_setup_${steps[newValue]}_viewed`,
+        source: 'webui',
+      });
+    }
   };
 
   const closeSetupModal = () => {
@@ -338,6 +363,17 @@ export default function RedTeamSetupPage() {
       numStrategies: config.strategies.length,
       targetType: config.target.id,
     });
+
+    // Track funnel milestone
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_setup_configured',
+      source: 'webui',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+
     try {
       const response = await callApi('/configs', {
         method: 'POST',
@@ -472,6 +508,8 @@ export default function RedTeamSetupPage() {
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
         entities: yamlConfig.redteam?.entities || [],
+        numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
+        maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
         applicationDefinition: {
           purpose: yamlConfig.redteam?.purpose || '',
           // We could potentially parse these from redteam.purpose if it follows a specific format.
@@ -580,34 +618,40 @@ export default function RedTeamSetupPage() {
                 onChange={handleChange}
               >
                 <StyledTab
-                  icon={<AppIcon />}
+                  icon={<TargetIcon />}
                   iconPosition="start"
-                  label="Usage Details"
+                  label="Target Type"
                   {...a11yProps(0)}
                 />
                 <StyledTab
-                  icon={<TargetIcon />}
+                  icon={<SettingsIcon />}
                   iconPosition="start"
-                  label="Targets"
+                  label="Target Config"
+                  {...a11yProps(1)}
+                />
+                <StyledTab
+                  icon={<AppIcon />}
+                  iconPosition="start"
+                  label="Application Details"
                   {...a11yProps(1)}
                 />
                 <StyledTab
                   icon={<PluginIcon />}
                   iconPosition="start"
                   label={`Plugins${config.plugins?.length ? ` (${config.plugins.length})` : ''}`}
-                  {...a11yProps(2)}
+                  {...a11yProps(3)}
                 />
                 <StyledTab
                   icon={<StrategyIcon />}
                   iconPosition="start"
                   label={`Strategies${config.strategies?.length ? ` (${config.strategies.length})` : ''}`}
-                  {...a11yProps(3)}
+                  {...a11yProps(4)}
                 />
                 <StyledTab
                   icon={<ReviewIcon />}
                   iconPosition="start"
                   label="Review"
-                  {...a11yProps(4)}
+                  {...a11yProps(5)}
                 />
               </StyledTabs>
             </TabsContainer>
@@ -644,26 +688,35 @@ export default function RedTeamSetupPage() {
         </OuterSidebarContainer>
         <TabContent>
           <CustomTabPanel value={value} index={0}>
-            <ErrorBoundary name="Application Purpose Page">
-              <Purpose onNext={handleNext} />
+            <ErrorBoundary name="Target Type Selection Page">
+              <TargetTypeSelection onNext={handleNext} setupModalOpen={setupModalOpen} />
             </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={1}>
-            <ErrorBoundary name="Targets Page">
-              <Targets onNext={handleNext} onBack={handleBack} setupModalOpen={setupModalOpen} />
+            <ErrorBoundary name="Target Configuration Page">
+              <TargetConfiguration
+                onNext={handleNext}
+                onBack={handleBack}
+                setupModalOpen={setupModalOpen}
+              />
             </ErrorBoundary>
           </CustomTabPanel>
           <CustomTabPanel value={value} index={2}>
+            <ErrorBoundary name="Application Purpose Page">
+              <Purpose onNext={handleNext} onBack={handleBack} />
+            </ErrorBoundary>
+          </CustomTabPanel>
+          <CustomTabPanel value={value} index={3}>
             <ErrorBoundary name="Plugins Page">
               <Plugins onNext={handleNext} onBack={handleBack} />
             </ErrorBoundary>
           </CustomTabPanel>
-          <CustomTabPanel value={value} index={3}>
+          <CustomTabPanel value={value} index={4}>
             <ErrorBoundary name="Strategies Page">
               <Strategies onNext={handleNext} onBack={handleBack} />
             </ErrorBoundary>
           </CustomTabPanel>
-          <CustomTabPanel value={value} index={4}>
+          <CustomTabPanel value={value} index={5}>
             <ErrorBoundary name="Review Page">
               <Review />
             </ErrorBoundary>
@@ -671,136 +724,142 @@ export default function RedTeamSetupPage() {
         </TabContent>
       </Content>
 
-      <Setup open={setupModalOpen} onClose={closeSetupModal} />
+      {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
       <CrispChat />
-      <Dialog
-        open={saveDialogOpen}
-        onClose={() => setSaveDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Save Configuration</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Configuration Name"
-            fullWidth
-            value={configName}
-            onChange={(e) => setConfigName(e.target.value)}
-            sx={{ mb: 2 }}
-          />
-          <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={handleDownloadYaml}
+      {saveDialogOpen ? (
+        <Dialog
+          open={saveDialogOpen}
+          onClose={() => setSaveDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Save Configuration</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Configuration Name"
               fullWidth
-            >
-              Export YAML
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<SaveIcon />}
-              onClick={handleSaveConfig}
-              disabled={!configName}
-              fullWidth
-            >
-              Save
-            </Button>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog
-        open={loadDialogOpen}
-        onClose={() => setLoadDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Load Configuration</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mb: 2 }}>
-            <input
-              accept=".yml,.yaml"
-              style={{ display: 'none' }}
-              id="yaml-file-upload"
-              type="file"
-              onChange={handleFileUpload}
+              value={configName}
+              onChange={(e) => setConfigName(e.target.value)}
+              sx={{ mb: 2 }}
             />
-            <label htmlFor="yaml-file-upload">
-              <Button variant="outlined" component="span" fullWidth sx={{ mb: 2 }}>
-                Upload YAML File
+            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={handleDownloadYaml}
+                fullWidth
+              >
+                Export YAML
               </Button>
-            </label>
-          </Box>
-          <Typography variant="subtitle2" sx={{ mb: 2 }}>
-            Or choose a saved configuration:
-          </Typography>
-          {savedConfigs.length === 0 ? (
-            <Box sx={{ py: 4, textAlign: 'center' }}>
-              <Typography color="text.secondary">No saved configurations found</Typography>
+              <Button
+                variant="contained"
+                startIcon={<SaveIcon />}
+                onClick={handleSaveConfig}
+                disabled={!configName}
+                fullWidth
+              >
+                Save
+              </Button>
             </Box>
-          ) : (
-            <List>
-              {savedConfigs.map((config) => (
-                <ListItemButton
-                  key={config.id}
-                  onClick={() => handleLoadConfig(config.id)}
-                  sx={{
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                    mb: 0.5,
-                    backgroundColor: 'background.paper',
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                      cursor: 'pointer',
-                    },
-                  }}
-                >
-                  <ListItemText
-                    primary={config.name}
-                    secondary={new Date(config.updatedAt).toLocaleString()}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
-        </DialogActions>
-      </Dialog>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+          </DialogActions>
+        </Dialog>
+      ) : null}
 
-      <Dialog
-        open={resetDialogOpen}
-        onClose={() => setResetDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Reset Configuration</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to reset the configuration to default values? This action cannot
-            be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
-          <Button
-            onClick={() => {
-              handleResetConfig();
-            }}
-            color="error"
-          >
-            Reset
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {loadDialogOpen ? (
+        <Dialog
+          open={loadDialogOpen}
+          onClose={() => setLoadDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Load Configuration</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mb: 2 }}>
+              <input
+                accept=".yml,.yaml"
+                style={{ display: 'none' }}
+                id="yaml-file-upload"
+                type="file"
+                onChange={handleFileUpload}
+              />
+              <label htmlFor="yaml-file-upload">
+                <Button variant="outlined" component="span" fullWidth sx={{ mb: 2 }}>
+                  Upload YAML File
+                </Button>
+              </label>
+            </Box>
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Or choose a saved configuration:
+            </Typography>
+            {savedConfigs.length === 0 ? (
+              <Box sx={{ py: 4, textAlign: 'center' }}>
+                <Typography color="text.secondary">No saved configurations found</Typography>
+              </Box>
+            ) : (
+              <List>
+                {savedConfigs.map((config) => (
+                  <ListItemButton
+                    key={config.id}
+                    onClick={() => handleLoadConfig(config.id)}
+                    sx={{
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      mb: 0.5,
+                      backgroundColor: 'background.paper',
+                      '&:hover': {
+                        backgroundColor: 'action.hover',
+                        cursor: 'pointer',
+                      },
+                    }}
+                  >
+                    <ListItemText
+                      primary={config.name}
+                      secondary={new Date(config.updatedAt).toLocaleString()}
+                    />
+                  </ListItemButton>
+                ))}
+              </List>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
+          </DialogActions>
+        </Dialog>
+      ) : null}
+
+      {resetDialogOpen ? (
+        <Dialog
+          open={resetDialogOpen}
+          onClose={() => setResetDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Reset Configuration</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to reset the configuration to default values? This action cannot
+              be undone.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                handleResetConfig();
+              }}
+              color="error"
+            >
+              Reset
+            </Button>
+          </DialogActions>
+        </Dialog>
+      ) : null}
     </Root>
   );
 }

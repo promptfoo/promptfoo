@@ -1,12 +1,13 @@
 import async from 'async';
-import { SingleBar, Presets } from 'cli-progress';
+import { Presets, SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../cache';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+
+import type { TestCase } from '../../types';
 
 async function generateCompositePrompts(
   testCases: TestCase[],
@@ -24,6 +25,7 @@ async function generateCompositePrompts(
           format:
             'Composite Jailbreak Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
+          gracefulExit: true,
         },
         Presets.shades_classic,
       );
@@ -68,21 +70,25 @@ async function generateCompositePrompts(
         return;
       }
 
-      const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => ({
-        ...testCase,
-        vars: {
-          ...testCase.vars,
-          [injectVar]: modifiedPrompt,
-        },
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: `${assertion.metric}/Composite`,
-        })),
-        metadata: {
-          ...testCase.metadata,
-          strategyId: 'jailbreak:composite',
-        },
-      }));
+      const compositeTestCases = data.modifiedPrompts.map((modifiedPrompt: string) => {
+        const originalText = String(testCase.vars![injectVar]);
+        return {
+          ...testCase,
+          vars: {
+            ...testCase.vars,
+            [injectVar]: modifiedPrompt,
+          },
+          assert: testCase.assert?.map((assertion) => ({
+            ...assertion,
+            metric: `${assertion.metric}/Composite`,
+          })),
+          metadata: {
+            ...testCase.metadata,
+            strategyId: 'jailbreak:composite',
+            originalText,
+          },
+        };
+      });
 
       allResults = allResults.concat(compositeTestCases);
 

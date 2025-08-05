@@ -1,9 +1,11 @@
 import { addIterativeJailbreaks } from '../../../src/redteam/strategies/iterative';
+
 import type { TestCase } from '../../../src/types';
 
 describe('addIterativeJailbreaks', () => {
   const mockTestCases: TestCase[] = [
     {
+      vars: { testVar: 'test value' },
       assert: [
         {
           type: 'contains-all', // Add required type field
@@ -41,6 +43,7 @@ describe('addIterativeJailbreaks', () => {
       metadata: {
         existingKey: 'existingValue',
         strategyId: 'jailbreak',
+        originalText: 'test value',
       },
     });
   });
@@ -69,6 +72,7 @@ describe('addIterativeJailbreaks', () => {
       metadata: {
         existingKey: 'existingValue',
         strategyId: 'jailbreak:tree',
+        originalText: 'test value',
       },
     });
   });
@@ -76,6 +80,7 @@ describe('addIterativeJailbreaks', () => {
   it('should handle test cases without assertions', () => {
     const testCasesWithoutAssert: TestCase[] = [
       {
+        vars: { testVar: 'test value' },
         metadata: {
           existingKey: 'existingValue',
         },
@@ -96,6 +101,7 @@ describe('addIterativeJailbreaks', () => {
       metadata: {
         existingKey: 'existingValue',
         strategyId: 'jailbreak',
+        originalText: 'test value',
       },
     });
   });
@@ -103,6 +109,7 @@ describe('addIterativeJailbreaks', () => {
   it('should handle test cases without metadata', () => {
     const testCasesWithoutMetadata: TestCase[] = [
       {
+        vars: { testVar: 'test value' },
         assert: [
           {
             type: 'contains-all',
@@ -132,6 +139,7 @@ describe('addIterativeJailbreaks', () => {
       ],
       metadata: {
         strategyId: 'jailbreak',
+        originalText: 'test value',
       },
     });
   });
@@ -157,6 +165,7 @@ describe('addIterativeJailbreaks', () => {
       metadata: {
         existingKey: 'existingValue',
         strategyId: 'jailbreak',
+        originalText: 'test value',
       },
     });
   });

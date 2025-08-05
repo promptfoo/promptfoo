@@ -1,4 +1,7 @@
 import logger from '../logger';
+import invariant from '../util/invariant';
+import { getNunjucksEngine } from '../util/templates';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -6,8 +9,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 
 interface SequenceProviderConfig {
   inputs: string[];
@@ -44,13 +46,7 @@ export class SequenceProvider implements ApiProvider {
 
     const nunjucks = getNunjucksEngine();
     const responses: string[] = [];
-    const totalTokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      numRequests: 0,
-      cached: 0,
-    };
+    const accumulatedTokenUsage = createEmptyTokenUsage();
 
     // Send each input to the original provider
     for (const input of this.inputs) {
@@ -69,21 +65,12 @@ export class SequenceProvider implements ApiProvider {
 
       responses.push(response.output);
 
-      // Accumulate token usage if available
-      if (response.tokenUsage) {
-        totalTokenUsage.total += response.tokenUsage.total || 0;
-        totalTokenUsage.prompt += response.tokenUsage.prompt || 0;
-        totalTokenUsage.completion += response.tokenUsage.completion || 0;
-        totalTokenUsage.numRequests += response.tokenUsage.numRequests || 1;
-        totalTokenUsage.cached += response.tokenUsage.cached || 0;
-      } else {
-        totalTokenUsage.numRequests += 1;
-      }
+      accumulateResponseTokenUsage(accumulatedTokenUsage, response);
     }
 
     return {
       output: responses.join(this.separator),
-      tokenUsage: totalTokenUsage,
+      tokenUsage: accumulatedTokenUsage,
     };
   }
 

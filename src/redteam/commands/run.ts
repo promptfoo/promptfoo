@@ -1,16 +1,18 @@
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
+import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
 import { doRedteamRun } from '../shared';
-import type { RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
+import type { Command } from 'commander';
+
+import type { RedteamRunOptions } from '../types';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
@@ -34,8 +36,11 @@ export function redteamRunCommand(program: Command) {
       'Path to output file for generated tests. Defaults to redteam.yaml in the same directory as the configuration file.',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls', (val) =>
-      Number.parseInt(val, 10),
+    .option(
+      '-j, --max-concurrency <number>',
+      'Maximum number of concurrent API calls',
+      (val) => Number.parseInt(val, 10),
+      DEFAULT_MAX_CONCURRENCY,
     )
     .option('--delay <number>', 'Delay in milliseconds between API calls', (val) =>
       Number.parseInt(val, 10),
@@ -53,7 +58,6 @@ export function redteamRunCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'redteam run',
       });
-      await telemetry.send();
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         if (opts.target && !UUID_REGEX.test(opts.target)) {

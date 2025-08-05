@@ -1,7 +1,9 @@
 import * as fs from 'fs';
+
 import * as cache from '../../../src/cache';
 import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import * as util from '../../../src/providers/google/util';
+import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
 
 jest.mock('../../../src/cache', () => ({
@@ -20,10 +22,25 @@ jest.mock('../../../src/util/templates', () => ({
 }));
 
 jest.mock('../../../src/util/file', () => ({
-  ...jest.requireActual('../../../src/util/file'),
-  getNunjucksEngineForFilePath: jest.fn(() => ({
-    renderString: jest.fn((str) => str),
-  })),
+  getNunjucksEngineForFilePath: jest.fn(),
+  maybeLoadFromExternalFile: jest.fn((input) => {
+    if (typeof input === 'string' && input.startsWith('file://')) {
+      // Simulate loading from file
+      const fs = require('fs');
+      const path = require('path');
+      const filePath = path.resolve(input.slice('file://'.length));
+
+      if (fs.existsSync(filePath)) {
+        const contents = fs.readFileSync(filePath, 'utf8');
+        if (filePath.endsWith('.json')) {
+          return JSON.parse(contents);
+        }
+        return contents;
+      }
+      throw new Error(`File does not exist: ${filePath}`);
+    }
+    return input;
+  }),
 }));
 
 jest.mock('glob', () => ({
@@ -41,6 +58,18 @@ describe('AIStudioChatProvider', () => {
   let provider: AIStudioChatProvider;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+      renderString: jest.fn((str) => str),
+    } as any);
+    jest.mocked(fs.existsSync).mockReset();
+    jest.mocked(fs.readFileSync).mockReset();
+    jest.mocked(fs.writeFileSync).mockReset();
+    jest.mocked(fs.statSync).mockReset();
+    jest.mocked(getNunjucksEngineForFilePath).mockReturnValue({
+      renderString: jest.fn((str) => str),
+    } as any);
+
     provider = new AIStudioChatProvider('gemini-pro', {
       config: {
         temperature: 0.7,
@@ -49,12 +78,11 @@ describe('AIStudioChatProvider', () => {
         topK: 40,
       },
     });
-    jest.clearAllMocks();
   });
 
   describe('constructor and configuration', () => {
     it('should handle API key from different sources and render with Nunjucks', () => {
-      const mockRenderString = jest.fn((str) => `rendered-${str}`);
+      const mockRenderString = jest.fn((str) => (str ? `rendered-${str}` : str));
       jest.mocked(templates.getNunjucksEngine).mockReturnValue({
         renderString: mockRenderString,
       } as any);
@@ -74,6 +102,9 @@ describe('AIStudioChatProvider', () => {
       expect(mockRenderString).toHaveBeenCalledWith('env-key', {});
 
       // No API key
+      delete process.env.GEMINI_API_KEY;
+      delete process.env.GOOGLE_API_KEY;
+      delete process.env.PALM_API_KEY;
       const providerWithNoKey = new AIStudioChatProvider('gemini-pro');
       expect(providerWithNoKey.getApiKey()).toBeUndefined();
     });
@@ -118,6 +149,9 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should prioritize apiHost over apiBaseUrl', () => {
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: jest.fn((str) => `rendered-${str}`),
+      } as any);
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           apiHost: 'host.googleapis.com',
@@ -149,8 +183,13 @@ describe('AIStudioChatProvider', () => {
 
   describe('error handling', () => {
     it('should throw error when API key is not set', async () => {
+      delete process.env.GEMINI_API_KEY;
+      delete process.env.GOOGLE_API_KEY;
+      delete process.env.PALM_API_KEY;
       provider = new AIStudioChatProvider('gemini-pro', {});
-      await expect(provider.callApi('test')).rejects.toThrow('Google API key is not set');
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
     });
 
     it('should handle empty candidate responses', async () => {
@@ -177,7 +216,9 @@ describe('AIStudioChatProvider', () => {
       });
 
       const response = await provider.callGemini('test prompt');
-      expect(response.error).toContain('Error: Expected one candidate in API response.');
+      expect(response.error).toContain(
+        'Error: Expected at least one candidate in AI Studio API response.',
+      );
     });
 
     it('should handle malformed API responses', async () => {
@@ -221,6 +262,17 @@ describe('AIStudioChatProvider', () => {
 
   describe('non-Gemini models', () => {
     beforeEach(() => {
+      jest.clearAllMocks();
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: jest.fn((str) => str),
+      } as any);
+      jest.mocked(fs.existsSync).mockReset();
+      jest.mocked(fs.readFileSync).mockReset();
+      jest.mocked(fs.writeFileSync).mockReset();
+      jest.mocked(fs.statSync).mockReset();
+      jest.mocked(getNunjucksEngineForFilePath).mockReturnValue({
+        renderString: jest.fn((str) => str),
+      } as any);
       provider = new AIStudioChatProvider('palm2', {
         config: {
           temperature: 0.7,
@@ -270,12 +322,24 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        undefined,
       );
     });
   });
 
   describe('callGemini', () => {
+    beforeEach(() => {
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          temperature: 0.7,
+          maxOutputTokens: 100,
+          topP: 0.9,
+          topK: 40,
+        },
+      });
+    });
+
     it('should call the Gemini API and return the response with token usage', async () => {
       const mockResponse = {
         data: {
@@ -359,7 +423,9 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should use v1alpha API for thinking model', async () => {
-      provider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp');
+      provider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp', {
+        config: { apiKey: 'test-key' },
+      });
       const mockResponse = {
         data: {
           candidates: [{ content: { parts: [{ text: 'thinking response' }] } }],
@@ -407,6 +473,7 @@ describe('AIStudioChatProvider', () => {
     it('should handle response schema', async () => {
       provider = new AIStudioChatProvider('gemini-pro', {
         config: {
+          apiKey: 'test-key',
           responseSchema: '{"type":"object","properties":{"name":{"type":"string"}}}',
         },
       });
@@ -485,6 +552,7 @@ describe('AIStudioChatProvider', () => {
     it('should handle structured output with response schema', async () => {
       provider = new AIStudioChatProvider('gemini-pro', {
         config: {
+          apiKey: 'test-key',
           generationConfig: {
             response_mime_type: 'application/json',
             response_schema: '{"type":"object","properties":{"name":{"type":"string"}}}',
@@ -576,6 +644,7 @@ describe('AIStudioChatProvider', () => {
     it('should handle additional configuration options', async () => {
       provider = new AIStudioChatProvider('gemini-pro', {
         config: {
+          apiKey: 'test-key',
           generationConfig: {
             temperature: 0.9,
             topP: 0.95,
@@ -616,8 +685,12 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle API version selection', async () => {
-      const v1alphaProvider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp');
-      const v1betaProvider = new AIStudioChatProvider('gemini-pro');
+      const v1alphaProvider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp', {
+        config: { apiKey: 'test-key' },
+      });
+      const v1betaProvider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key' },
+      });
 
       const mockResponse = {
         data: {
@@ -656,6 +729,9 @@ describe('AIStudioChatProvider', () => {
     });
 
     it('should handle function calling configuration', async () => {
+      jest.mocked(templates.getNunjucksEngine).mockReturnValue({
+        renderString: jest.fn((str) => `rendered-${str}`),
+      } as any);
       const tools = [
         {
           functionDeclarations: [
@@ -1174,6 +1250,240 @@ describe('AIStudioChatProvider', () => {
         'json',
         false,
       );
+    });
+
+    it('should load system instructions from file', async () => {
+      const mockSystemInstruction = 'You are a helpful assistant from a file.';
+
+      // Mock file system operations
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(mockSystemInstruction);
+
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          systemInstruction: 'file://system-instruction.txt',
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+          },
+        },
+        cached: false,
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      await provider.callGemini('test prompt');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining(
+            `"system_instruction":{"parts":[{"text":"${mockSystemInstruction}"}]}`,
+          ),
+        }),
+        expect.any(Number),
+        'json',
+        false,
+      );
+
+      // Verify file was read
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('system-instruction.txt'),
+        'utf8',
+      );
+    });
+
+    describe('thinking token tracking', () => {
+      it('should track thinking tokens when present in response', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: {
+            apiKey: 'test-key',
+            generationConfig: {
+              thinkingConfig: {
+                thinkingBudget: 1024,
+              },
+            },
+          },
+        });
+
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response with thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              thoughtsTokenCount: 50, // Thinking tokens
+            },
+          },
+          cached: false,
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.tokenUsage).toEqual({
+          prompt: 10,
+          completion: 20,
+          total: 30,
+          numRequests: 1,
+          completionDetails: {
+            reasoning: 50,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+        });
+      });
+
+      it('should handle response without thinking tokens', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: {
+            apiKey: 'test-key',
+          },
+        });
+
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response without thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              // No thoughtsTokenCount field
+            },
+          },
+          cached: false,
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.tokenUsage).toEqual({
+          prompt: 10,
+          completion: 20,
+          total: 30,
+          numRequests: 1,
+          // No completionDetails field when thoughtsTokenCount is absent
+        });
+      });
+
+      it('should track thinking tokens with zero value', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: {
+            apiKey: 'test-key',
+            generationConfig: {
+              thinkingConfig: {
+                thinkingBudget: 1024,
+              },
+            },
+          },
+        });
+
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response with zero thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 30,
+              thoughtsTokenCount: 0, // Zero thinking tokens
+            },
+          },
+          cached: false,
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.tokenUsage).toEqual({
+          prompt: 10,
+          completion: 20,
+          total: 30,
+          numRequests: 1,
+          completionDetails: {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+        });
+      });
+
+      it('should track thinking tokens in cached responses', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: {
+            apiKey: 'test-key',
+            generationConfig: {
+              thinkingConfig: {
+                thinkingBudget: 1024,
+              },
+            },
+          },
+        });
+
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'cached response with thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 20,
+              totalTokenCount: 80,
+              thoughtsTokenCount: 50, // Thinking tokens in cached response
+            },
+          },
+          cached: true,
+        };
+
+        jest.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        jest.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.tokenUsage).toEqual({
+          cached: 80,
+          total: 80,
+          numRequests: 0,
+          completionDetails: {
+            reasoning: 50,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+        });
+      });
     });
   });
 });

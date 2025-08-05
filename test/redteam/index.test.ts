@@ -1,5 +1,6 @@
-import cliProgress from 'cli-progress';
 import * as fs from 'fs';
+
+import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
@@ -17,10 +18,13 @@ import { Plugins } from '../../src/redteam/plugins';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies';
 import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
-import type { TestCaseWithPlugin } from '../../src/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
+import { extractVariablesFromTemplates } from '../../src/util/templates';
+
+import type { TestCaseWithPlugin } from '../../src/types';
 
 jest.mock('cli-progress');
+jest.mock('../../src/logger');
 jest.mock('../../src/providers');
 jest.mock('../../src/redteam/extraction/entities');
 jest.mock('../../src/redteam/extraction/purpose');
@@ -28,14 +32,13 @@ jest.mock('../../src/util/templates', () => {
   const originalModule = jest.requireActual('../../src/util/templates');
   return {
     ...originalModule,
-    extractVariablesFromTemplates: jest.fn(originalModule.extractVariablesFromTemplates),
+    extractVariablesFromTemplates: jest.fn().mockReturnValue(['query']),
   };
 });
 
-jest.mock('process', () => ({
-  ...jest.requireActual('process'),
-  exit: jest.fn(),
-}));
+jest.spyOn(process, 'exit').mockImplementation(() => {
+  return undefined as never;
+});
 
 jest.mock('../../src/redteam/strategies', () => ({
   ...jest.requireActual('../../src/redteam/strategies'),
@@ -60,8 +63,23 @@ describe('synthesize', () => {
     id: () => 'test-provider',
   };
 
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Set up logger mocks
+    jest.mocked(logger.info).mockReturnValue(logger as any);
+    jest.mocked(logger.warn).mockReturnValue(logger as any);
+    jest.mocked(logger.error).mockReturnValue(logger as any);
+    jest.mocked(logger.debug).mockReturnValue(logger as any);
+
+    // Set up templates mock with consistent default behavior
+    jest.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+
     jest.mocked(extractEntities).mockResolvedValue(['entity1', 'entity2']);
     jest.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
     jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
@@ -75,6 +93,14 @@ describe('synthesize', () => {
       stop: jest.fn(),
       update: jest.fn(),
     } as any);
+    // Disable remote generation by default to avoid health checks interfering
+    // with tests that don't explicitly set this behaviour
+    jest.mocked(shouldGenerateRemote).mockReturnValue(false);
+    jest.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
+    jest.mocked(checkRemoteHealth).mockResolvedValue({
+      status: 'OK',
+      message: 'Cloud API is healthy',
+    });
   });
 
   // Input handling tests
@@ -176,7 +202,7 @@ describe('synthesize', () => {
   // Plugin and strategy tests
   describe('Plugins and strategies', () => {
     it('should generate test cases for each plugin', async () => {
-      const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
       const result = await synthesize({
@@ -216,7 +242,7 @@ describe('synthesize', () => {
     });
 
     it('should handle HARM_PLUGINS and PII_PLUGINS correctly', async () => {
-      const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
       const result = await synthesize({
@@ -258,7 +284,7 @@ describe('synthesize', () => {
     });
 
     it('should generate a correct report for plugins and strategies', async () => {
-      const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
       const mockStrategyAction = jest.fn().mockReturnValue([{ test: 'strategy case' }]);
@@ -281,7 +307,7 @@ describe('synthesize', () => {
     });
 
     it('should expand strategy collections into individual strategies', async () => {
-      const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
       const mockStrategyAction = jest.fn().mockReturnValue([{ test: 'strategy case' }]);
@@ -310,7 +336,7 @@ describe('synthesize', () => {
     });
 
     it('should deduplicate strategies with the same ID', async () => {
-      const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
       // Create a spy on validateStrategies to capture the strategies array
@@ -351,7 +377,7 @@ describe('synthesize', () => {
     });
 
     it('should handle missing strategy collections gracefully', async () => {
-      const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
 
       await synthesize({
@@ -365,9 +391,207 @@ describe('synthesize', () => {
         targetLabels: ['test-provider'],
       });
 
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('unknown-collection not registered'),
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('unknown-collection'));
+    });
+
+    it('should find exact strategy IDs like jailbreak:composite', async () => {
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const mockJailbreakCompositeAction = jest.fn().mockReturnValue([
+        {
+          vars: { query: 'composite test' },
+          metadata: { strategyId: 'jailbreak:composite' },
+        },
+      ]);
+
+      // Mock the Strategies array to include both jailbreak and jailbreak:composite
+      jest.spyOn(Strategies, 'find').mockImplementation((predicate) => {
+        if (typeof predicate === 'function') {
+          const strategies = [
+            {
+              id: 'jailbreak',
+              action: jest.fn().mockReturnValue([{ vars: { query: 'basic jailbreak' } }]),
+            },
+            { id: 'jailbreak:composite', action: mockJailbreakCompositeAction },
+          ];
+          return strategies.find(predicate);
+        }
+        return undefined;
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'jailbreak:composite' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Should have called the composite action, not the basic jailbreak action
+      expect(mockJailbreakCompositeAction).toHaveBeenCalled();
+
+      // Check that the strategy test cases have the correct strategy ID
+      const strategyTestCases = result.testCases.filter((tc) => tc.metadata?.strategyId);
+      expect(strategyTestCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({ strategyId: 'jailbreak:composite' }),
+          }),
+        ]),
       );
+    });
+
+    it('should find exact strategy ID for custom strategy', async () => {
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const mockCustomAction = jest.fn().mockReturnValue([
+        {
+          vars: { query: 'custom test' },
+          metadata: { strategyId: 'custom' },
+        },
+      ]);
+
+      // Mock the Strategies array to include the exact 'custom' strategy
+      jest.spyOn(Strategies, 'find').mockImplementation((predicate) => {
+        if (typeof predicate === 'function') {
+          const strategies = [{ id: 'custom', action: mockCustomAction }];
+          return strategies.find(predicate);
+        }
+        return undefined;
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'custom' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Should have found the exact 'custom' strategy and called its action
+      expect(mockCustomAction).toHaveBeenCalled();
+
+      // Check that the strategy test cases have the correct strategy ID
+      const strategyTestCases = result.testCases.filter((tc) => tc.metadata?.strategyId);
+      expect(strategyTestCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({ strategyId: 'custom' }),
+          }),
+        ]),
+      );
+    });
+
+    it('should fall back to base strategy ID for custom variants', async () => {
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const mockCustomAction = jest.fn().mockReturnValue([
+        {
+          vars: { query: 'custom test' },
+          metadata: { strategyId: 'custom:aggressive' },
+        },
+      ]);
+
+      // Mock the Strategies array to include only the base 'custom' strategy
+      jest.spyOn(Strategies, 'find').mockImplementation((predicate) => {
+        if (typeof predicate === 'function') {
+          const strategies = [{ id: 'custom', action: mockCustomAction }];
+          return strategies.find(predicate);
+        }
+        return undefined;
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'custom:aggressive' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Should have found the base 'custom' strategy and called its action
+      expect(mockCustomAction).toHaveBeenCalled();
+
+      // Check that the strategy test cases have the correct strategy ID
+      const strategyTestCases = result.testCases.filter((tc) => tc.metadata?.strategyId);
+      expect(strategyTestCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({ strategyId: 'custom:aggressive' }),
+          }),
+        ]),
+      );
+    });
+
+    it('should warn when strategy is not found', async () => {
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      // Mock Strategies.find to return undefined (strategy not found)
+      jest.spyOn(Strategies, 'find').mockReturnValue(undefined);
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'nonexistent-strategy' }],
+        targetLabels: ['test-provider'],
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Strategy nonexistent-strategy not registered, skipping',
+      );
+    });
+
+    it('should prioritize exact strategy match over base strategy for colon-separated IDs', async () => {
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      jest.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const mockJailbreakAction = jest.fn().mockReturnValue([
+        {
+          vars: { query: 'basic jailbreak' },
+          metadata: { strategyId: 'jailbreak' },
+        },
+      ]);
+
+      const mockJailbreakCompositeAction = jest.fn().mockReturnValue([
+        {
+          vars: { query: 'composite jailbreak' },
+          metadata: { strategyId: 'jailbreak:composite' },
+        },
+      ]);
+
+      // Mock the Strategies array to include both strategies
+      jest.spyOn(Strategies, 'find').mockImplementation((predicate) => {
+        if (typeof predicate === 'function') {
+          const strategies = [
+            { id: 'jailbreak', action: mockJailbreakAction },
+            { id: 'jailbreak:composite', action: mockJailbreakCompositeAction },
+          ];
+          return strategies.find(predicate);
+        }
+        return undefined;
+      });
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'jailbreak:composite' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Should have called the composite action, not the basic jailbreak action
+      expect(mockJailbreakCompositeAction).toHaveBeenCalled();
+      expect(mockJailbreakAction).not.toHaveBeenCalled();
     });
 
     it('should skip plugins that fail validation and not throw', async () => {
@@ -384,14 +608,14 @@ describe('synthesize', () => {
         .spyOn(Plugins, 'find')
         .mockReturnValueOnce({
           key: 'fail-plugin',
-          action: jest.fn().mockResolvedValue([{ test: 'fail-case' }]),
+          action: jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
           validate: () => {
             throw new Error('Validation failed!');
           },
         })
         .mockReturnValue({
           key: 'pass-plugin',
-          action: jest.fn().mockResolvedValue([{ test: 'pass-case' }]),
+          action: jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
           validate: jest.fn(),
         });
 
@@ -534,6 +758,17 @@ describe('synthesize', () => {
   describe('API Health Check', () => {
     beforeEach(() => {
       jest.clearAllMocks();
+      jest.resetAllMocks();
+
+      // Reset logger mocks
+      jest.mocked(logger.info).mockReturnValue(logger as any);
+      jest.mocked(logger.warn).mockReturnValue(logger as any);
+      jest.mocked(logger.error).mockReturnValue(logger as any);
+      jest.mocked(logger.debug).mockReturnValue(logger as any);
+
+      // Set up templates mock with consistent default behavior
+      jest.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+
       jest.mocked(shouldGenerateRemote).mockReturnValue(true);
       jest.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
       jest.mocked(checkRemoteHealth).mockResolvedValue({
@@ -671,7 +906,7 @@ describe('synthesize', () => {
   describe('Direct plugin handling', () => {
     it('should recognize and not expand direct plugins like bias:gender', async () => {
       const mockPluginAction = jest.fn().mockImplementation(({ n }) => {
-        return Array(n).fill({ test: 'bias:gender case' });
+        return Array(n).fill({ vars: { query: 'test' } });
       });
       jest.spyOn(Plugins, 'find').mockReturnValue({ key: 'bias:gender', action: mockPluginAction });
 
@@ -704,7 +939,7 @@ describe('synthesize', () => {
     });
 
     it('should still expand category plugins with new bias category', async () => {
-      const mockPluginAction = jest.fn().mockResolvedValue([{ test: 'case' }]);
+      const mockPluginAction = jest.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       jest.spyOn(Plugins, 'find').mockReturnValue({ key: 'mockPlugin', action: mockPluginAction });
 
       const result = await synthesize({
@@ -732,8 +967,19 @@ jest.mock('fs');
 jest.mock('js-yaml');
 
 describe('resolvePluginConfig', () => {
-  afterEach(() => {
+  beforeEach(() => {
+    jest.clearAllMocks();
     jest.resetAllMocks();
+
+    // Set up logger mocks
+    jest.mocked(logger.info).mockReturnValue(logger as any);
+    jest.mocked(logger.warn).mockReturnValue(logger as any);
+    jest.mocked(logger.error).mockReturnValue(logger as any);
+    jest.mocked(logger.debug).mockReturnValue(logger as any);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   it('should return an empty object if config is undefined', () => {

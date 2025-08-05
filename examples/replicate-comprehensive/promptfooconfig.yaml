@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Comprehensive Replicate provider testing
+
+prompts:
+  - '{{task}}'
+
+providers:
+  # Text generation with Llama 3
+  - id: replicate:meta/meta-llama-3-8b-instruct
+    config:
+      temperature: 0.5
+      max_new_tokens: 200
+
+  # Image generation with SDXL
+  - id: replicate:image:stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc
+    config:
+      width: 512
+      height: 512
+      num_inference_steps: 25
+
+tests:
+  # Text generation tests
+  - vars:
+      task: 'Write a haiku about mountains'
+    assert:
+      - type: contains-any
+        value: ['mountain', 'peak', 'high', 'snow', 'summit']
+      - type: javascript
+        value: |
+          // Basic check for haiku-like structure
+          const lines = output.split('\n').filter(line => line.trim().length > 0);
+          return {
+            pass: lines.length >= 3,
+            reason: `Found ${lines.length} lines, expected at least 3 for haiku`
+          };
+        provider: replicate:meta/meta-llama-3-8b-instruct
+
+  - vars:
+      task: 'Explain quantum computing in one paragraph'
+    assert:
+      - type: contains-any
+        value: ['quantum', 'qubit', 'superposition', 'entanglement']
+      - type: javascript
+        value: 'output.length > 100'
+        provider: replicate:meta/meta-llama-3-8b-instruct
+
+  # Image generation test
+  - vars:
+      task: 'A serene mountain landscape at sunset with a lake reflection'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          return output && typeof output === 'string' && output.includes('![') && output.includes('](http');
+        provider: replicate:image:stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc
+
+  - vars:
+      task: 'Abstract geometric art with vibrant colors and sharp angles'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          return output && typeof output === 'string' && output.includes('![') && output.includes('](http');
+        provider: replicate:image:stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc

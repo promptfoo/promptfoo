@@ -28,3 +28,34 @@
 .vuln-low {
   color: green !important;
 }
+
+/* Table responsiveness fixes */
+.MuiTableContainer-root {
+  overflow-x: auto !important;
+  max-width: 100% !important;
+}
+
+.MuiTable-root {
+  table-layout: auto !important;
+  width: 100% !important;
+}
+
+.MuiTableCell-root {
+  padding: 8px 12px !important;
+}
+
+/* Ensure buttons don't expand beyond their containers */
+.MuiTableCell-root .MuiButton-root {
+  min-width: auto !important;
+  font-size: 0.75rem !important;
+}
+
+@media print {
+  .MuiTableRow-root {
+    display: table-row !important;
+  }
+
+  .MuiTablePagination-root {
+    display: none !important;
+  }
+}

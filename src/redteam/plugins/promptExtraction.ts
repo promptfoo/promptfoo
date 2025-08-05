@@ -1,8 +1,9 @@
 import dedent from 'dedent';
-import type { ApiProvider, Assertion, TestCase } from '../../types';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:prompt-extraction';
+import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:prompt-extraction';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>
@@ -26,13 +27,8 @@ export class PromptExtractionPlugin extends RedteamPluginBase {
 
   private systemPrompt: string | undefined;
 
-  constructor(
-    provider: ApiProvider,
-    purpose: string,
-    injectVar: string,
-    config: { systemPrompt?: string },
-  ) {
-    super(provider, purpose, injectVar);
+  constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
+    super(provider, purpose, injectVar, config);
     this.systemPrompt = config.systemPrompt;
   }
 

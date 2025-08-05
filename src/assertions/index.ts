@@ -1,9 +1,12 @@
-import async from 'async';
 import fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import async from 'async';
+import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
+import { handleConversationRelevance } from '../external/assertions/deepeval';
+import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import {
   matchesAnswerRelevance,
@@ -20,13 +23,6 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import type {
-  AssertionParams,
-  AssertionValueFunctionContext,
-  BaseAssertionTypes,
-  ProviderResponse,
-  ScoringFunction,
-} from '../types';
 import {
   type ApiProvider,
   type Assertion,
@@ -56,10 +52,12 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import { handleFinishReason } from './finishReason';
 import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
+import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
@@ -78,9 +76,20 @@ import { handleRougeScore } from './rouge';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
+import { handleTraceErrorSpans } from './traceErrorSpans';
+import { handleTraceSpanCount } from './traceSpanCount';
+import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleIsXml } from './xml';
+
+import type {
+  AssertionParams,
+  AssertionValueFunctionContext,
+  BaseAssertionTypes,
+  ProviderResponse,
+  ScoringFunction,
+} from '../types';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 
@@ -105,6 +114,7 @@ export async function runAssertion({
   latencyMs,
   providerResponse,
   assertIndex,
+  traceId,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -113,6 +123,7 @@ export async function runAssertion({
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
+  traceId?: string;
 }): Promise<GradingResult> {
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
@@ -140,6 +151,23 @@ export async function runAssertion({
     providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
   };
+
+  // Add trace data if traceId is available
+  if (traceId) {
+    try {
+      const { getTraceStore } = await import('../tracing/store');
+      const traceStore = getTraceStore();
+      const traceData = await traceStore.getTrace(traceId);
+      if (traceData) {
+        context.trace = {
+          traceId: traceData.traceId,
+          spans: traceData.spans || [],
+        };
+      }
+    } catch (error) {
+      logger.debug(`Failed to fetch trace data for assertion: ${error}`);
+    }
+  }
 
   // Render assertion values
   let renderedValue = assertion.value;
@@ -236,21 +264,25 @@ export async function runAssertion({
     contains: handleContains,
     'contains-all': handleContainsAll,
     'contains-any': handleContainsAny,
+    'contains-html': handleContainsHtml,
     'contains-json': handleContainsJson,
     'contains-sql': handleContainsSql,
     'contains-xml': handleIsXml,
     'context-faithfulness': handleContextFaithfulness,
     'context-recall': handleContextRecall,
     'context-relevance': handleContextRelevance,
+    'conversation-relevance': handleConversationRelevance,
     cost: handleCost,
     equals: handleEquals,
     factuality: handleFactuality,
+    'finish-reason': handleFinishReason,
+    'g-eval': handleGEval,
     gleu: handleGleuScore,
     guardrails: handleGuardrails,
-    'g-eval': handleGEval,
     icontains: handleIContains,
     'icontains-all': handleIContainsAll,
     'icontains-any': handleIContainsAny,
+    'is-html': handleIsHtml,
     'is-json': handleIsJson,
     'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,
@@ -284,14 +316,22 @@ export async function runAssertion({
     moderation: handleModeration,
     perplexity: handlePerplexity,
     'perplexity-score': handlePerplexityScore,
+    pi: handlePiScorer,
     python: handlePython,
     regex: handleRegex,
     'rouge-n': handleRougeScore,
     similar: handleSimilar,
     'starts-with': handleStartsWith,
+    'trace-error-spans': handleTraceErrorSpans,
+    'trace-span-count': handleTraceSpanCount,
+    'trace-span-duration': handleTraceSpanDuration,
     webhook: handleWebhook,
-    pi: handlePiScorer,
   };
+
+  // Check for redteam assertions first
+  if (baseType.startsWith('promptfoo:redteam:')) {
+    return handleRedteam(assertionParams);
+  }
 
   const handler = assertionHandlers[baseType as keyof typeof assertionHandlers];
   if (handler) {
@@ -308,9 +348,6 @@ export async function runAssertion({
     return result;
   }
 
-  if (baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
-  }
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
@@ -321,6 +358,7 @@ export async function runAssertions({
   provider,
   providerResponse,
   test,
+  traceId,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -328,6 +366,7 @@ export async function runAssertions({
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
+  traceId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -371,8 +410,8 @@ export async function runAssertions({
     asserts,
     ASSERTIONS_MAX_CONCURRENCY,
     async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-')) {
-        // Select-type assertions are handled separately because they depend on multiple outputs.
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
         return;
       }
 
@@ -384,6 +423,7 @@ export async function runAssertions({
         test,
         latencyMs,
         assertIndex: index,
+        traceId,
       });
 
       assertResult.addResult({
@@ -459,4 +499,5 @@ export default {
   matchesContextFaithfulness,
   matchesComparisonBoolean: matchesSelectBest,
   matchesModeration,
+  matchesConversationRelevance,
 };

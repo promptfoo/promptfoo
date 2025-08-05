@@ -1,4 +1,5 @@
 import React from 'react';
+
 import CloseIcon from '@mui/icons-material/Close';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import Box from '@mui/material/Box';
@@ -18,11 +19,12 @@ import {
   type Strategy,
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getStrategyIdFromTest } from './shared';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import './RiskCategoryDrawer.css';
 
 interface RiskCategoryDrawerProps {
@@ -122,6 +124,7 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   numFailed,
   strategyStats,
 }) => {
+  const navigate = useNavigate();
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
     console.error('[RiskCategoryDrawer] Could not load category', category);
@@ -205,14 +208,13 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
             const testWithPluginId = firstFailure || firstPass;
             const pluginId = testWithPluginId?.result?.metadata?.pluginId;
 
-            const searchQuery = pluginId
-              ? `metadata=pluginId:${pluginId}`
-              : `metric=${categoryName}`;
-            const url = `/eval/?evalId=${evalId}&search=${encodeURIComponent(searchQuery)}`;
+            const url = pluginId
+              ? `/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`
+              : `/eval/${evalId}`;
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {
-              window.location.href = url;
+              navigate(url);
             }
           }}
         >

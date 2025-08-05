@@ -2,8 +2,9 @@ import { getDb } from '../../src/database';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, { getEvalSummaries } from '../../src/models/eval';
-import type { Prompt } from '../../src/types';
 import EvalFactory from '../factories/evalFactory';
+
+import type { Prompt } from '../../src/types';
 
 jest.mock('../../src/globalConfig/accounts', () => ({
   ...jest.requireActual('../../src/globalConfig/accounts'),
@@ -118,6 +119,51 @@ describe('evaluator', () => {
     });
   });
 
+  describe('findById', () => {
+    it('should handle empty vars array', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.vars).toEqual([]);
+    });
+
+    it('should backfill vars from eval results when vars array is empty', async () => {
+      // This will create eval results with vars in test_case
+      const eval1 = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+
+      // Remove vars from the evals table to trigger backfill
+      const db = getDb();
+      // Drizzle's .run() does not support ? params for this case, so interpolate directly
+      await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval1.id}'`);
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.vars.length).toBeGreaterThan(0);
+    });
+
+    it('should store backfilled vars in database', async () => {
+      const eval1 = await EvalFactory.create({
+        numResults: 2,
+        // @ts-expect-error: injectVarsInResults is for test factory only
+        injectVarsInResults: true,
+      });
+
+      // Remove vars from the evals table to trigger backfill
+      const db = getDb();
+      await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval1.id}'`);
+
+      const persistedEval1 = await Eval.findById(eval1.id);
+      const vars = persistedEval1?.vars || [];
+      expect(vars.length).toBeGreaterThan(0);
+
+      // Now, after backfilling, the next load should get the same vars from db
+      const persistedEval2 = await Eval.findById(eval1.id);
+      expect(persistedEval2?.vars).toEqual(vars);
+    });
+  });
+
   describe('getStats', () => {
     it('should accumulate assertion token usage correctly', () => {
       const eval1 = new Eval({});
@@ -166,6 +212,12 @@ describe('evaluator', () => {
         prompt: 120,
         completion: 150,
         cached: 30,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       });
     });
 
@@ -192,6 +244,12 @@ describe('evaluator', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       });
     });
 
@@ -236,6 +294,12 @@ describe('evaluator', () => {
         prompt: 40,
         completion: 50,
         cached: 10,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       });
     });
   });
@@ -404,13 +468,21 @@ describe('evaluator', () => {
 
     it('should filter by specific metrics', async () => {
       // This test requires setting up results with named scores in the eval factory
-      const metricName = 'accuracy';
-      const result = await evalWithResults.getTablePage({ metricFilter: metricName });
+      const result = await evalWithResults.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metric',
+            operator: 'equals',
+            value: 'accuracy',
+          }),
+        ],
+      });
 
       // All results should have the specified metric
       for (const row of result.body) {
         const hasMetric = row.outputs.some(
-          (output) => output.namedScores && output.namedScores[metricName] !== undefined,
+          (output) => output.namedScores && output.namedScores['accuracy'] !== undefined,
         );
         expect(hasMetric).toBe(true);
       }
@@ -420,13 +492,50 @@ describe('evaluator', () => {
       const result = await evalWithResults.getTablePage({
         filterMode: 'passes',
         searchQuery: 'searchable_content',
-        metricFilter: 'relevance',
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metric',
+            operator: 'equals',
+            value: 'relevance',
+          }),
+        ],
         limit: 10,
       });
 
       // Results should satisfy all conditions and respect limit
       expect(result.body.length).toBeLessThanOrEqual(10);
       expect(result.filteredCount).toBeLessThan(result.totalCount);
+    });
+
+    it('should be filterable by multiple metrics', async () => {
+      const result = await evalWithResults.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'or',
+            type: 'metric',
+            operator: 'equals',
+            value: 'accuracy',
+          }),
+          JSON.stringify({
+            logicOperator: 'or',
+            type: 'metric',
+            operator: 'equals',
+            value: 'relevance',
+          }),
+        ],
+      });
+
+      // Row should have at least one of the metrics
+      for (const row of result.body) {
+        const hasMetric1 = row.outputs.some(
+          (output) => output.namedScores && output.namedScores['accuracy'] !== undefined,
+        );
+        const hasMetric2 = row.outputs.some(
+          (output) => output.namedScores && output.namedScores['relevance'] !== undefined,
+        );
+        expect(hasMetric1 || hasMetric2).toBe(true);
+      }
     });
 
     it('should return correct counts for filtered results', async () => {

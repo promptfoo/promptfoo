@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react';
 import React from 'react';
-import { MemoryRouter } from 'react-router-dom';
+
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 
 // Mock data
@@ -98,7 +99,7 @@ vi.mock('react-router-dom', async () => {
 let mockTableStoreData = {
   table: mockTableWithoutHighlights,
   setTable: vi.fn(),
-  config: { description: 'Test Config' },
+  config: { description: 'Test Config', tags: {} },
   setConfig: vi.fn(),
   evalId: '1',
   author: 'Test Author',
@@ -109,24 +110,34 @@ let mockTableStoreData = {
   filteredResultsCount: 10,
   totalResultsCount: 10,
   highlightedResultsCount: 0,
+  filters: {
+    values: {},
+    appliedCount: 0,
+    options: {
+      metric: [] as string[],
+      metadata: [] as string[],
+    },
+  },
+};
+
+let mockResultsViewSettingsStoreData = {
+  stickyHeader: true,
+  setStickyHeader: vi.fn(),
+  inComparisonMode: false,
+  setInComparisonMode: vi.fn(),
+  columnStates: { '1': mockColumnState },
+  setColumnState: vi.fn(),
+  maxTextLength: 100,
+  wordBreak: 'break-word',
+  showInferenceDetails: true,
+  comparisonEvalIds: [],
+  setComparisonEvalIds: vi.fn(),
+  renderMarkdown: true,
 };
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => mockTableStoreData),
-  useResultsViewSettingsStore: vi.fn(() => ({
-    stickyHeader: true,
-    setStickyHeader: vi.fn(),
-    inComparisonMode: false,
-    setInComparisonMode: vi.fn(),
-    columnStates: { '1': mockColumnState },
-    setColumnState: vi.fn(),
-    maxTextLength: 100,
-    wordBreak: 'break-word',
-    showInferenceDetails: true,
-    comparisonEvalIds: [],
-    setComparisonEvalIds: vi.fn(),
-    renderMarkdown: true,
-  })),
+  useResultsViewSettingsStore: vi.fn(() => mockResultsViewSettingsStoreData),
 }));
 
 // Mock the API functions
@@ -166,6 +177,18 @@ vi.mock('@app/hooks/useShiftKey', () => {
   };
 });
 
+vi.mock('./ResultsCharts', () => {
+  return {
+    default: vi.fn(() => <div data-testid="results-charts">ResultsCharts Mock</div>),
+  };
+});
+
+declare global {
+  interface Window {
+    resizeHandler: any;
+  }
+}
+
 // Helper function for rendering with providers
 const renderWithProviders = (ui: React.ReactNode) => {
   return render(
@@ -186,7 +209,7 @@ describe('ResultsView', () => {
     mockTableStoreData = {
       table: mockTableWithoutHighlights,
       setTable: vi.fn(),
-      config: { description: 'Test Config' },
+      config: { description: 'Test Config', tags: {} },
       setConfig: vi.fn(),
       evalId: '1',
       author: 'Test Author',
@@ -197,9 +220,63 @@ describe('ResultsView', () => {
       filteredResultsCount: 10,
       totalResultsCount: 10,
       highlightedResultsCount: 0,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [] as string[],
+          metadata: [] as string[],
+        },
+      },
+    };
+
+    mockResultsViewSettingsStoreData = {
+      stickyHeader: true,
+      setStickyHeader: vi.fn(),
+      inComparisonMode: false,
+      setInComparisonMode: vi.fn(),
+      columnStates: { '1': mockColumnState },
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+      renderMarkdown: true,
     };
   });
 
+  it('renders ResultsCharts when table, config, and more than one prompt are present and viewport height is at least 1100px', () => {
+    Object.defineProperty(window, 'innerHeight', {
+      writable: true,
+      configurable: true,
+      value: 1200,
+    });
+
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      table: {
+        head: {
+          prompts: [{ provider: 'test-provider' }, { provider: 'test-provider-2' }],
+          vars: ['Variable 1'],
+        },
+        body: [
+          {
+            outputs: [{ pass: true, score: 1, text: 'test output' }],
+            test: {},
+            vars: ['test var'],
+          },
+        ],
+      },
+      config: { description: 'Test Config', tags: {} },
+    };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
+  });
   it('renders without crashing', () => {
     renderWithProviders(
       <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
@@ -261,5 +338,177 @@ describe('ResultsView', () => {
       backgroundColor: 'rgba(25, 118, 210, 0.08)',
       color: 'rgba(25, 118, 210, 1)',
     });
+  });
+
+  it('renders FiltersButton and FiltersForm when filters are available', () => {
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      filters: {
+        ...mockTableStoreData.filters,
+        options: {
+          metric: ['accuracy', 'f1-score'],
+          metadata: [],
+        },
+      },
+    };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument();
+  });
+
+  it('does not render FiltersButton, FiltersForm, or MetricFilterSelector when there are no available metric filters', () => {
+    mockTableStoreData.filters.options.metric = [];
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.queryByTestId('filters-button')).toBeNull();
+    expect(screen.queryByTestId('filters-form')).toBeNull();
+    expect(screen.queryByTestId('metric-filter-selector')).toBeNull();
+  });
+
+  it('should not update charts visibility state on window resize after mount', () => {
+    const initialInnerHeight = 1200;
+    const newInnerHeight = 900;
+
+    Object.defineProperty(window, 'innerHeight', {
+      writable: true,
+      configurable: true,
+      value: initialInnerHeight,
+    });
+
+    const { container } = renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    const originalAddEventListener = window.addEventListener;
+    window.addEventListener = vi.fn((event, handler) => {
+      if (event === 'resize') {
+        window.resizeHandler = handler;
+      } else {
+        originalAddEventListener(event, handler);
+      }
+    });
+
+    window.innerHeight = newInnerHeight;
+    if (window.resizeHandler) {
+      window.resizeHandler();
+    }
+
+    expect(container).toBeInTheDocument();
+  });
+
+  it('renders ResultsView without crashing when columnVisibility and recentEvals props are not passed to ResultsCharts', () => {
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.getByText('Table Settings')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search or select an eval...')).toBeInTheDocument();
+  });
+
+  it('should not render ResultsCharts when all prompts are hidden', () => {
+    mockTableStoreData.table = {
+      head: {
+        prompts: [{ provider: 'test-provider' }, { provider: 'another-provider' }],
+        vars: ['Variable 1'],
+      },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'test output' }],
+          test: {},
+          vars: ['test var'],
+        },
+      ],
+    };
+    mockResultsViewSettingsStoreData = {
+      ...mockResultsViewSettingsStoreData,
+      columnStates: {
+        '1': {
+          selectedColumns: ['Variable 1'],
+          columnVisibility: { 'Variable 1': true, 'Prompt 1': false },
+        },
+      },
+    };
+
+    vi.mock('./store', () => ({
+      useTableStore: vi.fn(() => mockTableStoreData),
+      useResultsViewSettingsStore: vi.fn(() => mockResultsViewSettingsStoreData),
+    }));
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+  });
+
+  it('hides ResultsCharts when viewport height is less than 1100px', () => {
+    Object.defineProperty(window, 'innerHeight', {
+      writable: true,
+      configurable: true,
+      value: 900,
+    });
+
+    mockTableStoreData.table = {
+      head: {
+        prompts: [{ provider: 'test-provider' }, { provider: 'test-provider' }],
+        vars: ['Variable 1'],
+      },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'test output' }],
+          test: {},
+          vars: ['test var'],
+        },
+      ],
+    };
+
+    mockTableStoreData.config = { description: 'Test Config', tags: {} };
+
+    const { container } = renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(container).toBeInTheDocument();
+  });
+
+  it('renders ResultsCharts with scores outside the normal range', () => {
+    mockTableStoreData.table = {
+      head: {
+        prompts: [{ provider: 'test-provider' }, { provider: 'another-provider' }],
+        vars: ['Variable 1'],
+      },
+      body: [
+        {
+          outputs: [{ pass: true, score: -0.5, text: 'test output' }],
+          test: {},
+          vars: ['test var'],
+        },
+        {
+          outputs: [{ pass: false, score: 1.5, text: 'test output 2' }],
+          test: {},
+          vars: ['test var 2'],
+        },
+      ],
+    };
+    mockTableStoreData.config = { description: 'Test Config', tags: {} };
+
+    mockResultsViewSettingsStoreData = {
+      ...mockResultsViewSettingsStoreData,
+      renderMarkdown: true,
+    };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    const showChartsButton = screen.getByText('Show Charts');
+    expect(showChartsButton).toBeInTheDocument();
   });
 });

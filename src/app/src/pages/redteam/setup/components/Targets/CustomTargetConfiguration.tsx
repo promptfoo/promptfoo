@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Typography, TextField } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+
+import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 import TextareaAutosize from '@mui/material/TextareaAutosize';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+
 import type { ProviderOptions } from '../../types';
 
 interface CustomTargetConfigurationProps {
@@ -33,9 +37,6 @@ const CustomTargetConfiguration: React.FC<CustomTargetConfigurationProps> = ({
 
   return (
     <Box mt={2}>
-      <Typography variant="h6" gutterBottom>
-        Custom Target Configuration
-      </Typography>
       <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
         <TextField
           fullWidth

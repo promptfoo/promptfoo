@@ -1,14 +1,15 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import invariant from '../../util/invariant';
+import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
+import { REQUEST_TIMEOUT_MS } from '../shared';
+
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider } from '../../types/providers';
-import invariant from '../../util/invariant';
-import { OpenAiImageProvider, formatOutput, callOpenAiImageApi } from '../openai/image';
 import type { OpenAiSharedOptions } from '../openai/types';
-import { REQUEST_TIMEOUT_MS } from '../shared';
 
-export type XaiImageOptions = OpenAiSharedOptions & {
+type XaiImageOptions = OpenAiSharedOptions & {
   n?: number;
   response_format?: 'url' | 'b64_json';
   user?: string;

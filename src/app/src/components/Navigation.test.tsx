@@ -1,12 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Navigation from './Navigation';
-
-const useUIStoreMock = vi.fn();
-vi.mock('../stores/uiStore', () => ({
-  useUIStore: (...args: any[]) => useUIStoreMock(...args),
-}));
 
 vi.mock('./InfoModal', () => ({
   default: ({ open }: { open: boolean }) => (open ? <div>InfoModal</div> : null),
@@ -35,21 +30,7 @@ describe('Navigation', () => {
     vi.clearAllMocks();
   });
 
-  it('does not render when navbar is hidden', () => {
-    useUIStoreMock.mockImplementation((selector: any) => selector({ isNavbarVisible: false }));
-
-    const { container } = render(
-      <MemoryRouter>
-        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
-      </MemoryRouter>,
-    );
-
-    expect(container.firstChild).toBeNull();
-  });
-
   it('renders links and opens modals', () => {
-    useUIStoreMock.mockImplementation((selector: any) => selector({ isNavbarVisible: true }));
-
     render(
       <MemoryRouter>
         <Navigation darkMode={false} onToggleDarkMode={() => {}} />

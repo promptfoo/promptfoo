@@ -1,41 +1,140 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+import Code from '@app/components/Code';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { callApi } from '@app/utils/api';
+import { formatToolsAsJSDocs } from '@app/utils/discovery';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import { Alert, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
+import { alpha, useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
-import { alpha, useTheme } from '@mui/material/styles';
-import {
-  EXAMPLE_APPLICATION_DEFINITION,
-  EXAMPLE_CONFIG,
-  useRedTeamConfig,
-} from '../hooks/useRedTeamConfig';
+import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import PageWrapper from './PageWrapper';
+
 import type { ApplicationDefinition } from '../types';
 
 interface PromptsProps {
   onNext: () => void;
+  onBack?: () => void;
 }
 
-export default function Purpose({ onNext }: PromptsProps) {
-  const theme = useTheme();
-  const { config, updateApplicationDefinition, setFullConfig } = useRedTeamConfig();
+/**
+ * Component to display auto-discovery results with copy functionality
+ */
+function DiscoveryResult({
+  text,
+  section,
+}: {
+  text: string;
+  section: keyof ApplicationDefinition;
+}) {
   const { recordEvent } = useTelemetry();
+  const theme = useTheme();
+  const { updateApplicationDefinition, config } = useRedTeamConfig();
+  const sectionValue = config.applicationDefinition?.[section];
+
+  /**
+   * Appends the text to the section.
+   */
+  const handleApply = useCallback(() => {
+    updateApplicationDefinition(section, sectionValue ? `${sectionValue}\n\n${text}` : text);
+    recordEvent('feature_used', { feature: 'redteam_discovery_apply_discovery_result' });
+  }, [section, text, updateApplicationDefinition, recordEvent, sectionValue]);
+
+  /**
+   * Is the text already applied to the section?
+   */
+  const applied = useMemo(() => {
+    return (sectionValue ?? '').includes(text);
+  }, [sectionValue, text]);
+
+  return (
+    <Box
+      sx={{
+        mb: 2,
+        p: 2,
+        borderRadius: 1,
+        backgroundColor:
+          theme.palette.mode === 'dark'
+            ? alpha(theme.palette.primary.main, 0.1)
+            : alpha(theme.palette.primary.main, 0.05),
+        border: `1px solid ${
+          theme.palette.mode === 'dark'
+            ? alpha(theme.palette.primary.main, 0.3)
+            : alpha(theme.palette.primary.main, 0.2)
+        }`,
+        position: 'relative',
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography
+            variant="subtitle2"
+            sx={{
+              fontWeight: 'medium',
+              mb: 1,
+              color: theme.palette.primary.main,
+            }}
+          >
+            🔍 Auto-Discovery Result
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{
+              color:
+                theme.palette.mode === 'dark'
+                  ? theme.palette.text.primary
+                  : theme.palette.text.secondary,
+              lineHeight: 1.5,
+
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontSize: '12px',
+              fontFamily: 'monospace',
+            }}
+          >
+            {text}
+          </Typography>
+        </Box>
+        <Button
+          size="small"
+          variant="contained"
+          onClick={handleApply}
+          startIcon={<AutoAwesomeIcon fontSize="small" />}
+          disabled={applied}
+        >
+          Apply
+        </Button>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * "Usage Details" step of the red teaming config setup wizard.
+ */
+export default function Purpose({ onNext, onBack }: PromptsProps) {
+  const theme = useTheme();
+  const { config, updateApplicationDefinition, updateConfig } = useRedTeamConfig();
+  const { recordEvent } = useTelemetry();
+  const { status: apiHealthStatus, checkHealth } = useApiHealth();
   const [testMode, setTestMode] = useState<'application' | 'model'>('application');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['Core Application Details']), // Expand the first section by default since it has required fields
   );
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
@@ -47,27 +146,7 @@ export default function Purpose({ onNext }: PromptsProps) {
   ) => {
     if (newMode !== null) {
       setTestMode(newMode);
-      // Clear application definition fields when switching to model testing
-      if (newMode === 'model') {
-        Object.keys(EXAMPLE_APPLICATION_DEFINITION).forEach((key) => {
-          updateApplicationDefinition(key as keyof ApplicationDefinition, '');
-        });
-      }
       recordEvent('feature_used', { feature: 'redteam_test_mode_change', mode: newMode });
-    }
-  };
-
-  const loadExample = () => {
-    recordEvent('feature_used', { feature: 'redteam_config_example' });
-    setTestMode('application');
-    setFullConfig(EXAMPLE_CONFIG);
-    setConfirmDialogOpen(false);
-  };
-  const handleLoadExample = () => {
-    if (config.purpose || Object.values(config.applicationDefinition ?? {}).some((val) => val)) {
-      setConfirmDialogOpen(true);
-    } else {
-      loadExample();
     }
   };
 
@@ -117,34 +196,103 @@ export default function Purpose({ onNext }: PromptsProps) {
     return `${percentage}%`;
   };
 
-  return (
-    <Box sx={{ width: '100%' }}>
-      <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)}>
-        <DialogTitle>Load Example Configuration?</DialogTitle>
-        <DialogContent>
-          Load example configuration with demo chat endpoint and sample application details? Current
-          settings will be replaced.
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
-          <Button onClick={loadExample} variant="contained" color="primary">
-            Load Example
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Box sx={{ maxWidth: '1200px', width: '100%', px: 3 }}>
-        <Stack direction="column" spacing={4}>
-          <Box
-            sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-          >
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
-              Usage Details
-            </Typography>
-            <Button variant="outlined" onClick={handleLoadExample}>
-              Load Example
-            </Button>
-          </Box>
+  // =============================================================================
+  // TARGET PURPOSE DISCOVERY ====================================================
+  // =============================================================================
 
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [discoveryResult, setDiscoveryResult] = useState<TargetPurposeDiscoveryResult | null>(null);
+  const [showSlowDiscoveryMessage, setShowSlowDiscoveryMessage] = useState(false);
+
+  const handleTargetPurposeDiscovery = React.useCallback(async () => {
+    recordEvent('feature_used', { feature: 'redteam_config_target_test' });
+    try {
+      setIsDiscovering(true);
+      setShowSlowDiscoveryMessage(false);
+
+      // Show slow discovery message after a few seconds
+      const slowDiscoveryTimeout = setTimeout(() => {
+        setShowSlowDiscoveryMessage(true);
+      }, 5000);
+
+      const response = await callApi('/providers/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config.target),
+      });
+
+      if (!response.ok) {
+        const { error } = (await response.json()) as { error: string };
+        setDiscoveryError(error);
+        return;
+      }
+
+      const data = (await response.json()) as TargetPurposeDiscoveryResult;
+      setDiscoveryResult(data);
+
+      // Clear the timeout since discovery completed
+      clearTimeout(slowDiscoveryTimeout);
+    } catch (error) {
+      console.error('Error during target purpose discovery:', error);
+      setDiscoveryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsDiscovering(false);
+      setShowSlowDiscoveryMessage(false);
+    }
+  }, [config.target]);
+
+  const hasTargetConfigured = JSON.stringify(config.target) !== JSON.stringify(DEFAULT_HTTP_TARGET);
+
+  const toolsAsJSDocs = React.useMemo(
+    () => formatToolsAsJSDocs(discoveryResult?.tools),
+    [discoveryResult],
+  );
+
+  // Auto-expand accordions when discovery results are available
+  useEffect(() => {
+    if (discoveryResult) {
+      setExpandedSections((prev) => {
+        const newSet = new Set(prev);
+
+        // Expand "Core Application Details" if limitations are discovered
+        if (discoveryResult.limitations) {
+          newSet.add('Core Application Details');
+        }
+
+        // Expand "Access & Permissions" if tools are discovered
+        if (discoveryResult.tools && discoveryResult.tools.length > 0) {
+          newSet.add('Access & Permissions');
+        }
+
+        return newSet;
+      });
+    }
+  }, [discoveryResult]);
+
+  /**
+   * Validate that the API is healthy when the target is configured.
+   */
+  useEffect(() => {
+    if (hasTargetConfigured) {
+      checkHealth();
+    }
+  }, [hasTargetConfigured, checkHealth]);
+
+  // =============================================================================
+  // RENDERING ===================================================================
+  // =============================================================================
+
+  return (
+    <PageWrapper
+      title="Application Details"
+      description="Define your application's purpose and constraints to help tailor the red team test generation and evaluation."
+      onNext={onNext}
+      onBack={onBack}
+      nextDisabled={testMode === 'application' && !isPurposePresent}
+    >
+      <Box sx={{ width: '100%', px: 3 }}>
+        <Stack direction="column" spacing={4}>
           <ToggleButtonGroup
             value={testMode}
             exclusive
@@ -206,8 +354,97 @@ export default function Purpose({ onNext }: PromptsProps) {
           </ToggleButtonGroup>
 
           {testMode === 'application' ? (
-            <>
-              <Box>
+            <Stack direction="column" spacing={4}>
+              {/* Auto-Discover Target Details */}
+              {!discoveryResult && (
+                <Stack direction="column" spacing={2}>
+                  <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
+                    Auto-Discovery
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Get started using 1-click discovery of your target's usage details.{' '}
+                    <a
+                      href="https://promptfoo.dev/docs/red-team/discovery"
+                      target="_blank"
+                      style={{ color: 'inherit', textDecoration: 'underline' }}
+                    >
+                      Learn more
+                    </a>
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    disabled={
+                      !hasTargetConfigured ||
+                      apiHealthStatus !== 'connected' ||
+                      !!discoveryError ||
+                      !!discoveryResult
+                    }
+                    onClick={handleTargetPurposeDiscovery}
+                    loading={isDiscovering}
+                    sx={{ width: '150px' }}
+                  >
+                    {isDiscovering ? 'Discovering...' : 'Discover'}
+                  </Button>
+                  {isDiscovering && showSlowDiscoveryMessage && (
+                    <Alert severity="info" sx={{ border: 0 }}>
+                      Discovery is taking a little while. This is normal for complex applications.
+                    </Alert>
+                  )}
+                  {!hasTargetConfigured && (
+                    <Alert severity="warning" sx={{ border: 0 }}>
+                      You must configure a target to run auto-discovery.
+                    </Alert>
+                  )}
+                  {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
+                    <Alert severity="error" sx={{ border: 0 }}>
+                      Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
+                      connection.
+                    </Alert>
+                  )}
+                  {discoveryError && (
+                    <>
+                      <Alert severity="error" sx={{ border: 0 }}>
+                        {discoveryError}
+                      </Alert>
+                      <Box
+                        sx={{
+                          p: 2,
+                          borderRadius: 1.5,
+                          backgroundColor:
+                            theme.palette.mode === 'dark'
+                              ? alpha(theme.palette.grey[800], 0.5)
+                              : alpha(theme.palette.grey[100], 0.5),
+                          border: `1px solid ${
+                            theme.palette.mode === 'dark'
+                              ? alpha(theme.palette.grey[700], 0.3)
+                              : alpha(theme.palette.grey[300], 0.3)
+                          }`,
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ fontStyle: 'italic', mb: 2 }}
+                        >
+                          💡 To re-attempt discovery from your terminal:
+                        </Typography>
+                        <Stack spacing={1}>
+                          <Typography variant="body2" color="text.secondary">
+                            <strong>1.</strong> Save Config and export it as YAML
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            <strong>2.</strong> Run the following command:
+                          </Typography>
+                          <Code>promptfoo redteam discover -c redteam-config.yaml</Code>
+                        </Stack>
+                      </Box>
+                    </>
+                  )}
+                </Stack>
+              )}
+
+              {/* Main Purpose - Standalone Section */}
+              <Stack direction="column" spacing={3}>
                 <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
                   Application Details
                 </Typography>
@@ -221,7 +458,6 @@ export default function Purpose({ onNext }: PromptsProps) {
                   <strong>more accurate</strong> grading of attack effectiveness.
                 </Typography>
 
-                {/* Main Purpose - Standalone Section */}
                 <Box sx={{}}>
                   <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
                     What is the main purpose of your application?{' '}
@@ -233,6 +469,11 @@ export default function Purpose({ onNext }: PromptsProps) {
                       foundational information provides essential context for generating all types
                       of targeted security attacks and red team tests.
                     </Typography>
+
+                    {discoveryResult && discoveryResult.purpose && (
+                      <DiscoveryResult text={discoveryResult.purpose} section="purpose" />
+                    )}
+
                     <TextField
                       fullWidth
                       value={config.applicationDefinition?.purpose}
@@ -251,17 +492,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                     />
                   </Box>
                 </Box>
-
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 4, mt: 2, fontStyle: 'italic' }}
-                >
+                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                   Only the main purpose is required. All other fields are optional, but providing
                   more details will result in significantly more targeted and effective security
                   tests.
                 </Typography>
+              </Stack>
 
+              <Stack direction="column" spacing={0}>
                 {/* Core Application Details */}
                 <Accordion
                   expanded={expandedSections.has('Core Application Details')}
@@ -309,6 +547,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                           access, hijacking attempts, and tests for excessive agency
                           vulnerabilities.
                         </Typography>
+
                         <TextField
                           fullWidth
                           value={config.applicationDefinition?.features}
@@ -369,6 +608,14 @@ export default function Purpose({ onNext }: PromptsProps) {
                           include information about what the system will or won't respond to, topics
                           it restricts, input formats, or any other domain-specific rules.
                         </Typography>
+
+                        {discoveryResult && discoveryResult.limitations && (
+                          <DiscoveryResult
+                            text={discoveryResult.limitations}
+                            section="attackConstraints"
+                          />
+                        )}
+
                         <TextField
                           fullWidth
                           value={config.applicationDefinition?.attackConstraints || ''}
@@ -433,6 +680,11 @@ export default function Purpose({ onNext }: PromptsProps) {
                           access, privilege escalation, malicious resource fetching, and RAG
                           poisoning vulnerabilities.
                         </Typography>
+
+                        {discoveryResult && toolsAsJSDocs && (
+                          <DiscoveryResult text={toolsAsJSDocs} section="hasAccessTo" />
+                        )}
+
                         <TextField
                           fullWidth
                           value={config.applicationDefinition?.hasAccessTo}
@@ -784,7 +1036,7 @@ export default function Purpose({ onNext }: PromptsProps) {
                     </Stack>
                   </AccordionDetails>
                 </Accordion>
-              </Box>
+              </Stack>
 
               {/* Red Team User - Standalone Section */}
               <Box sx={{ mt: 4 }}>
@@ -802,6 +1054,11 @@ export default function Purpose({ onNext }: PromptsProps) {
                     attempts, prompt extraction, system prompt override, and role-based security
                     vulnerabilities.
                   </Typography>
+
+                  {discoveryResult && discoveryResult.user && (
+                    <DiscoveryResult text={discoveryResult.user} section="redteamUser" />
+                  )}
+
                   <TextField
                     fullWidth
                     value={config.applicationDefinition?.redteamUser}
@@ -819,7 +1076,42 @@ export default function Purpose({ onNext }: PromptsProps) {
                   />
                 </Box>
               </Box>
-            </>
+
+              {/* Test Generation Instructions - Standalone Section */}
+              <Box sx={{ mt: 4 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
+                  Test Generation Instructions
+                </Typography>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                    Additional instructions for test generation{' '}
+                    <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>(optional)</span>
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Provide specific guidance on how red team attacks should be generated for your
+                    application. These instructions will be included in all test generation prompts
+                    to ensure attacks are contextually relevant and follow your desired approach.
+                    This is particularly useful for domain-specific applications or when you want to
+                    focus on particular attack patterns.
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    value={config.testGenerationInstructions}
+                    onChange={(e) => updateConfig('testGenerationInstructions', e.target.value)}
+                    placeholder="e.g. Focus on healthcare-specific attacks using medical terminology and patient scenarios. Ensure all prompts reference realistic medical situations that could occur in patient interactions."
+                    multiline
+                    minRows={3}
+                    variant="outlined"
+                    sx={{
+                      '& .MuiInputBase-inputMultiline': {
+                        resize: 'vertical',
+                        minHeight: '72px',
+                      },
+                    }}
+                  />
+                </Box>
+              </Box>
+            </Stack>
           ) : (
             <Box>
               <Alert
@@ -848,35 +1140,8 @@ export default function Purpose({ onNext }: PromptsProps) {
               </Alert>
             </Box>
           )}
-
-          <Grid item xs={12}>
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                alignItems: 'center',
-                mt: 4,
-              }}
-            >
-              <Button
-                variant="contained"
-                endIcon={<KeyboardArrowRightIcon />}
-                onClick={onNext}
-                disabled={testMode === 'application' && !isPurposePresent}
-                sx={{
-                  backgroundColor: theme.palette.primary.main,
-                  '&:hover': { backgroundColor: theme.palette.primary.dark },
-                  '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
-                  px: 4,
-                  py: 1,
-                }}
-              >
-                Next
-              </Button>
-            </Box>
-          </Grid>
         </Stack>
       </Box>
-    </Box>
+    </PageWrapper>
   );
 }

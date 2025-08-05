@@ -1,15 +1,15 @@
-import chalk from 'chalk';
-import { spawn } from 'child_process';
-import { exec } from 'child_process';
-import type { Command } from 'commander';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
+
+import chalk from 'chalk';
 import logger from '../logger';
+import type { Command } from 'commander';
 
 const execAsync = promisify(exec);
 
-async function checkModelAuditInstalled(): Promise<boolean> {
+export async function checkModelAuditInstalled(): Promise<boolean> {
   try {
-    await execAsync('python -c "import modelaudit"');
+    await execAsync('which modelaudit');
     return true;
   } catch {
     return false;
@@ -35,7 +35,9 @@ export function modelScanCommand(program: Command): void {
       (val) => Number.parseInt(val, 10),
       300,
     )
+    .option('-v, --verbose', 'Enable verbose output')
     .option('--max-file-size <bytes>', 'Maximum file size to scan in bytes')
+    .option('--max-total-size <bytes>', 'Maximum total bytes to scan before stopping')
     .action(async (paths: string[], options) => {
       if (!paths || paths.length === 0) {
         logger.error(
@@ -53,10 +55,7 @@ export function modelScanCommand(program: Command): void {
         process.exit(1);
       }
 
-      const args = ['-m', 'modelaudit'];
-
-      // Add all paths
-      args.push(...paths);
+      const args = ['scan', ...paths];
 
       // Add options
       if (options.blacklist && options.blacklist.length > 0) {
@@ -74,16 +73,24 @@ export function modelScanCommand(program: Command): void {
       }
 
       if (options.timeout) {
-        args.push('--timeout', options.timeout);
+        args.push('--timeout', options.timeout.toString());
+      }
+
+      if (options.verbose) {
+        args.push('--verbose');
       }
 
       if (options.maxFileSize) {
         args.push('--max-file-size', options.maxFileSize);
       }
 
+      if (options.maxTotalSize) {
+        args.push('--max-total-size', options.maxTotalSize);
+      }
+
       logger.info(`Running model scan on: ${paths.join(', ')}`);
 
-      const modelAudit = spawn('python', args, { stdio: 'inherit' });
+      const modelAudit = spawn('modelaudit', args, { stdio: 'inherit' });
 
       modelAudit.on('error', (error) => {
         logger.error(`Failed to start modelaudit: ${error.message}`);

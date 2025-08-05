@@ -1,5 +1,20 @@
 ---
-sidebar_position: 25
+sidebar_position: 21
+sidebar_label: Dataset generation
+title: Dataset Generation - Automated Test Data Creation
+description: Generate comprehensive test datasets automatically using promptfoo. Create diverse test cases, personas, and edge cases for thorough LLM evaluation.
+keywords:
+  [
+    dataset generation,
+    automated testing,
+    test data creation,
+    LLM datasets,
+    evaluation data,
+    test automation,
+    synthetic data,
+  ]
+pagination_prev: configuration/scenarios
+pagination_next: configuration/huggingface-datasets
 ---
 
 # Dataset generation
@@ -28,7 +43,7 @@ tests:
       location: 'Great Barrier Reef'
 ```
 
-Alternatively, you can specify your [prompts as CSV](/docs/configuration/parameters/#csv-prompts):
+Alternatively, you can specify your [prompts as CSV](/docs/configuration/prompts#csv-prompts):
 
 ```yaml
 prompts: file://travel-guide-prompts.csv
@@ -74,7 +89,7 @@ promptfoo generate dataset -w
 
 ### Loading from output files
 
-When using the `-o` flag, you will need to include the generated dataset within the [tests](/docs/configuration/parameters/#tests-and-vars) block of your configuration file.
+When using the `-o` flag, you will need to include the generated dataset within the [tests](/docs/configuration/test-cases) block of your configuration file.
 
 For example:
 

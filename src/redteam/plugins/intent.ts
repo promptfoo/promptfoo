@@ -1,34 +1,31 @@
 import dedent from 'dedent';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { extractGoalFromPrompt } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:intent';
+import type {
+  ApiProvider,
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  PluginConfig,
+  TestCase,
+} from '../../types';
 
-type Intent = string | string[];
-
-interface IntentPluginConfig {
-  intent: Intent | Intent[];
-}
+const PLUGIN_ID = 'promptfoo:redteam:intent';
 
 export class IntentPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   static readonly canGenerateRemote = false;
-  private intents: Intent[];
+  private intents: (string | string[])[];
 
-  constructor(
-    provider: ApiProvider,
-    purpose: string,
-    injectVar: string,
-    config: IntentPluginConfig,
-  ) {
-    super(provider, purpose, injectVar);
+  constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
+    super(provider, purpose, injectVar, config);
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
     // Handle both string and array configs
-    const loadedIntents = maybeLoadFromExternalFile(config.intent) as Intent | Intent[];
+    const loadedIntents = maybeLoadFromExternalFile(config.intent) as (string | string[])[];
     this.intents = Array.isArray(loadedIntents) ? loadedIntents : [loadedIntents];
   }
 

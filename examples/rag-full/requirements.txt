@@ -1,7 +1,7 @@
-chromadb>=0.5.17
-langchain-chroma>=0.1.4
-langchain-community>=0.3.4
-langchain-openai>=0.2.5
-langchain>=0.3.6
-pypdf>=5.1.0
-tqdm>=4.66.6
+chromadb==1.0.15
+langchain==0.3.26
+langchain-chroma==0.2.4
+langchain-community==0.3.27
+langchain-openai==0.3.27
+pypdf==5.7.0
+tqdm==4.67.1

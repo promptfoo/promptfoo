@@ -100,7 +100,7 @@ You can customize the evaluation prompt using the `rubricPrompt` property. The p
 
 - `{{input}}`: The original prompt/question
 - `{{ideal}}`: The reference answer (from the `value` field)
-- `{{completion}}`: The LLM's actual response
+- `{{completion}}`: The LLM's actual response (provided automatically by promptfoo)
 
 Your custom prompt should instruct the model to either:
 

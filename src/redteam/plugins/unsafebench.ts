@@ -2,11 +2,12 @@ import dedent from 'dedent';
 import { fetchWithProxy } from '../../fetch';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
-import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:unsafebench';
-export const DATASET_PATH = 'huggingface://datasets/yiting/UnsafeBench';
+import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:unsafebench';
+const DATASET_PATH = 'huggingface://datasets/yiting/UnsafeBench';
 
 // Valid categories in the UnsafeBench dataset
 export const VALID_CATEGORIES = [
@@ -308,7 +309,7 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
   private datasetManager: UnsafeBenchDatasetManager;
 
   constructor(provider: any, purpose: string, injectVar: string, config?: UnsafeBenchPluginConfig) {
-    super(provider, purpose, injectVar, config || {});
+    super(provider, purpose, injectVar, config);
     this.pluginConfig = config;
     this.datasetManager = UnsafeBenchDatasetManager.getInstance();
 

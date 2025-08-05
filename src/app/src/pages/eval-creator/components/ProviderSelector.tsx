@@ -1,4 +1,5 @@
 import React from 'react';
+
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -7,15 +8,54 @@ import Chip from '@mui/material/Chip';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import type { ProviderOptions } from '@promptfoo/types';
 import { useProvidersStore } from '../../../store/providersStore';
 import AddLocalProviderDialog from './AddLocalProviderDialog';
 import ProviderConfigDialog from './ProviderConfigDialog';
+import type { ProviderOptions } from '@promptfoo/types';
 
 const defaultProviders: ProviderOptions[] = (
   [] as (ProviderOptions & { id: string; label?: string })[]
 )
   .concat([
+    {
+      id: 'openai:gpt-4.1',
+      label: 'OpenAI: GPT-4.1',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+        function_call: undefined,
+        functions: undefined,
+        stop: undefined,
+      },
+    },
+    {
+      id: 'openai:gpt-4.1-mini',
+      label: 'OpenAI: GPT-4.1 Mini',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+      },
+    },
+    {
+      id: 'openai:gpt-4.1-nano',
+      label: 'OpenAI: GPT-4.1 Nano',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+      },
+    },
     {
       id: 'openai:gpt-4o',
       label: 'OpenAI: GPT-4o',
@@ -44,12 +84,22 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openai:o1',
-      label: 'OpenAI: GPT-o1 (with thinking)',
+      id: 'openai:o3',
+      label: 'OpenAI: GPT-o3 (with thinking)',
       config: {
         organization: '',
         isReasoningModel: true,
         max_completion_tokens: 1024,
+        reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
+      },
+    },
+    {
+      id: 'openai:o4-mini',
+      label: 'OpenAI: GPT-o4 Mini (with thinking)',
+      config: {
+        organization: '',
+        isReasoningModel: true,
+        max_completion_tokens: 2048,
         reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
       },
     },
@@ -293,6 +343,26 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'azure:chat:gpt-4.1',
+      label: 'Azure: GPT-4.1',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2024-02-15-preview',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    },
+    {
+      id: 'azure:chat:gpt-4.1-mini',
+      label: 'Azure: GPT-4.1 Mini',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2024-02-15-preview',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    },
+    {
       id: 'azure:chat:gpt-4o',
       label: 'Azure: GPT-4o',
       config: {
@@ -313,6 +383,16 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
+      id: 'azure:chat:o4-mini',
+      label: 'Azure: O4 Mini',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2024-05-15-preview',
+        temperature: 0.5,
+        max_tokens: 4096,
+      },
+    },
+    {
       id: 'azure:chat:o3-mini',
       label: 'Azure: O3 Mini',
       config: {
@@ -324,18 +404,6 @@ const defaultProviders: ProviderOptions[] = (
     },
   ])
   .concat([
-    {
-      id: 'vertex:gemini-2.5-pro-exp-03-25',
-      label: 'Vertex: Gemini 2.5 Pro (Exp)',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
-      },
-    },
     {
       id: 'vertex:gemini-2.5-pro',
       label: 'Vertex: Gemini 2.5 Pro',

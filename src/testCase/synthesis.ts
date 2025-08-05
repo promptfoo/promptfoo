@@ -1,13 +1,14 @@
-import type { SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
 import { getDefaultProviders } from '../providers/defaults';
-import type { TestCase, TestSuite, VarMapping, ApiProvider } from '../types';
 import { retryWithDeduplication, sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';
 import { extractVariablesFromTemplates } from '../util/templates';
+import type { SingleBar } from 'cli-progress';
+
+import type { ApiProvider, TestCase, TestSuite, VarMapping } from '../types';
 
 interface SynthesizeOptions {
   instructions?: string;
@@ -107,7 +108,10 @@ export async function synthesize({
   let progressBar: SingleBar | undefined;
   if (logger.level !== 'debug') {
     const cliProgress = await import('cli-progress');
-    progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+    progressBar = new cliProgress.SingleBar(
+      { gracefulExit: true },
+      cliProgress.Presets.shades_classic,
+    );
     const totalProgressSteps = 1 + numPersonas * numTestCasesPerPersona;
     progressBar.start(totalProgressSteps, 0);
   }

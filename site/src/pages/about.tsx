@@ -84,6 +84,12 @@ const AboutPageContent = () => {
                 bio: 'Michael brings extensive experience in AI and engineering leadership. As the former VP of Engineering and Head of AI at Smile Identity, he has a track record of scaling ML solutions to serve over 100 million people across hundreds of enterprises.',
               },
               {
+                name: 'Lily Liu',
+                title: 'Business Operations Lead',
+                image: '/img/team/lily.jpeg',
+                bio: 'Lily brings investment and operational expertise from CVC Capital Partners and Evercore, where she spent five years evaluating software companies and tech M&A deals. At Promptfoo, she builds the systems and processes that enable our rapid growth while maintaining operational excellence. She holds a BS in Computer Science from Stanford.',
+              },
+              {
                 name: 'Steve Klein',
                 title: 'Staff Engineer',
                 image: '/img/team/steve.jpeg',
@@ -122,14 +128,20 @@ const AboutPageContent = () => {
               {
                 name: 'Will Holley',
                 title: 'Senior Engineer',
-                image: '/img/team/will.jpg',
+                image: '/img/team/will.jpeg',
                 bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
               },
               {
                 name: 'Asmi Gulati',
                 title: 'AI Red Team',
                 image: '/img/team/asmi.jpeg',
-                bio: 'Asmi specializes in prompt hacking and develops educational content for Promptfoo. In her free time she maintains https://aisimplyexplained.com/',
+                bio: 'Asmi specializes in prompt hacking and develops educational content for Promptfoo. In her free time she maintains <a href="https://aisimplyexplained.com/" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">AI Simply Explained</a>.',
+              },
+              {
+                name: 'Tabs Fakier',
+                title: 'Founding Developer Advocate',
+                image: '/img/team/tabs.jpeg',
+                bio: 'Tabs fronts developer education, community management, and technical writing backed by a wealth of experience in design and software development. Learn more at your <a href="https://ladyofcode.com" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">own peril</a>.',
               },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
@@ -145,7 +157,7 @@ const AboutPageContent = () => {
                   <Typography variant="subtitle1" color="text.secondary" gutterBottom>
                     {leader.title}
                   </Typography>
-                  <Typography variant="body2">{leader.bio}</Typography>
+                  <Typography variant="body2" dangerouslySetInnerHTML={{ __html: leader.bio }} />
                 </Box>
               </Grid>
             ))}

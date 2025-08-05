@@ -65,14 +65,14 @@ Promptfoo has built-in support for a wide variety of models such as those from O
 First, start your Ollama server and pull the model you want to test:
 
 ```bash
-ollama pull llama3.1:8b
+ollama pull llama3.3:8b
 ```
 
 Then configure Promptfoo to use it:
 
 ```yaml
 targets:
-  - ollama:llama3.1:8b
+  - ollama:chat:llama3.3:8b
 ```
 
 ### Your application
@@ -105,7 +105,7 @@ For more information, see:
 
 - [HarmBench paper](https://arxiv.org/abs/2402.04249)
 - [HarmBench GitHub repository](https://github.com/centerforaisafety/HarmBench)
-- [HarmBench Propmtfoo plugin](/docs/red-team/plugins/harmbench)
+- [HarmBench Promptfoo plugin](/docs/red-team/plugins/harmbench)
 - [Promptfoo red teaming guide](/docs/red-team/quickstart)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [CybersecEval](/blog/cyberseceval)

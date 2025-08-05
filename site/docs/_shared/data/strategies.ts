@@ -136,6 +136,16 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/goat/',
   },
   {
+    category: 'Multi-turn',
+    strategy: 'mischievous-user',
+    displayName: 'Mischievous User',
+    description: 'Mischievous user conversations',
+    longDescription: 'Simulates a multi-turn conversation between a mischievous user and an agent',
+    cost: 'High',
+    asrIncrease: '10-20%',
+    link: '/docs/red-team/strategies/mischievous-user/',
+  },
+  {
     category: 'Static (Single-Turn)',
     strategy: 'video',
     displayName: 'Video Encoding',
@@ -288,6 +298,17 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '0-5%',
     link: '/docs/red-team/strategies/other-encodings/#camelcase',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'emoji',
+    displayName: 'Emoji Smuggling',
+    description: 'Variation selector encoding',
+    longDescription:
+      'Tests hiding UTF-8 payloads inside emoji variation selectors to evaluate filter evasion.',
+    cost: 'Low',
+    asrIncrease: '0-5%',
+    link: '/docs/red-team/strategies/other-encodings/#emoji-encoding',
   },
   {
     category: 'Regression',

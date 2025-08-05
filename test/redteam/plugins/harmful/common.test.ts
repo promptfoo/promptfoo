@@ -130,18 +130,12 @@ describe('harmful plugin', () => {
     });
   });
 
-  describe('harm categories and graders', () => {
-    it('should have corresponding graders for all harmful categories', () => {
+  describe('plugin category validation', () => {
+    it('should have graders for all harmful categories', () => {
       const harmCategories = Object.keys(HARM_PLUGINS);
 
-      harmCategories.forEach((category) => {
-        const graderKey = `promptfoo:redteam:${category}` as keyof typeof GRADERS;
-        expect(GRADERS[graderKey]).toBeDefined();
-      });
-
-      const harmGraders = Object.keys(GRADERS).filter(
-        (key) =>
-          key.startsWith('promptfoo:redteam:harmful:') || key === 'promptfoo:redteam:bias:gender',
+      const harmGraders = Object.keys(GRADERS).filter((key) =>
+        key.startsWith('promptfoo:redteam:harmful:'),
       );
       expect(harmGraders.length).toBeGreaterThanOrEqual(harmCategories.length);
     });

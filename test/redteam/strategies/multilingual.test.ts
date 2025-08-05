@@ -6,6 +6,7 @@ import {
   getConcurrencyLimit,
   translateBatch,
 } from '../../../src/redteam/strategies/multilingual';
+
 import type { TestCase } from '../../../src/types';
 
 jest.mock('cli-progress', () => ({
@@ -261,6 +262,7 @@ describe('Multilingual Strategy', () => {
         harmCategory: 'Test',
         strategyId: 'multilingual',
         language: 'de',
+        originalText: 'Hello world',
       });
       expect(result[0].vars?.text).toBe('Hallo Welt');
     });

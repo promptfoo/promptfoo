@@ -1,16 +1,17 @@
 import React, { useMemo } from 'react';
-import ReactMarkdown from 'react-markdown';
+
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import Tooltip from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
+import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { useResultsViewSettingsStore } from './store';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -31,6 +32,9 @@ export interface EvalOutputCellProps {
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean, score?: number, comment?: string) => void;
+  evaluationId?: string;
+  testCaseId?: string;
+  onMetricFilter?: (metric: string | null) => void;
 }
 
 function EvalOutputCell({
@@ -43,13 +47,18 @@ function EvalOutputCell({
   showDiffs,
   searchText,
   showStats,
+  evaluationId,
+  testCaseId,
+  onMetricFilter,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
-  searchText: string;
+  searchText?: string;
 }) {
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewSettingsStore();
+
+  const { shouldHighlightSearchText } = useTableStore();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -112,7 +121,7 @@ function EvalOutputCell({
   let failReasons: string[] = [];
 
   // Handle failure messages by splitting the text at '---'
-  if (!output.pass && text.includes('---')) {
+  if (!output.pass && text && text.includes('---')) {
     failReasons = (output.gradingResult?.componentResults || [])
       .filter((result) => (result ? !result.pass : false))
       .map((result) => result.reason);
@@ -144,23 +153,19 @@ function EvalOutputCell({
         diffResult = diffWords(firstOutputText, text);
       }
     }
-    node = (
-      <>
-        {diffResult.map(
-          (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
-            part.added ? (
-              <ins key={index}>{part.value}</ins>
-            ) : part.removed ? (
-              <del key={index}>{part.value}</del>
-            ) : (
-              <span key={index}>{part.value}</span>
-            ),
-        )}
-      </>
+    node = diffResult.map(
+      (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
+        part.added ? (
+          <ins key={index}>{part.value}</ins>
+        ) : part.removed ? (
+          <del key={index}>{part.value}</del>
+        ) : (
+          <span key={index}>{part.value}</span>
+        ),
     );
   }
 
-  if (searchText) {
+  if (searchText && shouldHighlightSearchText) {
     // Highlight search matches
     try {
       const regex = new RegExp(searchText, 'gi');
@@ -172,35 +177,34 @@ function EvalOutputCell({
           end: regex.lastIndex,
         });
       }
-      node = (
-        <>
-          {matches.length > 0 ? (
-            <>
-              <span key="text-before">{text.substring(0, matches[0].start)}</span>
-              {matches.map((range, index) => (
-                <>
-                  <span className="search-highlight" key={'match-' + index}>
-                    {text.substring(range.start, range.end)}
+      node =
+        matches.length > 0 ? (
+          <>
+            <span key="text-before">{text?.substring(0, matches[0].start)}</span>
+            {matches.map((range, index) => {
+              const matchText = text?.substring(range.start, range.end);
+              const afterText = text?.substring(
+                range.end,
+                matches[index + 1] ? matches[index + 1].start : text?.length,
+              );
+              return (
+                <React.Fragment key={`fragment-${index}`}>
+                  <span className="search-highlight" key={`match-${index}`}>
+                    {matchText}
                   </span>
-                  <span key={'text-after-' + index}>
-                    {text.substring(
-                      range.end,
-                      matches[index + 1] ? matches[index + 1].start : text.length,
-                    )}
-                  </span>
-                </>
-              ))}
-            </>
-          ) : (
-            <span key="no-match">{text}</span>
-          )}
-        </>
-      );
+                  <span key={`text-after-${index}`}>{afterText}</span>
+                </React.Fragment>
+              );
+            })}
+          </>
+        ) : (
+          <span key="no-match">{text}</span>
+        );
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
   } else if (
-    text.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
+    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
   ) {
     node = (
       <img
@@ -309,8 +313,11 @@ function EvalOutputCell({
     );
   }
 
-  if (output.tokenUsage?.completion) {
-    const tokPerSec = output.tokenUsage.completion / (output.latencyMs / 1000);
+  // Check for token usage in both output.tokenUsage and output.response?.tokenUsage
+  const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
+
+  if (tokenUsage?.completion) {
+    const tokPerSec = tokenUsage.completion / (output.latencyMs / 1000);
     tokPerSecDisplay = (
       <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>
     );
@@ -320,34 +327,32 @@ function EvalOutputCell({
     costDisplay = <span>${output.cost.toPrecision(2)}</span>;
   }
 
-  if (output.response?.tokenUsage?.cached) {
+  if (tokenUsage?.cached) {
     tokenUsageDisplay = (
       <span>
-        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-          output.response?.tokenUsage?.cached ?? 0,
-        )}{' '}
+        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.cached ?? 0)}{' '}
         (cached)
       </span>
     );
-  } else if (output.response?.tokenUsage?.total) {
+  } else if (tokenUsage?.total) {
     const promptTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.response?.tokenUsage?.prompt ?? 0,
+      tokenUsage.prompt ?? 0,
     );
     const completionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.response?.tokenUsage?.completion ?? 0,
+      tokenUsage.completion ?? 0,
     );
     const totalTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      output.response?.tokenUsage?.total ?? 0,
+      tokenUsage.total ?? 0,
     );
 
-    if (output.response?.tokenUsage?.completionDetails?.reasoning) {
+    if (tokenUsage.completionDetails?.reasoning) {
       const reasoningTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-        output.response.tokenUsage.completionDetails.reasoning ?? 0,
+        tokenUsage.completionDetails.reasoning ?? 0,
       );
 
       tokenUsageDisplay = (
         <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total & ${reasoningTokens} reasoning tokens`}
+          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`}
         >
           <span>
             {totalTokens}
@@ -580,6 +585,8 @@ function EvalOutputCell({
               gradingResults={output.gradingResult?.componentResults}
               output={text}
               metadata={output.metadata}
+              evaluationId={evaluationId}
+              testCaseId={testCaseId || output.id}
             />
           )}
         </>
@@ -614,7 +621,7 @@ function EvalOutputCell({
   );
 
   return (
-    <div className="cell" style={cellStyle}>
+    <div id="eval-output-cell" className="cell" style={cellStyle}>
       {showPassFail && (
         <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
           <div className="status-row">
@@ -624,7 +631,7 @@ function EvalOutputCell({
             </div>
             {providerOverride}
           </div>
-          <CustomMetrics lookup={output.namedScores} />
+          <CustomMetrics lookup={output.namedScores} onMetricFilter={onMetricFilter} />
           {!output.pass && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />

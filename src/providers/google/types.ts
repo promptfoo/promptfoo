@@ -66,8 +66,6 @@ export interface FunctionDeclaration {
   response?: Schema;
 }
 
-export type FunctionParameters = Record<string, unknown>;
-
 interface GoogleSearchRetrieval {
   dynamicRetrievalConfig: {
     mode?: 'MODE_UNSPECIFIED' | 'MODE_DYNAMIC';
@@ -96,7 +94,7 @@ export interface CompletionOptions {
   projectId?: string;
   region?: string;
   publisher?: string;
-  apiVersion?: string;
+  apiVersion?: string; // For Live API: 'v1alpha' or 'v1' (default: v1alpha)
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format
 
@@ -112,6 +110,19 @@ export interface CompletionOptions {
   top_p?: number; // Alternative format for Claude models
   topK?: number;
   top_k?: number; // Alternative format for Claude models
+
+  // Image generation options
+  n?: number; // Number of images to generate
+  aspectRatio?: '1:1' | '16:9' | '9:16' | '3:4' | '4:3'; // Valid aspect ratios
+  personGeneration?: 'allow_all' | 'allow_adult' | 'dont_allow';
+  safetyFilterLevel?:
+    | 'block_most'
+    | 'block_some'
+    | 'block_few'
+    | 'block_fewest'
+    | 'block_low_and_above';
+  addWatermark?: boolean;
+  seed?: number;
 
   // Live API websocket timeout
   timeoutMs?: number;
@@ -131,6 +142,28 @@ export interface CompletionOptions {
 
     // Live API
     response_modalities?: string[];
+
+    // Speech configuration
+    speechConfig?: {
+      voiceConfig?: {
+        prebuiltVoiceConfig?: {
+          voiceName?: string;
+        };
+      };
+      languageCode?: string;
+    };
+
+    // Transcription configuration
+    outputAudioTranscription?: Record<string, any>;
+    inputAudioTranscription?: Record<string, any>;
+
+    // Affective dialog (v1alpha only)
+    enableAffectiveDialog?: boolean;
+
+    // Proactive audio (v1alpha only)
+    proactivity?: {
+      proactiveAudio?: boolean;
+    };
 
     // Thinking configuration
     thinkingConfig?: {
@@ -153,7 +186,7 @@ export interface CompletionOptions {
    * If set, automatically call these functions when the assistant activates
    * these function tools.
    */
-  functionToolCallbacks?: Record<string, (arg: string) => Promise<any>>;
+  functionToolCallbacks?: Record<string, ((arg: string) => Promise<any>) | string>;
 
   /**
    * If set, spawn a python process with the file and connect to its API
@@ -165,7 +198,7 @@ export interface CompletionOptions {
     pythonExecutable?: string;
   };
 
-  systemInstruction?: Content;
+  systemInstruction?: Content | string;
 
   /**
    * Model-specific configuration for Llama models
