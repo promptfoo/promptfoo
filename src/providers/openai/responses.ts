@@ -3,6 +3,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
@@ -12,6 +13,8 @@ import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
+  private functionCallbackHandler = new FunctionCallbackHandler();
+
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
     'gpt-4o-2024-08-06',
@@ -326,7 +329,34 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         }
 
         if (item.type === 'function_call') {
-          result = JSON.stringify(item);
+          // Handle function tool callbacks if configured
+          if (
+            config.functionToolCallbacks &&
+            item.name &&
+            config.functionToolCallbacks[item.name]
+          ) {
+            // Skip completed status messages that are just status updates without meaningful arguments
+            if (item.status === 'completed' && (!item.arguments || item.arguments === '{}')) {
+              continue;
+            }
+            try {
+              const functionResult = await this.functionCallbackHandler.executeCallback(
+                item.name,
+                item.arguments || '{}',
+                config.functionToolCallbacks,
+              );
+              result = functionResult;
+            } catch (error) {
+              // If callback fails, fall back to original behavior (return the function call)
+              logger.debug(
+                `Function callback failed for ${item.name} with error ${error}, falling back to original output`,
+              );
+              result = JSON.stringify(item);
+            }
+          } else {
+            // No callback configured, return the raw function call
+            result = JSON.stringify(item);
+          }
         } else if (item.type === 'message' && item.role === 'assistant') {
           if (item.content) {
             for (const contentItem of item.content) {
@@ -345,7 +375,29 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                   data.annotations.push(...contentItem.annotations);
                 }
               } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-                result = JSON.stringify(contentItem);
+                // Handle function tool callbacks for content items
+                if (
+                  config.functionToolCallbacks &&
+                  contentItem.name &&
+                  config.functionToolCallbacks[contentItem.name]
+                ) {
+                  try {
+                    const functionResult = await this.functionCallbackHandler.executeCallback(
+                      contentItem.name,
+                      contentItem.arguments || '{}',
+                      config.functionToolCallbacks,
+                    );
+                    result = functionResult;
+                  } catch (error) {
+                    // If callback fails, fall back to original behavior
+                    logger.debug(
+                      `Function callback failed for ${contentItem.name} with error ${error}, falling back to original output`,
+                    );
+                    result = JSON.stringify(contentItem);
+                  }
+                } else {
+                  result = JSON.stringify(contentItem);
+                }
               } else if (contentItem.type === 'refusal') {
                 refusal = contentItem.refusal;
                 isRefusal = true;

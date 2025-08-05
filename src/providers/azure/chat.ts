@@ -5,6 +5,7 @@ import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import invariant from '../../util/invariant';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
@@ -16,6 +17,7 @@ import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } fro
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;
+  private functionCallbackHandler = new FunctionCallbackHandler();
 
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
@@ -268,8 +270,65 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         }
 
         if (output == null) {
-          // Restore tool_calls and function_call handling
-          output = message.tool_calls ?? message.function_call;
+          // Handle tool_calls and function_call
+          const toolCalls = message.tool_calls;
+          const functionCall = message.function_call;
+          
+          if (config.functionToolCallbacks && (toolCalls || functionCall)) {
+            const results: string[] = [];
+            let hasSuccessfulCallback = false;
+            
+            // Handle tool_calls array
+            if (toolCalls && Array.isArray(toolCalls)) {
+              for (const toolCall of toolCalls) {
+                if (toolCall.type === 'function' && 
+                    toolCall.function?.name && 
+                    config.functionToolCallbacks[toolCall.function.name]) {
+                  try {
+                    const functionResult = await this.functionCallbackHandler.executeCallback(
+                      toolCall.function.name,
+                      toolCall.function.arguments || '{}',
+                      config.functionToolCallbacks,
+                    );
+                    results.push(functionResult);
+                    hasSuccessfulCallback = true;
+                  } catch (error) {
+                    logger.debug(
+                      `Function callback failed for ${toolCall.function.name} with error ${error}, falling back to original output`,
+                    );
+                    results.push(JSON.stringify(toolCall));
+                  }
+                } else {
+                  results.push(JSON.stringify(toolCall));
+                }
+              }
+            }
+            
+            // Handle single function_call
+            if (functionCall && functionCall.name && config.functionToolCallbacks[functionCall.name]) {
+              try {
+                const functionResult = await this.functionCallbackHandler.executeCallback(
+                  functionCall.name,
+                  functionCall.arguments || '{}',
+                  config.functionToolCallbacks,
+                );
+                results.push(functionResult);
+                hasSuccessfulCallback = true;
+              } catch (error) {
+                logger.debug(
+                  `Function callback failed for ${functionCall.name} with error ${error}, falling back to original output`,
+                );
+                results.push(JSON.stringify(functionCall));
+              }
+            } else if (functionCall) {
+              results.push(JSON.stringify(functionCall));
+            }
+            
+            output = hasSuccessfulCallback && results.length > 0 ? results.join('\n') : (toolCalls ?? functionCall);
+          } else {
+            // No callbacks configured, return raw tool/function calls
+            output = toolCalls ?? functionCall;
+          }
         } else if (
           config.response_format?.type === 'json_schema' ||
           config.response_format?.type === 'json_object'
