@@ -32,6 +32,7 @@ import {
 import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
+  type AssertionSet,
   type AssertionType,
   type CompletedPrompt,
   type EvaluateOptions,
@@ -50,6 +51,8 @@ import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
+import { getNunjucksEngine } from './util/templates';
+import { maybeLoadFromExternalFile } from './util/file';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   createEmptyTokenUsage,
@@ -58,6 +61,167 @@ import {
   accumulateResponseTokenUsage,
 } from './util/tokenUsageUtils';
 import { transform, type TransformContext, TransformInputType } from './util/transform';
+
+const DEFAULT_MAX_CONCURRENCY = parseInt(process.env.PROMPTFOO_CONCURRENT_EVALUATIONS || '') || 4;
+
+export { DEFAULT_MAX_CONCURRENCY };
+
+/**
+ * Properties that should be interpolated late (during assertion execution)
+ * because they need runtime context like output, provider response, etc.
+ */
+const LATE_INTERPOLATION_PROPERTIES = new Set([
+  'value', // Needs output context
+  'transform', // Needs output to transform
+  'contextTransform', // Needs output to extract context
+]);
+
+/**
+ * Properties that should not be recursively interpolated to preserve
+ * their original structure and avoid unintended modifications.
+ *
+ * - 'config': Provider and test configuration must remain as-is for proper functionality
+ * - 'metadata': Test metadata and tracing information should not be modified
+ */
+const INTERPOLATION_EXCLUSIONS = new Set(['config', 'metadata']);
+
+/**
+ * Interpolates a single property value with variables, handling file:// references
+ * and different value types appropriately.
+ */
+async function interpolatePropertyValue(
+  value: any,
+  vars: Record<string, any>,
+  propertyName: string,
+): Promise<any> {
+  if (!vars) {
+    return value;
+  }
+
+  const nunjucks = getNunjucksEngine();
+
+  // Handle string values
+  if (typeof value === 'string') {
+    // Check for file:// references first
+    if (value.startsWith('file://')) {
+      try {
+        // Interpolate variables in the file path itself
+        const interpolatedPath = nunjucks.renderString(value, vars);
+        // Load the file content
+        const fileContent = await maybeLoadFromExternalFile(interpolatedPath);
+        // If the file content is a string, try to interpolate it as well
+        if (typeof fileContent === 'string' && !LATE_INTERPOLATION_PROPERTIES.has(propertyName)) {
+          try {
+            return nunjucks.renderString(fileContent, vars);
+          } catch {
+            // If interpolation fails, return the raw content
+            return fileContent;
+          }
+        }
+        return fileContent;
+      } catch (error) {
+        logger.debug(`Failed to interpolate file path ${value}: ${error}`);
+        return value;
+      }
+    }
+
+    // Regular string interpolation
+    try {
+      return nunjucks.renderString(value, vars);
+    } catch (error) {
+      logger.debug(`Failed to interpolate property ${propertyName}: ${error}`);
+      return value;
+    }
+  }
+
+  // Handle provider objects with string id
+  if (
+    propertyName === 'provider' &&
+    typeof value === 'object' &&
+    value &&
+    'id' in value &&
+    typeof value.id === 'string'
+  ) {
+    try {
+      const interpolatedId = nunjucks.renderString(value.id, vars);
+      return { ...value, id: interpolatedId };
+    } catch (error) {
+      logger.debug(`Failed to interpolate provider id ${value.id}: ${error}`);
+      return value;
+    }
+  }
+
+  // Handle arrays recursively
+  if (Array.isArray(value)) {
+    return Promise.all(value.map((item) => interpolatePropertyValue(item, vars, propertyName)));
+  }
+
+  // Handle objects recursively, excluding certain properties
+  if (typeof value === 'object' && value !== null) {
+    const result: Record<string, any> = {};
+    for (const [key, val] of Object.entries(value)) {
+      if (INTERPOLATION_EXCLUSIONS.has(key)) {
+        result[key] = val;
+      } else {
+        result[key] = await interpolatePropertyValue(val, vars, key);
+      }
+    }
+    return result;
+  }
+
+  return value;
+}
+
+/**
+ * Interpolates variables into assertion properties, handling file:// references
+ * and respecting late interpolation requirements.
+ *
+ * @param assertion - The assertion or assertion array to interpolate
+ * @param vars - Variables to interpolate into the assertion
+ * @returns The interpolated assertion(s)
+ */
+async function interpolateAssertionProperties(
+  assertion: Assertion | (Assertion | AssertionSet)[] | AssertionSet,
+  vars: Record<string, any>,
+): Promise<Assertion | (Assertion | AssertionSet)[] | AssertionSet> {
+  if (Array.isArray(assertion)) {
+    // Handle array of assertions
+    return Promise.all(
+      assertion.map(
+        (a) => interpolateAssertionProperties(a, vars) as Promise<Assertion | AssertionSet>,
+      ),
+    );
+  }
+
+  if (typeof assertion === 'object' && assertion !== null) {
+    // Handle single assertion object
+    const interpolated: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(assertion)) {
+      if (LATE_INTERPOLATION_PROPERTIES.has(key) || INTERPOLATION_EXCLUSIONS.has(key)) {
+        // Skip properties that should be interpolated late or excluded
+        interpolated[key] = value;
+      } else {
+        // Interpolate the property
+        interpolated[key] = await interpolatePropertyValue(value, vars, key);
+      }
+    }
+
+    // Handle nested assert-set assertions
+    if (
+      'type' in assertion &&
+      assertion.type === 'assert-set' &&
+      'assert' in assertion &&
+      assertion.assert
+    ) {
+      interpolated.assert = await interpolateAssertionProperties(assertion.assert, vars);
+    }
+
+    return interpolated as Assertion | AssertionSet;
+  }
+
+  return assertion;
+}
 
 /**
  * Manages progress bars for different execution phases of the evaluation
@@ -300,8 +464,6 @@ class ProgressBarManager {
     }
   }
 }
-
-export const DEFAULT_MAX_CONCURRENCY = 4;
 
 /**
  * Update token usage metrics with assertion token usage
@@ -1041,6 +1203,7 @@ class Evaluator {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.assert || [] : []),
         ...(testCase.assert || []),
       ];
+
       testCase.threshold =
         testCase.threshold ??
         (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.threshold : undefined);
@@ -1103,12 +1266,24 @@ class Evaluator {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
-                test: (() => {
+                test: await (async () => {
                   const baseTest = {
                     ...testCase,
                     vars,
                     options: testCase.options,
                   };
+
+                  // Interpolate assertion properties with the specific vars from var combinations
+                  if (testCase.assert) {
+                    // We know testCase.assert is an array from the invariant check above
+                    const interpolatedAssertions = await interpolateAssertionProperties(
+                      testCase.assert,
+                      vars || {},
+                    );
+                    // Since we pass an array, we get an array back (which can contain both Assertion and AssertionSet)
+                    baseTest.assert = interpolatedAssertions as (Assertion | AssertionSet)[];
+                  }
+
                   // Only add tracing metadata fields if tracing is actually enabled
                   const tracingEnabled =
                     testCase.metadata?.tracingEnabled === true ||
