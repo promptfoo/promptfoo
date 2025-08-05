@@ -1,0 +1,30 @@
+description: 'Azure Foundry Assistant Provider Example'
+
+providers:
+  - azure:foundry-assistant:asst_uRGMedGFDehLkjJJaq51J9GY:
+      projectUrl: 'https://faiza-m92xlckl-swedencentral.services.ai.azure.com/api/projects/faiza-m92xlckl-swedence-project'
+      config:
+        temperature: 0.7
+        max_tokens: 150
+        instructions: 'You are a helpful assistant that provides clear and concise answers.'
+
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  - vars:
+      question: 'Explain what photosynthesis is in simple terms.'
+    assert:
+      - type: contains
+        value: 'plants'
+      - type: contains
+        value: 'sunlight'
+
+  - vars:
+      question: 'What is 2 + 2?'
+    assert:
+      - type: contains
+        value: '4'

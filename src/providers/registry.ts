@@ -23,6 +23,7 @@ import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
 import { AzureEmbeddingProvider } from './azure/embedding';
+import { AzureFoundryAssistantProvider } from './azure/foundry-assistant';
 import { AzureModerationProvider } from './azure/moderation';
 import { BAMProvider } from './bam';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
@@ -33,10 +34,11 @@ import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere'
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
+import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
-import { GoogleLiveProvider } from './google/live';
 import { GoogleImageProvider } from './google/image';
+import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HeliconeGatewayProvider } from './helicone';
@@ -90,7 +92,6 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
-import { createGitHubProvider } from './github/index';
 
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -240,6 +241,9 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'assistant') {
         return new AzureAssistantProvider(deploymentName, providerOptions);
+      }
+      if (modelType === 'foundry-assistant') {
+        return new AzureFoundryAssistantProvider(deploymentName, providerOptions);
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
         return new AzureEmbeddingProvider(
