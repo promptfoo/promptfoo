@@ -14,11 +14,13 @@ import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
+  calcPromptfooRisk,
   categoryAliases,
   displayNameOverrides,
   type Plugin,
   riskCategories,
   Severity,
+  severityRiskScores,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
@@ -32,6 +34,18 @@ interface TestSuitesProps {
   plugins: RedteamPluginObject[];
 }
 
+const getRiskScoreColor = (riskScore: number): string => {
+  if (riskScore >= severityRiskScores[Severity.Critical]) {
+    return '#d32f2f'; // Red for critical
+  } else if (riskScore >= severityRiskScores[Severity.High]) {
+    return '#f57c00'; // Orange for high
+  } else if (riskScore >= severityRiskScores[Severity.Medium]) {
+    return '#fbc02d'; // Yellow for medium
+  } else {
+    return '#388e3c'; // Green for low
+  }
+};
+
 const getSubCategoryStats = (
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,
   plugins: RedteamPluginObject[],
@@ -39,6 +53,15 @@ const getSubCategoryStats = (
   const subCategoryStats = [];
   for (const subCategories of Object.values(riskCategories)) {
     for (const subCategory of subCategories) {
+      const attackSuccessRate = categoryStats[subCategory]
+        ? (
+            ((categoryStats[subCategory].total - categoryStats[subCategory].pass) /
+              categoryStats[subCategory].total) *
+            100
+          ).toFixed(1) + '%'
+        : 'N/A';
+
+      const severity = getRiskCategorySeverityMap(plugins)[subCategory as Plugin] || 'Unknown';
       subCategoryStats.push({
         pluginName: subCategory,
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
@@ -55,14 +78,15 @@ const getSubCategoryStats = (
               100
             ).toFixed(1) + '%'
           : 'N/A',
-        severity: getRiskCategorySeverityMap(plugins)[subCategory as Plugin] || 'Unknown',
-        attackSuccessRate: categoryStats[subCategory]
-          ? (
-              ((categoryStats[subCategory].total - categoryStats[subCategory].pass) /
-                categoryStats[subCategory].total) *
-              100
-            ).toFixed(1) + '%'
-          : 'N/A',
+        severity,
+        riskScore: calcPromptfooRisk(
+          severity,
+          categoryStats[subCategory]
+            ? categoryStats[subCategory].total - categoryStats[subCategory].pass
+            : 0,
+          categoryStats[subCategory]?.total,
+        ),
+        attackSuccessRate,
       });
     }
   }
@@ -95,10 +119,10 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
   };
 
   const [order, setOrder] = React.useState<'asc' | 'desc'>('desc');
-  const [orderBy, setOrderBy] = React.useState<'attackSuccessRate' | 'severity' | 'default'>(
-    'attackSuccessRate',
+  const [orderBy, setOrderBy] = React.useState<'attackSuccessRate' | 'severity' | 'riskScore'>(
+    'riskScore',
   );
-  const handleSort = (property: 'attackSuccessRate' | 'severity') => {
+  const handleSort = (property: 'attackSuccessRate' | 'severity' | 'riskScore') => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(property);
@@ -106,7 +130,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
 
   const exportToCSV = () => {
     // Format data for CSV
-    const headers = ['Type', 'Description', 'Attack Success Rate', 'Severity'];
+    const headers = ['Type', 'Risk Score', 'Severity', 'Attack Success Rate', 'Description'];
 
     // Get the sorted data as displayed in the table
     const sortedData = [...subCategoryStats].sort((a, b) => {
@@ -136,6 +160,8 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
         return order === 'asc'
           ? severityOrder[a.severity] - severityOrder[b.severity]
           : severityOrder[b.severity] - severityOrder[a.severity];
+      } else if (orderBy === 'riskScore') {
+        return order === 'asc' ? a.riskScore - b.riskScore : b.riskScore - a.riskScore;
       } else {
         // Default sort: severity desc tiebroken by pass rate asc, N/A passRate goes to the bottom
         const severityOrder = {
@@ -155,9 +181,10 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
     const csvData = sortedData.map((subCategory) => [
       displayNameOverrides[subCategory.pluginName as keyof typeof displayNameOverrides] ||
         subCategory.type,
-      subCategory.description,
-      subCategory.attackSuccessRate,
+      subCategory.riskScore,
       subCategory.severity,
+      subCategory.attackSuccessRate,
+      subCategory.description,
     ]);
 
     // Combine headers and data with proper escaping for CSV
@@ -210,14 +237,13 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
           <TableHead>
             <TableRow>
               <TableCell>Type</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell style={{ minWidth: '200px' }}>
+              <TableCell>
                 <TableSortLabel
-                  active={orderBy === 'attackSuccessRate'}
-                  direction={orderBy === 'attackSuccessRate' ? order : 'asc'}
-                  onClick={() => handleSort('attackSuccessRate')}
+                  active={orderBy === 'riskScore'}
+                  direction={orderBy === 'riskScore' ? order : 'asc'}
+                  onClick={() => handleSort('riskScore')}
                 >
-                  Attack Success Rate
+                  Risk Score
                 </TableSortLabel>
               </TableCell>
               <TableCell>
@@ -229,6 +255,16 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                   Severity
                 </TableSortLabel>
               </TableCell>
+              <TableCell style={{ minWidth: '200px' }}>
+                <TableSortLabel
+                  active={orderBy === 'attackSuccessRate'}
+                  direction={orderBy === 'attackSuccessRate' ? order : 'asc'}
+                  onClick={() => handleSort('attackSuccessRate')}
+                >
+                  Attack Success Rate
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>Description</TableCell>
               <TableCell style={{ minWidth: '275px' }} className="print-hide">
                 Actions
               </TableCell>
@@ -265,6 +301,8 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                   return order === 'asc'
                     ? severityOrder[a.severity] - severityOrder[b.severity]
                     : severityOrder[b.severity] - severityOrder[a.severity];
+                } else if (orderBy === 'riskScore') {
+                  return order === 'asc' ? a.riskScore - b.riskScore : b.riskScore - a.riskScore;
                 } else {
                   // Default sort: severity desc tiebroken by pass rate asc, N/A passRate goes to the bottom
                   const severityOrder = {
@@ -288,17 +326,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                 const isInCurrentPage =
                   index >= page * rowsPerPage && index < page * rowsPerPage + rowsPerPage;
                 const rowStyle = isInCurrentPage ? {} : { display: 'none' };
-                let passRateClass = '';
-                if (subCategory.attackSuccessRate !== 'N/A') {
-                  const passRate = Number.parseFloat(subCategory.attackSuccessRate);
-                  if (passRate >= 75) {
-                    passRateClass = 'asr-high';
-                  } else if (passRate >= 50) {
-                    passRateClass = 'asr-medium';
-                  } else {
-                    passRateClass = 'asr-low';
-                  }
-                }
+
                 return (
                   <TableRow key={index} style={rowStyle}>
                     <TableCell>
@@ -308,18 +336,57 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                         ] || subCategory.type}
                       </span>
                     </TableCell>
-                    <TableCell>{subCategory.description}</TableCell>
-                    <TableCell className={passRateClass}>
-                      <strong>{subCategory.attackSuccessRate}</strong>
+                    <TableCell>
+                      <Tooltip
+                        title={
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                              Risk Score Calculation
+                            </Typography>
+                            <Typography variant="caption" component="div">
+                              Risk Score = Base Severity + (Attack Success Rate × Escalation Factor)
+                            </Typography>
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="caption" component="div">
+                                • Base Severity: {subCategory.severity} (
+                                {severityRiskScores[subCategory.severity as Severity] || 'N/A'})
+                              </Typography>
+                              <Typography variant="caption" component="div">
+                                • Attack Success Rate: {subCategory.attackSuccessRate}
+                              </Typography>
+                              <Typography variant="caption" component="div">
+                                • Higher severity vulnerabilities escalate faster with successful
+                                attacks
+                              </Typography>
+                            </Box>
+                          </Box>
+                        }
+                        placement="top"
+                        arrow
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'help' }}>
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: '50%',
+                              backgroundColor: getRiskScoreColor(subCategory.riskScore),
+                            }}
+                          />
+                          {subCategory.riskScore}
+                        </Box>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell>{subCategory.severity}</TableCell>
+                    <TableCell>
+                      {subCategory.attackSuccessRate}
                       {subCategory.passRateWithFilter === subCategory.passRate ? null : (
                         <>
                           <br />({subCategory.passRateWithFilter} with mitigation)
                         </>
                       )}
                     </TableCell>
-                    <TableCell className={`vuln-${subCategory.severity.toLowerCase()}`}>
-                      {subCategory.severity}
-                    </TableCell>
+                    <TableCell>{subCategory.description}</TableCell>
                     <TableCell style={{ minWidth: 270 }} className="print-hide">
                       <Button
                         variant="contained"
