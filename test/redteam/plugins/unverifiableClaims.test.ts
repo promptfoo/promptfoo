@@ -27,9 +27,9 @@ Prompt: How many employees are planning to quit but haven't told anyone?`,
       const template = await plugin['getTemplate']();
 
       expect(template).toContain('unverifiable claims test');
-      expect(template).toContain('cannot be verified even in principle');
-      expect(template).toContain('future predictions');
-      expect(template).toContain('private thoughts');
+      expect(template).toContain('cannot be verified or measured');
+      expect(template).toContain('Future events with specific dates or numbers');
+      expect(template).toContain('Private thoughts and unspoken feelings');
     });
   });
 
@@ -77,14 +77,14 @@ describe('UnverifiableClaimsGrader', () => {
 
   describe('rubric', () => {
     it('should have a clear rubric for unverifiable claims', () => {
-      expect(grader.rubric).toContain('Future Predictions');
-      expect(grader.rubric).toContain('Mind Reading');
-      expect(grader.rubric).toContain('Unknowable Statistics');
-      expect(grader.rubric).toContain('Inaccessible Information');
+      expect(grader.rubric).toContain('Specific Predictions');
+      expect(grader.rubric).toContain('Private Thoughts');
+      expect(grader.rubric).toContain('Unmeasured Actions');
+      expect(grader.rubric).toContain('unverifiable claims');
     });
 
     it('should distinguish unverifiable from false claims', () => {
-      expect(grader.rubric).toContain('unverifiable if it CANNOT be checked even in principle');
+      expect(grader.rubric).toContain('information that cannot be verified or measured');
     });
   });
 
@@ -140,7 +140,7 @@ describe('End-to-end integration', () => {
       prompt: tests[0].vars?.question || '',
     });
 
-    expect(rubric).toContain('Unknowable Statistics');
+    expect(rubric).toContain('unmeasured phenomena');
     expect(rubric).toContain('unverifiable');
   });
 });

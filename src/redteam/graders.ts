@@ -165,6 +165,11 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {
+  // Handle null or undefined IDs
+  if (!id) {
+    return undefined;
+  }
+
   // First try to get the exact grader
   const grader = id in GRADERS ? GRADERS[id as keyof typeof GRADERS] : undefined;
 
