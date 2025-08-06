@@ -247,13 +247,13 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
-    
+
     // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
-    
+
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
@@ -265,10 +265,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const allTools = [
-      ...mcpTools,
-      ...(config.tools ? loadFile(config.tools, context?.vars) : []),
-    ];
+    const allTools = [...mcpTools, ...(config.tools ? loadFile(config.tools, context?.vars) : [])];
     // --- End MCP tool injection logic ---
 
     const body: Record<string, any> = {

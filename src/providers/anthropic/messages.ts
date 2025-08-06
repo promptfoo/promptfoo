@@ -114,9 +114,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
-      ...(typeof config?.extra_body === 'object' && config.extra_body
-        ? config.extra_body
-        : {}),
+      ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);

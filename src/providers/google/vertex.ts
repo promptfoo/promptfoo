@@ -277,13 +277,13 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (this.initializationPromise) {
       await this.initializationPromise;
     }
-    
+
     // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
-    
+
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
@@ -292,10 +292,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     );
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const allTools = [
-      ...mcpTools,
-      ...(config.tools ? loadFile(config.tools, context?.vars) : []),
-    ];
+    const allTools = [...mcpTools, ...(config.tools ? loadFile(config.tools, context?.vars) : [])];
     // --- End MCP tool injection logic ---
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
@@ -833,7 +830,11 @@ export class VertexChatProvider extends VertexGenericProvider {
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string, config: any): Promise<any> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    config: any,
+  ): Promise<any> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
