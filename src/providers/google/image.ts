@@ -1,9 +1,11 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { getGoogleClient } from './util';
-import { sleep } from '../../util/time';
+
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
@@ -59,6 +61,33 @@ export class GoogleImageProvider implements ApiProvider {
     return `[Google Image Generation Provider ${this.modelName}]`;
   }
 
+  /**
+   * Helper method to get Google client with credentials support
+   * Handles file:// paths by loading the credentials from the specified file
+   */
+  private async getClientWithCredentials() {
+    let credentials = this.config.credentials;
+
+    if (credentials && credentials.startsWith('file://')) {
+      try {
+        credentials = maybeLoadFromExternalFile(credentials) as string;
+      } catch (error) {
+        throw new Error(`Failed to load credentials from file: ${error}`);
+      }
+    }
+
+    return await getGoogleClient({ credentials });
+  }
+
+  private async getProjectId() {
+    return (
+      (await this.getClientWithCredentials()).projectId ||
+      this.config.projectId ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      this.env?.GOOGLE_PROJECT_ID
+    );
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!prompt) {
       return {
@@ -98,7 +127,8 @@ export class GoogleImageProvider implements ApiProvider {
       'us-central1';
 
     try {
-      const { client, projectId } = await getGoogleClient();
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
       if (!projectId) {
         return {
           error:
