@@ -38,8 +38,10 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { isFoundationModelProvider } from '@promptfoo/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
+import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
@@ -51,6 +53,9 @@ import type { Job } from '@promptfoo/types';
 
 interface ReviewProps {
   onBack?: () => void;
+  navigateToPlugins: () => void;
+  navigateToStrategies: () => void;
+  navigateToPurpose: () => void;
 }
 
 interface PolicyPlugin {
@@ -65,7 +70,12 @@ interface JobStatusResponse {
   jobId?: string;
 }
 
-export default function Review({ onBack }: ReviewProps) {
+export default function Review({
+  onBack,
+  navigateToPlugins,
+  navigateToStrategies,
+  navigateToPurpose,
+}: ReviewProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
@@ -425,6 +435,17 @@ export default function Review({ onBack }: ReviewProps) {
                   />
                 ))}
               </Box>
+              {pluginSummary.length === 0 && (
+                <>
+                  <Alert severity="warning" sx={{ mt: 2 }}>
+                    You haven't selected any plugins. Plugins are the vulnerabilities that the red
+                    team will test for. Go to the Plugins section and add a plugin.{' '}
+                  </Alert>
+                  <Button onClick={navigateToPlugins} sx={{ mt: 2 }} variant="contained">
+                    Add a plugin
+                  </Button>
+                </>
+              )}
             </Paper>
           </Grid>
 
@@ -455,6 +476,19 @@ export default function Review({ onBack }: ReviewProps) {
                   />
                 ))}
               </Box>
+              {(strategySummary.length === 0 ||
+                (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
+                <>
+                  <Alert severity="warning" sx={{ mt: 2 }}>
+                    The basic strategy is great for getting started however to get full coverage we
+                    recommend adding more strategies. Go to the Strategies section and add a
+                    strategy.{' '}
+                  </Alert>
+                  <Button onClick={navigateToStrategies} sx={{ mt: 2 }} variant="contained">
+                    Add more strategies
+                  </Button>
+                </>
+              )}
             </Paper>
           </Grid>
 
@@ -602,6 +636,26 @@ export default function Review({ onBack }: ReviewProps) {
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={12}>
                   <Typography variant="subtitle2">Purpose</Typography>
+                  {(!config.purpose?.trim() || config.purpose.length < 100) &&
+                  !isFoundationModelProvider(config.target.id) ? (
+                    <Box sx={{ mb: 2 }}>
+                      <Alert severity="warning">
+                        Application details are required to generate a high quality red team. Go to
+                        the Application Details section and add a purpose.{' '}
+                        <Link
+                          style={{ textDecoration: 'underline' }}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
+                        >
+                          Learn more about red team best practices.
+                        </Link>
+                      </Alert>
+                      <Button onClick={navigateToPurpose} sx={{ mt: 2 }} variant="contained">
+                        Add application details
+                      </Button>
+                    </Box>
+                  ) : null}
                   <Typography
                     variant="body2"
                     onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
