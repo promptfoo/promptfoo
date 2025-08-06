@@ -65,29 +65,37 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       return;
     }
 
+    // Optional config plugins - only validate if config is provided but invalid
     if (
       pluginId === 'bfla' &&
-      (!pluginConfig.targetIdentifiers || pluginConfig.targetIdentifiers.length === 0)
+      pluginConfig.targetIdentifiers &&
+      (!Array.isArray(pluginConfig.targetIdentifiers) ||
+        pluginConfig.targetIdentifiers.length === 0)
     ) {
       res.status(400).json({
-        error: 'BFLA plugin requires targetIdentifiers configuration',
+        error: 'BFLA plugin targetIdentifiers must be a non-empty array when provided',
       });
       return;
     }
 
     if (
       pluginId === 'bola' &&
-      (!pluginConfig.targetSystems || pluginConfig.targetSystems.length === 0)
+      pluginConfig.targetSystems &&
+      (!Array.isArray(pluginConfig.targetSystems) || pluginConfig.targetSystems.length === 0)
     ) {
       res.status(400).json({
-        error: 'BOLA plugin requires targetSystems configuration',
+        error: 'BOLA plugin targetSystems must be a non-empty array when provided',
       });
       return;
     }
 
-    if (pluginId === 'ssrf' && (!pluginConfig.targetUrls || pluginConfig.targetUrls.length === 0)) {
+    if (
+      pluginId === 'ssrf' &&
+      pluginConfig.targetUrls &&
+      (!Array.isArray(pluginConfig.targetUrls) || pluginConfig.targetUrls.length === 0)
+    ) {
       res.status(400).json({
-        error: 'SSRF plugin requires targetUrls configuration',
+        error: 'SSRF plugin targetUrls must be a non-empty array when provided',
       });
       return;
     }

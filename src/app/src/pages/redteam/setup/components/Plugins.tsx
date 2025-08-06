@@ -413,6 +413,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isTestCaseConfigValid = useCallback((plugin: Plugin, config: any) => {
     if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      // For plugins that don't require config or only support optional config, always allow generation
       return true;
     }
     if (!config) {
@@ -424,15 +425,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     if (plugin === 'prompt-extraction') {
       return config.systemPrompt && config.systemPrompt.trim() !== '';
     }
-    if (plugin === 'bfla') {
-      return Array.isArray(config.targetIdentifiers) && config.targetIdentifiers.length > 0;
-    }
-    if (plugin === 'bola') {
-      return Array.isArray(config.targetSystems) && config.targetSystems.length > 0;
-    }
-    if (plugin === 'ssrf') {
-      return Array.isArray(config.targetUrls) && config.targetUrls.length > 0;
-    }
+    // Note: bfla, bola, ssrf are not in PLUGINS_REQUIRING_CONFIG, so they will return true above
     return true;
   }, []);
 
@@ -498,19 +491,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   };
 
   const handleGenerateTestCase = async (plugin: Plugin) => {
-    const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
+    const supportsConfig = PLUGINS_SUPPORTING_CONFIG.includes(plugin);
 
     setGeneratingPlugin(plugin);
     setGeneratedTestCase(null);
     setGeneratingTestCase(false);
 
-    if (requiresConfig) {
+    if (supportsConfig) {
       // Initialize temp config with existing plugin config if available
       setTempTestCaseConfig(pluginConfig[plugin] || {});
       setTestCaseDialogMode('config');
       setTestCaseDialogOpen(true);
     } else {
-      // Directly generate test case for plugins that don't require config
+      // Directly generate test case for plugins that don't support config
       await generateTestCaseWithConfig(plugin, {});
     }
   };
@@ -912,6 +905,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                             borderRadius: 1,
                             color: 'text.secondary',
                             fontSize: '0.7rem',
+                            textAlign: 'center',
                           }}
                         >
                           Recently Used
@@ -1088,16 +1082,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
               <DialogContent>
                 {testCaseDialogMode === 'config' &&
                 generatingPlugin &&
-                PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin) ? (
+                PLUGINS_SUPPORTING_CONFIG.includes(generatingPlugin) ? (
                   <Box sx={{ pt: 2 }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                      This plugin requires configuration to generate relevant test cases.
+                      {PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin)
+                        ? 'This plugin requires configuration to generate relevant test cases.'
+                        : 'This plugin supports configuration to generate more targeted test cases. Configuration is optional.'}
                     </Typography>
 
                     {/* Render configuration fields based on plugin */}
                     {generatingPlugin === 'indirect-prompt-injection' && (
                       <TextField
                         fullWidth
+                        required
                         label="Indirect Injection Variable"
                         value={tempTestCaseConfig.indirectInjectionVar || ''}
                         onChange={(e) =>
@@ -1115,6 +1112,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     {generatingPlugin === 'prompt-extraction' && (
                       <TextField
                         fullWidth
+                        required
                         label="System Prompt"
                         multiline
                         rows={4}
@@ -1134,7 +1132,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     {generatingPlugin === 'bfla' && (
                       <TextField
                         fullWidth
-                        label="Target Identifiers"
+                        label="Target Identifiers (Optional)"
                         multiline
                         rows={3}
                         value={
@@ -1150,7 +1148,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                           });
                         }}
                         placeholder="Enter function names, API endpoints, or identifiers (one per line)"
-                        helperText="BFLA tests whether users can access functions they shouldn't"
+                        helperText="BFLA tests whether users can access functions they shouldn't. Leave empty for general testing."
                         sx={{ mb: 2 }}
                       />
                     )}
@@ -1158,7 +1156,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     {generatingPlugin === 'bola' && (
                       <TextField
                         fullWidth
-                        label="Target Systems"
+                        label="Target Systems (Optional)"
                         multiline
                         rows={3}
                         value={
@@ -1171,7 +1169,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                           setTempTestCaseConfig({ ...tempTestCaseConfig, targetSystems: values });
                         }}
                         placeholder="Enter system names, object IDs, or resource identifiers (one per line)"
-                        helperText="BOLA tests whether users can access objects they shouldn't own"
+                        helperText="BOLA tests whether users can access objects they shouldn't own. Leave empty for general testing."
                         sx={{ mb: 2 }}
                       />
                     )}
@@ -1179,7 +1177,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     {generatingPlugin === 'ssrf' && (
                       <TextField
                         fullWidth
-                        label="Target URLs"
+                        label="Target URLs (Optional)"
                         multiline
                         rows={3}
                         value={
@@ -1192,7 +1190,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                           setTempTestCaseConfig({ ...tempTestCaseConfig, targetUrls: values });
                         }}
                         placeholder="Enter URLs or endpoints that should not be accessible (one per line)"
-                        helperText="SSRF tests whether your application can be tricked into making requests to unintended destinations"
+                        helperText="SSRF tests whether your application can be tricked into making requests to unintended destinations. Leave empty for general testing."
                         sx={{ mb: 2 }}
                       />
                     )}
@@ -1252,29 +1250,43 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
                 {testCaseDialogMode === 'config' &&
                   generatingPlugin &&
-                  PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin) && (
-                    <Button
-                      variant="contained"
-                      onClick={() => {
-                        if (generatingPlugin) {
-                          generateTestCaseWithConfig(generatingPlugin, tempTestCaseConfig);
+                  PLUGINS_SUPPORTING_CONFIG.includes(generatingPlugin) && (
+                    <>
+                      {/* Show Skip button for optional config plugins */}
+                      {!PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin) && (
+                        <Button
+                          onClick={() => {
+                            if (generatingPlugin) {
+                              generateTestCaseWithConfig(generatingPlugin, {});
+                            }
+                          }}
+                          disabled={generatingTestCase}
+                        >
+                          Skip Configuration
+                        </Button>
+                      )}
+
+                      <Button
+                        variant="contained"
+                        onClick={() => {
+                          if (generatingPlugin) {
+                            generateTestCaseWithConfig(generatingPlugin, tempTestCaseConfig);
+                          }
+                        }}
+                        disabled={
+                          generatingTestCase ||
+                          !isTestCaseConfigValid(generatingPlugin, tempTestCaseConfig)
                         }
-                      }}
-                      disabled={
-                        generatingTestCase ||
-                        !isTestCaseConfigValid(generatingPlugin, tempTestCaseConfig)
-                      }
-                    >
-                      Generate Test Case
-                    </Button>
+                      >
+                        Generate Test Case
+                      </Button>
+                    </>
                   )}
 
                 {testCaseDialogMode === 'result' && (
                   <Button
                     variant="contained"
-                    startIcon={
-                      generatingTestCase ? <CircularProgress size={16} /> : <RefreshIcon />
-                    }
+                    startIcon={<RefreshIcon />}
                     onClick={() => {
                       if (generatingPlugin) {
                         const configToUse = PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin)
