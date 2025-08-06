@@ -33,6 +33,65 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     const purpose = config?.applicationDefinition?.purpose || 'general AI assistant';
     const injectVar = config?.injectVar || 'query';
 
+    // Extract plugin-specific configuration
+    const pluginConfig = {
+      language: config?.language || 'en',
+      // Pass through plugin-specific config fields
+      ...(config?.indirectInjectionVar && { indirectInjectionVar: config.indirectInjectionVar }),
+      ...(config?.systemPrompt && { systemPrompt: config.systemPrompt }),
+      ...(config?.targetIdentifiers && { targetIdentifiers: config.targetIdentifiers }),
+      ...(config?.targetSystems && { targetSystems: config.targetSystems }),
+      ...(config?.targetUrls && { targetUrls: config.targetUrls }),
+      // Pass through any other config fields that might be present
+      ...Object.fromEntries(
+        Object.entries(config || {}).filter(
+          ([key]) => !['applicationDefinition', 'injectVar', 'language', 'provider'].includes(key),
+        ),
+      ),
+    };
+
+    // Validate required configuration for specific plugins
+    if (pluginId === 'indirect-prompt-injection' && !pluginConfig.indirectInjectionVar) {
+      res.status(400).json({
+        error: 'Indirect Prompt Injection plugin requires indirectInjectionVar configuration',
+      });
+      return;
+    }
+
+    if (pluginId === 'prompt-extraction' && !pluginConfig.systemPrompt) {
+      res.status(400).json({
+        error: 'Prompt Extraction plugin requires systemPrompt configuration',
+      });
+      return;
+    }
+
+    if (
+      pluginId === 'bfla' &&
+      (!pluginConfig.targetIdentifiers || pluginConfig.targetIdentifiers.length === 0)
+    ) {
+      res.status(400).json({
+        error: 'BFLA plugin requires targetIdentifiers configuration',
+      });
+      return;
+    }
+
+    if (
+      pluginId === 'bola' &&
+      (!pluginConfig.targetSystems || pluginConfig.targetSystems.length === 0)
+    ) {
+      res.status(400).json({
+        error: 'BOLA plugin requires targetSystems configuration',
+      });
+      return;
+    }
+
+    if (pluginId === 'ssrf' && (!pluginConfig.targetUrls || pluginConfig.targetUrls.length === 0)) {
+      res.status(400).json({
+        error: 'SSRF plugin requires targetUrls configuration',
+      });
+      return;
+    }
+
     // Get the red team provider
     const redteamProvider = await redteamProviderManager.getProvider({
       provider: config?.provider || REDTEAM_MODEL,
@@ -45,7 +104,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       n: 1, // Generate only one test case
       delayMs: 0,
       config: {
-        language: config?.language || 'en',
+        // Random number to avoid caching
+        __random: Math.random(),
+        ...pluginConfig,
       },
     });
 

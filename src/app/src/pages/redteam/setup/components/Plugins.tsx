@@ -121,6 +121,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     metadata?: any;
   } | null>(null);
   const [generatingTestCase, setGeneratingTestCase] = useState(false);
+  // Add new state for dialog mode and temporary config
+  const [testCaseDialogMode, setTestCaseDialogMode] = useState<'config' | 'result'>('config');
+  const [tempTestCaseConfig, setTempTestCaseConfig] = useState<any>({});
 
   // Category filter options based on riskCategories
   const categoryFilters = Object.keys(riskCategories).map((category) => ({
@@ -408,6 +411,31 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return true;
   }, [selectedPlugins, pluginConfig]);
 
+  const isTestCaseConfigValid = useCallback((plugin: Plugin, config: any) => {
+    if (!PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      return true;
+    }
+    if (!config) {
+      return false;
+    }
+    if (plugin === 'indirect-prompt-injection') {
+      return config.indirectInjectionVar && config.indirectInjectionVar.trim() !== '';
+    }
+    if (plugin === 'prompt-extraction') {
+      return config.systemPrompt && config.systemPrompt.trim() !== '';
+    }
+    if (plugin === 'bfla') {
+      return Array.isArray(config.targetIdentifiers) && config.targetIdentifiers.length > 0;
+    }
+    if (plugin === 'bola') {
+      return Array.isArray(config.targetSystems) && config.targetSystems.length > 0;
+    }
+    if (plugin === 'ssrf') {
+      return Array.isArray(config.targetUrls) && config.targetUrls.length > 0;
+    }
+    return true;
+  }, []);
+
   const hasAnyPluginsConfigured = useCallback(() => {
     // Check regular plugins
     if (selectedPlugins.size > 0) {
@@ -470,8 +498,26 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   };
 
   const handleGenerateTestCase = async (plugin: Plugin) => {
-    setGeneratingTestCase(true);
+    const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
+
     setGeneratingPlugin(plugin);
+    setGeneratedTestCase(null);
+    setGeneratingTestCase(false);
+
+    if (requiresConfig) {
+      // Initialize temp config with existing plugin config if available
+      setTempTestCaseConfig(pluginConfig[plugin] || {});
+      setTestCaseDialogMode('config');
+      setTestCaseDialogOpen(true);
+    } else {
+      // Directly generate test case for plugins that don't require config
+      await generateTestCaseWithConfig(plugin, {});
+    }
+  };
+
+  const generateTestCaseWithConfig = async (plugin: Plugin, configForGeneration: any) => {
+    setGeneratingTestCase(true);
+    setTestCaseDialogMode('result');
 
     try {
       recordEvent('feature_used', {
@@ -490,6 +536,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           pluginId: plugin,
           config: {
             applicationDefinition: config.applicationDefinition,
+            ...configForGeneration,
           },
         }),
       });
@@ -505,13 +552,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         context: data.context,
         metadata: data.metadata,
       });
-      setTestCaseDialogOpen(true);
+
+      if (!testCaseDialogOpen) {
+        setTestCaseDialogOpen(true);
+      }
     } catch (error) {
       console.error('Failed to generate test case:', error);
       toast.showToast(
         error instanceof Error ? error.message : 'Failed to generate test case',
         'error',
       );
+      // Close dialog on error
+      setTestCaseDialogOpen(false);
+      setGeneratingPlugin(null);
     } finally {
       setGeneratingTestCase(false);
     }
@@ -1018,19 +1071,133 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 setTestCaseDialogOpen(false);
                 setGeneratedTestCase(null);
                 setGeneratingPlugin(null);
+                setTestCaseDialogMode('config');
+                setTempTestCaseConfig({});
               }}
               maxWidth="md"
               fullWidth
             >
               <DialogTitle>
-                Test Case Sample -{' '}
+                {testCaseDialogMode === 'config' ? 'Configure Test Generation' : 'Test Case Sample'}{' '}
+                -{' '}
                 {generatingPlugin &&
                   (displayNameOverrides[generatingPlugin] ||
                     categoryAliases[generatingPlugin] ||
                     generatingPlugin)}
               </DialogTitle>
               <DialogContent>
-                {generatingTestCase ? (
+                {testCaseDialogMode === 'config' &&
+                generatingPlugin &&
+                PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin) ? (
+                  <Box sx={{ pt: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      This plugin requires configuration to generate relevant test cases.
+                    </Typography>
+
+                    {/* Render configuration fields based on plugin */}
+                    {generatingPlugin === 'indirect-prompt-injection' && (
+                      <TextField
+                        fullWidth
+                        label="Indirect Injection Variable"
+                        value={tempTestCaseConfig.indirectInjectionVar || ''}
+                        onChange={(e) =>
+                          setTempTestCaseConfig({
+                            ...tempTestCaseConfig,
+                            indirectInjectionVar: e.target.value,
+                          })
+                        }
+                        placeholder="e.g., name, userContent, document"
+                        helperText="Specify the variable name in your prompt that contains untrusted data"
+                        sx={{ mb: 2 }}
+                      />
+                    )}
+
+                    {generatingPlugin === 'prompt-extraction' && (
+                      <TextField
+                        fullWidth
+                        label="System Prompt"
+                        multiline
+                        rows={4}
+                        value={tempTestCaseConfig.systemPrompt || ''}
+                        onChange={(e) =>
+                          setTempTestCaseConfig({
+                            ...tempTestCaseConfig,
+                            systemPrompt: e.target.value,
+                          })
+                        }
+                        placeholder="Enter your actual system prompt here..."
+                        helperText="Provide your system prompt so the plugin can test if it can be extracted"
+                        sx={{ mb: 2 }}
+                      />
+                    )}
+
+                    {generatingPlugin === 'bfla' && (
+                      <TextField
+                        fullWidth
+                        label="Target Identifiers"
+                        multiline
+                        rows={3}
+                        value={
+                          Array.isArray(tempTestCaseConfig.targetIdentifiers)
+                            ? tempTestCaseConfig.targetIdentifiers.join('\n')
+                            : tempTestCaseConfig.targetIdentifiers || ''
+                        }
+                        onChange={(e) => {
+                          const values = e.target.value.split('\n').filter((v) => v.trim() !== '');
+                          setTempTestCaseConfig({
+                            ...tempTestCaseConfig,
+                            targetIdentifiers: values,
+                          });
+                        }}
+                        placeholder="Enter function names, API endpoints, or identifiers (one per line)"
+                        helperText="BFLA tests whether users can access functions they shouldn't"
+                        sx={{ mb: 2 }}
+                      />
+                    )}
+
+                    {generatingPlugin === 'bola' && (
+                      <TextField
+                        fullWidth
+                        label="Target Systems"
+                        multiline
+                        rows={3}
+                        value={
+                          Array.isArray(tempTestCaseConfig.targetSystems)
+                            ? tempTestCaseConfig.targetSystems.join('\n')
+                            : tempTestCaseConfig.targetSystems || ''
+                        }
+                        onChange={(e) => {
+                          const values = e.target.value.split('\n').filter((v) => v.trim() !== '');
+                          setTempTestCaseConfig({ ...tempTestCaseConfig, targetSystems: values });
+                        }}
+                        placeholder="Enter system names, object IDs, or resource identifiers (one per line)"
+                        helperText="BOLA tests whether users can access objects they shouldn't own"
+                        sx={{ mb: 2 }}
+                      />
+                    )}
+
+                    {generatingPlugin === 'ssrf' && (
+                      <TextField
+                        fullWidth
+                        label="Target URLs"
+                        multiline
+                        rows={3}
+                        value={
+                          Array.isArray(tempTestCaseConfig.targetUrls)
+                            ? tempTestCaseConfig.targetUrls.join('\n')
+                            : tempTestCaseConfig.targetUrls || ''
+                        }
+                        onChange={(e) => {
+                          const values = e.target.value.split('\n').filter((v) => v.trim() !== '');
+                          setTempTestCaseConfig({ ...tempTestCaseConfig, targetUrls: values });
+                        }}
+                        placeholder="Enter URLs or endpoints that should not be accessible (one per line)"
+                        helperText="SSRF tests whether your application can be tricked into making requests to unintended destinations"
+                        sx={{ mb: 2 }}
+                      />
+                    )}
+                  </Box>
+                ) : generatingTestCase ? (
                   <Box
                     sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}
                   >
@@ -1076,22 +1243,51 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     setTestCaseDialogOpen(false);
                     setGeneratedTestCase(null);
                     setGeneratingPlugin(null);
+                    setTestCaseDialogMode('config');
+                    setTempTestCaseConfig({});
                   }}
                 >
-                  Close
+                  {testCaseDialogMode === 'config' ? 'Cancel' : 'Close'}
                 </Button>
-                <Button
-                  variant="contained"
-                  startIcon={generatingTestCase ? <CircularProgress size={16} /> : <RefreshIcon />}
-                  onClick={() => {
-                    if (generatingPlugin) {
-                      handleGenerateTestCase(generatingPlugin);
+
+                {testCaseDialogMode === 'config' &&
+                  generatingPlugin &&
+                  PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin) && (
+                    <Button
+                      variant="contained"
+                      onClick={() => {
+                        if (generatingPlugin) {
+                          generateTestCaseWithConfig(generatingPlugin, tempTestCaseConfig);
+                        }
+                      }}
+                      disabled={
+                        generatingTestCase ||
+                        !isTestCaseConfigValid(generatingPlugin, tempTestCaseConfig)
+                      }
+                    >
+                      Generate Test Case
+                    </Button>
+                  )}
+
+                {testCaseDialogMode === 'result' && (
+                  <Button
+                    variant="contained"
+                    startIcon={
+                      generatingTestCase ? <CircularProgress size={16} /> : <RefreshIcon />
                     }
-                  }}
-                  disabled={!generatingPlugin || generatingTestCase}
-                >
-                  Generate Another
-                </Button>
+                    onClick={() => {
+                      if (generatingPlugin) {
+                        const configToUse = PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin)
+                          ? tempTestCaseConfig
+                          : {};
+                        generateTestCaseWithConfig(generatingPlugin, configToUse);
+                      }
+                    }}
+                    disabled={!generatingPlugin || generatingTestCase}
+                  >
+                    Generate Another
+                  </Button>
+                )}
               </DialogActions>
             </Dialog>
           </Box>
