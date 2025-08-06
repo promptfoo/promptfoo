@@ -63,7 +63,7 @@ describe('GPT-OSS Models in OpenAI Provider', () => {
       const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: { apiKey: 'test-key' },
       });
-      
+
       expect(gptOssProvider['supportsTemperature']()).toBe(true);
       expect(o1Provider['supportsTemperature']()).toBe(false);
     });
@@ -106,7 +106,7 @@ describe('GPT-OSS Models in OpenAI Provider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Test response with high reasoning');
-      
+
       // Check that the API was called with reasoning_effort
       const apiCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
       const body = JSON.parse((apiCall[1] as any).body);
@@ -152,7 +152,7 @@ describe('GPT-OSS Models in OpenAI Provider', () => {
 
       const apiCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
       const body = JSON.parse((apiCall[1] as any).body);
-      
+
       // gpt-oss should support both temperature and reasoning_effort
       expect(body.temperature).toBe(0.7);
       expect(body.reasoning_effort).toBe('medium');
@@ -197,7 +197,7 @@ describe('GPT-OSS Models in OpenAI Provider', () => {
 
       const apiCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
       const body = JSON.parse((apiCall[1] as any).body);
-      
+
       expect(body.max_completion_tokens).toBe(4096);
       expect(body.max_tokens).toBeUndefined();
     });
@@ -252,10 +252,10 @@ describe('GPT-OSS Models in OpenAI Provider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Reasoning response from gpt-oss-120b');
-      
+
       const apiCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
       const body = JSON.parse((apiCall[1] as any).body);
-      
+
       // Verify Responses API specific fields
       expect(body.model).toBe('gpt-oss-120b');
       expect(body.reasoning_effort).toBe('low');
@@ -292,7 +292,7 @@ describe('GPT-OSS Models in OpenAI Provider', () => {
       });
 
       const reasoningEfforts: Array<'low' | 'medium' | 'high'> = ['low', 'medium', 'high'];
-      
+
       for (const effort of reasoningEfforts) {
         jest.clearAllMocks();
         jest.mocked(cache.fetchWithCache).mockResolvedValue({
@@ -313,7 +313,7 @@ describe('GPT-OSS Models in OpenAI Provider', () => {
 
         const apiCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
         const body = JSON.parse((apiCall[1] as any).body);
-        
+
         expect(body.reasoning_effort).toBe(effort);
       }
     });
@@ -390,7 +390,7 @@ describe('GPT-OSS Models in OpenAI Provider', () => {
 
       const apiCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
       const url = apiCall[0] as string;
-      
+
       expect(url).toContain('custom.api.endpoint');
     });
 
