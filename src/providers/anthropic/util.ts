@@ -8,7 +8,6 @@ export const ANTHROPIC_MODELS = [
   // Claude 4 models - Latest generation
   ...[
     'claude-opus-4-1-20250805',
-    'claude-opus-4-1-latest',
     'claude-opus-4-20250514',
     'claude-opus-4-0',
     'claude-opus-4-latest',
