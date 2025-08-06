@@ -1,5 +1,7 @@
 ---
 sidebar_label: Google Vertex
+title: Google Vertex AI Provider
+description: Use Google Vertex AI models including Gemini, Claude, Llama, and specialized models for text, code, and embeddings in your evals
 ---
 
 # Google Vertex
