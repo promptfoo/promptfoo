@@ -1410,6 +1410,36 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     </Box>
                   </Box>
                 ) : null}
+
+                {/* Documentation link */}
+                {generatingPlugin && hasSpecificPluginDocumentation(generatingPlugin) && (
+                  <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                    <Link
+                      href={getPluginDocumentationUrl(generatingPlugin)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 0.5,
+                        fontSize: '0.875rem',
+                        textDecoration: 'none',
+                        '&:hover': {
+                          textDecoration: 'underline',
+                        },
+                      }}
+                    >
+                      Learn more about the{' '}
+                      {displayNameOverrides[generatingPlugin] ||
+                        categoryAliases[generatingPlugin] ||
+                        generatingPlugin}{' '}
+                      plugin
+                      <Box component="span" sx={{ fontSize: '0.75rem' }}>
+                        ↗
+                      </Box>
+                    </Link>
+                  </Box>
+                )}
               </DialogContent>
               <DialogActions>
                 <Button
