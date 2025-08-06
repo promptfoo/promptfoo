@@ -218,6 +218,7 @@ describe('Anthropic utilities', () => {
                 cited_text: 'The sky is blue.',
                 document_index: 0,
                 document_title: 'Nature Facts',
+                file_id: null,
                 start_char_index: 0,
                 end_char_index: 15,
               },
