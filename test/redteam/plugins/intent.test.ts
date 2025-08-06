@@ -34,7 +34,12 @@ jest.mock('glob', () => ({
   globSync: jest.fn(),
 }));
 
-jest.mock('better-sqlite3');
+jest.mock('@libsql/client', () => ({
+  createClient: jest.fn().mockReturnValue({
+    execute: jest.fn(),
+    close: jest.fn(),
+  }),
+}));
 
 describe('IntentPlugin', () => {
   const mockProvider: ApiProvider = {
