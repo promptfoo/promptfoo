@@ -46,6 +46,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3-deep-research-2025-06-26',
     'o4-mini-deep-research',
     'o4-mini-deep-research-2025-06-26',
+    // GPT-OSS open-weight models
+    'gpt-oss-120b',
+    'gpt-oss-20b',
   ];
 
   config: OpenAiCompletionOptions;
@@ -63,14 +66,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
+      this.modelName.startsWith('gpt-oss') ||
       this.modelName === 'codex-mini-latest'
     );
   }
 
   protected supportsTemperature(): boolean {
     // OpenAI's o1 and o3 models don't support temperature but some 3rd
-    // party reasoning models do.
-    return !this.isReasoningModel();
+    // party reasoning models do. gpt-oss models support temperature.
+    return !this.isReasoningModel() || this.modelName.startsWith('gpt-oss');
   }
 
   getOpenAiBody(
@@ -182,12 +186,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    // Handle reasoning_effort and reasoning parameters for o-series models
+    // Handle reasoning_effort and reasoning parameters for reasoning models
     if (
       config.reasoning_effort &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.startsWith('gpt-oss'))
     ) {
       body.reasoning_effort = config.reasoning_effort;
     }
