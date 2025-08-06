@@ -3,9 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
@@ -490,13 +490,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           pluginId: plugin,
           config: {
             applicationDefinition: config.applicationDefinition,
-            injectVar: 'query',
-            language: 'en',
-            modifiers: {},
           },
-          // Add timestamp to ensure unique requests and bypass caching
-          timestamp: Date.now(),
-          requestId: Math.random().toString(36).substring(7),
         }),
       });
 
@@ -836,7 +830,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         {generatingTestCase && generatingPlugin === plugin ? (
                           <CircularProgress size={16} />
                         ) : (
-                          <PlayArrowIcon fontSize="small" />
+                          <MagicWandIcon fontSize="small" />
                         )}
                       </IconButton>
                     </Tooltip>
