@@ -84,7 +84,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = {
+    const config: AnthropicMessageOptions = {
       ...this.config,
       ...context?.prompt?.config,
     };

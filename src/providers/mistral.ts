@@ -401,15 +401,9 @@ export class MistralEmbeddingProvider implements ApiProvider {
     return apiKeyCandidate;
   }
 
-  async callApi(text: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(text: string): Promise<ProviderResponse> {
     try {
-      // Merge configs from the provider and the prompt
-      const config: MistralChatCompletionOptions = {
-        ...this.config,
-        ...context?.prompt?.config,
-      };
-      
-      const embeddingResponse = await this.callEmbeddingApi(text, config);
+      const embeddingResponse = await this.callEmbeddingApi(text);
       return {
         output: JSON.stringify(embeddingResponse.embedding),
         tokenUsage: embeddingResponse.tokenUsage,
