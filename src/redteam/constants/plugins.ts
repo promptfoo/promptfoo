@@ -282,6 +282,7 @@ export const ADDITIONAL_PLUGINS = [
   'system-prompt-override',
   'tool-discovery',
   'unsafebench',
+  'unverifiable-claims',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
