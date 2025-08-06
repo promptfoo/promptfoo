@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import AddIcon from '@mui/icons-material/Add';
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -1130,69 +1131,245 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     )}
 
                     {generatingPlugin === 'bfla' && (
-                      <TextField
-                        fullWidth
-                        label="Target Identifiers (Optional)"
-                        multiline
-                        rows={3}
-                        value={
-                          Array.isArray(tempTestCaseConfig.targetIdentifiers)
-                            ? tempTestCaseConfig.targetIdentifiers.join('\n')
-                            : tempTestCaseConfig.targetIdentifiers || ''
-                        }
-                        onChange={(e) => {
-                          const values = e.target.value.split('\n').filter((v) => v.trim() !== '');
-                          setTempTestCaseConfig({
-                            ...tempTestCaseConfig,
-                            targetIdentifiers: values,
-                          });
-                        }}
-                        placeholder="Enter function names, API endpoints, or identifiers (one per line)"
-                        helperText="BFLA tests whether users can access functions they shouldn't. Leave empty for general testing."
-                        sx={{ mb: 2 }}
-                      />
+                      <Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          BFLA tests whether users can access functions they shouldn't. Leave empty
+                          for general testing.
+                        </Typography>
+                        {((tempTestCaseConfig.targetIdentifiers as string[]) || ['']).map(
+                          (item: string, index: number) => {
+                            return (
+                              <Box
+                                key={index}
+                                sx={{ display: 'flex', alignItems: 'center', mb: 1 }}
+                              >
+                                <TextField
+                                  fullWidth
+                                  label={`Target Identifier ${index + 1}`}
+                                  variant="outlined"
+                                  value={item}
+                                  onChange={(e) => {
+                                    const newArray = [
+                                      ...((tempTestCaseConfig.targetIdentifiers as string[]) || [
+                                        '',
+                                      ]),
+                                    ];
+                                    newArray[index] = e.target.value;
+                                    setTempTestCaseConfig({
+                                      ...tempTestCaseConfig,
+                                      targetIdentifiers: newArray,
+                                    });
+                                  }}
+                                  placeholder="e.g., getUserData, /api/admin/users, deleteUser"
+                                  sx={{ mr: 1 }}
+                                />
+                                {((tempTestCaseConfig.targetIdentifiers as string[]) || [''])
+                                  .length > 1 && (
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                      const newArray = [
+                                        ...((tempTestCaseConfig.targetIdentifiers as string[]) || [
+                                          '',
+                                        ]),
+                                      ];
+                                      newArray.splice(index, 1);
+                                      if (newArray.length === 0) {
+                                        newArray.push('');
+                                      }
+                                      setTempTestCaseConfig({
+                                        ...tempTestCaseConfig,
+                                        targetIdentifiers: newArray,
+                                      });
+                                    }}
+                                  >
+                                    <RemoveIcon />
+                                  </IconButton>
+                                )}
+                              </Box>
+                            );
+                          },
+                        )}
+                        <Button
+                          startIcon={<AddIcon />}
+                          onClick={() => {
+                            const currentArray =
+                              (tempTestCaseConfig.targetIdentifiers as string[]) || [''];
+                            setTempTestCaseConfig({
+                              ...tempTestCaseConfig,
+                              targetIdentifiers: [...currentArray, ''],
+                            });
+                          }}
+                          variant="outlined"
+                          size="small"
+                          sx={{ mt: 1 }}
+                          disabled={(
+                            (tempTestCaseConfig.targetIdentifiers as string[]) || ['']
+                          ).some((item) => {
+                            return item.trim() === '';
+                          })}
+                        >
+                          Add
+                        </Button>
+                      </Box>
                     )}
 
                     {generatingPlugin === 'bola' && (
-                      <TextField
-                        fullWidth
-                        label="Target Systems (Optional)"
-                        multiline
-                        rows={3}
-                        value={
-                          Array.isArray(tempTestCaseConfig.targetSystems)
-                            ? tempTestCaseConfig.targetSystems.join('\n')
-                            : tempTestCaseConfig.targetSystems || ''
-                        }
-                        onChange={(e) => {
-                          const values = e.target.value.split('\n').filter((v) => v.trim() !== '');
-                          setTempTestCaseConfig({ ...tempTestCaseConfig, targetSystems: values });
-                        }}
-                        placeholder="Enter system names, object IDs, or resource identifiers (one per line)"
-                        helperText="BOLA tests whether users can access objects they shouldn't own. Leave empty for general testing."
-                        sx={{ mb: 2 }}
-                      />
+                      <Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          BOLA tests whether users can access objects they shouldn't own. Leave
+                          empty for general testing.
+                        </Typography>
+                        {((tempTestCaseConfig.targetSystems as string[]) || ['']).map(
+                          (item: string, index: number) => {
+                            return (
+                              <Box
+                                key={index}
+                                sx={{ display: 'flex', alignItems: 'center', mb: 1 }}
+                              >
+                                <TextField
+                                  fullWidth
+                                  label={`Target System ${index + 1}`}
+                                  variant="outlined"
+                                  value={item}
+                                  onChange={(e) => {
+                                    const newArray = [
+                                      ...((tempTestCaseConfig.targetSystems as string[]) || ['']),
+                                    ];
+                                    newArray[index] = e.target.value;
+                                    setTempTestCaseConfig({
+                                      ...tempTestCaseConfig,
+                                      targetSystems: newArray,
+                                    });
+                                  }}
+                                  placeholder="e.g., user_123, order_456, document_789"
+                                  sx={{ mr: 1 }}
+                                />
+                                {((tempTestCaseConfig.targetSystems as string[]) || ['']).length >
+                                  1 && (
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                      const newArray = [
+                                        ...((tempTestCaseConfig.targetSystems as string[]) || ['']),
+                                      ];
+                                      newArray.splice(index, 1);
+                                      if (newArray.length === 0) {
+                                        newArray.push('');
+                                      }
+                                      setTempTestCaseConfig({
+                                        ...tempTestCaseConfig,
+                                        targetSystems: newArray,
+                                      });
+                                    }}
+                                  >
+                                    <RemoveIcon />
+                                  </IconButton>
+                                )}
+                              </Box>
+                            );
+                          },
+                        )}
+                        <Button
+                          startIcon={<AddIcon />}
+                          onClick={() => {
+                            const currentArray = (tempTestCaseConfig.targetSystems as string[]) || [
+                              '',
+                            ];
+                            setTempTestCaseConfig({
+                              ...tempTestCaseConfig,
+                              targetSystems: [...currentArray, ''],
+                            });
+                          }}
+                          variant="outlined"
+                          size="small"
+                          sx={{ mt: 1 }}
+                          disabled={((tempTestCaseConfig.targetSystems as string[]) || ['']).some(
+                            (item) => item.trim() === '',
+                          )}
+                        >
+                          Add
+                        </Button>
+                      </Box>
                     )}
 
                     {generatingPlugin === 'ssrf' && (
-                      <TextField
-                        fullWidth
-                        label="Target URLs (Optional)"
-                        multiline
-                        rows={3}
-                        value={
-                          Array.isArray(tempTestCaseConfig.targetUrls)
-                            ? tempTestCaseConfig.targetUrls.join('\n')
-                            : tempTestCaseConfig.targetUrls || ''
-                        }
-                        onChange={(e) => {
-                          const values = e.target.value.split('\n').filter((v) => v.trim() !== '');
-                          setTempTestCaseConfig({ ...tempTestCaseConfig, targetUrls: values });
-                        }}
-                        placeholder="Enter URLs or endpoints that should not be accessible (one per line)"
-                        helperText="SSRF tests whether your application can be tricked into making requests to unintended destinations. Leave empty for general testing."
-                        sx={{ mb: 2 }}
-                      />
+                      <Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          SSRF tests whether your application can be tricked into making requests to
+                          unintended destinations. Leave empty for general testing.
+                        </Typography>
+                        {((tempTestCaseConfig.targetUrls as string[]) || ['']).map(
+                          (item: string, index: number) => {
+                            return (
+                              <Box
+                                key={index}
+                                sx={{ display: 'flex', alignItems: 'center', mb: 1 }}
+                              >
+                                <TextField
+                                  fullWidth
+                                  label={`Target URL ${index + 1}`}
+                                  variant="outlined"
+                                  value={item}
+                                  onChange={(e) => {
+                                    const newArray = [
+                                      ...((tempTestCaseConfig.targetUrls as string[]) || ['']),
+                                    ];
+                                    newArray[index] = e.target.value;
+                                    setTempTestCaseConfig({
+                                      ...tempTestCaseConfig,
+                                      targetUrls: newArray,
+                                    });
+                                  }}
+                                  placeholder="e.g., http://internal-api.company.com, file:///etc/passwd"
+                                  sx={{ mr: 1 }}
+                                />
+                                {((tempTestCaseConfig.targetUrls as string[]) || ['']).length >
+                                  1 && (
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                      const newArray = [
+                                        ...((tempTestCaseConfig.targetUrls as string[]) || ['']),
+                                      ];
+                                      newArray.splice(index, 1);
+                                      if (newArray.length === 0) {
+                                        newArray.push('');
+                                      }
+                                      setTempTestCaseConfig({
+                                        ...tempTestCaseConfig,
+                                        targetUrls: newArray,
+                                      });
+                                    }}
+                                  >
+                                    <RemoveIcon />
+                                  </IconButton>
+                                )}
+                              </Box>
+                            );
+                          },
+                        )}
+                        <Button
+                          startIcon={<AddIcon />}
+                          onClick={() => {
+                            const currentArray = (tempTestCaseConfig.targetUrls as string[]) || [
+                              '',
+                            ];
+                            setTempTestCaseConfig({
+                              ...tempTestCaseConfig,
+                              targetUrls: [...currentArray, ''],
+                            });
+                          }}
+                          variant="outlined"
+                          size="small"
+                          sx={{ mt: 1 }}
+                          disabled={((tempTestCaseConfig.targetUrls as string[]) || ['']).some(
+                            (item) => item.trim() === '',
+                          )}
+                        >
+                          Add
+                        </Button>
+                      </Box>
                     )}
                   </Box>
                 ) : generatingTestCase ? (

@@ -249,7 +249,7 @@ export default function PluginConfigDialog({
               <Box key={index} sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
                 <TextField
                   fullWidth
-                  label={`${arrayKey} ${index + 1}`}
+                  label={`${arrayKeyToLabel(arrayKey)} ${index + 1}`}
                   variant="outlined"
                   value={item}
                   onChange={(e) => handleArrayInputChange(arrayKey, index, e.target.value)}
@@ -341,3 +341,14 @@ export default function PluginConfigDialog({
     </Dialog>
   );
 }
+
+const arrayKeyToLabel = (key: string) => {
+  switch (key) {
+    case 'targetIdentifiers':
+      return 'Target Identifier';
+    case 'targetSystems':
+      return 'Target System';
+    case 'targetUrls':
+      return 'Target URL';
+  }
+};
