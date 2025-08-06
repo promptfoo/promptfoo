@@ -38,9 +38,10 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { isNotABaseModelProvider } from '@promptfoo/constants';
+import { isFoundationModelProvider } from '@promptfoo/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
+import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
@@ -635,6 +636,26 @@ export default function Review({
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={12}>
                   <Typography variant="subtitle2">Purpose</Typography>
+                  {(!config.purpose?.trim() || config.purpose.length < 100) &&
+                  !isFoundationModelProvider(config.target.id) ? (
+                    <Box sx={{ mb: 2 }}>
+                      <Alert severity="warning">
+                        Application details are required to generate a high quality red team. Go to
+                        the Application Details section and add a purpose.{' '}
+                        <Link
+                          style={{ textDecoration: 'underline' }}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
+                        >
+                          Learn more about red team best practices.
+                        </Link>
+                      </Alert>
+                      <Button onClick={navigateToPurpose} sx={{ mt: 2 }} variant="contained">
+                        Add application details
+                      </Button>
+                    </Box>
+                  ) : null}
                   <Typography
                     variant="body2"
                     onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
@@ -653,21 +674,7 @@ export default function Review({
                       },
                     }}
                   >
-                    {config.purpose ||
-                      (isNotABaseModelProvider(config.target.id) ||
-                      config.prompts[0] !== '{{prompt}}' ? (
-                        <>
-                          <Alert severity="warning">
-                            Application details are required to generate a high quality red team. Go
-                            to the Application Details section and add a purpose.
-                          </Alert>
-                          <Button onClick={navigateToPurpose} sx={{ mt: 2 }} variant="contained">
-                            Add application details
-                          </Button>
-                        </>
-                      ) : (
-                        'Not specified'
-                      ))}
+                    {config.purpose || 'Not specified'}
                   </Typography>
                   {config.purpose && config.purpose.split('\n').length > 6 && (
                     <Typography
