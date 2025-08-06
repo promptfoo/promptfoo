@@ -3,6 +3,7 @@ import React from 'react';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import { useTheme } from '@mui/material/styles';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -25,6 +26,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
+import { getSeverityColor } from './FrameworkComplianceUtils';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
@@ -34,15 +36,15 @@ interface TestSuitesProps {
   plugins: RedteamPluginObject[];
 }
 
-const getRiskScoreColor = (riskScore: number): string => {
+const getRiskScoreColor = (riskScore: number, theme: any): string => {
   if (riskScore >= severityRiskScores[Severity.Critical]) {
-    return '#d32f2f'; // Red for critical
+    return getSeverityColor(Severity.Critical, theme);
   } else if (riskScore >= severityRiskScores[Severity.High]) {
-    return '#f57c00'; // Orange for high
+    return getSeverityColor(Severity.High, theme);
   } else if (riskScore >= severityRiskScores[Severity.Medium]) {
-    return '#fbc02d'; // Yellow for medium
+    return getSeverityColor(Severity.Medium, theme);
   } else {
-    return '#388e3c'; // Green for low
+    return getSeverityColor(Severity.Low, theme);
   }
 };
 
@@ -103,6 +105,7 @@ const getSubCategoryStats = (
 
 const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins }) => {
   const navigate = useNavigate();
+  const theme = useTheme();
   const subCategoryStats = getSubCategoryStats(categoryStats, plugins).filter(
     (subCategory) => subCategory.passRate !== 'N/A',
   );
@@ -217,9 +220,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
   return (
     <Box sx={{ pageBreakBefore: 'always', breakBefore: 'always' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5" id="table">
-          Vulnerabilities and Mitigations
-        </Typography>
+        <Typography variant="h5">Vulnerabilities and Mitigations</Typography>
 
         <Button
           variant="contained"
@@ -370,7 +371,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                               width: 12,
                               height: 12,
                               borderRadius: '50%',
-                              backgroundColor: getRiskScoreColor(subCategory.riskScore),
+                              backgroundColor: getRiskScoreColor(subCategory.riskScore, theme),
                             }}
                           />
                           {subCategory.riskScore}
