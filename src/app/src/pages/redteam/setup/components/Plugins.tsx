@@ -7,7 +7,6 @@ import AddIcon from '@mui/icons-material/Add';
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
@@ -1459,24 +1458,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       </Button>
                     </>
                   )}
-
-                {testCaseDialogMode === 'result' && (
-                  <Button
-                    variant="contained"
-                    startIcon={<RefreshIcon />}
-                    onClick={() => {
-                      if (generatingPlugin) {
-                        const configToUse = PLUGINS_REQUIRING_CONFIG.includes(generatingPlugin)
-                          ? tempTestCaseConfig
-                          : {};
-                        generateTestCaseWithConfig(generatingPlugin, configToUse);
-                      }
-                    }}
-                    disabled={!generatingPlugin || generatingTestCase}
-                  >
-                    Generate Another
-                  </Button>
-                )}
               </DialogActions>
             </Dialog>
           </Box>
