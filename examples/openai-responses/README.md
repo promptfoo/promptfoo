@@ -31,6 +31,20 @@ This example compares inline vs. external file approach:
 
 Example demonstrating function calling capabilities with the Responses API.
 
+### Function Callbacks (`promptfooconfig.function-callback.yaml`)
+
+Example showing how to use function callbacks to execute functions locally instead of just returning the function call. This allows you to:
+
+- Execute custom logic when the model calls a function
+- Return the result directly to the test assertions
+- Test end-to-end workflows including function execution
+
+Key differences from regular function calling:
+
+- Uses `functionToolCallbacks` to define JavaScript functions
+- Functions are executed locally and results are returned
+- Perfect for testing tool-using AI agents
+
 ### Reasoning Models (`promptfooconfig.reasoning.yaml`)
 
 Example showing how to use reasoning models (o1, o3, etc.) with specific configurations.
@@ -74,6 +88,9 @@ npx promptfoo eval -c promptfooconfig.mcp.yaml
 
 # Function calling example
 npx promptfoo eval -c promptfooconfig.function-call.yaml
+
+# Function callbacks example
+npx promptfoo eval -c promptfooconfig.function-callback.yaml
 
 # Reasoning models example
 npx promptfoo eval -c promptfooconfig.reasoning.yaml

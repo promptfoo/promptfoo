@@ -845,4 +845,244 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.finishReason).toBe('stop');
     });
   });
+
+  describe('Function Tool Callbacks', () => {
+    it('should execute function callbacks and return the result', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: {
+                    name: 'addNumbers',
+                    arguments: '{"a": 5, "b": 6}',
+                  },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const providerWithCallbacks = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return JSON.stringify(a + b);
+            },
+          },
+        },
+      });
+
+      const result = await providerWithCallbacks.callApi('Add 5 and 6');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('11');
+    });
+
+    it('should handle multiple function callbacks', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: {
+                    name: 'addNumbers',
+                    arguments: '{"a": 5, "b": 6}',
+                  },
+                },
+                {
+                  id: 'call_456',
+                  type: 'function',
+                  function: {
+                    name: 'multiplyNumbers',
+                    arguments: '{"a": 3, "b": 4}',
+                  },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const providerWithCallbacks = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return JSON.stringify(a + b);
+            },
+            multiplyNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return JSON.stringify(a * b);
+            },
+          },
+        },
+      });
+
+      const result = await providerWithCallbacks.callApi('Add 5 and 6, then multiply 3 and 4');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('11\n12');
+    });
+
+    it('should fall back to raw function call when callback fails', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+              function_call: {
+                name: 'addNumbers',
+                arguments: 'invalid json',
+              },
+            },
+            finish_reason: 'function_call',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const providerWithCallbacks = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args); // This will throw
+              return JSON.stringify(a + b);
+            },
+          },
+        },
+      });
+
+      const result = await providerWithCallbacks.callApi('Add numbers with invalid JSON');
+
+      expect(result.error).toBeUndefined();
+      // When callback fails, it returns the stringified function call
+      expect(result.output).toBe('{"name":"addNumbers","arguments":"invalid json"}');
+    });
+
+    it('should handle legacy function_call format', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+              function_call: {
+                name: 'calculateSum',
+                arguments: '{"numbers": [1, 2, 3, 4, 5]}',
+              },
+            },
+            finish_reason: 'function_call',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      };
+
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const providerWithCallbacks = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            calculateSum: async (args: string) => {
+              const { numbers } = JSON.parse(args);
+              const sum = numbers.reduce((a: number, b: number) => a + b, 0);
+              return JSON.stringify(sum);
+            },
+          },
+        },
+      });
+
+      const result = await providerWithCallbacks.callApi('Calculate sum of [1, 2, 3, 4, 5]');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('15');
+    });
+  });
 });

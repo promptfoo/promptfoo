@@ -3755,4 +3755,185 @@ describe('OpenAiResponsesProvider', () => {
       );
     });
   });
+
+  describe('Function Tool Callbacks', () => {
+    it('should execute function callbacks and return the result', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'function_call',
+            name: 'addNumbers',
+            id: 'call_123',
+            arguments: '{"a": 5, "b": 6}',
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return JSON.stringify(a + b);
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Add 5 and 6');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('11');
+    });
+
+    it('should skip status:completed messages from function calls', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'function_call',
+            name: 'addNumbers',
+            id: 'call_123',
+            arguments: '{"a": 5, "b": 6}',
+          },
+          {
+            type: 'function_call',
+            status: 'completed',
+            name: 'addNumbers',
+            arguments: '{}',
+            call_id: 'call_123',
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return JSON.stringify(a + b);
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Add 5 and 6');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('11');
+    });
+
+    it('should fall back to raw function call when callback fails', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'function_call',
+            name: 'addNumbers',
+            id: 'call_123',
+            arguments: 'invalid json',
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args); // This will throw
+              return JSON.stringify(a + b);
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Add numbers with invalid JSON');
+
+      expect(result.error).toBeUndefined();
+      const parsedOutput = JSON.parse(result.output);
+      expect(parsedOutput.type).toBe('function_call');
+      expect(parsedOutput.name).toBe('addNumbers');
+      expect(parsedOutput.arguments).toBe('invalid json');
+    });
+
+    it('should handle function callbacks in assistant message content', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'function_call',
+                name: 'multiplyNumbers',
+                arguments: '{"a": 3, "b": 4}',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: {
+            multiplyNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return JSON.stringify(a * b);
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Multiply 3 and 4');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('12');
+    });
+  });
 });
