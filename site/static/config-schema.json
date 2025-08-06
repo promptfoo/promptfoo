@@ -1270,6 +1270,7 @@
                           "toxic-chat",
                           "toxicity",
                           "unsafebench",
+                          "unverifiable-claims",
                           "xstest"
                         ]
                       },
@@ -1455,6 +1456,7 @@
                               "toxic-chat",
                               "toxicity",
                               "unsafebench",
+                              "unverifiable-claims",
                               "xstest"
                             ]
                           },
