@@ -302,7 +302,7 @@ export default function ProviderTypeSelector({
     { key: 'specialized', label: 'Specialized' },
     { key: 'local', label: 'Local Models' },
   ];
-  console.log(provider);
+
   // Handle category filter toggle
   const handleCategoryToggle = (category: string) => {
     setSelectedCategory(category);
