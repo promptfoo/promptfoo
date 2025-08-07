@@ -38,6 +38,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setAuthor,
     fetchEvalData,
     resetFilters,
+    setIsStreaming,
   } = useTableStore();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
@@ -69,14 +70,19 @@ export default function Eval({ fetchId }: EvalOptions) {
   /**
    * Triggers the fetching of a specific eval by id. Eval data is populated in the table store.
    *
+   * @param {string} id - The eval ID to load
+   * @param {boolean} isBackgroundUpdate - Whether this is a background update (e.g., from socket) that shouldn't show loading state
    * @returns {Boolean} Whether the eval was loaded successfully.
    */
   const loadEvalById = useCallback(
-    async (id: string) => {
+    async (id: string, isBackgroundUpdate = false) => {
       try {
         setEvalId(id);
 
-        const data = await fetchEvalData(id, { skipSettingEvalId: true });
+        const data = await fetchEvalData(id, {
+          skipSettingEvalId: true,
+          skipLoadingState: isBackgroundUpdate,
+        });
 
         if (!data) {
           setFailed(true);
@@ -135,19 +141,25 @@ export default function Eval({ fetchId }: EvalOptions) {
        * Populates the table store with the most recent eval result.
        */
       const handleResultsFile = async (data: ResultsFile, isInit: boolean = false) => {
+        // Set streaming state when we start receiving data
+        setIsStreaming(true);
+
         // Populate values which do not change while the eval results are being streamed.
         if (isInit) {
-        setTableFromResultsFile(data);
-        setConfig(data.config);
-        setAuthor(data.author ?? null);
+          setTableFromResultsFile(data);
+          setConfig(data.config);
+          setAuthor(data.author ?? null);
         }
         const newRecentEvals = await fetchRecentFileEvals();
         if (newRecentEvals && newRecentEvals.length > 0) {
           const newId = newRecentEvals[0].evalId;
           setDefaultEvalId(newId);
           setEvalId(newId);
-          loadEvalById(newId);
+          await loadEvalById(newId, true); // Pass true for isBackgroundUpdate since this is from socket
         }
+
+        // Clear streaming state after update is complete
+        setIsStreaming(false);
       };
 
       socket
@@ -166,6 +178,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
       return () => {
         socket.disconnect();
+        setIsStreaming(false);
       };
     } else {
       console.log('Eval init: Fetching eval via recent');
@@ -204,6 +217,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setInComparisonMode,
     setComparisonEvalIds,
     resetFilters,
+    setIsStreaming,
   ]);
 
   usePageMeta({
