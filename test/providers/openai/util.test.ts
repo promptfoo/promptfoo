@@ -208,7 +208,7 @@ describe('calculateOpenAICost', () => {
 
   it('should calculate cost correctly for gpt-5-nano', () => {
     const cost = calculateOpenAICost('gpt-5-nano', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 0.05 + 500 * 0.2) / 1e6, 6);
+    expect(cost).toBeCloseTo((1000 * 0.05 + 500 * 0.4) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-5-mini', () => {
