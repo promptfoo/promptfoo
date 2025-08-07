@@ -1267,6 +1267,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
       const o3StandardProvider = new OpenAiChatCompletionProvider('o3');
       const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
+      const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');
+      const gpt5MiniProvider = new OpenAiChatCompletionProvider('gpt-5-mini');
 
       expect(regularProvider['isReasoningModel']()).toBe(false);
       expect(o1Provider['isReasoningModel']()).toBe(true);
@@ -1274,6 +1276,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o1PreviewProvider['isReasoningModel']()).toBe(true);
       expect(o3StandardProvider['isReasoningModel']()).toBe(true);
       expect(o4MiniProvider['isReasoningModel']()).toBe(true);
+      expect(gpt5Provider['isReasoningModel']()).toBe(true);
+      expect(gpt5MiniProvider['isReasoningModel']()).toBe(true);
     });
 
     it('should handle temperature support correctly', () => {
@@ -1283,6 +1287,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
       const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
       const gpt41Provider = new OpenAiChatCompletionProvider('gpt-4.1');
+      const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');
 
       expect(regularProvider['supportsTemperature']()).toBe(true);
       expect(o1Provider['supportsTemperature']()).toBe(false);
@@ -1290,6 +1295,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o1PreviewProvider['supportsTemperature']()).toBe(false);
       expect(o4MiniProvider['supportsTemperature']()).toBe(false);
       expect(gpt41Provider['supportsTemperature']()).toBe(true);
+      expect(gpt5Provider['supportsTemperature']()).toBe(false);
     });
 
     it('should respect temperature settings based on model type', async () => {
@@ -1356,6 +1362,17 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o1Body = JSON.parse(o1Call[1].body);
       expect(o1Body.max_tokens).toBeUndefined();
       expect(o1Body.max_completion_tokens).toBe(200);
+
+      // Test GPT-5 model with max_completion_tokens
+      mockFetchWithCache.mockClear();
+      const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5-mini', {
+        config: { max_completion_tokens: 300 },
+      });
+      await gpt5Provider.callApi('Test prompt');
+      const gpt5Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const gpt5Body = JSON.parse(gpt5Call[1].body);
+      expect(gpt5Body.max_tokens).toBeUndefined();
+      expect(gpt5Body.max_completion_tokens).toBe(300);
     });
 
     it('should handle reasoning_effort for reasoning models', async () => {

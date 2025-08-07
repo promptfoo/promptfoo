@@ -46,6 +46,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3-deep-research-2025-06-26',
     'o4-mini-deep-research',
     'o4-mini-deep-research-2025-06-26',
+    // GPT-5 family (reasoning)
+    'gpt-5',
+    'gpt-5-2025-08-07',
+    'gpt-5-mini',
+    'gpt-5-mini-2025-08-07',
+    'gpt-5-nano',
+    'gpt-5-nano-2025-08-07',
   ];
 
   config: OpenAiCompletionOptions;
@@ -63,6 +70,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
+      this.modelName.startsWith('gpt-5') ||
       this.modelName === 'codex-mini-latest'
     );
   }
@@ -187,7 +195,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       config.reasoning_effort &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.startsWith('gpt-5'))
     ) {
       body.reasoning_effort = config.reasoning_effort;
     }
@@ -196,7 +205,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       config.reasoning &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.startsWith('gpt-5'))
     ) {
       body.reasoning = config.reasoning;
     }

@@ -27,8 +27,8 @@ The OpenAI provider supports the following model formats:
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
 or if you have a custom model.
-For example, if OpenAI releases `gpt-5` chat completion,
-you could begin using it immediately with `openai:chat:gpt-5`.
+For example, if OpenAI releases `gpt-6` chat completion,
+you could begin using it immediately with `openai:chat:gpt-6`.
 
 The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
 
@@ -175,9 +175,9 @@ providers:
   - id: openai:chat:gpt-4.1-nano-2025-04-14 # Nano
 ```
 
-### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
+### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini, gpt-5, gpt-5-mini, gpt-5-nano)
 
-Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, and `o4-mini`, are large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem-solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
+Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, `o4-mini`, and the new GPT-5 family (`gpt-5`, `gpt-5-mini`, `gpt-5-nano`), are large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem-solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
 
 When using reasoning models, there are important differences in how tokens are handled:
 
@@ -190,7 +190,7 @@ providers:
       max_completion_tokens: 25000 # Can also be set via OPENAI_MAX_COMPLETION_TOKENS env var
 ```
 
-Unlike standard models that use `max_tokens`, reasoning models use:
+Unlike standard models that use `max_tokens`, reasoning models (including GPT-5 family) use:
 
 - `max_completion_tokens` to control the total tokens generated (both reasoning and visible output)
 - `reasoning` to control how thoroughly the model thinks before responding (with `effort`: low, medium, high)
@@ -203,7 +203,7 @@ Reasoning models "think before they answer," generating internal reasoning token
 - Count towards token usage and billing
 - Occupy space in the context window
 
-Both `o1` and `o3-mini` models have a 128,000 token context window, while `o3-pro` and `o4-mini` have a 200,000 token context window. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
+Both `o1` and `o3-mini` models have a 128,000 token context window, while `o3-pro` and `o4-mini` have a 200,000 token context window. GPT-5 family models are treated as reasoning models for configuration purposes. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
 
 ## Images
 

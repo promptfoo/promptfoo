@@ -11,6 +11,28 @@ const ajv = getAjv();
 
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
+  // GPT-5 family (reasoning) - non-snapshot and snapshot share pricing
+  ...['gpt-5', 'gpt-5-2025-08-07'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5-mini', 'gpt-5-mini-2025-08-07'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.25 / 1e6,
+      output: 2 / 1e6,
+    },
+  })),
+  ...['gpt-5-nano', 'gpt-5-nano-2025-08-07'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.05 / 1e6,
+      output: 0.4 / 1e6,
+    },
+  })),
   // Transcription models
   ...['gpt-4o-transcribe', 'gpt-4o-mini-transcribe'].map((model) => ({
     id: model,
