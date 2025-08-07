@@ -170,7 +170,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4')
+      this.modelName.startsWith('o4') ||
+      this.modelName.startsWith('gpt-5')
     );
   }
 

@@ -23,6 +23,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-4.1-mini-2025-04-14',
     'gpt-4.1-nano',
     'gpt-4.1-nano-2025-04-14',
+    // GPT-5 models
+    'gpt-5',
+    'gpt-5-2025-08-07',
+    'gpt-5-chat-latest',
+    'gpt-5-nano',
+    'gpt-5-nano-2025-08-07',
+    'gpt-5-mini',
+    'gpt-5-mini-2025-08-07',
     'o1',
     'o1-2024-12-17',
     'o1-preview',
@@ -63,7 +71,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
-      this.modelName === 'codex-mini-latest'
+      this.modelName === 'codex-mini-latest' ||
+      this.modelName.startsWith('gpt-5')
     );
   }
 
