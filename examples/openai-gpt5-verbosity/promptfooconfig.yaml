@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'GPT-5 verbosity and minimal reasoning'
+
+prompts:
+  - 'Summarize the following text in 3 bullet points: {{input}}'
+
+providers:
+  - id: openai:chat:gpt-5
+    config:
+      verbosity: high
+      reasoning_effort: minimal
+      temperature: 0
+  - id: openai:responses:gpt-5
+    config:
+      reasoning:
+        effort: minimal
+      temperature: 0
+
+tests:
+  - vars:
+      input: |
+        Promptfoo is an open-source framework for testing and evaluating LLMs. It supports many providers and offers assertions and metrics.
+    assert:
+      - type: contains
+        value: 'LLM'
