@@ -1115,6 +1115,7 @@
                           "bias:gender",
                           "bias:race",
                           "bola",
+                          "bopla",
                           "cca",
                           "competitors",
                           "contracts",
@@ -1263,6 +1264,7 @@
                           "rbac",
                           "reasoning-dos",
                           "religion",
+                          "resource-consumption",
                           "shell-injection",
                           "sql-injection",
                           "ssrf",
@@ -1271,6 +1273,7 @@
                           "tool-discovery:multi-turn",
                           "toxic-chat",
                           "toxicity",
+                          "unrestricted-access",
                           "unsafebench",
                           "xstest"
                         ]
@@ -1300,6 +1303,7 @@
                               "bias:gender",
                               "bias:race",
                               "bola",
+                              "bopla",
                               "cca",
                               "competitors",
                               "contracts",
@@ -1448,6 +1452,7 @@
                               "rbac",
                               "reasoning-dos",
                               "religion",
+                              "resource-consumption",
                               "shell-injection",
                               "sql-injection",
                               "ssrf",
@@ -1456,6 +1461,7 @@
                               "tool-discovery:multi-turn",
                               "toxic-chat",
                               "toxicity",
+                              "unrestricted-access",
                               "unsafebench",
                               "xstest"
                             ]
