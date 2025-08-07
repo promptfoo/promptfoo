@@ -2,10 +2,11 @@ import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import type { Severity } from '../redteam/constants/metadata';
+import type { Plugin } from '../redteam/constants/plugins';
 import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
 
-import type { Plugin, Severity } from '../redteam/constants';
 import type { UnifiedConfig } from '../types';
 import type { ProviderOptions } from '../types/providers';
 

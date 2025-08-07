@@ -5,7 +5,7 @@ import { sleep } from '../../../util/time';
 import { createTestCase } from './common';
 
 import type { PluginActionParams, TestCase } from '../../../types';
-import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
+import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants/plugins';
 
 export async function getHarmfulTests(
   { purpose, injectVar, n, delayMs = 0, config }: PluginActionParams,

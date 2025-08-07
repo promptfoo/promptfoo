@@ -4,7 +4,7 @@ import { createTestCase, getHarmfulAssertions } from './common';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
 
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types';
-import type { HARM_PLUGINS } from '../../constants';
+import type { HARM_PLUGINS } from '../../constants/plugins';
 import type { HarmfulCategory } from './constants';
 
 export class AlignedHarmfulPlugin extends RedteamPluginBase {

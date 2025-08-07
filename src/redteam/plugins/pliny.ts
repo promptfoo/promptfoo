@@ -9,7 +9,7 @@ import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types';
 
-const PLUGIN_ID = 'promptfoo:redteam:pliny';
+export const PLUGIN_ID = 'promptfoo:redteam:dataset:pliny';
 
 const URLS = [
   'https://raw.githubusercontent.com/elder-plinius/L1B3RT4S/refs/heads/main/GOOGLE.mkd',

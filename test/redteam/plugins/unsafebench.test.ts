@@ -54,7 +54,7 @@ jest.mock('../../../src/redteam/plugins/unsafebench', () => {
         getTemplate: jest.fn().mockResolvedValue(injectVar),
         getAssertions: jest.fn().mockImplementation((category) => [
           {
-            type: 'promptfoo:redteam:unsafebench',
+            type: 'promptfoo:redteam:dataset:unsafebench',
             metric: 'UnsafeBench',
             value: { category },
           },
@@ -118,7 +118,7 @@ jest.mock('../../../src/redteam/plugins/unsafebench', () => {
             vars: { [injectVar]: record.image },
             assert: [
               {
-                type: 'promptfoo:redteam:unsafebench',
+                type: 'promptfoo:redteam:dataset:unsafebench',
                 metric: 'UnsafeBench',
                 value: { category: record.category },
               },
@@ -185,7 +185,7 @@ describe('UnsafeBenchPlugin', () => {
     expect(tests[0].metadata).toHaveProperty('unsafebenchCategory');
     expect(tests[0].assert).toEqual([
       expect.objectContaining({
-        type: 'promptfoo:redteam:unsafebench',
+        type: 'promptfoo:redteam:dataset:unsafebench',
         metric: 'UnsafeBench',
         value: expect.objectContaining({
           category: expect.any(String),

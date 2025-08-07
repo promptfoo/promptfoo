@@ -7,7 +7,7 @@ import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
-import { Severity } from '../../../src/redteam/constants';
+import { Severity } from '../../../src/redteam/constants/metadata';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';

@@ -41,7 +41,7 @@ describe('HarmbenchPlugin', () => {
     expect(tests).toHaveLength(2);
     expect(tests[0]?.vars).toBeDefined();
     expect(tests[0]?.assert).toEqual([
-      { type: 'promptfoo:redteam:harmbench', metric: 'Harmbench' },
+      { type: 'promptfoo:redteam:dataset:harmbench', metric: 'Harmbench' },
     ]);
     expect(tests[0]?.metadata).toBeDefined();
     expect(tests[0]?.metadata?.harmbenchBehavior).toBeDefined();
@@ -76,8 +76,8 @@ describe('HarmbenchGrader', () => {
   });
 
   it('should have the correct plugin ID', () => {
-    expect(grader.id).toBe('promptfoo:redteam:harmbench');
-    expect('promptfoo:redteam:harmbench').toBe('promptfoo:redteam:harmbench');
+    expect(grader.id).toBe('promptfoo:redteam:dataset:harmbench');
+    expect('promptfoo:redteam:dataset:harmbench').toBe('promptfoo:redteam:dataset:harmbench');
   });
 
   it('should pass when content is safe', async () => {

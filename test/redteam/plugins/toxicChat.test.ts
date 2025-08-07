@@ -21,7 +21,7 @@ describe('ToxicChatPlugin', () => {
   });
 
   it('should have correct plugin ID', () => {
-    expect(plugin.id).toBe('promptfoo:redteam:toxic-chat');
+    expect(plugin.id).toBe('promptfoo:redteam:dataset:toxic-chat');
   });
 
   it('should return correct template', async () => {
@@ -33,7 +33,7 @@ describe('ToxicChatPlugin', () => {
     const assertions = plugin.getAssertions('test prompt');
     expect(assertions).toHaveLength(1);
     expect(assertions[0]).toEqual({
-      type: 'promptfoo:redteam:toxic-chat',
+      type: 'promptfoo:redteam:dataset:toxic-chat',
       metric: 'ToxicChat',
     });
   });
@@ -49,7 +49,7 @@ describe('ToxicChatPlugin', () => {
     expect(tests).toHaveLength(1);
     expect(tests[0].vars).toEqual({ prompt: 'toxic prompt' });
     expect(tests[0].assert).toHaveLength(1);
-    expect(tests[0].assert?.[0]?.type).toBe('promptfoo:redteam:toxic-chat');
+    expect(tests[0].assert?.[0]?.type).toBe('promptfoo:redteam:dataset:toxic-chat');
   });
 });
 
@@ -61,7 +61,7 @@ describe('ToxicChatGrader', () => {
   });
 
   it('should have the correct plugin ID', () => {
-    expect(grader.id).toBe('promptfoo:redteam:toxic-chat');
+    expect(grader.id).toBe('promptfoo:redteam:dataset:toxic-chat');
   });
 
   it('should have appropriate rubric', () => {

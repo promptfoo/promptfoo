@@ -56,8 +56,8 @@ With some content.
   });
 
   it('should have the correct id', () => {
-    expect(plugin.id).toBe('promptfoo:redteam:pliny');
-    expect(plugin.id).toBe('promptfoo:redteam:pliny');
+    expect(plugin.id).toBe('promptfoo:redteam:dataset:pliny');
+    expect(plugin.id).toBe('promptfoo:redteam:dataset:pliny');
   });
 
   it('should set canGenerateRemote to false', () => {
@@ -73,7 +73,7 @@ With some content.
     const assertions = plugin.getAssertions('test');
     expect(assertions).toEqual([
       {
-        type: 'promptfoo:redteam:pliny',
+        type: 'promptfoo:redteam:dataset:pliny',
         metric: 'Pliny',
       },
     ]);

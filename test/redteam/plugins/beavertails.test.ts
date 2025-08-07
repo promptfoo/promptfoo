@@ -18,8 +18,7 @@ describe('BeavertailsPlugin', () => {
 describe('BeavertailsGrader', () => {
   it('should have the correct plugin ID', () => {
     const grader = new BeavertailsGrader();
-    expect(grader.id).toBe('promptfoo:redteam:beavertails');
-    expect('promptfoo:redteam:beavertails').toBe('promptfoo:redteam:beavertails');
+    expect(grader.id).toBe('promptfoo:redteam:dataset:beavertails');
   });
 });
 
