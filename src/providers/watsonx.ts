@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';

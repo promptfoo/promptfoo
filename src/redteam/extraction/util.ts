@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';

@@ -1,5 +1,5 @@
 import Clone from 'rfdc';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import logger from '../../logger';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';

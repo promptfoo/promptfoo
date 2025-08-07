@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { type Command } from 'commander';
 import dedent from 'dedent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { fetchWithProxy } from '../../fetch';
@@ -73,8 +73,8 @@ export const ArgsSchema = z
   })
   // Config and target are mutually exclusive:
   .refine((data) => !(data.config && data.target), {
-    message: 'Cannot specify both config and target!',
     path: ['config', 'target'],
+    error: 'Cannot specify both config and target!',
   });
 
 // ========================================================

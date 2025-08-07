@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { loadApiProviders } from '../../../providers';
 import { createToolResponse } from '../lib/utils';
 import { withTimeout } from '../lib/utils';
@@ -39,12 +39,11 @@ export function registerCompareProvidersTool(server: McpServer) {
         ),
 
       timeoutMs: z
-        .number()
         .int()
         .min(1000)
         .max(300000)
         .optional()
-        .default(30000)
+        .prefault(30000)
         .describe('Timeout for each provider in milliseconds (default: 30000)'),
     },
     async (args) => {

@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { loadApiProvider, loadApiProviders } from '../../../providers';
 import { createToolResponse } from '../lib/utils';
 import { withTimeout } from '../lib/utils';
@@ -39,7 +39,7 @@ export function registerTestProviderTool(server: McpServer) {
           z.string().min(1, 'Provider ID cannot be empty'),
           z.object({
             id: z.string().min(1, 'Provider ID cannot be empty'),
-            config: z.record(z.unknown()).optional(),
+            config: z.record(z.string(), z.unknown()).optional(),
           }),
         ])
         .describe(
@@ -61,12 +61,11 @@ export function registerTestProviderTool(server: McpServer) {
           `,
         ),
       timeoutMs: z
-        .number()
         .int()
         .min(1000)
         .max(300000)
         .optional()
-        .default(30000)
+        .prefault(30000)
         .describe(
           dedent`
             Request timeout in milliseconds. 

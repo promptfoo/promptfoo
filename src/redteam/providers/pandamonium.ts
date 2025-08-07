@@ -1,5 +1,5 @@
 import async from 'async';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { fetchWithRetries } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
@@ -54,7 +54,7 @@ type PandamoniumTest = z.infer<typeof PandamoniumTestSchema>;
  * Returns testCases (which may be empty), run id, current iteration, and pending plugins.
  */
 const NextResponseSchema = z.object({
-  testCases: z.array(PandamoniumTestSchema).optional().default([]),
+  testCases: z.array(PandamoniumTestSchema).optional().prefault([]),
   id: z.string(),
   iteration: z.number(),
   pendingPlugins: z.array(z.string()),

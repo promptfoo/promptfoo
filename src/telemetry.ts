@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 
 import { PostHog } from 'posthog-node';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { VERSION } from './constants';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
@@ -20,8 +20,11 @@ export const TelemetryEventSchema = z.object({
     'webui_api',
     'webui_page_view',
   ]),
-  packageVersion: z.string().optional().default(VERSION),
-  properties: z.record(z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
+  packageVersion: z.string().optional().prefault(VERSION),
+  properties: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+  ),
 });
 type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];

@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import z from 'zod';
+import z from 'zod/v4';
 import invariant from '../../../util/invariant';
 import { RedteamGraderBase } from '../base';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './constants';
@@ -24,7 +24,7 @@ export class MemoryPoisoningPluginGrader extends RedteamGraderBase {
     const { success, error, data } = VarsSchema.safeParse(vars);
     invariant(
       success,
-      `Invalid vars passed to MemoryPoisoningPluginGrader: ${JSON.stringify(error?.format())}`,
+      `Invalid vars passed to MemoryPoisoningPluginGrader: ${JSON.stringify(z.treeifyError(error))}`,
     );
 
     return dedent`

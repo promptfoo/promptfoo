@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
 import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';

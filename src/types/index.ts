@@ -1,6 +1,6 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
@@ -39,7 +39,7 @@ export const CommandLineOptionsSchema = z.object({
   // Shared with EvaluateOptions
   maxConcurrency: z.coerce.number().int().positive().optional(),
   repeat: z.coerce.number().int().positive().optional(),
-  delay: z.coerce.number().int().nonnegative().default(0),
+  delay: z.coerce.number().int().nonnegative().prefault(0),
 
   // Command line only
   vars: z.string().optional(),
@@ -64,7 +64,7 @@ export const CommandLineOptionsSchema = z.object({
   filterProviders: z.string().optional(),
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
-  var: z.record(z.string()).optional(),
+  var: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
   promptPrefix: z.string().optional(),
@@ -607,6 +607,7 @@ const ProviderPromptMapSchema = z.record(
 const MetadataSchema = z.record(z.string(), z.any());
 
 export const VarsSchema = z.record(
+  z.string(),
   z.union([
     z.string(),
     z.number(),
@@ -732,7 +733,7 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 
 // Same as a TestCase, except the `vars` object has been flattened into its final form.
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
-  vars: z.record(z.union([z.string(), z.object({})])).optional(),
+  vars: z.record(z.string(), z.union([z.string(), z.object({})])).optional(),
 }).strict();
 
 export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
@@ -790,10 +791,10 @@ export const DerivedMetricSchema = z.object({
   // The function to calculate the metric - either a mathematical expression or a function that takes the scores and returns a number
   value: z.union([
     z.string(),
-    z
-      .function()
-      .args(z.record(z.string(), z.number()), z.custom<RunEvalOptions>())
-      .returns(z.number()),
+    z.function({
+      input: [z.record(z.string(), z.number()), z.custom<RunEvalOptions>()],
+      output: z.number(),
+    }),
   ]),
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
@@ -825,7 +826,7 @@ export const TestSuiteSchema = z.object({
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
-        message: 'defaultTest string must start with file://',
+        error: 'defaultTest string must start with file://',
       }),
       TestCaseSchema.omit({ description: true }),
     ])
@@ -846,7 +847,7 @@ export const TestSuiteSchema = z.object({
       z
         .string()
         .refine((value) => value.startsWith('file://'), {
-          message: 'Extension must start with file://',
+          error: 'Extension must start with file://',
         })
         .refine(
           (value) => {
@@ -854,7 +855,7 @@ export const TestSuiteSchema = z.object({
             return parts.length === 3 && parts.every((part) => part.trim() !== '');
           },
           {
-            message: 'Extension must be of the form file://path/to/file.py:function_name',
+            error: 'Extension must be of the form file://path/to/file.py:function_name',
           },
         )
         .refine(
@@ -866,7 +867,7 @@ export const TestSuiteSchema = z.object({
             );
           },
           {
-            message:
+            error:
               'Extension must be a python (.py) or javascript (.js, .ts, .mjs, .cjs, etc.) file followed by a colon and function name',
           },
         ),
@@ -909,7 +910,7 @@ export const TestSuiteSchema = z.object({
         .object({
           enabled: z.boolean(),
           endpoint: z.string(),
-          headers: z.record(z.string()).optional(),
+          headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
     })
@@ -962,7 +963,7 @@ export const TestSuiteConfigSchema = z.object({
   defaultTest: z
     .union([
       z.string().refine((val) => val.startsWith('file://'), {
-        message: 'defaultTest string must start with file://',
+        error: 'defaultTest string must start with file://',
       }),
       TestCaseSchema.omit({ description: true }),
     ])
@@ -1018,23 +1019,23 @@ export const TestSuiteConfigSchema = z.object({
   // Tracing configuration
   tracing: z
     .object({
-      enabled: z.boolean().default(false),
+      enabled: z.boolean().prefault(false),
 
       // OTLP receiver configuration
       otlp: z
         .object({
           http: z
             .object({
-              enabled: z.boolean().default(true),
-              port: z.number().default(4318),
-              host: z.string().default('0.0.0.0'),
-              acceptFormats: z.array(z.enum(['protobuf', 'json'])).default(['json']),
+              enabled: z.boolean().prefault(true),
+              port: z.number().prefault(4318),
+              host: z.string().prefault('0.0.0.0'),
+              acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json']),
             })
             .optional(),
           grpc: z
             .object({
-              enabled: z.boolean().default(false),
-              port: z.number().default(4317),
+              enabled: z.boolean().prefault(false),
+              port: z.number().prefault(4317),
             })
             .optional(),
         })
@@ -1043,17 +1044,17 @@ export const TestSuiteConfigSchema = z.object({
       // Storage configuration
       storage: z
         .object({
-          type: z.enum(['sqlite']).default('sqlite'),
-          retentionDays: z.number().default(30),
+          type: z.enum(['sqlite']).prefault('sqlite'),
+          retentionDays: z.number().prefault(30),
         })
         .optional(),
 
       // Optional: Forward traces to another collector
       forwarding: z
         .object({
-          enabled: z.boolean().default(false),
+          enabled: z.boolean().prefault(false),
           endpoint: z.string(),
-          headers: z.record(z.string()).optional(),
+          headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
     })

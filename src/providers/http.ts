@@ -4,7 +4,7 @@ import http from 'http';
 import path from 'path';
 
 import httpZ from 'http-z';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
@@ -305,15 +305,15 @@ function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?:
 }
 
 const TokenEstimationConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  multiplier: z.number().min(0.01).default(1.3),
+  enabled: z.boolean().prefault(false),
+  multiplier: z.number().min(0.01).prefault(1.3),
 });
 
 // Base signature auth fields
 const BaseSignatureAuthSchema = z.object({
-  signatureValidityMs: z.number().default(300000),
-  signatureDataTemplate: z.string().default('{{signatureTimestamp}}'),
-  signatureAlgorithm: z.string().default('SHA256'),
+  signatureValidityMs: z.number().prefault(300000),
+  signatureDataTemplate: z.string().prefault('{{signatureTimestamp}}'),
+  signatureAlgorithm: z.string().prefault('SHA256'),
   signatureRefreshBufferMs: z.number().optional(),
 });
 
@@ -365,11 +365,11 @@ const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
 });
 
 export const HttpProviderConfigSchema = z.object({
-  body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
-  headers: z.record(z.string()).optional(),
+  body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
-  queryParams: z.record(z.string()).optional(),
+  queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
   useHttps: z
     .boolean()
@@ -380,7 +380,7 @@ export const HttpProviderConfigSchema = z.object({
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
   validateStatus: z
-    .union([z.string(), z.function().returns(z.boolean()).args(z.number())])
+    .union([z.string(), z.function({ input: [z.number()], output: z.boolean() })])
     .optional(),
   /**
    * @deprecated use transformResponse instead

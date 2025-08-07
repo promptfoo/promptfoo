@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { fromError } from 'zod-validation-error';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -8,13 +8,11 @@ import { RedteamPluginBase } from './base';
 
 import type { ApiProvider, Assertion } from '../../types';
 
-const CustomPluginDefinitionSchema = z
-  .object({
-    generator: z.string().min(1, 'Generator must not be empty').trim(),
-    grader: z.string().min(1, 'Grader must not be empty').trim(),
-    id: z.string().optional(),
-  })
-  .strict();
+const CustomPluginDefinitionSchema = z.strictObject({
+  generator: z.string().min(1, 'Generator must not be empty').trim(),
+  grader: z.string().min(1, 'Grader must not be empty').trim(),
+  id: z.string().optional(),
+});
 
 type CustomPluginDefinition = z.infer<typeof CustomPluginDefinitionSchema>;
 

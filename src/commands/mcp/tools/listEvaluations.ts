@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { getEvalSummaries } from '../../../models/eval';
 import { evaluationCache, paginate } from '../lib/performance';
 import { createToolResponse } from '../lib/utils';
@@ -19,19 +19,17 @@ export function registerListEvaluationsTool(server: McpServer) {
           'Filter evaluations by dataset ID. Example: "dataset_123" or leave empty to see all evaluations',
         ),
       page: z
-        .number()
         .int()
         .positive()
         .optional()
-        .default(1)
+        .prefault(1)
         .describe('Page number for pagination (default: 1)'),
       pageSize: z
-        .number()
         .int()
         .min(1)
         .max(100)
         .optional()
-        .default(20)
+        .prefault(20)
         .describe('Number of items per page (1-100, default: 20)'),
     },
     async (args) => {

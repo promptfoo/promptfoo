@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 
 import input from '@inquirer/input';
 import chalk from 'chalk';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
 import { fetchWithTimeout } from '../fetch';
@@ -101,7 +101,7 @@ export async function promptForEmailUnverified() {
     await telemetry.record('feature_used', {
       feature: 'promptForEmailUnverified',
     });
-    const emailSchema = z.string().email('Please enter a valid email address');
+    const emailSchema = z.email();
     email = await input({
       message: 'Redteam evals require email verification. Please enter your work email:',
       validate: (input: string) => {
