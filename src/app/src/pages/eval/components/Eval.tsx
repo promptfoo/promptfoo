@@ -134,10 +134,13 @@ export default function Eval({ fetchId }: EvalOptions) {
       /**
        * Populates the table store with the most recent eval result.
        */
-      const handleResultsFile = async (data: ResultsFile) => {
+      const handleResultsFile = async (data: ResultsFile, isInit: boolean = false) => {
+        // Populate values which do not change while the eval results are being streamed.
+        if (isInit) {
         setTableFromResultsFile(data);
         setConfig(data.config);
         setAuthor(data.author ?? null);
+        }
         const newRecentEvals = await fetchRecentFileEvals();
         if (newRecentEvals && newRecentEvals.length > 0) {
           const newId = newRecentEvals[0].evalId;
@@ -150,7 +153,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       socket
         .on('init', async (data) => {
           console.log('Initialized socket connection', data);
-          await handleResultsFile(data);
+          await handleResultsFile(data, true);
         })
         /**
          * The user has run `promptfoo eval` and a new latest eval
@@ -158,7 +161,7 @@ export default function Eval({ fetchId }: EvalOptions) {
          */
         .on('update', async (data) => {
           console.log('Received data update', data);
-          await handleResultsFile(data);
+          await handleResultsFile(data, false);
         });
 
       return () => {
