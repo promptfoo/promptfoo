@@ -263,7 +263,7 @@ export const OPENAI_CHAT_MODELS = [
     id: model,
     cost: {
       input: 0.05 / 1e6,
-      output: 0.2 / 1e6,
+      output: 0.4 / 1e6,
     },
   })),
   ...['gpt-5-mini', 'gpt-5-mini-2025-08-07'].map((model) => ({
@@ -307,35 +307,6 @@ export const OPENAI_COMPLETION_MODELS = [
     cost: {
       input: 1.5 / 1000000,
       output: 2 / 1000000,
-    },
-  },
-  // GPT-5 models - for completeness (though they likely use Chat API)
-  {
-    id: 'gpt-5',
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-5-chat-latest',
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-5-nano',
-    cost: {
-      input: 0.05 / 1e6,
-      output: 0.2 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-5-mini',
-    cost: {
-      input: 0.25 / 1e6,
-      output: 2 / 1e6,
     },
   },
   {
