@@ -27,9 +27,10 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import { styled } from '@mui/material/styles';
+import { styled, useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -238,10 +239,25 @@ export default function ResultsView({
 
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [shareLoading, setShareLoading] = React.useState(false);
-  const [topAreaCollapsed, setTopAreaCollapsed] = React.useState(false);
 
   const [filtersFormOpen, setFiltersFormOpen] = React.useState(false);
   const filtersButtonRef = React.useRef<HTMLButtonElement>(null);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { topAreaCollapsed, setTopAreaCollapsed } = useResultsViewSettingsStore();
+
+  /**
+   * Auto-collapse header on mobile devices for better screen real estate usage.
+   * Note: This only triggers if the header is not already collapsed. Once a user
+   * manually expands the header on mobile, it will remain expanded until they
+   * manually collapse it again or navigate away and return.
+   */
+  React.useEffect(() => {
+    if (isMobile && !topAreaCollapsed) {
+      setTopAreaCollapsed(true);
+    }
+  }, [isMobile, topAreaCollapsed, setTopAreaCollapsed]);
 
   // State for anchor element
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -527,22 +543,28 @@ export default function ResultsView({
           flexDirection: 'column',
           position: 'relative',
         }}
-        ref={(el: HTMLDivElement | null) => {
-          const top = el?.getBoundingClientRect().top;
-          if (top) {
-            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-            el.style.height = `calc(100vh - ${top}px)`;
-          }
-        }}
+        ref={React.useCallback(
+          (el: HTMLDivElement | null) => {
+            if (el) {
+              // Recalculate when navigation visibility changes
+              const recalculate = () => {
+                el.style.height = `calc(100vh - ${el.getBoundingClientRect().top}px)`;
+              };
+              recalculate();
+              // Also recalculate after a short delay to account for navigation transition
+              setTimeout(recalculate, 100);
+            }
+          },
+          [topAreaCollapsed],
+        )}
       >
         <Box
           sx={{
             position: 'absolute',
-            top: 8,
-            right: 16,
+            top: isMobile ? 4 : 8,
+            right: isMobile ? 8 : 16,
             zIndex: 1000,
-            opacity: topAreaCollapsed ? 0.3 : 1,
+            opacity: topAreaCollapsed ? (isMobile ? 0.7 : 0.3) : 1,
             transition: 'opacity 0.2s ease',
             '&:hover': {
               opacity: 1,
@@ -551,26 +573,40 @@ export default function ResultsView({
         >
           <Tooltip
             title={topAreaCollapsed ? 'Expand controls' : 'Collapse controls'}
-            placement="left"
+            placement={isMobile ? 'bottom' : 'left'}
           >
             <IconButton
               onClick={() => setTopAreaCollapsed(!topAreaCollapsed)}
-              size="small"
+              size={isMobile ? 'medium' : 'small'}
               sx={{
+                display: 'flex',
+                alignItems: 'center',
+                borderRadius: '16px',
+                padding: isMobile ? '8px 16px' : '4px 12px',
+                fontSize: '0.875rem',
                 backgroundColor: 'background.paper',
                 border: 1,
                 borderColor: 'divider',
+                boxShadow: isMobile ? 2 : 1,
                 '&:hover': {
                   backgroundColor: 'action.hover',
+                  boxShadow: 3,
                 },
               }}
+              aria-label={topAreaCollapsed ? 'Expand controls' : 'Collapse controls'}
             >
               {topAreaCollapsed ? <UnfoldMoreIcon /> : <UnfoldLessIcon />}
             </IconButton>
           </Tooltip>
         </Box>
-        <Box sx={{ transition: 'all 0.3s ease' }}>
-          {!topAreaCollapsed && (
+        <Box
+          sx={{
+            overflow: 'hidden',
+            height: topAreaCollapsed ? 0 : 'auto',
+            transition: 'height 0.3s ease',
+          }}
+        >
+          {
             <>
               <ResponsiveStack
                 direction="row"
@@ -901,21 +937,31 @@ export default function ResultsView({
                 <ResultsCharts handleHideCharts={() => setRenderResultsCharts(false)} />
               )}
             </>
-          )}
+          }
         </Box>
-        <ResultsTable
-          maxTextLength={maxTextLength}
-          columnVisibility={currentColumnState.columnVisibility}
-          wordBreak={wordBreak}
-          showStats={showInferenceDetails}
-          filterMode={filterMode}
-          failureFilter={failureFilter}
-          debouncedSearchText={debouncedSearchValue}
-          onFailureFilterToggle={handleFailureFilterToggle}
-          onSearchTextChange={handleSearchTextChange}
-          setFilterMode={setFilterMode}
-          zoom={resultsTableZoom}
-        />
+        <Box
+          sx={{
+            flexGrow: 1,
+            minHeight: 0,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <ResultsTable
+            maxTextLength={maxTextLength}
+            columnVisibility={currentColumnState.columnVisibility}
+            wordBreak={wordBreak}
+            showStats={showInferenceDetails}
+            filterMode={filterMode}
+            failureFilter={failureFilter}
+            debouncedSearchText={debouncedSearchValue}
+            onFailureFilterToggle={handleFailureFilterToggle}
+            onSearchTextChange={handleSearchTextChange}
+            setFilterMode={setFilterMode}
+            zoom={resultsTableZoom}
+          />
+        </Box>
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
