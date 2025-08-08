@@ -18,10 +18,7 @@
   transition: height 0.3s ease;
 }
 
-#results-view-container {
-  padding-top: 16px;
-  timeline-scope: --collapseTimeline;
-}
+/* Container-specific timeline-scope removed; header animation now uses the root scroll timeline */
 
 .eval-header {
   /* animation-name: collapseEvalHeader;

@@ -506,36 +506,11 @@ export default function ResultsView({
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
-  /**
-   * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
-   * (and the rendering of duplicative, useless scrollbars).
-   */
-  React.useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, []);
+  // Remove body overflow lock; horizontal overflow will be hidden globally in CSS
 
   return (
     <>
-      <Box
-        id="results-view-container"
-        px={2}
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'relative',
-        }}
-        ref={(el: HTMLDivElement | null) => {
-          const top = el?.getBoundingClientRect().top;
-          if (top) {
-            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-            el.style.height = `calc(100vh - ${top}px)`;
-          }
-        }}
-      >
+      <Box px={2}>
         <Box
           sx={{
             position: 'absolute',

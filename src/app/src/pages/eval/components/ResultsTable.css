@@ -8,16 +8,8 @@ pre {
 
 #results-table-container {
   overflow: scroll;
-  margin: 1rem -1rem 0 -1rem;
+  margin: 0 -1rem;
   padding: 0 1rem;
-
-  /*
-    NOTE: The timeline is defined on the `#results-view-container` element
-    in `ResultsView.css`.
-  */
-  scroll-timeline: --collapseTimeline y;
-  scroll-timeline: --collapseTimeline vertical;
-  will-change: scroll-position;
 }
 
 table.results-table,
@@ -476,14 +468,19 @@ table.results-table,
   }
 }
 
-.results-table thead.sticky {
+thead {
+  scroll-snap-type: x mandatory;
+  scroll-snap-align: start;
+}
+
+.results-table-sticky {
   position: sticky;
   top: 0;
   z-index: 100;
   transition: transform 0.2s ease-out;
 }
 
-[data-theme='dark'] .results-table thead.sticky {
+[data-theme='dark'] .results-table-sticky {
   background: #1a1a1a;
 }
 
@@ -498,14 +495,14 @@ table.results-table,
   background: #eee;
 }
 
-thead.sticky {
+thead {
   animation-name: collapseHeader;
+  /** Attach scroll timeline to the root scroll container */
+  animation-timeline: scroll();
   animation-duration: 1ms;
-  animation-timeline: --collapseTimeline;
   animation-range-start: 0px;
   animation-range-end: 50px;
   animation-fill-mode: both;
-
   will-change: contents;
 }
 
