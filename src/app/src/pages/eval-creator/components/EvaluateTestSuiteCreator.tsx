@@ -40,7 +40,7 @@ function ErrorFallback({
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
-  const { config, updateConfig, reset } = useStore();
+  const { config, updateConfig, updateProviderConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
 
   // Ensure providers is always an array of ProviderOptions
@@ -139,6 +139,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
             <ProviderSelector
               providers={normalizedProviders}
               onChange={(p) => updateConfig({ providers: p })}
+              onProviderConfigUpdate={updateProviderConfig}
             />
           </Stack>
         </ErrorBoundary>
@@ -162,7 +163,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
         <TestCasesSection varsList={varsList} />
       </ErrorBoundary>
       <Box mt={8} />
-      <YamlEditor initialConfig={useStore.getState().getTestSuite()} />
+      <YamlEditor />
       <Dialog
         open={resetDialogOpen}
         onClose={() => setResetDialogOpen(false)}
