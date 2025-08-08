@@ -66,6 +66,10 @@ jest.mock('../src/globalConfig/accounts', () => ({
   getUserId: jest.fn().mockReturnValue('test-user-id'),
 }));
 
+jest.mock('../src/constants/build', () => ({
+  POSTHOG_KEY: 'test-posthog-key',
+}));
+
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let fetchSpy: jest.SpyInstance;
