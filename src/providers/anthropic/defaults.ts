@@ -1,10 +1,16 @@
-import { AnthropicMessagesProvider } from './messages';
-
+import logger from '../../logger';
 import type { DefaultProviders, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
+import type { ProviderConfiguration } from '../../types/providerConfig';
+import { OpenAiEmbeddingProvider } from '../openai/embedding';
+import { OpenAiModerationProvider } from '../openai/moderation';
+import { AnthropicMessagesProvider } from './messages';
 
 // Default model to use for all default providers
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+
+// Default OpenAI embedding model to use
+export const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-large';
 
 /**
  * Helper function to create a lazy-loaded provider. This allows the .env file to be
@@ -109,7 +115,29 @@ const llmRubricProviderFactory = createLazyProvider(
 );
 
 /**
+ * Anthropic provider configuration
+ */
+export const AnthropicProviderConfig: ProviderConfiguration = (env?: EnvOverrides) => {
+  logger.debug('Using Anthropic default providers');
+
+  // Get providers with the provided environment variables
+  const gradingProvider = gradingProviderFactory.getInstance(env);
+  const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
+
+  return {
+    embeddingProvider: new OpenAiEmbeddingProvider(DEFAULT_EMBEDDING_MODEL, { env }),
+    gradingJsonProvider: gradingProvider,
+    gradingProvider,
+    llmRubricProvider,
+    moderationProvider: new OpenAiModerationProvider('omni-moderation-latest', { env }), // No native moderation, fallback to OpenAI
+    suggestionsProvider: gradingProvider,
+    synthesizeProvider: gradingProvider,
+  };
+};
+
+/**
  * Gets all default Anthropic providers with the given environment overrides
+ * @deprecated Use AnthropicProviderConfig instead
  * @param env - Optional environment overrides
  * @returns Anthropic provider implementations for various functions
  */

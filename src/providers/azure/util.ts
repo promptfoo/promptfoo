@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import { calculateCost } from '../shared';
-import { AZURE_MODELS } from './defaults';
+import { AZURE_MODELS } from './models';
 
 import type { AzureCompletionOptions } from './types';
 

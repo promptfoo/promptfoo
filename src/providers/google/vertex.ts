@@ -945,6 +945,3 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     }
   }
 }
-
-export const DefaultGradingProvider = new VertexChatProvider('gemini-1.5-pro');
-export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedding-004');

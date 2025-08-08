@@ -2,8 +2,11 @@ import { clearCache } from '../../../src/cache';
 import {
   AnthropicLlmRubricProvider,
   getAnthropicProviders,
+  AnthropicProviderConfig,
 } from '../../../src/providers/anthropic/defaults';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { OpenAiEmbeddingProvider } from '../../../src/providers/openai/embedding';
+import { OpenAiModerationProvider } from '../../../src/providers/openai/moderation';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
@@ -44,6 +47,29 @@ describe('Anthropic Default Providers', () => {
       // Access multiple times should return the same instance
       const sameGradingProvider = providers.gradingProvider;
       expect(sameGradingProvider).toBe(gradingProvider);
+    });
+  });
+
+  describe('AnthropicProviderConfig', () => {
+    it('should return all required provider implementations', () => {
+      const providers = AnthropicProviderConfig();
+
+      expect(providers.embeddingProvider).toBeInstanceOf(OpenAiEmbeddingProvider);
+      expect(providers.gradingJsonProvider).toBeInstanceOf(AnthropicMessagesProvider);
+      expect(providers.gradingProvider).toBeInstanceOf(AnthropicMessagesProvider);
+      expect(providers.llmRubricProvider).toBeInstanceOf(AnthropicLlmRubricProvider);
+      expect(providers.moderationProvider).toBeInstanceOf(OpenAiModerationProvider);
+      expect(providers.suggestionsProvider).toBeInstanceOf(AnthropicMessagesProvider);
+      expect(providers.synthesizeProvider).toBeInstanceOf(AnthropicMessagesProvider);
+    });
+
+    it('should return the same instances on repeated calls', () => {
+      const providers1 = AnthropicProviderConfig();
+      const providers2 = AnthropicProviderConfig();
+
+      expect(providers1.gradingProvider).toBe(providers2.gradingProvider);
+      expect(providers1.gradingJsonProvider).toBe(providers2.gradingJsonProvider);
+      expect(providers1.llmRubricProvider).toBe(providers2.llmRubricProvider);
     });
   });
 

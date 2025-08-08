@@ -8,7 +8,7 @@ import invariant from '../../util/invariant';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import { DEFAULT_AZURE_API_VERSION } from './defaults';
+import { DEFAULT_AZURE_API_VERSION } from './models';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
