@@ -1005,6 +1005,112 @@ function ResultsTable({
     return width;
   }, [descriptionColumn, head.vars.length, head.prompts.length]);
 
+  // Listen for scroll events on the table container and sync the header horizontally
+  const tableRef = useRef<HTMLDivElement>(null);
+  const theadRef = useRef<HTMLTableSectionElement>(null);
+
+  useEffect(() => {
+    if (!tableRef.current || !theadRef.current) {
+      return;
+    }
+
+    const container = tableRef.current;
+    let rafId: number | null = null;
+
+    const handleScroll = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      rafId = requestAnimationFrame(() => {
+        if (theadRef.current) {
+          const xScroll = container.scrollLeft;
+          theadRef.current.style.transform = `translateX(-${xScroll}px)`;
+        }
+      });
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  interface ResultsTableHeaderProps {
+    reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
+    tableWidth: number;
+    maxTextLength: number;
+    wordBreak: 'break-word' | 'break-all';
+    theadRef: React.RefObject<HTMLTableSectionElement>;
+  }
+
+  function ResultsTableHeader({
+    reactTable,
+    tableWidth,
+    maxTextLength,
+    wordBreak,
+    theadRef,
+  }: ResultsTableHeaderProps) {
+    return (
+      <table
+        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''} ${
+          stickyHeader && 'results-table-sticky'
+        }`}
+        style={{
+          wordBreak,
+          width: `${tableWidth}px`,
+        }}
+      >
+        <thead ref={theadRef}>
+          {stickyHeader && (
+            <div className="header-dismiss">
+              <IconButton
+                onClick={() => setStickyHeader(false)}
+                size="small"
+                sx={{ color: 'text.primary' }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </div>
+          )}
+          {reactTable.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id} className="header">
+              {headerGroup.headers.map((header) => {
+                const isMetadataCol =
+                  header.column.id.startsWith('Variable') || header.column.id === 'description';
+                const isFinalRow = headerGroup.depth === 1;
+
+                return (
+                  <th
+                    key={header.id}
+                    colSpan={header.colSpan}
+                    style={{
+                      width: header.getSize(),
+                      borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                      height: isFinalRow ? 'fit-content' : 'auto',
+                    }}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                    <div
+                      onMouseDown={header.getResizeHandler()}
+                      onTouchStart={header.getResizeHandler()}
+                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                    />
+                  </th>
+                );
+              })}
+            </tr>
+          ))}
+        </thead>
+      </table>
+    );
+  }
+
   return (
     // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
     // of this component. This ensures that the pagination footer is always pinned to the bottom
@@ -1027,6 +1133,16 @@ function ResultsTable({
           </Box>
         )}
 
+      <Box sx={{ height: '1rem' }} />
+
+      <ResultsTableHeader
+        reactTable={reactTable}
+        tableWidth={tableWidth}
+        maxTextLength={maxTextLength}
+        wordBreak={wordBreak}
+        theadRef={theadRef}
+      />
+
       <div
         id="results-table-container"
         style={{
@@ -1038,6 +1154,7 @@ function ResultsTable({
           flexGrow: 1,
           position: 'relative',
         }}
+        ref={tableRef}
       >
         <Box
           sx={{
@@ -1066,50 +1183,6 @@ function ResultsTable({
             width: `${tableWidth}px`,
           }}
         >
-          <thead className={`${stickyHeader && 'sticky'}`}>
-            {stickyHeader && (
-              // TODO: Fix this position in the CSS.
-              <div className="header-dismiss">
-                <IconButton
-                  onClick={() => setStickyHeader(false)}
-                  size="small"
-                  sx={{ color: 'text.primary' }}
-                >
-                  <CloseIcon fontSize="small" />
-                </IconButton>
-              </div>
-            )}
-            {reactTable.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="header">
-                {headerGroup.headers.map((header) => {
-                  const isMetadataCol =
-                    header.column.id.startsWith('Variable') || header.column.id === 'description';
-                  const isFinalRow = headerGroup.depth === 1;
-
-                  return (
-                    <th
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      style={{
-                        width: header.getSize(),
-                        borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
-                        height: isFinalRow ? 'fit-content' : 'auto',
-                      }}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                      />
-                    </th>
-                  );
-                })}
-              </tr>
-            ))}
-          </thead>
           <tbody>
             {reactTable.getRowModel().rows.map((row, rowIndex) => {
               let colBorderDrawn = false;
@@ -1187,6 +1260,9 @@ function ResultsTable({
         px={2}
         mx={-2}
         sx={{
+          position: 'sticky',
+          bottom: 0,
+          zIndex: 1000,
           display: 'flex',
           alignItems: 'center',
           gap: 2,
