@@ -695,6 +695,8 @@ The `trace-span-count` assertion counts the number of spans in a trace that matc
 
 :::note
 Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
+
+If trace data is not available, the assertion will throw an error rather than failing, indicating that the assertion could not be evaluated.
 :::
 
 Example:
@@ -737,6 +739,10 @@ Common patterns:
 
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
 
+:::note
+This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
+:::
+
 Example:
 
 ```yaml
@@ -771,6 +777,10 @@ The assertion will show the slowest spans when a threshold is exceeded, making i
 ### Trace-Error-Spans
 
 The `trace-error-spans` assertion detects error spans in a trace and ensures the error rate is within acceptable limits. It automatically detects errors through status codes, error attributes, and status messages.
+
+:::note
+This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
+:::
 
 Example:
 
