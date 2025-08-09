@@ -4,7 +4,7 @@ import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';

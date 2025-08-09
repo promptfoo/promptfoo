@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
@@ -37,32 +37,33 @@ export const RedteamPluginObjectSchema = z.object({
     .union([
       z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
         if (!pluginOptions.includes(val)) {
-          ctx.addIssue({
+          ctx.issues.push({
             code: z.ZodIssueCode.invalid_enum_value,
             options: pluginOptions,
             received: val,
             message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+            input: '',
           });
         }
       }),
       z.string().superRefine((val, ctx) => {
         if (!val.startsWith('file://')) {
-          ctx.addIssue({
+          ctx.issues.push({
             code: z.ZodIssueCode.custom,
             message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
+            input: '',
           });
         }
       }),
     ])
     .describe('Name of the plugin'),
   numTests: z
-    .number()
     .int()
     .positive()
-    .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
+    .prefault(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
-  config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
-  severity: z.nativeEnum(Severity).optional().describe('Severity level for this plugin'),
+  config: z.record(z.string(), z.unknown()).optional().describe('Plugin-specific configuration'),
+  severity: z.enum(Severity).optional().describe('Severity level for this plugin'),
 });
 
 /**
@@ -73,19 +74,21 @@ export const RedteamPluginSchema = z.union([
     .union([
       z.enum(pluginOptions as [string, ...string[]]).superRefine((val, ctx) => {
         if (!pluginOptions.includes(val)) {
-          ctx.addIssue({
+          ctx.issues.push({
             code: z.ZodIssueCode.invalid_enum_value,
             options: pluginOptions,
             received: val,
             message: `Invalid plugin name. Must be one of: ${pluginOptions.join(', ')} (or a path starting with file://)`,
+            input: '',
           });
         }
       }),
       z.string().superRefine((val, ctx) => {
         if (!val.startsWith('file://')) {
-          ctx.addIssue({
+          ctx.issues.push({
             code: z.ZodIssueCode.custom,
             message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
+            input: '',
           });
         }
       }),
@@ -97,11 +100,12 @@ export const RedteamPluginSchema = z.union([
 export const strategyIdSchema = z.union([
   z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
     if (!ALL_STRATEGIES.includes(val as Strategy)) {
-      ctx.addIssue({
+      ctx.issues.push({
         code: z.ZodIssueCode.invalid_enum_value,
         options: [...ALL_STRATEGIES] as [string, ...string[]],
         received: val,
         message: `Invalid strategy name. Must be one of: ${[...ALL_STRATEGIES].join(', ')} (or a path starting with file://)`,
+        input: '',
       });
     }
   }),
@@ -129,7 +133,10 @@ export const RedteamStrategySchema = z.union([
   strategyIdSchema,
   z.object({
     id: strategyIdSchema,
-    config: z.record(z.unknown()).optional().describe('Strategy-specific configuration'),
+    config: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Strategy-specific configuration'),
   }),
 ]);
 
@@ -148,25 +155,19 @@ export const RedteamGenerateOptionsSchema = z.object({
     .describe('Additional strategies to include'),
   cache: z.boolean().describe('Whether to use caching'),
   config: z.string().optional().describe('Path to the configuration file'),
-  defaultConfig: z.record(z.unknown()).describe('Default configuration object'),
+  defaultConfig: z.record(z.string(), z.unknown()).describe('Default configuration object'),
   defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
   delay: z
-    .number()
     .int()
     .nonnegative()
     .optional()
     .describe('Delay in milliseconds between plugin API calls'),
   envFile: z.string().optional().describe('Path to the environment file'),
-  force: z.boolean().describe('Whether to force generation').default(false),
+  force: z.boolean().describe('Whether to force generation').prefault(false),
   injectVar: z.string().optional().describe('Variable to inject'),
   language: z.string().optional().describe('Language of tests to generate'),
-  maxConcurrency: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Maximum number of concurrent API calls'),
-  numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
+  maxConcurrency: z.int().positive().optional().describe('Maximum number of concurrent API calls'),
+  numTests: z.int().positive().optional().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
   provider: z.string().optional().describe('Provider to use'),
@@ -197,7 +198,7 @@ export const RedteamConfigSchema = z
       .optional()
       .describe('Additional instructions for test generation applied to each plugin'),
     provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
-    numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
+    numTests: z.int().positive().optional().describe('Number of tests to generate'),
     language: z.string().optional().describe('Language of tests ot generate for this plugin'),
     entities: z
       .array(z.string())
@@ -206,7 +207,7 @@ export const RedteamConfigSchema = z
     plugins: z
       .array(RedteamPluginSchema)
       .describe('Plugins to use for redteam generation')
-      .default(['default']),
+      .prefault(['default']),
     strategies: z
       .array(RedteamStrategySchema)
       .describe(
@@ -217,15 +218,13 @@ export const RedteamConfigSchema = z
         `,
       )
       .optional()
-      .default(['default']),
+      .prefault(['default']),
     maxConcurrency: z
-      .number()
       .int()
       .positive()
       .optional()
       .describe('Maximum number of concurrent API calls'),
     delay: z
-      .number()
       .int()
       .nonnegative()
       .optional()

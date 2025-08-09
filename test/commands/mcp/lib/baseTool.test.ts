@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { AbstractTool } from '../../../../src/commands/mcp/lib/baseTool';
 import type { ToolResult } from '../../../../src/commands/mcp/lib/types';
