@@ -1,4 +1,3 @@
-import { fetchWithProxy } from '../src/fetch';
 import {
   checkGoogleSheetAccess,
   fetchCsvFromGoogleSheetAuthenticated,
@@ -6,6 +5,7 @@ import {
   writeCsvToGoogleSheet,
 } from '../src/googleSheets';
 import logger from '../src/logger';
+import { fetchWithProxy } from '../src/util/fetch';
 import { createMockResponse } from './util/utils';
 
 import type { CsvRow } from '../src/types';
@@ -19,7 +19,7 @@ interface MockSpreadsheets {
   batchUpdate: jest.Mock;
 }
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithProxy: jest.fn(),
 }));
 

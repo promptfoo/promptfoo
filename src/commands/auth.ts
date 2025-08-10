@@ -1,10 +1,10 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { fetchWithProxy } from '../fetch';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { fetchWithProxy } from '../util/fetch';
 import type { Command } from 'commander';
 
 export function authCommand(program: Command) {

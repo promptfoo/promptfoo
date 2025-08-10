@@ -1,7 +1,6 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { z } from 'zod';
-import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -9,6 +8,7 @@ import { TestSuite, UnifiedConfig } from '../../types';
 import { CallApiContextParams, CallApiOptionsParams } from '../../types/providers';
 import { setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
+import { fetchWithProxy } from '../../util/fetch';
 
 const SimbaCommandSchema = z.object({
   config: z.union([z.string(), z.array(z.string())]).optional(),

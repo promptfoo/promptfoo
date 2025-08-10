@@ -1,8 +1,8 @@
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
-import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { ProviderOptionsSchema } from '../validators/providers';
+import { fetchWithProxy } from './fetch';
 import invariant from './invariant';
 
 import type { Plugin, Severity } from '../redteam/constants';

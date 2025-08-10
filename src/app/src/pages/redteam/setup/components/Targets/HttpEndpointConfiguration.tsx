@@ -4,6 +4,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
+import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -253,7 +254,7 @@ ${exampleRequest}`;
     setGenerating(true);
     setError('');
     try {
-      const res = await fetch('https://api.promptfoo.app/api/http-provider-generator', {
+      const res = await callApi('/http-provider-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

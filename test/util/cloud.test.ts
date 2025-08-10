@@ -1,4 +1,3 @@
-import { fetchWithProxy } from '../../src/fetch';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import {
   getConfigFromCloud,
@@ -6,8 +5,9 @@ import {
   getProviderFromCloud,
   makeRequest,
 } from '../../src/util/cloud';
+import { fetchWithProxy } from '../../src/util/fetch';
 
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts');
 jest.mock('../../src/globalConfig/cloud');
 jest.mock('../../src/util/cloud', () => ({
   ...jest.requireActual('../../src/util/cloud'),

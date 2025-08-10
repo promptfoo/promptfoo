@@ -1,11 +1,11 @@
-import { fetchWithProxy } from '../../../src/fetch';
 import {
   ArgsSchema,
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
 } from '../../../src/redteam/commands/discover';
+import { fetchWithProxy } from '../../../src/util/fetch';
 
-jest.mock('../../../src/fetch');
+jest.mock('../../../src/util/fetch');
 
 const mockedFetchWithProxy = jest.mocked(fetchWithProxy);
 
