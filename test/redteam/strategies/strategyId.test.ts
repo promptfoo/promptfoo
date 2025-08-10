@@ -91,7 +91,6 @@ describe('Strategy IDs', () => {
       'mischievous-user': 'mischievousUser.ts',
       morse: 'otherEncodings.ts',
       multilingual: 'multilingual.ts',
-      pandamonium: 'pandamonium.ts',
       piglatin: 'otherEncodings.ts',
       'prompt-injection': 'promptInjections/index.ts',
       retry: 'retry.ts',
