@@ -76,6 +76,14 @@ export default function BlackHat2025(): JSX.Element {
         <link rel="canonical" href="https://promptfoo.dev/events/blackhat-2025" />
       </Head>
       <main className={styles.blackhatPage}>
+        {/* Event Notice */}
+        <div className={styles.eventNotice}>
+          <p>
+            This event has concluded. Thank you to everyone who visited our booth at Black Hat USA
+            2025!
+          </p>
+        </div>
+
         {/* Hero Section */}
         <section className={styles.hero}>
           <div className={styles.heroBackground}>

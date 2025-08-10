@@ -24,6 +24,8 @@ tags: [company-update, conferences, defcon, blackhat]
 
 # Join Promptfoo at Hacker Summer Camp 2025
 
+> **Note:** This event has concluded. Thank you to everyone who met with us at the AI Summit, Black Hat, and DEF CON 2025!
+
 Black Hat + DEF CON USA 2025 will be here before we know it, and we would love to meet you.
 
 <!-- truncate -->

@@ -64,6 +64,11 @@ export default function Defcon2025(): JSX.Element {
         <link rel="canonical" href="https://promptfoo.dev/events/defcon-2025" />
       </Head>
       <main className={styles.defconPage}>
+        {/* Event Notice */}
+        <div className={styles.eventNotice}>
+          <p>This event has concluded. Thanks to everyone who joined us at DEFCON 33!</p>
+        </div>
+
         {/* Hero Section */}
         <section className={styles.hero}>
           <div className={styles.heroBackground}>
