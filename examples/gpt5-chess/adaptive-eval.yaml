@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Adaptive GPT-5 chess evaluation with Bayesian Elo estimation
+
+prompts:
+  - label: chess-game
+    raw: '{{start_fen}}'
+
+providers:
+  # Test against multiple Stockfish skill levels for Bayesian estimation
+  - id: file://./provider/gpt5-vs-stockfish.ts
+    label: gpt5-mini-vs-skill-5
+    config:
+      gptModel: gpt-5-mini
+      playAs: w
+      stockfishSkill: 5
+      depth: 10
+      maxPlies: 80
+      
+  - id: file://./provider/gpt5-vs-stockfish.ts
+    label: gpt5-mini-vs-skill-7
+    config:
+      gptModel: gpt-5-mini
+      playAs: w
+      stockfishSkill: 7
+      depth: 10
+      maxPlies: 80
+      
+  - id: file://./provider/gpt5-vs-stockfish.ts
+    label: gpt5-mini-vs-skill-9
+    config:
+      gptModel: gpt-5-mini
+      playAs: w
+      stockfishSkill: 9
+      depth: 12
+      maxPlies: 80
+      
+  - id: file://./provider/gpt5-vs-stockfish.ts
+    label: gpt5-mini-vs-skill-11
+    config:
+      gptModel: gpt-5-mini
+      playAs: w
+      stockfishSkill: 11
+      depth: 12
+      maxPlies: 80
+      
+  - id: file://./provider/gpt5-vs-stockfish.ts
+    label: gpt5-mini-vs-skill-13
+    config:
+      gptModel: gpt-5-mini
+      playAs: w
+      stockfishSkill: 13
+      depth: 14
+      maxPlies: 80
+
+tests:
+  # Initial exploration: 3 games per skill level = 15 games
+  - vars: { start_fen: startpos }
+  - vars: { start_fen: startpos }
+  - vars: { start_fen: startpos }
+  
+  # Add more games for skills near P(win) ≈ 0.5 after initial analysis
+  
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://./scorers/jsonShape.ts
+    - type: javascript
+      value: file://./scorers/noIllegal.ts
+    - type: javascript
+      value: file://./scorers/gameResult.ts
+    - type: javascript
+      value: file://./scorers/worldModel.ts
+
+# Export for Bayesian analysis
+outputPath: ./results/adaptive-eval-results.json 

@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT-5 chess evaluation against Stockfish
+
+prompts:
+  - label: chess-game
+    raw: '{{start_fen}}'  # Pass the starting position to the provider
+
+providers:
+  # Test GPT-5 mini against multiple Stockfish skill levels
+  - id: file://./provider/gpt5-vs-stockfish.ts
+    label: gpt5-mini-vs-skill-5-white
+    config:
+      gptModel: gpt-5-mini
+      playAs: w
+      stockfishSkill: 5
+      depth: 10
+      maxPlies: 120
+      
+  - id: file://./provider/gpt5-vs-stockfish.ts
+    label: gpt5-mini-vs-skill-5-black
+    config:
+      gptModel: gpt-5-mini
+      playAs: b    # Test as Black
+      stockfishSkill: 5
+      depth: 10
+      maxPlies: 120
+      
+  - id: file://./provider/gpt5-vs-stockfish.ts
+    label: gpt5-nano-vs-skill-5-white
+    config:
+      gptModel: gpt-5-nano   # Test the smallest GPT-5 variant
+      playAs: w
+      stockfishSkill: 5
+      depth: 10
+      maxPlies: 120
+      
+  - id: file://./provider/gpt5-vs-stockfish.ts
+    label: gpt5-vs-skill-10-white
+    config:
+      gptModel: gpt-5        # Full GPT-5 model
+      playAs: w
+      stockfishSkill: 10
+      depth: 12
+      maxPlies: 120
+
+tests:
+  # Run multiple games per configuration
+  - vars: { start_fen: startpos }
+  - vars: { start_fen: startpos }
+  - vars: { start_fen: startpos }
+  
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://./scorers/jsonShape.ts
+    - type: javascript
+      value: file://./scorers/noIllegal.ts
+    - type: javascript
+      value: file://./scorers/gameResult.ts
+
+# Optional: Export results to CSV for analysis
+outputPath: ./results/chess-eval-results.json 
