@@ -27,6 +27,7 @@ import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
+import { addTtsWithPerturbation } from './advancedTts';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
@@ -194,6 +195,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding audio encoding to ${testCases.length} test cases`);
       const newTestCases = await addAudioToBase64(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} audio encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'audio-perturbation',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding TTS with perturbation to ${testCases.length} test cases`);
+      const newTestCases = await addTtsWithPerturbation(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} TTS perturbation test cases`);
       return newTestCases;
     },
   },
