@@ -3,20 +3,20 @@ description: Simple GPT-5 vs Stockfish smoke test
 
 prompts:
   - label: chess-game
-    raw: '{{start_fen}}'  # Pass the FEN to the provider
+    raw: '{{start_fen}}' # Pass the FEN to the provider
 
 providers:
   - id: file://./provider/gpt5-vs-stockfish.ts
     label: gpt5-vs-sf-skill-3
     config:
-      gptModel: gpt-5-mini    # Using GPT-5 mini for cost efficiency
-      playAs: w              # GPT plays White
-      stockfishSkill: 3      # Very easy opponent for initial test
-      depth: 8               # Use depth for reproducibility
-      maxPlies: 60           # Shorter game for testing
+      gptModel: gpt-5-mini # Using GPT-5 mini for cost efficiency
+      playAs: w # GPT plays White
+      stockfishSkill: 3 # Very easy opponent for initial test
+      depth: 8 # Use depth for reproducibility
+      maxPlies: 60 # Shorter game for testing
 
 tests:
-  - vars: 
+  - vars:
       start_fen: startpos
     assert:
       - type: javascript
@@ -26,4 +26,4 @@ tests:
       - type: javascript
         value: file://./scorers/gameResult.ts
       - type: javascript
-        value: file://./scorers/worldModel.ts 
+        value: file://./scorers/worldModel.ts

@@ -1,21 +1,21 @@
 {
-    "name": "gpt5-chess-eval",
-    "version": "1.0.0",
-    "description": "Evaluate GPT-5's chess playing ability against Stockfish with Bayesian Elo estimation",
-    "scripts": {
-        "eval": "promptfoo eval -c promptfooconfig.yaml",
-        "eval-simple": "promptfoo eval -c simple.yaml",
-        "eval-adaptive": "promptfoo eval -c adaptive-eval.yaml",
-        "test": "promptfoo eval -c simple.yaml --max-concurrency 1",
-        "analyze": "cd analysis && python bayesian-elo.py ../results/adaptive-eval-results.json",
-        "full-eval": "npm run eval-adaptive && npm run analyze"
-    },
-    "dependencies": {
-        "chess.js": "^1.0.0-beta.8",
-        "openai": "^4.56.0"
-    },
-    "devDependencies": {
-        "@types/node": "^20.10.0",
-        "typescript": "^5.3.0"
-    }
+  "name": "gpt5-chess-eval",
+  "version": "1.0.0",
+  "description": "Evaluate GPT-5's chess playing ability against Stockfish with Bayesian Elo estimation",
+  "scripts": {
+    "eval": "promptfoo eval -c promptfooconfig.yaml",
+    "eval-simple": "promptfoo eval -c simple.yaml",
+    "eval-adaptive": "promptfoo eval -c adaptive-eval.yaml",
+    "test": "promptfoo eval -c simple.yaml --max-concurrency 1",
+    "analyze": "cd analysis && python bayesian-elo.py ../results/adaptive-eval-results.json",
+    "full-eval": "npm run eval-adaptive && npm run analyze"
+  },
+  "dependencies": {
+    "chess.js": "^1.0.0-beta.8",
+    "openai": "^4.56.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  }
 }

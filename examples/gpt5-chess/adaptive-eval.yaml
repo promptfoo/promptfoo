@@ -15,7 +15,7 @@ providers:
       stockfishSkill: 5
       depth: 10
       maxPlies: 80
-      
+
   - id: file://./provider/gpt5-vs-stockfish.ts
     label: gpt5-mini-vs-skill-7
     config:
@@ -24,7 +24,7 @@ providers:
       stockfishSkill: 7
       depth: 10
       maxPlies: 80
-      
+
   - id: file://./provider/gpt5-vs-stockfish.ts
     label: gpt5-mini-vs-skill-9
     config:
@@ -33,7 +33,7 @@ providers:
       stockfishSkill: 9
       depth: 12
       maxPlies: 80
-      
+
   - id: file://./provider/gpt5-vs-stockfish.ts
     label: gpt5-mini-vs-skill-11
     config:
@@ -42,7 +42,7 @@ providers:
       stockfishSkill: 11
       depth: 12
       maxPlies: 80
-      
+
   - id: file://./provider/gpt5-vs-stockfish.ts
     label: gpt5-mini-vs-skill-13
     config:
@@ -57,9 +57,9 @@ tests:
   - vars: { start_fen: startpos }
   - vars: { start_fen: startpos }
   - vars: { start_fen: startpos }
-  
+
   # Add more games for skills near P(win) ≈ 0.5 after initial analysis
-  
+
 defaultTest:
   assert:
     - type: javascript
@@ -72,4 +72,4 @@ defaultTest:
       value: file://./scorers/worldModel.ts
 
 # Export for Bayesian analysis
-outputPath: ./results/adaptive-eval-results.json 
+outputPath: ./results/adaptive-eval-results.json

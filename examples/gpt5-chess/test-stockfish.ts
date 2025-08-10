@@ -5,7 +5,7 @@ const SF_PATH = process.env.STOCKFISH_PATH || 'stockfish';
 
 async function testStockfish() {
   console.log('Testing Stockfish integration...\n');
-  
+
   try {
     const sf = spawn(SF_PATH, [], { stdio: ['pipe', 'pipe', 'inherit'] });
     const rl = readline.createInterface({ input: sf.stdout });
@@ -17,7 +17,7 @@ async function testStockfish() {
 
     // Initialize
     send('uci');
-    
+
     // Wait for UCI acknowledgment
     await new Promise<void>((resolve) => {
       rl.on('line', (line) => {
@@ -32,7 +32,7 @@ async function testStockfish() {
     // Test a simple position
     send('position startpos');
     send('go depth 10');
-    
+
     // Wait for best move
     const bestMove = await new Promise<string>((resolve) => {
       rl.on('line', (line) => {
@@ -55,4 +55,4 @@ async function testStockfish() {
   }
 }
 
-testStockfish(); 
+testStockfish();

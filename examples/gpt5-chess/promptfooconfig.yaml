@@ -3,7 +3,7 @@ description: GPT-5 chess evaluation against Stockfish
 
 prompts:
   - label: chess-game
-    raw: '{{start_fen}}'  # Pass the starting position to the provider
+    raw: '{{start_fen}}' # Pass the starting position to the provider
 
 providers:
   # Test GPT-5 mini against multiple Stockfish skill levels
@@ -15,29 +15,29 @@ providers:
       stockfishSkill: 5
       depth: 10
       maxPlies: 120
-      
+
   - id: file://./provider/gpt5-vs-stockfish.ts
     label: gpt5-mini-vs-skill-5-black
     config:
       gptModel: gpt-5-mini
-      playAs: b    # Test as Black
+      playAs: b # Test as Black
       stockfishSkill: 5
       depth: 10
       maxPlies: 120
-      
+
   - id: file://./provider/gpt5-vs-stockfish.ts
     label: gpt5-nano-vs-skill-5-white
     config:
-      gptModel: gpt-5-nano   # Test the smallest GPT-5 variant
+      gptModel: gpt-5-nano # Test the smallest GPT-5 variant
       playAs: w
       stockfishSkill: 5
       depth: 10
       maxPlies: 120
-      
+
   - id: file://./provider/gpt5-vs-stockfish.ts
     label: gpt5-vs-skill-10-white
     config:
-      gptModel: gpt-5        # Full GPT-5 model
+      gptModel: gpt-5 # Full GPT-5 model
       playAs: w
       stockfishSkill: 10
       depth: 12
@@ -48,7 +48,7 @@ tests:
   - vars: { start_fen: startpos }
   - vars: { start_fen: startpos }
   - vars: { start_fen: startpos }
-  
+
 defaultTest:
   assert:
     - type: javascript
@@ -59,4 +59,4 @@ defaultTest:
       value: file://./scorers/gameResult.ts
 
 # Optional: Export results to CSV for analysis
-outputPath: ./results/chess-eval-results.json 
+outputPath: ./results/chess-eval-results.json

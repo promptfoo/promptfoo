@@ -1,6 +1,6 @@
 # How Strong Is GPT-5 At Chess? We Measured Its Elo With Stockfish
 
-*TL;DR: We played 600+ games between GPT-5 and Stockfish across standard chess, Chess960, and random midgames. GPT-5 achieved ~2400 Elo in standard chess but dropped 500 points in Chess960, revealing continued reliance on memorized openings despite improved reasoning capabilities. Code and data included.*
+_TL;DR: We played 600+ games between GPT-5 and Stockfish across standard chess, Chess960, and random midgames. GPT-5 achieved ~2400 Elo in standard chess but dropped 500 points in Chess960, revealing continued reliance on memorized openings despite improved reasoning capabilities. Code and data included._
 
 ## The Question Everyone's Asking
 
@@ -11,6 +11,7 @@ More importantly, we wanted to answer: **Does GPT-5's reasoning ability translat
 ## Our Approach: Reproducible Chess Evaluation
 
 We built a systematic evaluation using:
+
 - **Stockfish 16** as the opponent (various skill levels from 5-20)
 - **600+ games** across three conditions
 - **Three GPT-5 variants**: GPT-5 (full), GPT-5-mini, GPT-5-nano
@@ -45,6 +46,7 @@ We built a systematic evaluation using:
 ### 🔍 Error Patterns
 
 GPT-5 shows improvement but still struggles with:
+
 1. **Complex knight maneuvers** in unfamiliar positions
 2. **Long-term positional planning** without pattern recognition
 3. **Technical endgames** requiring precise calculation
@@ -57,16 +59,20 @@ Even with GPT-5's reasoning capabilities, Chess960 reveals the gap between patte
 ### Example: Opening Comparison
 
 **Standard Chess (Game #89)**
+
 ```
 1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O
 ```
-*Flawless Ruy Lopez theory through move 15*
+
+_Flawless Ruy Lopez theory through move 15_
 
 **Chess960 (Game #203, Position 518)**
+
 ```
 1. e4 e5 2. Nf3 Nc6 3. Bc4?! f6? 4. d4 exd4 5. Nxd4??
 ```
-*Drops material on move 5 in unfamiliar structure*
+
+_Drops material on move 5 in unfamiliar structure_
 
 ## GPT-5 Variants: Size vs Strength
 
@@ -89,12 +95,12 @@ providers:
     config:
       gptModel: gpt-5-mini
       stockfishSkill: 10
-      nodes: 500000  # Fixed for reproducibility
+      nodes: 500000 # Fixed for reproducibility
 
 tests:
-  - vars: { position: "startpos" }
-  - vars: { position: "chess960", id: 518 }
-  
+  - vars: { position: 'startpos' }
+  - vars: { position: 'chess960', id: 518 }
+
 assert:
   - scorer: ./scorers/legality.ts
   - scorer: ./scorers/acpl.ts
@@ -110,18 +116,22 @@ assert:
 ## Surprising Observations
 
 ### 1. The Improvement Plateau
+
 GPT-5 shows diminishing returns - only ~400 Elo improvement over GPT-4 despite being a much larger model.
 
 ### 2. Reasoning vs Pattern Matching
+
 Despite GPT-5's reasoning capabilities, chess performance still correlates more with memorized patterns than logical deduction.
 
 ### 3. The 2400 Ceiling
+
 Even the full GPT-5 model plateaus around 2400 Elo in standard chess, suggesting fundamental architectural limitations for board games.
 
 ## Implications for AI Evaluation
 
 This experiment reveals important insights about GPT-5:
-- **Reasoning helps but doesn't eliminate pattern dependency** 
+
+- **Reasoning helps but doesn't eliminate pattern dependency**
 - **Significant improvement in move legality** (0.1% illegal vs 5% for GPT-4)
 - **Still struggles with novel positions** requiring pure calculation
 
@@ -139,6 +149,7 @@ npm run eval
 ```
 
 Requirements:
+
 - Stockfish 16+ installed
 - OpenAI API key with GPT-5 access
 - ~$50 in API credits for full replication
@@ -146,6 +157,7 @@ Requirements:
 ## What's Next?
 
 We're expanding this evaluation to:
+
 - Compare GPT-5 vs Claude 3.5 Opus, Gemini 2.0 Flash
 - Test with different reasoning effort settings
 - Evaluate puzzle-solving with step-by-step reasoning
@@ -161,6 +173,6 @@ For chess players: **GPT-5 is a decent sparring partner but won't replace engine
 
 ---
 
-*Reproduce this evaluation: [GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt5-chess)*
+_Reproduce this evaluation: [GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt5-chess)_
 
-*Discuss on [Hacker News](https://news.ycombinator.com/) | [LinkedIn](https://linkedin.com/)* 
+_Discuss on [Hacker News](https://news.ycombinator.com/) | [LinkedIn](https://linkedin.com/)_

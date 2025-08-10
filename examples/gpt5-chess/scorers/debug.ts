@@ -6,10 +6,10 @@ export default function debug(output: any, context: any) {
   console.log('Output.summary:', output?.summary);
   console.log('Context keys:', context ? Object.keys(context) : 'null');
   console.log('===================');
-  
+
   return {
     pass: true,
     score: 1,
-    reason: `Debug: ${output?.result || 'no result'}`
+    reason: `Debug: ${output?.result || 'no result'}`,
   };
-} 
+}

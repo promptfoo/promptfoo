@@ -21,40 +21,40 @@ function categorizeIllegalMove(chess: Chess, moveUci: string): string {
   if (!moveUci || moveUci.length < 4) {
     return 'format_error';
   }
-  
+
   const from = moveUci.slice(0, 2);
   const to = moveUci.slice(2, 4);
-  
+
   // Check if squares are valid
   if (!from.match(/[a-h][1-8]/) || !to.match(/[a-h][1-8]/)) {
     return 'format_error';
   }
-  
+
   // Check if there's a piece at the from square
   const piece = chess.get(from as any);
   if (!piece) {
     return 'state_error'; // No piece at source
   }
-  
+
   // Check if it's the right color's turn
   if (piece.color !== chess.turn()) {
     return 'state_error'; // Wrong color
   }
-  
+
   // Check for specific rule violations
   const moves = chess.moves({ verbose: true });
-  const legalFromSquare = moves.filter(m => m.from === from);
-  
+  const legalFromSquare = moves.filter((m) => m.from === from);
+
   if (legalFromSquare.length === 0) {
     return 'rule_error'; // Piece can't move at all
   }
-  
+
   // Check if the destination is blocked by own piece
   const destPiece = chess.get(to as any);
   if (destPiece && destPiece.color === piece.color) {
     return 'rule_error'; // Can't capture own piece
   }
-  
+
   // Would this move leave king in check?
   const testChess = new Chess(chess.fen());
   try {
@@ -65,7 +65,7 @@ function categorizeIllegalMove(chess: Chess, moveUci: string): string {
   } catch {
     return 'rule_error'; // Other rule violation
   }
-  
+
   return 'rule_error';
 }
 
@@ -74,36 +74,37 @@ export default function worldModel(output: any, context: any): WorldModelResult 
   const moves = output?.moves || [];
   const illegalCount = summary?.illegalCount || 0;
   const gptModel = summary?.gptModel || 'unknown';
-  
+
   // Categorize errors
   let formatErrors = 0;
   let stateErrors = 0;
   let ruleErrors = 0;
-  
+
   // Analyze the game moves if available
   if (moves.length > 0 && output?.pgn) {
     try {
       const chess = new Chess();
-      
+
       for (const move of moves) {
         if (move.engine) continue; // Skip Stockfish moves
-        
+
         const uci = move.uci;
-        if (!chess.moves({ verbose: true }).some(m => 
-          (m.from + m.to + (m.promotion || '')) === uci)) {
+        if (
+          !chess.moves({ verbose: true }).some((m) => m.from + m.to + (m.promotion || '') === uci)
+        ) {
           // This was an illegal move attempt
           const errorType = categorizeIllegalMove(chess, uci);
           if (errorType === 'format_error') formatErrors++;
           else if (errorType === 'state_error') stateErrors++;
           else if (errorType === 'rule_error') ruleErrors++;
         }
-        
+
         // Apply the move if legal
         try {
-          chess.move({ 
-            from: uci.slice(0, 2), 
-            to: uci.slice(2, 4), 
-            promotion: uci[4] as any 
+          chess.move({
+            from: uci.slice(0, 2),
+            to: uci.slice(2, 4),
+            promotion: uci[4] as any,
           });
         } catch {
           // Move was illegal
@@ -113,15 +114,15 @@ export default function worldModel(output: any, context: any): WorldModelResult 
       console.error('Error analyzing moves:', e);
     }
   }
-  
+
   // Calculate world model consistency score
   const totalMoves = moves.filter((m: any) => !m.engine).length || 1;
   const errorRate = illegalCount / totalMoves;
-  
+
   // Scoring rubric for world model quality
   let worldModelScore = 1.0;
   let assessment = 'Strong world model';
-  
+
   if (errorRate > 0.1) {
     worldModelScore = 0.0;
     assessment = 'No coherent world model - high illegal rate';
@@ -135,7 +136,7 @@ export default function worldModel(output: any, context: any): WorldModelResult 
     worldModelScore = 0.8;
     assessment = 'Good world model - rare errors';
   }
-  
+
   // Penalize specific error types more heavily
   if (stateErrors > 0) {
     worldModelScore *= 0.5; // State errors are worst - model loses track
@@ -145,24 +146,24 @@ export default function worldModel(output: any, context: any): WorldModelResult 
     worldModelScore *= 0.8; // Format errors suggest poor understanding
     assessment += ' (notation issues)';
   }
-  
+
   // Special case: GPT-5 reasoning models should do better
   if (gptModel.includes('gpt-5') && errorRate > 0.01) {
     assessment += ' - UNEXPECTED for reasoning model';
   }
-  
+
   const details = {
     formatErrors,
     stateErrors,
     ruleErrors,
-    consistencyScore: worldModelScore
+    consistencyScore: worldModelScore,
   };
-  
+
   return {
     pass: worldModelScore >= 0.6,
     score: worldModelScore,
     reason: assessment,
-    details
+    details,
   };
 }
 
@@ -172,10 +173,10 @@ export default function worldModel(output: any, context: any): WorldModelResult 
  */
 export function selfConsistencyTest(legalMovesList: string[], chosenMove: string): number {
   if (!legalMovesList || !chosenMove) return 0;
-  
+
   // Check if chosen move is in the list the model generated
   const consistency = legalMovesList.includes(chosenMove) ? 1.0 : 0.0;
-  
+
   return consistency;
 }
 
@@ -190,14 +191,14 @@ export function symmetryTest(originalMove: string, mirroredMove: string): number
     const idx = files.indexOf(file);
     return files[7 - idx];
   };
-  
+
   const mirrorMove = (move: string) => {
     if (!move || move.length < 4) return '';
     const fromFile = mirrorFile(move[0]);
     const toFile = mirrorFile(move[2]);
     return fromFile + move[1] + toFile + move[3] + (move[4] || '');
   };
-  
+
   const expectedMirror = mirrorMove(originalMove);
   return expectedMirror === mirroredMove ? 1.0 : 0.0;
-} 
+}

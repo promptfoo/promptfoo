@@ -13,12 +13,6 @@
     "moduleResolution": "node",
     "types": ["node"]
   },
-  "include": [
-    "provider/**/*",
-    "scorers/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
-} 
+  "include": ["provider/**/*", "scorers/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

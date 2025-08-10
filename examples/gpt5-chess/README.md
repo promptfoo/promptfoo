@@ -16,6 +16,7 @@ npx promptfoo@latest init --example gpt5-chess
    - Windows: Download from [stockfishchess.org](https://stockfishchess.org/download/)
 
 2. **OpenAI API key**:
+
    ```bash
    export OPENAI_API_KEY=sk-...
    ```
@@ -39,6 +40,7 @@ npm run test  # Runs one game with gpt-4o-mini vs Stockfish skill 5
 ### Simple Test (simple.yaml)
 
 Runs a single game with basic settings:
+
 - GPT-4o-mini as White
 - Stockfish skill level 5
 - Maximum 60 moves
@@ -47,6 +49,7 @@ Runs a single game with basic settings:
 ### Full Evaluation (promptfooconfig.yaml)
 
 Tests multiple conditions:
+
 - Standard chess starting position
 - Different Stockfish skill levels (5, 10, 15)
 - Both colors (White and Black)
@@ -63,6 +66,7 @@ Tests multiple conditions:
 ## Customization
 
 Edit the config files to:
+
 - Change GPT model: `gptModel: gpt-4o` or `gpt-4o-mini`
 - Adjust Stockfish strength: `stockfishSkill: 1-20`
 - Use fixed nodes for perfect reproducibility: `nodes: 100000`
@@ -71,6 +75,7 @@ Edit the config files to:
 ## Output
 
 Each game produces:
+
 - **PGN**: Standard chess notation of the game
 - **Result**: Win/Draw/Loss with reason
 - **Summary**: Statistics including illegal moves, retries, ply count
@@ -124,4 +129,4 @@ Coming soon - will add support for Chess960 starting positions.
 - Add Chess960 support for testing without opening theory
 - Implement ACPL (Average Centipawn Loss) scorer
 - Add Elo estimation from match results
-- Test temperature effects on play style 
+- Test temperature effects on play style
