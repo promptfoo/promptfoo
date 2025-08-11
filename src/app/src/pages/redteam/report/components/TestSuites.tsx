@@ -29,7 +29,7 @@ import { getSeverityColor } from './FrameworkComplianceUtils';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
-import { calcPromptfooRisk } from '@promptfoo/redteam/util';
+import { RiskScoreService } from '@promptfoo/redteam/riskScoring';
 
 interface TestSuitesProps {
   evalId: string;
@@ -85,7 +85,7 @@ const getSubCategoryStats = (
             ).toFixed(1) + '%'
           : 'N/A',
         severity,
-        riskScore: calcPromptfooRisk(
+        riskScore: RiskScoreService.calculate(
           severity,
           categoryStats[subCategory]
             ? categoryStats[subCategory].total - categoryStats[subCategory].pass
