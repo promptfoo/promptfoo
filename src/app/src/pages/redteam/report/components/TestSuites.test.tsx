@@ -1,4 +1,5 @@
 import { GridLogicOperator } from '@mui/x-data-grid';
+import { Severity } from '@promptfoo/redteam/constants';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +16,18 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 vi.mock('@promptfoo/redteam/constants', () => ({
+  calcPromptfooRisk: vi.fn((severity, failedTests, totalTests) => {
+    // Mock implementation of calcPromptfooRisk
+    const severityScores: Record<Severity, number> = {
+      [Severity.Critical]: 1.0,
+      [Severity.High]: 0.7,
+      [Severity.Medium]: 0.5,
+      [Severity.Low]: 0.3,
+    };
+    const severityScore = severityScores[severity as Severity] || 0;
+    const failureRate = totalTests > 0 ? failedTests / totalTests : 0;
+    return severityScore * failureRate;
+  }),
   categoryAliases: {
     'test-plugin': 'Test Plugin',
     'plugin-with-special-chars~!@#$%^&*()_+=-`': 'Plugin With Special Chars',
@@ -37,6 +50,12 @@ vi.mock('@promptfoo/redteam/constants', () => ({
     High: 'High',
     Medium: 'Medium',
     Low: 'Low',
+  },
+  severityRiskScores: {
+    Critical: 1.0,
+    High: 0.7,
+    Medium: 0.5,
+    Low: 0.3,
   },
   subCategoryDescriptions: {
     'test-plugin': 'Test plugin description',
