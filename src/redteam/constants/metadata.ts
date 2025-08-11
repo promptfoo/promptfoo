@@ -324,6 +324,11 @@ export function calcPromptfooRisk(
   attempts: number,
   complexityLevel = 5,
 ): number {
+  if (successes < 0 || attempts < 0 || successes > attempts) {
+    throw new Error(
+      'Invalid input: successes and attempts must be non-negative, and successes cannot exceed attempts',
+    );
+  }
   const R = severityRiskScores[severity];
   const Rmax = maxBySeverity[severity];
 
