@@ -13,11 +13,13 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
+import { handleMultiTurnToolConversation, shouldEnableMultiTurnTools, validateMultiTurnToolsConfig } from './multiTurnTools';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+import type OpenAI from 'openai';
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -166,6 +168,106 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
+  /**
+   * Makes an OpenAI API call with the provided messages and configuration.
+   * This method is used by the multi-turn tool conversation handler.
+   * 
+   * @private
+   */
+  private async makeOpenAICall(
+    messages: OpenAI.Chat.ChatCompletionMessageParam[],
+    config: OpenAiCompletionOptions,
+  ): Promise<OpenAI.Chat.ChatCompletion> {
+    const body = {
+      model: this.modelName,
+      messages,
+      ...this.getRequestBody(config),
+    };
+
+    logger.debug(`Making OpenAI API call for multi-turn tools: ${JSON.stringify(body)}`);
+
+    const { data } = await fetchWithCache(
+      `${this.getApiUrl()}/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.getApiKey()}`,
+          ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+          ...config.headers,
+        },
+        body: JSON.stringify(body),
+      },
+      REQUEST_TIMEOUT_MS,
+      'json',
+    );
+
+    if (data.error) {
+      throw new Error(formatOpenAiError(data));
+    }
+
+    return data;
+  }
+
+  /**
+   * Gets the request body configuration for OpenAI API calls.
+   * Extracted from getOpenAiBody for reuse in multi-turn scenarios.
+   * 
+   * @private
+   */
+  private getRequestBody(config: OpenAiCompletionOptions) {
+    const isReasoningModel = this.isReasoningModel();
+    const maxCompletionTokens = isReasoningModel
+      ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
+      : undefined;
+    
+    const maxTokens = !isReasoningModel
+      ? (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS'))
+      : undefined;
+
+    // Get reasoning effort for reasoning models
+    const reasoningEffort = config.reasoning_effort ?? 'medium';
+
+    // --- MCP tool injection logic ---
+    const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
+    const fileTools = config.tools
+      ? maybeLoadToolsFromExternalFile(config.tools, {}) || []
+      : [];
+    const allTools = [...mcpTools, ...fileTools];
+    // --- End MCP tool injection logic ---
+
+    const body: any = {
+      ...(maxTokens !== undefined && { max_tokens: maxTokens }),
+      ...(maxCompletionTokens !== undefined && { max_completion_tokens: maxCompletionTokens }),
+      ...(config.temperature !== undefined &&
+        this.supportsTemperature() && { temperature: config.temperature }),
+      ...(config.top_p !== undefined && { top_p: config.top_p }),
+      ...(config.frequency_penalty !== undefined && { frequency_penalty: config.frequency_penalty }),
+      ...(config.presence_penalty !== undefined && { presence_penalty: config.presence_penalty }),
+      ...(allTools.length > 0 && { tools: allTools }),
+      ...(config.tool_choice !== undefined && { tool_choice: config.tool_choice }),
+      ...(config.parallel_tool_calls !== undefined && { parallel_tool_calls: config.parallel_tool_calls }),
+      ...(config.response_format && {
+        response_format: maybeLoadFromExternalFile(
+          renderVarsInObject(config.response_format, {}),
+        ),
+      }),
+      ...(config.stop && { stop: config.stop }),
+      ...(config.seed !== undefined && { seed: config.seed }),
+      ...(config.user && { user: config.user }),
+      ...(config.passthrough && config.passthrough),
+      ...(isReasoningModel && { reasoning_effort: reasoningEffort }),
+      ...(config.reasoning && { reasoning: config.reasoning }),
+      ...(config.service_tier !== undefined && { service_tier: config.service_tier }),
+    };
+
+    if (config.store !== undefined) {
+      body.store = config.store;
+    }
+
+    return body;
+  }
+
   protected isReasoningModel(): boolean {
     return (
       this.modelName.startsWith('o1') ||
@@ -190,6 +292,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+
+    // Validate multi-turn tools configuration early
+    validateMultiTurnToolsConfig(config);
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -406,6 +511,41 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
+      
+      // Check if multi-turn tool handling should be enabled
+      if (shouldEnableMultiTurnTools(config, functionCalls)) {
+        logger.debug('Multi-turn tool conversation enabled, handling with agentic loop');
+        
+        try {
+          const multiTurnResult = await handleMultiTurnToolConversation(
+            // Convert initial prompt to messages format for multi-turn handler
+            parseChatPrompt(prompt, [{ role: 'user', content: prompt }]),
+            {
+              config,
+              modelName: this.modelName,
+              context,
+              executeFunctionCallback: this.executeFunctionCallback.bind(this),
+              callOpenAI: this.makeOpenAICall.bind(this),
+            },
+          );
+          
+          return {
+            output: multiTurnResult.output,
+            tokenUsage: multiTurnResult.tokenUsage,
+            cached: multiTurnResult.cached || false,
+            cost: multiTurnResult.cost || 0,
+            ...(multiTurnResult.finishReason && { finishReason: multiTurnResult.finishReason }),
+            ...(multiTurnResult.logProbs && { logProbs: multiTurnResult.logProbs }),
+            metadata: multiTurnResult.metadata,
+          };
+        } catch (error) {
+          logger.error(`Multi-turn tool conversation failed: ${error}`);
+          // Fall back to single-turn behavior
+          logger.debug('Falling back to single-turn function callback handling');
+        }
+      }
+      
+      // Original single-turn function callback handling (preserved for backward compatibility)
       if (functionCalls && config.functionToolCallbacks) {
         const results = [];
         let hasSuccessfulCallback = false;
