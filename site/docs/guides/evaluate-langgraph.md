@@ -410,7 +410,7 @@ In this example, you can see:
 npx promptfoo view
 ```
 
-<img width="800" alt="Promptfoo evaluation results for LangGraph agent (July 2025)" src="/img/docs/langgraph/promptfoo-eval.png" />
+<img width="800" alt="Promptfoo evaluation results for LangGraph agent (July 2025)" src="/img/localeval-results.png" />
 
 You just ran a full Promptfoo evaluation on a custom LangGraph agent.
 
@@ -440,7 +440,7 @@ You typed `y`, and the browser opened with the Promptfoo dashboard.
 - **Pass/fail summary**: A quick visual summary of how many tests passed, failed, or were skipped.
 - **Assertion results**: Breakdown of which assertions were run and whether they passed or failed.
 
-<img width="800" alt="Promptfoo dashboard showing LangGraph evaluation results" src="/img/docs/langgraph/promptfoo-dashboard.png" />
+<img width="800" alt="Promptfoo dashboard showing LangGraph evaluation results" src="/img/evalresults-search.png" />
 
 ## Step 9: Set Up Red Team Target (Custom LangGraph Provider)
 
@@ -487,8 +487,8 @@ In Custom Configuration (JSON), you can leave defaults like:
 - This setup tells Promptfoo which system to attack with red team tests.
 - By wiring it to your local LangGraph agent, you ensure that all adversarial prompts will hit your code—helping you catch weak spots, improve safety, and make your agent more robust.
 
-<img width="800" alt="Red team target configuration for LangGraph agent" src="/img/docs/langgraph/red-team-target.png" />
-<img width="800" alt="Custom target configuration details in Promptfoo" src="/img/docs/langgraph/custom-target.png" />
+<img width="800" alt="Red team target configuration for LangGraph agent" src="/img/redteammodel-local.png" />
+<img width="800" alt="Custom target configuration details in Promptfoo" src="/img/foundationmodel-testsetup.png" />
 
 ### Additional Configuration
 
@@ -548,8 +548,8 @@ We clarify:
 
 Providing this context helps the red teaming tool generate meaningful and focused attacks, avoiding time wasted on irrelevant prompts.
 
-<img width="800" alt="Usage details configuration for LangGraph research agent" src="/img/docs/langgraph/usage-details.png" />
-<img width="800" alt="Core application configuration in Promptfoo red team setup" src="/img/docs/langgraph/core-app.png" />
+<img width="800" alt="Usage details configuration for LangGraph research agent" src="/img/application-details-framed.png" />
+<img width="800" alt="Core application configuration in Promptfoo red team setup" src="/img/foundationmodel--localrun.png" />
 
 ## Step 11: Finalize Plugin & Strategy Setup
 
@@ -559,8 +559,8 @@ In this step, you:
 - Picked Custom strategies like Basic, Single-shot Optimization, Composite Jailbreaks, etc.
 - Reviewed all configurations, including Purpose, Features, Domain, Rules, and Sample Data to ensure the system only tests safe research queries.
 
-<img width="800" alt="Plugin configuration for LangGraph red team testing" src="/img/docs/langgraph/plugin-config.png" />
-<img width="800" alt="Strategy configuration for comprehensive LangGraph testing" src="/img/docs/langgraph/strategy-config.png" />
+<img width="800" alt="Plugin configuration for LangGraph red team testing" src="/img/risk-assessment-framed.png" />
+<img width="800" alt="Strategy configuration for comprehensive LangGraph testing" src="/img/risk-category-drawer@2x.png" />
 
 ## Step 12: Run and Check Final Red Team Results
 
@@ -588,8 +588,8 @@ npx promptfoo view
 
 When complete, you'll get a full summary with vulnerability checks, token usage, pass rates, and detailed plugin/strategy results.
 
-<img width="800" alt="Running red team configuration for LangGraph agent" src="/img/docs/langgraph/running-config.png" />
-<img width="800" alt="Test summary results from LangGraph red team evaluation" src="/img/docs/langgraph/test-summary.png" />
+<img width="800" alt="Running red team configuration for LangGraph agent" src="/img/redteamrun-cli.png" />
+<img width="800" alt="Test summary results from LangGraph red team evaluation" src="/img/foundationmodel-evalresult.png" />
 
 ## Step 13: Check and summarize your results
 
@@ -599,8 +599,8 @@ Go to the Promptfoo dashboard and review:
 - Security, compliance, and safety sections all pass? ✅ Your agent handles prompts responsibly.
 - Check prompt history and evaluation logs for past runs and pass rates.
 
-<img width="800" alt="LLM risk overview dashboard for LangGraph agent evaluation" src="/img/docs/langgraph/llm-risk.png" />
-<img width="800" alt="Security summary report showing LangGraph agent safety metrics" src="/img/docs/langgraph/security.png" />
+<img width="800" alt="LLM risk overview dashboard for LangGraph agent evaluation" src="/img/riskreport-1.png" />
+<img width="800" alt="Security summary report showing LangGraph agent safety metrics" src="/img/security-coverage.png" />
 
 ## Conclusion
 

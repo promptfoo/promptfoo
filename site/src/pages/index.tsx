@@ -179,9 +179,9 @@ function HomepageWalkthrough() {
       description: (
         <>
           <p className={styles.walkthroughHeading}>
-            Enterprise MCP proxy for secure AI tool integration into your Applications and Users
+            Enterprise MCP proxy for secure AI tool integration
           </p>
-          <p>Control and monitor Model Context Protocol (MCP) servers in your organization:</p>
+          <p>Control and monitor MCP servers in your organization:</p>
           <ul>
             <li>Whitelist approved MCP servers for enterprise use</li>
             <li>Grant access to approved MCP servers to your applications and users</li>
@@ -189,8 +189,7 @@ function HomepageWalkthrough() {
             <li>Prevent security risks from untrusted MCP servers</li>
           </ul>
           <p>
-            Ensure your AI applications only access authorized tools and data sources while
-            maintaining full visibility into MCP interactions.
+            Restrict AI access to approved tools and data, with complete oversight of MCP activity.
           </p>
           <p>
             <strong>

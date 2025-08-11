@@ -170,7 +170,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4')
+      this.modelName.startsWith('o4') ||
+      this.modelName.startsWith('gpt-5')
     );
   }
 
@@ -265,14 +266,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             audio: config.audio || { voice: 'alloy', format: 'wav' },
           }
         : {}),
+      // GPT-5 only: attach verbosity if provided
+      ...(this.modelName.startsWith('gpt-5') && config.verbosity
+        ? { verbosity: config.verbosity }
+        : {}),
     };
 
-    // Handle reasoning_effort and reasoning parameters for o-series models
+    // Handle reasoning_effort and reasoning parameters for reasoning models
     if (
       config.reasoning_effort &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.startsWith('gpt-5'))
     ) {
       body.reasoning_effort = config.reasoning_effort;
     }
