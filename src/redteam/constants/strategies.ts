@@ -19,7 +19,7 @@ export const isCustomStrategy = (strategyId: string): boolean => {
 };
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
-export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
+export const MULTI_MODAL_STRATEGIES = ['audio', 'audio-perturbation', 'image', 'video'] as const;
 export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 
 export const AGENTIC_STRATEGIES = [
@@ -48,6 +48,7 @@ export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
   'audio',
+  'audio-perturbation',
   'base64',
   'best-of-n',
   'camelcase',
@@ -104,6 +105,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'citation',
   'custom',
   'mischievous-user',
+  'audio-perturbation',
 ] as const;
 
 export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];

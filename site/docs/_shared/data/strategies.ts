@@ -180,6 +180,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'audio-perturbation',
+    displayName: 'Audio Perturbation',
+    description: 'Audio with acoustic distortions',
+    longDescription:
+      'Tests resilience against audio inputs with acoustic perturbations like static, phone quality, underwater effects, and other real-world distortions',
+    cost: 'Medium',
+    asrIncrease: '30-50%',
+    link: '/docs/red-team/strategies/audio-perturbation/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'base64',
     displayName: 'Base64',
     description: 'Base64 encoding bypass',

@@ -8,6 +8,12 @@ description: Test how AI systems handle audio-encoded text inputs that may bypas
 
 The Audio strategy converts prompt text into speech audio and then encodes that audio as a base64 string. This allows for testing how AI systems handle audio-encoded text, which may potentially bypass text-based content filters or lead to different behaviors than when processing plain text.
 
+:::tip
+
+For testing with realistic acoustic conditions or adversarial audio perturbations, consider using the [Audio Perturbation](/docs/red-team/strategies/audio-perturbation) strategy, which adds effects like phone quality, static, underwater distortion, and more.
+
+:::
+
 ## Use Case
 
 This strategy is useful for:
@@ -66,6 +72,7 @@ This strategy is worth implementing because:
 
 ## Related Concepts
 
+- [Audio Perturbation](/docs/red-team/strategies/audio-perturbation) - Advanced audio testing with acoustic distortions and real-world effects
 - [Image Jailbreaking](/docs/red-team/strategies/image.md) - Similar approach using images instead of audio
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities
 - [Red Teaming Strategies](/docs/red-team/strategies) - Other red teaming approaches
