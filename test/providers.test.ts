@@ -12,6 +12,7 @@ import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
+import * as fileModule from '../src/util/file';
 
 import type { ProviderOptions } from '../src/types';
 
@@ -25,6 +26,7 @@ jest.mock('../src/providers/pythonCompletion');
 jest.mock('../src/providers/scriptCompletion');
 jest.mock('../src/providers/websocket');
 jest.mock('../src/util/cloud');
+jest.mock('../src/util/file');
 
 describe('loadApiProvider', () => {
   beforeEach(() => {
@@ -38,6 +40,9 @@ describe('loadApiProvider', () => {
     jest
       .mocked(getCloudDatabaseId)
       .mockImplementation((path: string) => path.slice('promptfoo://provider/'.length));
+
+    // By default, maybeLoadConfigFromExternalFile returns its input unchanged
+    jest.mocked(fileModule.maybeLoadConfigFromExternalFile).mockImplementation((input) => input);
   });
 
   it('should load echo provider', async () => {
@@ -97,6 +102,79 @@ describe('loadApiProvider', () => {
     expect(yaml.load).toHaveBeenCalledWith(JSON.stringify(jsonContent));
     expect(provider).toBeDefined();
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
+  });
+
+  it('should recursively resolve file:// references in provider config from yaml', async () => {
+    const yamlContentWithRefs: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'file://api-key.txt',
+        temperature: 'file://temperature.json',
+        tools: 'file://tools.yaml',
+      },
+    };
+
+    const resolvedContent: ProviderOptions = {
+      id: 'openai:chat:gpt-4',
+      config: {
+        apiKey: 'sk-test-key-12345',
+        temperature: 0.7,
+        tools: [{ name: 'search', description: 'Search the web' }],
+      },
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
+    jest.mocked(yaml.load).mockReturnValue(yamlContentWithRefs);
+    jest.mocked(fileModule.maybeLoadConfigFromExternalFile).mockReturnValue(resolvedContent);
+
+    const provider = await loadApiProvider('file://provider.yaml', {
+      basePath: '/test',
+    });
+
+    expect(fileModule.maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(yamlContentWithRefs);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', {
+      config: expect.objectContaining({
+        apiKey: 'sk-test-key-12345',
+        temperature: 0.7,
+        tools: [{ name: 'search', description: 'Search the web' }],
+      }),
+      id: 'openai:chat:gpt-4',
+    });
+  });
+
+  it('should recursively resolve file:// references in provider config from json', async () => {
+    const jsonContentWithRefs: ProviderOptions = {
+      id: 'openai:chat:gpt-3.5-turbo',
+      config: {
+        apiKey: 'file://secrets/api-key.txt',
+        systemPrompt: 'file://prompts/system.md',
+      },
+    };
+
+    const resolvedContent: ProviderOptions = {
+      id: 'openai:chat:gpt-3.5-turbo',
+      config: {
+        apiKey: 'sk-prod-key-67890',
+        systemPrompt: 'You are a helpful assistant.',
+      },
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContentWithRefs));
+    jest.mocked(yaml.load).mockReturnValue(jsonContentWithRefs);
+    jest.mocked(fileModule.maybeLoadConfigFromExternalFile).mockReturnValue(resolvedContent);
+
+    const provider = await loadApiProvider('file://provider.json', {
+      basePath: '/test',
+    });
+
+    expect(fileModule.maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(jsonContentWithRefs);
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-3.5-turbo', {
+      config: expect.objectContaining({
+        apiKey: 'sk-prod-key-67890',
+        systemPrompt: 'You are a helpful assistant.',
+      }),
+      id: 'openai:chat:gpt-3.5-turbo',
+    });
   });
 
   it('should load Provider from cloud', async () => {
