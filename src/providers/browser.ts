@@ -343,7 +343,9 @@ export class BrowserProvider implements ApiProvider {
           for (const [placeholder, key] of Object.entries(specialKeys)) {
             const lowerText = renderedArgs.text.toLowerCase();
             if (lowerText.includes(placeholder)) {
-              const parts = lowerText.split(placeholder);
+              // Use case-insensitive regex to split while preserving original case
+              const regex = new RegExp(placeholder.replace(/[<>]/g, '\\$&'), 'gi');
+              const parts = renderedArgs.text.split(regex);
               for (let i = 0; i < parts.length; i++) {
                 if (parts[i]) {
                   await page.fill(renderedArgs.selector, parts[i]);
