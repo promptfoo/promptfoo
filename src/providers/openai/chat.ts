@@ -195,10 +195,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const isReasoningModel = this.isReasoningModel();
+    const isGPT5Model = this.modelName.startsWith('gpt-5');
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
-    const maxTokens = isReasoningModel
+    const maxTokens = isReasoningModel || isGPT5Model
       ? undefined
       : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
 
