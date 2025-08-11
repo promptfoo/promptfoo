@@ -506,8 +506,6 @@ export default function ResultsView({
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
-  // Remove body overflow lock; horizontal overflow will be hidden globally in CSS
-
   return (
     <>
       <Box px={2}>

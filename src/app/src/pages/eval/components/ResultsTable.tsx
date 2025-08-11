@@ -144,6 +144,80 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
 }
 
+function ResultsTableHeader({
+  reactTable,
+  tableWidth,
+  maxTextLength,
+  wordBreak,
+  theadRef,
+  stickyHeader,
+  setStickyHeader,
+}: {
+  reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
+  tableWidth: number;
+  maxTextLength: number;
+  wordBreak: 'break-word' | 'break-all';
+  theadRef: React.RefObject<HTMLTableSectionElement>;
+  stickyHeader: boolean;
+  setStickyHeader: (sticky: boolean) => void;
+}) {
+  return (
+    <table
+      className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''} ${
+        stickyHeader && 'results-table-sticky'
+      }`}
+      style={{
+        wordBreak,
+        width: `${tableWidth}px`,
+      }}
+    >
+      <thead ref={theadRef}>
+        {stickyHeader && (
+          <div className="header-dismiss">
+            <IconButton
+              onClick={() => setStickyHeader(false)}
+              size="small"
+              sx={{ color: 'text.primary' }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </div>
+        )}
+        {reactTable.getHeaderGroups().map((headerGroup) => (
+          <tr key={headerGroup.id} className="header">
+            {headerGroup.headers.map((header) => {
+              const isMetadataCol =
+                header.column.id.startsWith('Variable') || header.column.id === 'description';
+              const isFinalRow = headerGroup.depth === 1;
+
+              return (
+                <th
+                  key={header.id}
+                  colSpan={header.colSpan}
+                  style={{
+                    width: header.getSize(),
+                    borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                    height: isFinalRow ? 'fit-content' : 'auto',
+                  }}
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                  <div
+                    onMouseDown={header.getResizeHandler()}
+                    onTouchStart={header.getResizeHandler()}
+                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                  />
+                </th>
+              );
+            })}
+          </tr>
+        ))}
+      </thead>
+    </table>
+  );
+}
+
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -1039,78 +1113,6 @@ function ResultsTable({
     };
   }, []);
 
-  interface ResultsTableHeaderProps {
-    reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
-    tableWidth: number;
-    maxTextLength: number;
-    wordBreak: 'break-word' | 'break-all';
-    theadRef: React.RefObject<HTMLTableSectionElement>;
-  }
-
-  function ResultsTableHeader({
-    reactTable,
-    tableWidth,
-    maxTextLength,
-    wordBreak,
-    theadRef,
-  }: ResultsTableHeaderProps) {
-    return (
-      <table
-        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''} ${
-          stickyHeader && 'results-table-sticky'
-        }`}
-        style={{
-          wordBreak,
-          width: `${tableWidth}px`,
-        }}
-      >
-        <thead ref={theadRef}>
-          {stickyHeader && (
-            <div className="header-dismiss">
-              <IconButton
-                onClick={() => setStickyHeader(false)}
-                size="small"
-                sx={{ color: 'text.primary' }}
-              >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </div>
-          )}
-          {reactTable.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="header">
-              {headerGroup.headers.map((header) => {
-                const isMetadataCol =
-                  header.column.id.startsWith('Variable') || header.column.id === 'description';
-                const isFinalRow = headerGroup.depth === 1;
-
-                return (
-                  <th
-                    key={header.id}
-                    colSpan={header.colSpan}
-                    style={{
-                      width: header.getSize(),
-                      borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
-                      height: isFinalRow ? 'fit-content' : 'auto',
-                    }}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                    <div
-                      onMouseDown={header.getResizeHandler()}
-                      onTouchStart={header.getResizeHandler()}
-                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                    />
-                  </th>
-                );
-              })}
-            </tr>
-          ))}
-        </thead>
-      </table>
-    );
-  }
-
   return (
     // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
     // of this component. This ensures that the pagination footer is always pinned to the bottom
@@ -1141,6 +1143,8 @@ function ResultsTable({
         maxTextLength={maxTextLength}
         wordBreak={wordBreak}
         theadRef={theadRef}
+        stickyHeader={stickyHeader}
+        setStickyHeader={setStickyHeader}
       />
 
       <div
