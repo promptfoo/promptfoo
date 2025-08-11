@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Dry run with GPT-4.1-nano via Responses API
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:responses:gpt-4.1-nano
+    label: GPT-4.1-nano (Responses)
+    config:
+      temperature: 0.1
+      max_output_tokens: 500
+      instructions: 'You are a helpful assistant that responds to questions directly and concisely.'
+
+tests: file://generate_dry_run_tests.js
+
+# Using GPT-4.1-nano as judge too for consistency
+defaultTest:
+  options:
+    provider:
+      id: openai:responses:gpt-4.1-nano
+      label: GPT-4.1-nano (Judge)
+      config:
+        temperature: 0
+        max_output_tokens: 1000
+
+outputPath: results/dry_run_results.json

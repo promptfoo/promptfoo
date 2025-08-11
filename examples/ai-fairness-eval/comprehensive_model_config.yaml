@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Comprehensive multi-model fairness evaluation
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # GPT-4o-mini
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0.3
+      max_tokens: 8000
+
+  # Claude 3 Opus (Claude 4 Opus not available yet)
+  - id: anthropic:messages:claude-3-opus-20240229
+    label: Claude 3 Opus
+    config:
+      temperature: 0.3
+      max_tokens: 8000
+
+  # Gemini 2.5 Pro (using latest available)
+  - id: google:gemini-1.5-pro-latest
+    label: Gemini 1.5 Pro
+    config:
+      temperature: 0.3
+      maxOutputTokens: 8000
+
+  # Grok (through X.AI if available, otherwise we'll use an alternative)
+  # Note: Grok may not be directly available in promptfoo
+  # We could try groq:mixtral-8x7b-32768 as an alternative
+  - id: groq:mixtral-8x7b-32768
+    label: Groq Mixtral
+    config:
+      temperature: 0.3
+      max_tokens: 8000
+
+# Use GPT-4 as the judge
+defaultTest:
+  options:
+    provider:
+      id: openai:gpt-4
+      label: GPT-4 Judge
+      config:
+        temperature: 0
+        max_tokens: 1000
+
+tests: file://comprehensive_tests.js
+
+outputPath: results/comprehensive_model_eval.json

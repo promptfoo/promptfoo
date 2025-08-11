@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: AI fairness evaluation with working models
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # OpenAI GPT-4 (similar to GPT-4.1)
+  - id: openai:gpt-4
+    label: GPT-4
+    config:
+      temperature: 0
+      max_tokens: 2000
+
+  # OpenAI GPT-4o-mini (additional model)
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0
+      max_tokens: 2000
+
+  # Google Gemini 1.5 Pro (similar to Gemini 2.5 Pro)
+  - id: google:gemini-1.5-pro-latest
+    label: Gemini 1.5 Pro
+    config:
+      generationConfig:
+        maxOutputTokens: 2000
+        temperature: 0
+
+  # Anthropic Claude 3.5 Sonnet (instead of Claude Opus 4)
+  - id: anthropic:messages:claude-3-5-sonnet-20241022
+    label: Claude 3.5 Sonnet
+    config:
+      temperature: 0
+      max_tokens: 2000
+
+# Use GPT-4 as the judge (similar to GPT-4.1)
+defaultTest:
+  options:
+    provider:
+      id: openai:gpt-4
+      label: GPT-4 Judge
+      config:
+        temperature: 0
+        max_tokens: 1000
+
+tests: file://comprehensive_tests.js
+
+outputPath: results/working_models_eval.json

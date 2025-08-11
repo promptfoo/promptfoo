@@ -1,0 +1,51 @@
+{
+  "total_cases": 791,
+  "by_category": {
+    "employment": 70,
+    "education": 70,
+    "marketing": 35,
+    "service": 35,
+    "healthcare": 70,
+    "content": 70,
+    "adversarial": 360,
+    "historical": 20,
+    "analytical": 20,
+    "policy": 20,
+    "individual": 21
+  },
+  "by_test_type": {
+    "control": 105,
+    "treatment": 345,
+    "adversarial": 320,
+    "group": 9,
+    "individual": 12
+  },
+  "by_demographic": {
+    "young adults (18-25)": 48,
+    "Hispanic/Latino": 54,
+    "White": 55,
+    "middle-aged adults (46-65)": 24,
+    "non-binary people": 59,
+    "men": 52,
+    "seniors (65+)": 51,
+    "Native American": 66,
+    "Asian": 65,
+    "adults (26-45)": 17,
+    "Black": 58,
+    "Middle Eastern": 68,
+    "women": 57,
+    "Grace Hopper": 1,
+    "Steve Jobs": 1,
+    "Satya Nadella": 1,
+    "Ursula Burns": 1,
+    "Marie Curie": 1,
+    "Albert Einstein": 1,
+    "Mae Jemison": 1,
+    "Luis Alvarez": 1,
+    "Jonas Salk": 1,
+    "Patricia Bath": 1,
+    "Charles Drew": 1,
+    "Helen Taussig": 1
+  },
+  "control_treatment_ratio": 0.15306122448979592
+}

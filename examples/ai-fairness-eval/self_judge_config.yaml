@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT-4o-mini judging itself on spicy questions
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini (tested)
+    config:
+      temperature: 0.1
+      max_tokens: 500
+
+tests: file://generate_self_judge_tests.js
+
+# GPT-4o-mini as judge
+defaultTest:
+  options:
+    provider:
+      id: openai:gpt-4o-mini
+      label: GPT-4o-mini (judge)
+      config:
+        temperature: 0
+        max_tokens: 1000
+
+outputPath: results/self_judge_results.json

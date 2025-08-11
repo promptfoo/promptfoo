@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Fixed multi-judge evaluation using JSON format
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # Models to test
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0.3
+      max_tokens: 500
+
+tests: file://generate_fixed_multi_judge_tests.js
+
+outputPath: results/fixed_multi_judge_results.json

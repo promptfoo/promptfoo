@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Multi-judge AI fairness evaluation with JSON output format
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # Models to test
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0.3
+      max_tokens: 500
+
+  # Could add more models here for comparison
+  # - id: anthropic:messages:claude-3-5-sonnet-20241022
+  #   label: Claude 3.5 Sonnet
+  #   config:
+  #     temperature: 0.3
+  #     max_tokens: 500
+
+tests: file://generate_multi_judge_tests.js
+
+# No defaultTest needed - judges are specified in the test generation
+
+outputPath: results/pilot_multi_judge_results.json

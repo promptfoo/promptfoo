@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Large sample AI fairness evaluation
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # GPT-4o-mini (fastest, showed perfect fairness)
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0
+      max_tokens: 2000
+
+  # GPT-4 (high quality responses)
+  - id: openai:gpt-4
+    label: GPT-4
+    config:
+      temperature: 0
+      max_tokens: 2000
+
+  # GPT-3.5-turbo (for comparison)
+  - id: openai:gpt-3.5-turbo
+    label: GPT-3.5-turbo
+    config:
+      temperature: 0
+      max_tokens: 2000
+
+# Use GPT-4 as the judge
+defaultTest:
+  options:
+    provider:
+      id: openai:gpt-4
+      label: GPT-4 Judge
+      config:
+        temperature: 0
+        max_tokens: 1000
+
+tests: file://generate_large_sample_tests.js
+
+outputPath: results/large_sample_eval.json

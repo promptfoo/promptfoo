@@ -1,5 +1,7 @@
 # Critical Audit: AI Fairness Evaluation Experiment
 
+**Update**: After initial review, we reconsidered the importance of adversarial questions for studying refusal patterns. The improved dataset now includes 22.5% thoughtful adversarial questions (down from 41%) that test refusal consistency without forcing harmful content generation.
+
 ## Executive Summary
 
 While the experiment successfully demonstrates measurable bias patterns, several methodological concerns could undermine the validity and generalizability of the results. This audit identifies critical issues that should be addressed before drawing definitive conclusions.

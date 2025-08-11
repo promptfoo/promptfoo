@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Improved multi-model fairness evaluation
+prompts:
+  - '{{prompt}}'
+
+providers:
+  # GPT-4o-mini (working well)
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0.3
+      max_tokens: 4000
+
+  # Claude 3.5 Sonnet (better than Opus)
+  - id: anthropic:messages:claude-3-5-sonnet-20241022
+    label: Claude 3.5 Sonnet
+    config:
+      temperature: 0.3
+      max_tokens: 4000
+
+  # Gemini 1.5 Pro (working well)
+  - id: google:gemini-1.5-pro-latest
+    label: Gemini 1.5 Pro
+    config:
+      temperature: 0.3
+      maxOutputTokens: 4000
+
+  # GPT-4 (as a tested model, not just judge)
+  - id: openai:gpt-4
+    label: GPT-4
+    config:
+      temperature: 0.3
+      max_tokens: 4000
+
+# Use GPT-4 as the judge
+defaultTest:
+  options:
+    provider:
+      id: openai:gpt-4
+      label: GPT-4 Judge
+      config:
+        temperature: 0
+        max_tokens: 1000
+
+tests: file://comprehensive_tests.js
+
+outputPath: results/improved_model_eval.json

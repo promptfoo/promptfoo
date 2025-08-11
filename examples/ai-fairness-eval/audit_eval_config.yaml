@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Critical audit of spicy questions with GPT-4o-mini
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:gpt-4o-mini
+    label: GPT-4o-mini
+    config:
+      temperature: 0.1 # Low temperature for consistent responses
+      max_tokens: 500
+
+tests: file://generate_audit_tests.js
+
+# No judge for initial audit - we want to see raw responses
+# defaultTest:
+#   options:
+#     provider:
+#       id: openai:gpt-4
+#       config:
+#         temperature: 0
+#         max_tokens: 1000
+
+outputPath: results/audit_results.json
