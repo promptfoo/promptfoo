@@ -499,7 +499,7 @@ thead {
   animation-name: collapseHeader;
   /** Attach scroll timeline to the root scroll container */
   animation-timeline: scroll();
-  animation-duration: 1ms;
+  animation-duration: 0;
   animation-range-start: 0px;
   animation-range-end: 50px;
   animation-fill-mode: both;
@@ -538,16 +538,16 @@ thead {
 }
 
 thead .header-dismiss {
-  opacity: var(--collapsed--header-dismiss-opacity);
+  opacity: var(--collapsed--header-dismiss-opacity, 0);
   pointer-events: var(--collapsed--header-dismiss-pointer-events, inherit);
   transition: opacity 0.2s ease-out;
   z-index: 100;
 }
 
 .results-table thead .collapse-hidden {
-  opacity: var(--collapse--collapse-hidden-opacity);
+  opacity: var(--collapse--collapse-hidden-opacity, 1);
   pointer-events: var(--collapse--collapse-hidden-pointer-events);
-  max-height: var(--collapse--collapse-hidden-max-height);
+  max-height: var(--collapse--collapse-hidden-max-height, 1000px);
   overflow: hidden;
   transition:
     opacity 0.1s ease-out,
@@ -556,7 +556,7 @@ thead .header-dismiss {
 }
 
 .results-table thead .MuiFormControlLabel-root {
-  margin-top: var(--collapsed--mui-form-label-margin-top);
+  margin-top: var(--collapsed--mui-form-label-margin-top, 15px);
   transition: margin-top 0.2s ease-out;
 }
 
@@ -587,7 +587,7 @@ thead .header-dismiss {
 }
 
 .results-table thead .collapse-font-small {
-  font-size: var(--collapsed--font-small-font-size);
+  font-size: var(--collapsed--font-small-font-size, 15px);
   transition: font-size 0.2s ease-out;
 }
 
