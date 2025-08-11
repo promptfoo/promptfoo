@@ -15,7 +15,6 @@ import TableSortLabel from '@mui/material/TableSortLabel';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
-  calcPromptfooRisk,
   categoryAliases,
   displayNameOverrides,
   type Plugin,
@@ -29,6 +28,8 @@ import { useNavigate } from 'react-router-dom';
 import { getSeverityColor } from './FrameworkComplianceUtils';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
+
+import { calcPromptfooRisk } from '@promptfoo/redteam/util';
 
 interface TestSuitesProps {
   evalId: string;
