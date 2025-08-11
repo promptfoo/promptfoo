@@ -38,4 +38,6 @@ examples/redteam-medical-agent/redteam.yaml
 examples/grok-4-political-bias/results.json
 examples/grok-4-political-bias/results-multi-judge.json
 
+# LLM Tool Settings
 **/.claude/settings.local.json
+.serena/
