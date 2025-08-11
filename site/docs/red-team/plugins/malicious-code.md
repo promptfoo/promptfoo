@@ -177,7 +177,7 @@ The plugin assesses the AI's response based on:
 
 The Malicious Code plugin works well alongside:
 
-- **[Cybercrime](harmful.md#cybercrime)**: For broader cybercrime-related testing
+- **[Harmful Content](harmful.md)**: For broader harmful content testing including other cybercrime categories
 - **[SQL Injection](sql-injection.md)**: For database-specific attack testing
 - **[Shell Injection](shell-injection.md)**: For command injection vulnerabilities
 - **[SSRF](ssrf.md)**: For server-side request forgery testing
