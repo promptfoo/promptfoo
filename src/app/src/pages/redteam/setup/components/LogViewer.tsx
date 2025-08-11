@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
 import { useToast } from '@app/hooks/useToast';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -32,7 +32,7 @@ export function LogViewer({ logs }: LogViewerProps) {
     main: 0,
     fullscreen: 0,
   });
-  const [initialWidth, setInitialWidth] = React.useState(-1);
+  const [initialWidth, setInitialWidth] = React.useState<number | null>(null);
 
   const ansiConverter = useMemo(
     () =>
@@ -83,8 +83,8 @@ export function LogViewer({ logs }: LogViewerProps) {
   /**
    * Get the initial width of the log container
    */
-  useEffect(() => {
-    if (logsContainerRef.current && initialWidth === -1) {
+  useLayoutEffect(() => {
+    if (logsContainerRef.current && initialWidth === null) {
       setInitialWidth(logsContainerRef.current.clientWidth);
     }
   }, [logsContainerRef, initialWidth]);
@@ -159,7 +159,7 @@ export function LogViewer({ logs }: LogViewerProps) {
           fontFamily: 'monospace',
           fontSize: '0.875rem',
           overflowX: 'scroll',
-          width: initialWidth,
+          width: initialWidth ?? '100%',
           ...sx,
         }}
       >
