@@ -146,6 +146,12 @@ export async function handleMultiTurnToolConversation(
       logger.debug(`Processing ${message.tool_calls!.length} tool calls in iteration ${iterations}`);
       
       for (const toolCall of message.tool_calls!) {
+        // Skip non-function tool calls (e.g., custom tool calls)
+        if (toolCall.type !== 'function') {
+          logger.debug(`Skipping non-function tool call of type: ${toolCall.type}`);
+          continue;
+        }
+        
         const functionName = toolCall.function.name;
         const functionArgs = toolCall.function.arguments;
         const timestamp = getCurrentTimestamp().toString();
