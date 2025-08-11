@@ -508,7 +508,7 @@ export default function ResultsView({
 
   return (
     <>
-      <Box px={2}>
+      <Box px={2} pt={2}>
         <Box
           sx={{
             position: 'absolute',
