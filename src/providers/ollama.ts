@@ -48,6 +48,7 @@ interface OllamaCompletionOptions {
   stop?: string[];
   num_thread?: number;
   tools?: any[]; // Support for function calling/tools
+  think?: boolean;
 }
 
 const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
@@ -85,6 +86,7 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'stop',
   'num_thread',
   'tools',
+  'think',
 ]);
 
 interface OllamaCompletionJsonL {
@@ -148,10 +150,11 @@ export class OllamaCompletionProvider implements ApiProvider {
       model: this.modelName,
       prompt,
       stream: false,
+      think: false,
       options: Object.keys(this.config).reduce(
         (options, key) => {
           const optionName = key as keyof OllamaCompletionOptions;
-          if (OllamaCompletionOptionKeys.has(optionName)) {
+          if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'think') {
             options[optionName] = this.config[optionName];
           }
           return options;
@@ -161,6 +164,10 @@ export class OllamaCompletionProvider implements ApiProvider {
         >,
       ),
     };
+
+    if (this.config.think !== undefined) {
+      params.think = this.config.think;
+    }
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
