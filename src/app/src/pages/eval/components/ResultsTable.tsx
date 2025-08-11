@@ -152,6 +152,7 @@ function ResultsTableHeader({
   theadRef,
   stickyHeader,
   setStickyHeader,
+  zoom,
 }: {
   reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
   tableWidth: number;
@@ -160,6 +161,7 @@ function ResultsTableHeader({
   theadRef: React.RefObject<HTMLTableSectionElement>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
+  zoom: number;
 }) {
   return (
     <table
@@ -169,6 +171,7 @@ function ResultsTableHeader({
       style={{
         wordBreak,
         width: `${tableWidth}px`,
+        zoom,
       }}
     >
       <thead ref={theadRef}>
@@ -1105,11 +1108,17 @@ function ResultsTable({
 
     container.addEventListener('scroll', handleScroll, { passive: true });
 
+    // Initial sync
+    handleScroll();
+    // Keep in sync on resize
+    window.addEventListener('resize', handleScroll);
+
     return () => {
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
       }
       container.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
     };
   }, []);
 
@@ -1145,6 +1154,7 @@ function ResultsTable({
         theadRef={theadRef}
         stickyHeader={stickyHeader}
         setStickyHeader={setStickyHeader}
+        zoom={zoom}
       />
 
       <div
