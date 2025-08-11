@@ -32,6 +32,7 @@ export function LogViewer({ logs }: LogViewerProps) {
     main: 0,
     fullscreen: 0,
   });
+  const [initialWidth, setInitialWidth] = React.useState(-1);
 
   const ansiConverter = useMemo(
     () =>
@@ -78,6 +79,15 @@ export function LogViewer({ logs }: LogViewerProps) {
       }
     }
   }, [logs, shouldAutoScroll]);
+
+  /**
+   * Get the initial width of the log container
+   */
+  useEffect(() => {
+    if (logsContainerRef.current && initialWidth === -1) {
+      setInitialWidth(logsContainerRef.current.clientWidth);
+    }
+  }, [logsContainerRef, initialWidth]);
 
   const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement | null>) => {
     if (containerRef.current) {
@@ -148,6 +158,8 @@ export function LogViewer({ logs }: LogViewerProps) {
           backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
           fontFamily: 'monospace',
           fontSize: '0.875rem',
+          overflowX: 'scroll',
+          width: initialWidth,
           ...sx,
         }}
       >
