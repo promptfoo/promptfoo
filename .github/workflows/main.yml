@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20.x', '22.x', '24.x']
+        node: ['18.x', '20.x', '22.x', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
         exclude:
           # Remove when https://github.com/nodejs/node/issues/51766 is resolved
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: ['20.x', '22.x', '24.x']
+        node: ['18.x', '20.x', '22.x', '24.x']
 
     steps:
       - name: Checkout repo
