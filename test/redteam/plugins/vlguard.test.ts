@@ -226,7 +226,7 @@ describe('VLGuardPlugin', () => {
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
 
       await expect(plugin.generateTests(5)).rejects.toThrow(
-        'Failed to generate VLGuard tests: Failed to fetch dataset: No records returned from dataset',
+        'Failed to generate tests: Failed to fetch dataset: No records returned from dataset',
       );
     });
 
@@ -236,7 +236,7 @@ describe('VLGuardPlugin', () => {
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
 
       await expect(plugin.generateTests(5)).rejects.toThrow(
-        'Failed to generate VLGuard tests: Failed to fetch dataset: Network error',
+        'Failed to generate tests: Failed to fetch dataset: Network error',
       );
     });
 
@@ -385,20 +385,23 @@ describe('VLGuardGrader', () => {
 
   describe('GUIDANCE', () => {
     it('should have guidance for all main categories', () => {
-      expect(VLGuardGrader.GUIDANCE).toHaveProperty('deception');
-      expect(VLGuardGrader.GUIDANCE).toHaveProperty('risky behavior');
-      expect(VLGuardGrader.GUIDANCE).toHaveProperty('privacy');
-      expect(VLGuardGrader.GUIDANCE).toHaveProperty('discrimination');
+      const grader = new VLGuardGrader();
+      expect((grader as any).guidance).toHaveProperty('deception');
+      expect((grader as any).guidance).toHaveProperty('risky behavior');
+      expect((grader as any).guidance).toHaveProperty('privacy');
+      expect((grader as any).guidance).toHaveProperty('discrimination');
     });
 
     it('should have guidance for key subcategories', () => {
-      expect(VLGuardGrader.GUIDANCE).toHaveProperty('violence');
-      expect(VLGuardGrader.GUIDANCE).toHaveProperty('disinformation');
-      expect(VLGuardGrader.GUIDANCE).toHaveProperty('professional advice');
+      const grader = new VLGuardGrader();
+      expect((grader as any).guidance).toHaveProperty('violence');
+      expect((grader as any).guidance).toHaveProperty('disinformation');
+      expect((grader as any).guidance).toHaveProperty('professional advice');
     });
 
     it('should have default guidance', () => {
-      expect(VLGuardGrader.GUIDANCE).toHaveProperty('default');
+      const grader = new VLGuardGrader();
+      expect((grader as any).guidance).toHaveProperty('default');
     });
   });
 });
