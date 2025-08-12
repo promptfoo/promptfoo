@@ -10,6 +10,7 @@ import { createShareableUrl } from '../share';
 import { isRunningUnderNpx } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
+import { checkMonthlyProbeLimit, formatProbeUsageMessage } from '../util/redteamProbeLimit';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
 
@@ -113,6 +114,11 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   );
 
   logger.info(chalk.green('\nRed team scan complete!'));
+
+  // Display remaining probe usage after completion
+  const probeStatus = await checkMonthlyProbeLimit();
+  logger.info('\n' + formatProbeUsageMessage(probeStatus.remainingProbes));
+
   const command = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
   if (options.loadedFromCloud) {
     const url = await createShareableUrl(evalResult, false);

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Code from '@app/components/Code';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
+import { useProbeLimit } from '@app/hooks/useProbeLimit';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
@@ -11,6 +12,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
+import ScienceIcon from '@mui/icons-material/Science';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
@@ -39,12 +41,17 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { isFoundationModelProvider } from '@promptfoo/constants';
-import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
+import {
+  REDTEAM_DEFAULTS,
+  strategyDisplayNames,
+  ALLOWED_PROBE_LIMIT_EXCEEDANCE,
+} from '@promptfoo/redteam/constants';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
+import { getEstimatedProbes } from '@promptfoo/redteam/util';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
@@ -79,8 +86,16 @@ export default function Review({
   const { config, updateConfig } = useRedTeamConfig();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();
+  const { probeLimit } = useProbeLimit();
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
+  const estimatedProbes = useMemo(() => getEstimatedProbes(config), [config]);
+  const exceedsProbeLimit = useMemo(() => {
+    if (!probeLimit) {
+      return false;
+    }
+    return estimatedProbes > probeLimit.remainingProbes + ALLOWED_PROBE_LIMIT_EXCEEDANCE;
+  }, [estimatedProbes, probeLimit]);
 
   const [isRunning, setIsRunning] = React.useState(false);
   const [logs, setLogs] = React.useState<string[]>([]);
@@ -777,6 +792,99 @@ export default function Review({
           Running Your Configuration
         </Typography>
 
+        {probeLimit && (
+          <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <ScienceIcon color="action" />
+              <Typography variant="h6">Red Team Probe Limit</Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 2 }}>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Used This Month
+                </Typography>
+                <Typography variant="h6">{probeLimit.usedProbes.toLocaleString()}</Typography>
+              </Box>
+              <Divider orientation="vertical" flexItem />
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Remaining
+                </Typography>
+                <Typography
+                  variant="h6"
+                  color={
+                    probeLimit.hasExceeded
+                      ? 'error.main'
+                      : probeLimit.remainingProbes < 5000
+                        ? 'warning.main'
+                        : 'text.primary'
+                  }
+                >
+                  {probeLimit.remainingProbes.toLocaleString()}
+                </Typography>
+              </Box>
+              <Divider orientation="vertical" flexItem />
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Monthly Limit
+                </Typography>
+                <Typography variant="h6">{probeLimit.limit.toLocaleString()}</Typography>
+              </Box>
+              <Divider orientation="vertical" flexItem />
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Est. for This Scan
+                </Typography>
+                <Typography
+                  variant="h6"
+                  color={
+                    estimatedProbes > probeLimit.remainingProbes
+                      ? 'error.main'
+                      : estimatedProbes > probeLimit.remainingProbes * 0.5
+                        ? 'warning.main'
+                        : 'success.main'
+                  }
+                >
+                  {estimatedProbes.toLocaleString()}
+                </Typography>
+              </Box>
+            </Box>
+
+            {estimatedProbes > probeLimit.remainingProbes && (
+              <Alert severity={exceedsProbeLimit ? 'error' : 'warning'} sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  This scan requires approximately {estimatedProbes.toLocaleString()} probes, but
+                  you only have {probeLimit.remainingProbes.toLocaleString()} remaining.
+                  {exceedsProbeLimit
+                    ? ` The scan cannot be started as it exceeds your limit by more than ${ALLOWED_PROBE_LIMIT_EXCEEDANCE.toLocaleString()} probes. Please reduce the number of tests or contact sales to upgrade.`
+                    : ' The scan may be limited. Consider reducing the number of tests.'}
+                </Typography>
+              </Alert>
+            )}
+
+            <Alert severity="info" sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                Probes for red teams are generated for each test. For our community plan we provide
+                50,000 free probes per month. If you need more please contact our sales team at{' '}
+                <Link to="mailto:sales@promptfoo.dev" style={{ color: 'inherit' }}>
+                  sales@promptfoo.dev
+                </Link>{' '}
+                to purchase our enterprise solution. To see what else you get with our enterprise
+                plan, check out{' '}
+                <Link
+                  to="https://www.promptfoo.dev/pricing/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'inherit' }}
+                >
+                  https://www.promptfoo.dev/pricing/
+                </Link>{' '}
+              </Typography>
+            </Alert>
+          </Paper>
+        )}
+
         <Paper elevation={2} sx={{ p: 3 }}>
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" gutterBottom>
@@ -820,19 +928,65 @@ export default function Review({
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
             </Typography>
+            {probeLimit && probeLimit.hasExceeded && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                You have exceeded your monthly probe limit ({probeLimit.limit.toLocaleString()}{' '}
+                probes). Please contact inquiries@promptfoo.dev to upgrade your account.
+              </Alert>
+            )}
+            {exceedsProbeLimit && !probeLimit?.hasExceeded && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                This scan requires {estimatedProbes.toLocaleString()} probes but you only have{' '}
+                {probeLimit?.remainingProbes.toLocaleString()} remaining. Please reduce the number
+                of tests or plugins to continue.
+              </Alert>
+            )}
+            {probeLimit &&
+              !probeLimit.hasExceeded &&
+              !exceedsProbeLimit &&
+              probeLimit.remainingProbes < 5000 && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  You have {probeLimit.remainingProbes.toLocaleString()} probes remaining this month
+                  ({Math.round((probeLimit.remainingProbes / probeLimit.limit) * 100)}% of your
+                  monthly limit).
+                </Alert>
+              )}
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleRunWithSettings}
-                  disabled={isRunning}
-                  startIcon={
-                    isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
+                <Tooltip
+                  title={
+                    probeLimit?.hasExceeded
+                      ? 'Monthly probe limit exceeded. Please contact inquiries@promptfoo.dev to upgrade.'
+                      : exceedsProbeLimit
+                        ? `This scan requires ${estimatedProbes.toLocaleString()} probes but you only have ${probeLimit?.remainingProbes.toLocaleString()} remaining. Please reduce the number of tests.`
+                        : ''
                   }
+                  placement="top"
                 >
-                  {isRunning ? 'Running...' : 'Run Now'}
-                </Button>
+                  <span>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={handleRunWithSettings}
+                      disabled={isRunning || probeLimit?.hasExceeded || exceedsProbeLimit}
+                      startIcon={
+                        isRunning ? (
+                          <CircularProgress size={20} color="inherit" />
+                        ) : (
+                          <PlayArrowIcon />
+                        )
+                      }
+                    >
+                      {isRunning
+                        ? 'Running...'
+                        : probeLimit?.hasExceeded
+                          ? 'Limit Exceeded'
+                          : exceedsProbeLimit
+                            ? 'Exceeds Limit'
+                            : 'Run Now'}
+                    </Button>
+                  </span>
+                </Tooltip>
                 {isRunning && (
                   <Button
                     variant="contained"

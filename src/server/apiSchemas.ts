@@ -31,6 +31,14 @@ export const ApiSchemas = {
         message: z.string().optional(),
       }),
     },
+    ProbeLimit: {
+      Response: z.object({
+        hasExceeded: z.boolean(),
+        usedProbes: z.number(),
+        remainingProbes: z.number(),
+        limit: z.number(),
+      }),
+    },
   },
   Eval: {
     UpdateAuthor: {

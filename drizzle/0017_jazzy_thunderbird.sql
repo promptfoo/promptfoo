@@ -1,0 +1,1 @@
+ALTER TABLE `evals` ADD `redteam` integer GENERATED ALWAYS AS (json_extract(config, '$.redteam') IS NOT NULL) VIRTUAL;

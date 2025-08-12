@@ -1,7 +1,7 @@
 import logger from '../logger';
+import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
 
 import type { TokenUsage } from '../types/shared';
-import { createEmptyTokenUsage, accumulateTokenUsage } from './tokenUsageUtils';
 
 /**
  * A utility class for tracking token usage across an evaluation
@@ -17,6 +17,7 @@ export class TokenUsageTracker {
    */
   public static getInstance(): TokenUsageTracker {
     if (!TokenUsageTracker.instance) {
+      logger.error('Creating new TokenUsageTracker instance');
       TokenUsageTracker.instance = new TokenUsageTracker();
     }
     return TokenUsageTracker.instance;

@@ -62,6 +62,9 @@ export const evalsTable = sqliteTable(
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
     vars: text('vars', { mode: 'json' }).$type<string[]>(),
+    redteam: integer('redteam', { mode: 'boolean' }).generatedAlwaysAs(
+      sql`json_extract(config, '$.redteam') IS NOT NULL`,
+    ),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
