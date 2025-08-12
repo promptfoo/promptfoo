@@ -387,7 +387,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           if (result) {
             result += '\n';
           }
-          result += `Reasoning: ${JSON.stringify(item.summary)}`;
+          result += `Reasoning: ${item.summary.map((s: { text: string }) => s.text).join('\n')}\n`;
         } else if (item.type === 'web_search_call') {
           // Handle web search calls from deep research models
           if (result) {
