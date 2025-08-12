@@ -382,7 +382,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           }
         } else if (item.type === 'tool_result') {
           result = JSON.stringify(item);
-        } else if (item.type === 'reasoning') {
+        } else if (item.type === 'reasoning' && item.summary && item.summary.length > 0) {
           // Handle reasoning output from deep research models
           if (result) {
             result += '\n';
