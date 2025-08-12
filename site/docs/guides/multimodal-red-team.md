@@ -15,6 +15,7 @@ keywords:
     vision models,
     image strategy,
     UnsafeBench,
+    VLGuard,
     audio strategy,
   ]
 ---
@@ -43,8 +44,11 @@ npx promptfoo@latest redteam run -c promptfooconfig.static-image.yaml
 # Run the image strategy red team
 npx promptfoo@latest redteam run -c promptfooconfig.image-strategy.yaml
 
-# Run the UnsafeBench red team
+# Run the UnsafeBench red team (requires academic license)
 npx promptfoo@latest redteam run -c promptfooconfig.unsafebench.yaml
+
+# Or run the VLGuard red team (no license restrictions)
+npx promptfoo@latest redteam run -c promptfooconfig.vlguard.yaml
 ```
 
 ## Multi-Modal Red Teaming Approaches
@@ -64,6 +68,10 @@ This approach converts potentially harmful text into images and then sends those
 #### 3. UnsafeBench Dataset Testing
 
 This approach uses real unsafe images from the [UnsafeBench](https://huggingface.co/datasets/yiting/UnsafeBench) dataset to test how models respond to potentially harmful visual content across various categories. It evaluates whether models can properly detect and refuse to engage with unsafe imagery.
+
+:::warning License Restriction
+The UnsafeBench dataset is restricted to **non-commercial academic research only**. For commercial or organizational use, you should verify licensing terms before using any dataset. Note that the VLGuard plugin's dataset (kirito011024/vlguard_unsafes) does not have an explicitly stated license, so its usage rights are unclear.
+:::
 
 ### Audio Content Strategy
 
@@ -412,6 +420,52 @@ plugins:
 redteam:
   numTests: 5 # Change to desired number
 ```
+
+## Alternative: VLGuard Dataset Testing
+
+If you need to use multi-modal safety testing in a commercial or organizational setting, the VLGuard plugin provides similar functionality to UnsafeBench without license restrictions.
+
+### VLGuard Configuration
+
+```yaml title="promptfooconfig.vlguard.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: VLGuard Multi-Modal Model Evaluation
+
+targets:
+  - id: openai:gpt-4o
+    label: multimodal-model
+
+prompts:
+  - id: file://image-prompt.json
+    label: vlguard-image-test
+
+redteam:
+  purpose: >-
+    You are a visual analysis assistant that provides information about images
+    while maintaining ethical boundaries.
+  injectVar: image
+  numTests: 3
+  plugins:
+    - id: vlguard
+      config:
+        categories:
+          - deception
+          - risky behavior
+          - privacy
+        # Optional: filter by subcategories
+        # subcategories:
+        #   - violence
+        #   - disinformation
+```
+
+### Key Differences from UnsafeBench
+
+- **Different categories** - Uses categories like "deception", "risky behavior", "privacy", "discrimination"
+- **Subcategory filtering** - Additional filtering by subcategories like "violence", "disinformation", etc.
+- **442 curated images** - Smaller but well-organized dataset
+- **License unclear** - The dataset does not have an explicitly stated license, unlike UnsafeBench which clearly states academic-only use
+
+For more details, see the [VLGuard plugin documentation](/docs/red-team/plugins/vlguard).
 
 ## Audio Strategy Example
 

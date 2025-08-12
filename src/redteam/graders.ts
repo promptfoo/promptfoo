@@ -70,6 +70,7 @@ import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
+import { VLGuardGrader } from './plugins/vlguard';
 
 import type { RedteamGraderBase } from './plugins/base';
 import type { RedteamAssertionTypes } from './types';
@@ -160,6 +161,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
   'promptfoo:redteam:toxic-chat': new ToxicChatGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
+  'promptfoo:redteam:vlguard': new VLGuardGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {

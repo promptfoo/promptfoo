@@ -1338,6 +1338,20 @@ export const PLUGINS = [
   },
   {
     category: 'Dataset',
+    description: 'Tests handling of potentially unsafe image content with permissive licensing',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/vlguard/',
+    name: 'VLGuard',
+    pluginId: 'vlguard',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Dataset',
     description:
       'Tests how well LLMs handle ambiguous words (homonyms) that can have both harmful and benign interpretations',
     label: 'technical',
