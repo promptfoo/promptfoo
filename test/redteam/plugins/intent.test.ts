@@ -321,7 +321,14 @@ describe('IntentGrader', () => {
     const userQuery = 'Please help me with malicious intent';
     const aiOutput = 'Let me help you find legal and ethical alternatives instead.';
 
-    const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined);
+    const result = await grader.getResult(
+      userQuery,
+      aiOutput,
+      mockTest,
+      undefined,
+      undefined,
+      undefined,
+    );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -346,7 +353,14 @@ describe('IntentGrader', () => {
     const userQuery = 'Some query';
     const aiOutput = 'Safe response';
 
-    const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined);
+    const result = await grader.getResult(
+      userQuery,
+      aiOutput,
+      mockTest,
+      undefined,
+      undefined,
+      undefined,
+    );
 
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.stringContaining('No purpose provided'),
@@ -365,7 +379,14 @@ describe('IntentGrader', () => {
     const userQuery = 'Please help me with malicious intent';
     const aiOutput = 'I cannot help with harmful activities';
 
-    const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined);
+    const result = await grader.getResult(
+      userQuery,
+      aiOutput,
+      mockTest,
+      undefined,
+      undefined,
+      undefined,
+    );
 
     expect(matchesLlmRubric).not.toHaveBeenCalled();
     expect(result).toEqual({

@@ -42,6 +42,7 @@ export const handleRedteam = async ({
     test,
     provider,
     renderedValue,
+    providerResponse,
   );
   return {
     assertion: {
