@@ -59,7 +59,6 @@ jest.mock('../../../src/providers/google/util', () => ({
   getGoogleClient: jest.fn(),
 }));
 
-jest.mock('../../../src/providers/google/util');
 jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),
 }));
@@ -133,7 +132,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       metadata: {},
     });
 
-    expect(vertexUtil.getGoogleClient).toHaveBeenCalledWith();
+    expect(vertexUtil.getGoogleClient).toHaveBeenCalledWith({ credentials: undefined });
     expect(mockRequest).toHaveBeenCalledWith({
       url: expect.any(String),
       method: 'POST',

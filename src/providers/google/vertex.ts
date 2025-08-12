@@ -5,6 +5,7 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
@@ -75,8 +76,9 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   async getProjectId() {
+    const { projectId } = await this.getClientAndProjectId();
     return (
-      (await getGoogleClient()).projectId ||
+      projectId ||
       this.config.projectId ||
       this.env?.VERTEX_PROJECT_ID ||
       getEnvString('VERTEX_PROJECT_ID')
@@ -118,6 +120,42 @@ class VertexGenericProvider implements ApiProvider {
       getEnvString('VERTEX_API_VERSION') ||
       'v1'
     );
+  }
+
+  /**
+   * Helper method to get Google client with credentials support
+   * Handles file:// paths by loading the credentials from the specified file
+   */
+  async getClientWithCredentials() {
+    let credentials = this.config.credentials;
+
+    if (credentials && credentials.startsWith('file://')) {
+      try {
+        credentials = maybeLoadFromExternalFile(credentials) as string;
+      } catch (error) {
+        throw new Error(`Failed to load credentials from file: ${error}`);
+      }
+    }
+
+    const { client } = await getGoogleClient({ credentials });
+    return client;
+  }
+
+  /**
+   * Helper method to get Google client and project ID
+   */
+  async getClientAndProjectId() {
+    let credentials = this.config.credentials;
+
+    if (credentials && credentials.startsWith('file://')) {
+      try {
+        credentials = maybeLoadFromExternalFile(credentials) as string;
+      } catch (error) {
+        throw new Error(`Failed to load credentials from file: ${error}`);
+      }
+    }
+
+    return await getGoogleClient({ credentials });
   }
 
   // @ts-ignore: Prompt is not used in this implementation
@@ -202,7 +240,8 @@ export class VertexChatProvider extends VertexGenericProvider {
 
     let data: ClaudeResponse;
     try {
-      const { client, projectId } = await getGoogleClient();
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
       const url = `https://${this.getApiHost()}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
 
       const res = await client.request({
@@ -334,7 +373,8 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (response === undefined) {
       let data;
       try {
-        const { client, projectId } = await getGoogleClient();
+        const client = await this.getClientWithCredentials();
+        const projectId = await this.getProjectId();
         const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
           this.modelName
         }:streamGenerateContent`;
@@ -564,7 +604,8 @@ export class VertexChatProvider extends VertexGenericProvider {
 
     let data: Palm2ApiResponse;
     try {
-      const { client, projectId } = await getGoogleClient();
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
@@ -701,7 +742,8 @@ export class VertexChatProvider extends VertexGenericProvider {
 
     let data: LlamaResponse;
     try {
-      const { client, projectId } = await getGoogleClient();
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
       // Llama models use a different endpoint format
       const url = `https://${this.getRegion()}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
 
@@ -886,6 +928,42 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     this.env = env;
   }
 
+  /**
+   * Helper method to get Google client with credentials support
+   * Handles file:// paths by loading the credentials from the specified file
+   */
+  async getClientWithCredentials() {
+    let credentials = this.config.credentials;
+
+    if (credentials && credentials.startsWith('file://')) {
+      try {
+        credentials = maybeLoadFromExternalFile(credentials) as string;
+      } catch (error) {
+        throw new Error(`Failed to load credentials from file: ${error}`);
+      }
+    }
+
+    const { client } = await getGoogleClient({ credentials });
+    return client;
+  }
+
+  /**
+   * Helper method to get Google client and project ID
+   */
+  async getClientAndProjectId() {
+    let credentials = this.config.credentials;
+
+    if (credentials && credentials.startsWith('file://')) {
+      try {
+        credentials = maybeLoadFromExternalFile(credentials) as string;
+      } catch (error) {
+        throw new Error(`Failed to load credentials from file: ${error}`);
+      }
+    }
+
+    return await getGoogleClient({ credentials });
+  }
+
   id() {
     return `vertex:${this.modelName}`;
   }
@@ -896,6 +974,16 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
   getApiVersion(): string {
     return this.config.apiVersion || 'v1';
+  }
+
+  async getProjectId() {
+    const { projectId } = await this.getClientAndProjectId();
+    return (
+      projectId ||
+      this.config.projectId ||
+      this.env?.VERTEX_PROJECT_ID ||
+      getEnvString('VERTEX_PROJECT_ID')
+    );
   }
 
   async callApi(): Promise<ProviderResponse> {
@@ -913,7 +1001,8 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
     let data: any;
     try {
-      const { client, projectId } = await getGoogleClient();
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
       const url = `https://${this.getRegion()}-aiplatform.googleapis.com/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:predict`;
