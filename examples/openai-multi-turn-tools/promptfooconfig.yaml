@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI multi-turn tool conversations
+
+prompts:
+  - 'Calculate the total cost for {{quantity}} items at ${{price}} each, then check if it fits within a budget of ${{budget}}'
+
+providers:
+  - id: openai:chat:gpt-4o
+    config:
+      enableMultiTurnTools: true
+      temperature: 0
+      tools:
+        [
+          {
+            'type': 'function',
+            'function':
+              {
+                'name': 'calculate_total',
+                'description': 'Calculate the total cost of items',
+                'parameters':
+                  {
+                    'type': 'object',
+                    'properties':
+                      {
+                        'quantity': { 'type': 'number', 'description': 'Number of items' },
+                        'price': { 'type': 'number', 'description': 'Price per item' },
+                      },
+                    'required': ['quantity', 'price'],
+                  },
+              },
+          },
+          {
+            'type': 'function',
+            'function':
+              {
+                'name': 'check_budget',
+                'description': 'Check if an amount is within budget',
+                'parameters':
+                  {
+                    'type': 'object',
+                    'properties':
+                      {
+                        'amount': { 'type': 'number', 'description': 'Amount to check' },
+                        'budget': { 'type': 'number', 'description': 'Budget limit' },
+                      },
+                    'required': ['amount', 'budget'],
+                  },
+              },
+          },
+        ]
+      functionToolCallbacks:
+        calculate_total: |
+          (args) => {
+            const { quantity, price } = JSON.parse(args);
+            const total = quantity * price;
+            return JSON.stringify({ total, quantity, price });
+          }
+        check_budget: |
+          (args) => {
+            const { amount, budget } = JSON.parse(args);
+            const within_budget = amount <= budget;
+            const difference = budget - amount;
+            return JSON.stringify({ 
+              amount, 
+              budget, 
+              within_budget, 
+              difference: within_budget ? difference : Math.abs(difference),
+              status: within_budget ? 'approved' : 'over_budget' 
+            });
+          }
+
+tests:
+  - vars:
+      quantity: 2500
+      price: 1299.99
+      budget: 5000000
+    assert:
+      - type: contains
+        value: '3,249,975'
+      - type: contains-any
+        value: ['within', 'approved', 'under']
+
+  - vars:
+      quantity: 10000
+      price: 2550.75
+      budget: 20000000
+    assert:
+      - type: contains
+        value: '25,507,500'
+      - type: contains-any
+        value: ['over', 'exceeds', 'too much']
+
+  - vars:
+      quantity: 1000
+      price: 45000.00
+      budget: 45000000
+    assert:
+      - type: contains
+        value: '45,000,000'
