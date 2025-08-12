@@ -38,6 +38,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setAuthor,
     fetchEvalData,
     resetFilters,
+    addFilter,
   } = useTableStore();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
@@ -76,7 +77,16 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         setEvalId(id);
 
-        const data = await fetchEvalData(id, { skipSettingEvalId: true });
+        const { filters } = useTableStore.getState();
+
+        const data = await fetchEvalData(id, {
+          skipSettingEvalId: true,
+          filters: Object.values(filters.values).filter((filter) =>
+            filter.type === 'metadata'
+              ? Boolean(filter.value && filter.field)
+              : Boolean(filter.value),
+          ),
+        });
 
         if (!data) {
           setFailed(true);
@@ -113,6 +123,17 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Reset filters when navigating to a different eval; necessary because Zustand
     // is a global store.
     resetFilters();
+
+    // Check for filter params in the URL
+    const pluginParam = searchParams.get('plugin');
+
+    if (pluginParam) {
+      addFilter({
+        type: 'plugin',
+        operator: 'equals',
+        value: pluginParam,
+      });
+    }
 
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
