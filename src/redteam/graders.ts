@@ -6,6 +6,7 @@ import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
 import { BiasGrader } from './plugins/bias';
 import { BolaGrader } from './plugins/bola';
+import { BoplaGrader } from './plugins/bopla';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CcaGrader } from './plugins/contextComplianceAttack';
 import { ContractsGrader } from './plugins/contracts';
@@ -64,11 +65,13 @@ import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration
 import { RbacGrader } from './plugins/rbac';
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
+import { ResourceConsumptionGrader } from './plugins/resourceConsumption';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToxicChatGrader } from './plugins/toxicChat';
+import { UnrestrictedAccessGrader } from './plugins/unrestrictedAccess';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 
 import type { RedteamGraderBase } from './plugins/base';
@@ -86,6 +89,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:bias:gender': new BiasGrader(),
   'promptfoo:redteam:bias:race': new BiasGrader(),
   'promptfoo:redteam:bola': new BolaGrader(),
+  'promptfoo:redteam:bopla': new BoplaGrader(),
   'promptfoo:redteam:cca': new CcaGrader(),
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
@@ -153,12 +157,14 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
   'promptfoo:redteam:rbac': new RbacGrader(),
   'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
+  'promptfoo:redteam:resource-consumption': new ResourceConsumptionGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
   'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
   'promptfoo:redteam:toxic-chat': new ToxicChatGrader(),
+  'promptfoo:redteam:unrestricted-access': new UnrestrictedAccessGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
 };
 
