@@ -7,23 +7,24 @@ interface RedTeamBadgeProps {
   size?: 'small' | 'medium';
 }
 
-export default function RedTeamBadge({ 
+export default function RedTeamBadge({
   tooltipPlacement = 'right',
-  size = 'small' 
+  size = 'small',
 }: RedTeamBadgeProps) {
   const theme = useTheme();
-  
-  const styles = size === 'small' 
-    ? {
-        fontSize: '0.65rem',
-        px: 0.5,
-        py: 0.125,
-      }
-    : {
-        fontSize: '0.75rem',
-        px: 0.75,
-        py: 0.25,
-      };
+
+  const styles =
+    size === 'small'
+      ? {
+          fontSize: '0.65rem',
+          px: 0.5,
+          py: 0.125,
+        }
+      : {
+          fontSize: '0.75rem',
+          px: 0.75,
+          py: 0.25,
+        };
 
   return (
     <Tooltip title="Red Team Eval" placement={tooltipPlacement} arrow>
