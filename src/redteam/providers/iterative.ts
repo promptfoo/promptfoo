@@ -1,29 +1,18 @@
 import dedent from 'dedent';
-
+import { TokenUsageTracker } from 'src/util/tokenUsage';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import {
+  accumulateGraderTokenUsage,
+  accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
@@ -39,6 +28,19 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -182,6 +184,7 @@ export async function runRedteamConversation({
       },
       vars: {},
     });
+    TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
@@ -341,11 +344,7 @@ export async function runRedteamConversation({
           additionalRubric,
         );
         storedGraderResult = grade;
-        if (grade.tokensUsed) {
-          accumulateTokenUsage(totalTokenUsage, grade.tokensUsed, true);
-        } else {
-          totalTokenUsage.numRequests = (totalTokenUsage.numRequests ?? 0) + 1;
-        }
+        accumulateGraderTokenUsage(totalTokenUsage, grade);
       }
     }
     // Calculate the score
@@ -372,6 +371,8 @@ export async function runRedteamConversation({
       },
       vars: {},
     });
+
+    TokenUsageTracker.getInstance().trackUsage(gradingProvider.id(), judgeResp.tokenUsage);
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
       await sleep(gradingProvider.delay);

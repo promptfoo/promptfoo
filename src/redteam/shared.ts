@@ -10,6 +10,7 @@ import { createShareableUrl } from '../share';
 import { isRunningUnderNpx } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
+import { TokenUsageTracker } from '../util/tokenUsage';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
 
@@ -130,6 +131,17 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       );
     }
   }
+
+  const tracker = TokenUsageTracker.getInstance();
+  console.log(`provider Ids: ${JSON.stringify(tracker.getProviderIds(), null, 2)}`);
+
+  console.log(
+    `provider usage: ${JSON.stringify(
+      tracker.getProviderUsage(tracker.getProviderIds()[0]),
+      null,
+      2,
+    )}`,
+  );
 
   // Clear the callback when done
   setLogCallback(null);

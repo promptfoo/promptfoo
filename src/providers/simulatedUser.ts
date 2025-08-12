@@ -1,7 +1,9 @@
+import { TokenUsageTracker } from 'src/util/tokenUsage';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 import type {
@@ -12,7 +14,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types';
-import { createEmptyTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
 export type Message = {
   role: 'user' | 'assistant' | 'system';
@@ -69,6 +70,7 @@ export class SimulatedUser implements ApiProvider {
     });
 
     const response = await userProvider.callApi(JSON.stringify(flippedMessages));
+    TokenUsageTracker.getInstance().trackUsage(userProvider.id(), response.tokenUsage);
     logger.debug(`User: ${response.output}`);
     return [...messages, { role: 'user', content: String(response.output || '') }];
   }

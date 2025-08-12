@@ -401,6 +401,16 @@ export async function doEval(
     const durationDisplay = formatDuration(duration);
 
     const isRedteam = Boolean(config.redteam);
+    const tracker = TokenUsageTracker.getInstance();
+    console.log(`provider Ids: ${JSON.stringify(tracker.getProviderIds(), null, 2)}`);
+
+    console.log(
+      `provider usage: ${JSON.stringify(
+        tracker.getProviderUsage(tracker.getProviderIds()[0]),
+        null,
+        2,
+      )}`,
+    );
 
     // Handle token usage display
     if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
@@ -446,7 +456,7 @@ export async function doEval(
       }
 
       // Provider breakdown
-      const tracker = TokenUsageTracker.getInstance();
+
       const providerIds = tracker.getProviderIds();
       if (providerIds.length > 1) {
         logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
