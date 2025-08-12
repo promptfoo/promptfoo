@@ -181,7 +181,7 @@ When implementing systems tested by this plugin:
 ## Related Plugins
 
 - [Harmful Content](harmful.md) - Tests for general harmful content generation
-- [Self-Harm](harmful.md#self-harm) - Specific tests for self-harm content
+- [Harmful: Self-Harm](harmful.md) - Includes tests for self-harm content
 - [Overreliance](overreliance.md) - Tests for encouraging over-dependence on AI
 
 ## Learn More
