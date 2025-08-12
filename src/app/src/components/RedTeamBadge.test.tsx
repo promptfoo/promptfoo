@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { describe, it, expect } from 'vitest';
@@ -24,7 +23,6 @@ describe('RedTeamBadge', () => {
       </ThemeProvider>,
     );
     const badge = screen.getByText('RT');
-    const styles = window.getComputedStyle(badge);
     // Check that the element exists and has expected attributes
     expect(badge.tagName.toLowerCase()).toBe('span');
     expect(badge).toHaveStyle({ textTransform: 'uppercase' });
@@ -38,21 +36,20 @@ describe('RedTeamBadge', () => {
       </ThemeProvider>,
     );
     const badge = screen.getByText('RT');
-    const styles = window.getComputedStyle(badge);
     // Check that the element exists and has expected attributes
     expect(badge.tagName.toLowerCase()).toBe('span');
     expect(badge).toHaveStyle({ textTransform: 'uppercase' });
   });
 
   it('should have a tooltip with correct title', async () => {
-    const { container } = render(<RedTeamBadge />);
+    render(<RedTeamBadge />);
     const badge = screen.getByText('RT');
-    
+
     // The tooltip title is set via the Tooltip component's title prop
     // MUI Tooltip adds the title to the trigger element's title attribute on hover
     // For testing purposes, we can check that the component structure is correct
     expect(badge).toBeInTheDocument();
-    
+
     // The parent should be the Tooltip wrapper
     const tooltipTrigger = badge.parentElement;
     expect(tooltipTrigger).toBeInTheDocument();
@@ -61,7 +58,7 @@ describe('RedTeamBadge', () => {
   it('should have correct typography styles', () => {
     render(<RedTeamBadge />);
     const badge = screen.getByText('RT');
-    
+
     // Check for expected inline styles
     expect(badge).toHaveStyle({
       textTransform: 'uppercase',
