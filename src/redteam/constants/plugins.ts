@@ -282,6 +282,7 @@ export const ADDITIONAL_PLUGINS = [
   'system-prompt-override',
   'tool-discovery',
   'unsafebench',
+  'vlguard',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
@@ -297,7 +298,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
-export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench'] as const;
+export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench', 'vlguard'] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
