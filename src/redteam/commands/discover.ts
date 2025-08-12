@@ -243,12 +243,24 @@ export async function doTargetPurposeDiscovery(
           `${LOG_PREFIX} Received response from target: ${JSON.stringify(targetResponse, null, 2)}`,
         );
 
-        const response =
-          typeof targetResponse.output === 'object'
-            ? JSON.stringify(targetResponse.output)
-            : targetResponse.output;
+        // Normalize the target output into a string for schema compatibility
+        let answer: string;
+        if (typeof targetResponse.output === 'object' && targetResponse.output !== null) {
+          try {
+            logger.warn(
+              `${LOG_PREFIX} Target response is an object; should a \`transformResponse\` be defined?`,
+            );
+            answer = JSON.stringify(targetResponse.output);
+          } catch {
+            // Fallback for non-JSON-serializable objects (e.g., circular refs, BigInt)
+            answer = String(targetResponse.output);
+          }
+        } else {
+          // Coerce primitives and nullish to string; treat null/undefined as empty
+          answer = String(targetResponse.output ?? '');
+        }
 
-        state.answers.push(response);
+        state.answers.push(answer);
       }
     } finally {
       if (showProgress) {
