@@ -243,7 +243,12 @@ export async function doTargetPurposeDiscovery(
           `${LOG_PREFIX} Received response from target: ${JSON.stringify(targetResponse, null, 2)}`,
         );
 
-        state.answers.push(targetResponse.output);
+        const response =
+          typeof targetResponse.output === 'object'
+            ? JSON.stringify(targetResponse.output)
+            : targetResponse.output;
+
+        state.answers.push(response);
       }
     } finally {
       if (showProgress) {
