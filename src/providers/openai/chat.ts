@@ -13,7 +13,11 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { handleMultiTurnToolConversation, shouldEnableMultiTurnTools, validateMultiTurnToolsConfig } from './multiTurnTools';
+import {
+  handleMultiTurnToolConversation,
+  shouldEnableMultiTurnTools,
+  validateMultiTurnToolsConfig,
+} from './multiTurnTools';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
@@ -171,7 +175,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   /**
    * Makes an OpenAI API call with the provided messages and configuration.
    * This method is used by the multi-turn tool conversation handler.
-   * 
+   *
    * @private
    */
   private async makeOpenAICall(
@@ -212,7 +216,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   /**
    * Gets the request body configuration for OpenAI API calls.
    * Extracted from getOpenAiBody for reuse in multi-turn scenarios.
-   * 
+   *
    * @private
    */
   private getRequestBody(config: OpenAiCompletionOptions) {
@@ -220,7 +224,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
-    
+
     const maxTokens = !isReasoningModel
       ? (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS'))
       : undefined;
@@ -230,9 +234,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
-      ? maybeLoadToolsFromExternalFile(config.tools, {}) || []
-      : [];
+    const fileTools = config.tools ? maybeLoadToolsFromExternalFile(config.tools, {}) || [] : [];
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
@@ -242,15 +244,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(config.temperature !== undefined &&
         this.supportsTemperature() && { temperature: config.temperature }),
       ...(config.top_p !== undefined && { top_p: config.top_p }),
-      ...(config.frequency_penalty !== undefined && { frequency_penalty: config.frequency_penalty }),
+      ...(config.frequency_penalty !== undefined && {
+        frequency_penalty: config.frequency_penalty,
+      }),
       ...(config.presence_penalty !== undefined && { presence_penalty: config.presence_penalty }),
       ...(allTools.length > 0 && { tools: allTools }),
       ...(config.tool_choice !== undefined && { tool_choice: config.tool_choice }),
-      ...(config.parallel_tool_calls !== undefined && { parallel_tool_calls: config.parallel_tool_calls }),
+      ...(config.parallel_tool_calls !== undefined && {
+        parallel_tool_calls: config.parallel_tool_calls,
+      }),
       ...(config.response_format && {
-        response_format: maybeLoadFromExternalFile(
-          renderVarsInObject(config.response_format, {}),
-        ),
+        response_format: maybeLoadFromExternalFile(renderVarsInObject(config.response_format, {})),
       }),
       ...(config.stop && { stop: config.stop }),
       ...(config.seed !== undefined && { seed: config.seed }),
@@ -511,11 +515,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
-      
+
       // Check if multi-turn tool handling should be enabled
       if (shouldEnableMultiTurnTools(config, functionCalls)) {
         logger.debug('Multi-turn tool conversation enabled, handling with agentic loop');
-        
+
         try {
           const multiTurnResult = await handleMultiTurnToolConversation(
             // Convert initial prompt to messages format for multi-turn handler
@@ -528,7 +532,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               callOpenAI: this.makeOpenAICall.bind(this),
             },
           );
-          
+
           return {
             output: multiTurnResult.output,
             tokenUsage: multiTurnResult.tokenUsage,
@@ -544,7 +548,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           logger.debug('Falling back to single-turn function callback handling');
         }
       }
-      
+
       // Original single-turn function callback handling (preserved for backward compatibility)
       if (functionCalls && config.functionToolCallbacks) {
         const results = [];

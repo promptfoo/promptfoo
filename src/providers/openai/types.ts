@@ -172,7 +172,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
    * Enable multi-turn tool conversations. When enabled, the provider will
    * automatically handle tool call responses and continue the conversation
    * until the model provides a final response without tool calls.
-   * 
+   *
    * @default false (to maintain backward compatibility)
    */
   enableMultiTurnTools?: boolean;
@@ -180,7 +180,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   /**
    * Maximum number of iterations for multi-turn tool conversations.
    * This serves as a safety valve to prevent infinite loops.
-   * 
+   *
    * @default 20
    */
   maxToolIterations?: number;
