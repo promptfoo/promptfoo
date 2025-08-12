@@ -27,7 +27,7 @@ vi.mock('@mui/x-data-grid', () => ({
       <div data-testid="data-grid">
         {!loading &&
           rows.map((row: any) => {
-            const className = getRowClassName ? getRowClassName({ id: row.evalId }) : '';
+            const className = getRowClassName ? getRowClassName({ id: row.evalId, row }) : '';
             return (
               <div key={row.evalId} data-testid={`eval-${row.evalId}`} className={className}>
                 {row.description || row.label}
@@ -52,7 +52,7 @@ const mockEvals = [
     createdAt: Date.now(),
     description: 'Original Description',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-1',
     numTests: 10,
     passRate: 90,
@@ -62,7 +62,7 @@ const mockEvals = [
     createdAt: Date.now(),
     description: 'Another Eval',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-2',
     numTests: 5,
     passRate: 100,
@@ -75,7 +75,7 @@ const mockEvalsWithMultipleDatasets = [
     createdAt: Date.now(),
     description: 'Eval 1 - Dataset 1',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-1',
     numTests: 10,
     passRate: 90,
@@ -85,7 +85,7 @@ const mockEvalsWithMultipleDatasets = [
     createdAt: Date.now(),
     description: 'Eval 2 - Dataset 1',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-2',
     numTests: 5,
     passRate: 100,
@@ -95,7 +95,7 @@ const mockEvalsWithMultipleDatasets = [
     createdAt: Date.now(),
     description: 'Eval 3 - Dataset 2',
     datasetId: 'dataset-2',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-3',
     numTests: 8,
     passRate: 75,
@@ -108,7 +108,7 @@ const mockEvalsWithDifferentDatasets = [
     createdAt: Date.now(),
     description: 'Original Description',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-1',
     numTests: 10,
     passRate: 90,
@@ -118,8 +118,31 @@ const mockEvalsWithDifferentDatasets = [
     createdAt: Date.now(),
     description: 'Another Eval',
     datasetId: 'dataset-2',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-2',
+    numTests: 5,
+    passRate: 100,
+  },
+];
+
+const mockEvalsWithRedteam = [
+  {
+    evalId: 'eval-redteam-1',
+    createdAt: Date.now(),
+    description: 'Red Team Eval',
+    datasetId: 'dataset-1',
+    isRedteam: true,
+    label: 'eval-redteam-1',
+    numTests: 10,
+    passRate: 75,
+  },
+  {
+    evalId: 'eval-regular-1',
+    createdAt: Date.now(),
+    description: 'Regular Eval',
+    datasetId: 'dataset-1',
+    isRedteam: false,
+    label: 'eval-regular-1',
     numTests: 5,
     passRate: 100,
   },
@@ -576,5 +599,36 @@ describe('EvalsDataGrid', () => {
 
     // The first request should have been aborted and not display "Original Description"
     expect(screen.queryByText('Original Description')).not.toBeInTheDocument();
+  });
+
+  it('should correctly identify and style red team evaluations', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvalsWithRedteam }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledWith(
+        '/results',
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      // Red team eval should have redteam-row class
+      expect(screen.getByTestId('eval-eval-redteam-1')).toHaveClass('redteam-row');
+      // Regular eval should NOT have redteam-row class
+      expect(screen.getByTestId('eval-eval-regular-1')).not.toHaveClass('redteam-row');
+    });
   });
 });

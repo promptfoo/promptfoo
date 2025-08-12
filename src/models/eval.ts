@@ -816,7 +816,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       description: result.description,
       numTests: testCount,
       datasetId: result.datasetId,
-      isRedteam: result.isRedteam,
+      isRedteam: Boolean(result.isRedteam),
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
     };
