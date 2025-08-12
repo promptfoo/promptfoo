@@ -8,8 +8,8 @@ keywords: [red team, multi-modal, image, safety, content moderation, unsafe cont
 
 The VLGuard plugin tests multi-modal models with potentially unsafe images from the [VLGuard dataset](https://huggingface.co/datasets/kirito011024/vlguard_unsafes).
 
-:::warning License Status Unknown
-The kirito011024/vlguard_unsafes dataset does not have an explicitly stated license. The original VLGuard dataset by ys-zong requires agreement to use only for research purposes. Before using this plugin in production or commercial settings, please verify the licensing terms with the dataset maintainer.
+:::note
+Dataset license not explicitly stated. Verify terms before commercial use.
 :::
 
 The plugin helps evaluate how well models:

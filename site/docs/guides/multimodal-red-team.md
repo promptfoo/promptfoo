@@ -44,10 +44,10 @@ npx promptfoo@latest redteam run -c promptfooconfig.static-image.yaml
 # Run the image strategy red team
 npx promptfoo@latest redteam run -c promptfooconfig.image-strategy.yaml
 
-# Run the UnsafeBench red team (requires academic license)
+# Run the UnsafeBench red team
 npx promptfoo@latest redteam run -c promptfooconfig.unsafebench.yaml
 
-# Or run the VLGuard red team (no license restrictions)
+# Run the VLGuard red team  
 npx promptfoo@latest redteam run -c promptfooconfig.vlguard.yaml
 ```
 
@@ -69,8 +69,8 @@ This approach converts potentially harmful text into images and then sends those
 
 This approach uses real unsafe images from the [UnsafeBench](https://huggingface.co/datasets/yiting/UnsafeBench) dataset to test how models respond to potentially harmful visual content across various categories. It evaluates whether models can properly detect and refuse to engage with unsafe imagery.
 
-:::warning License Restriction
-The UnsafeBench dataset is restricted to **non-commercial academic research only**. For commercial or organizational use, you should verify licensing terms before using any dataset. Note that the VLGuard plugin's dataset (kirito011024/vlguard_unsafes) does not have an explicitly stated license, so its usage rights are unclear.
+:::note
+UnsafeBench is restricted to non-commercial academic research. Check dataset licenses before commercial use.
 :::
 
 ### Audio Content Strategy
@@ -423,7 +423,7 @@ redteam:
 
 ## Alternative: VLGuard Dataset Testing
 
-If you need to use multi-modal safety testing in a commercial or organizational setting, the VLGuard plugin provides similar functionality to UnsafeBench without license restrictions.
+The VLGuard plugin provides an alternative dataset for multi-modal safety testing.
 
 ### VLGuard Configuration
 
@@ -458,14 +458,14 @@ redteam:
         #   - disinformation
 ```
 
-### Key Differences from UnsafeBench
+### Dataset Characteristics
 
-- **Different categories** - Uses categories like "deception", "risky behavior", "privacy", "discrimination"
-- **Subcategory filtering** - Additional filtering by subcategories like "violence", "disinformation", etc.
-- **442 curated images** - Smaller but well-organized dataset
-- **License unclear** - The dataset does not have an explicitly stated license, unlike UnsafeBench which clearly states academic-only use
+- Categories: deception, risky behavior, privacy, discrimination
+- Subcategories: violence, disinformation, professional advice, and more
+- 442 curated images
+- License status: Not explicitly stated
 
-For more details, see the [VLGuard plugin documentation](/docs/red-team/plugins/vlguard).
+See the [VLGuard plugin documentation](/docs/red-team/plugins/vlguard) for configuration details.
 
 ## Audio Strategy Example
 
