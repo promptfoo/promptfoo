@@ -631,4 +631,58 @@ describe('EvalsDataGrid', () => {
       expect(screen.getByTestId('eval-eval-regular-1')).not.toHaveClass('redteam-row');
     });
   });
+
+  it('should handle API responses where isRedteam is undefined or null without crashing', async () => {
+    const mockEvalsWithMissingRedteam = [
+      {
+        evalId: 'eval-1',
+        createdAt: Date.now(),
+        description: 'Eval with isRedteam undefined',
+        datasetId: 'dataset-1',
+        label: 'eval-1',
+        numTests: 10,
+        passRate: 90,
+      },
+      {
+        evalId: 'eval-2',
+        createdAt: Date.now(),
+        description: 'Eval with isRedteam null',
+        datasetId: 'dataset-1',
+        isRedteam: null,
+        label: 'eval-2',
+        numTests: 5,
+        passRate: 100,
+      },
+    ];
+
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvalsWithMissingRedteam }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledWith(
+        '/results',
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toHaveTextContent('Eval with isRedteam undefined');
+      expect(screen.getByTestId('eval-eval-2')).toHaveTextContent('Eval with isRedteam null');
+
+      expect(screen.getByTestId('eval-eval-1')).not.toHaveClass('redteam-row');
+      expect(screen.getByTestId('eval-eval-2')).not.toHaveClass('redteam-row');
+    });
+  });
 });
