@@ -720,10 +720,12 @@ describe('useTableStore', () => {
       let isStreamingDuringFetch = false;
 
       const originalFetchEvalData = useTableStore.getState().fetchEvalData;
-      const wrappedFetchEvalData = async (id: string) => {
+      const wrappedFetchEvalData = async (id: string, options?: any) => {
+        const result = originalFetchEvalData(id, options);
+        // Check state immediately after fetchEvalData starts (which sets isFetching: true)
         isFetchingDuringFetch = useTableStore.getState().isFetching;
         isStreamingDuringFetch = useTableStore.getState().isStreaming;
-        return originalFetchEvalData(id);
+        return result;
       };
 
       useTableStore.setState({ fetchEvalData: wrappedFetchEvalData });

@@ -429,8 +429,10 @@ export const useTableStore = create<TableState>()((set, get) => ({
       return null;
     } catch (error) {
       console.error('Error fetching eval data:', error);
-      if (!skipLoadingState) {
-        set({ isFetching: false });
+      if (skipLoadingState) {
+        set({ isStreaming: false });
+      } else {
+        set({ isFetching: false, isStreaming: false });
       }
       return null;
     }
