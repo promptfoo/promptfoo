@@ -1,8 +1,12 @@
 import dedent from 'dedent';
-import { fetchWithProxy } from '../../fetch';
-import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
+import {
+  fisherYatesShuffle,
+  getStringField,
+  ImageDatasetManager,
+  processImageData,
+} from './imageDatasetUtils';
 
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types';
 
@@ -44,46 +48,18 @@ interface VLGuardPluginConfig extends PluginConfig {
 }
 
 /**
- * Fetches an image from a URL and converts it to base64
- */
-async function fetchImageAsBase64(url: string): Promise<string | null> {
-  try {
-    logger.debug(`[vlguard] Fetching image from URL`);
-    const response = await fetchWithProxy(url);
-
-    if (!response.ok) {
-      logger.warn(`[vlguard] Failed to fetch image: ${response.statusText}`);
-      return null;
-    }
-
-    // Get image as array buffer
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Convert to base64
-    const base64 = buffer.toString('base64');
-
-    // Determine MIME type from response headers or default to jpeg
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-
-    return `data:${contentType};base64,${base64}`;
-  } catch (error) {
-    logger.error(
-      `[vlguard] Error fetching image: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return null;
-  }
-}
-
-/**
  * DatasetManager to handle VLGuard dataset caching and filtering
  * @internal - exported for testing purposes only
  */
-export class VLGuardDatasetManager {
+export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   private static instance: VLGuardDatasetManager | null = null;
-  private datasetCache: VLGuardInput[] | null = null;
+  protected pluginId = 'vlguard';
+  protected datasetPath = DATASET_PATH;
+  protected fetchLimit = 1000; // 442 records as of dataset version
 
-  private constructor() {}
+  private constructor() {
+    super();
+  }
 
   /**
    * Get singleton instance
@@ -102,6 +78,41 @@ export class VLGuardDatasetManager {
     if (VLGuardDatasetManager.instance) {
       VLGuardDatasetManager.instance.datasetCache = null;
     }
+  }
+
+  /**
+   * Process raw records from Hugging Face into VLGuardInput format
+   */
+  protected async processRecords(records: any[]): Promise<VLGuardInput[]> {
+    const processedRecordsPromise = Promise.all(
+      records.map(async (record) => {
+        // Validate required fields
+        if (!record.vars?.image) {
+          logger.warn('[vlguard] Record is missing image data, skipping');
+          return null;
+        }
+
+        // Process the image data
+        const imageData = await processImageData(record.vars.image, 'vlguard');
+        if (!imageData) {
+          return null;
+        }
+
+        return {
+          image: imageData,
+          category: getStringField(record.vars?.harmful_category, 'unknown'),
+          subcategory: getStringField(record.vars?.harmful_subcategory, 'unknown'),
+          question: getStringField(record.vars?.question),
+        };
+      }),
+    );
+
+    // Wait for all image processing to complete and filter out nulls
+    const processedRecords = (await processedRecordsPromise).filter(
+      (record): record is VLGuardInput => record !== null,
+    );
+
+    return processedRecords;
   }
 
   /**
@@ -153,7 +164,7 @@ export class VLGuardDatasetManager {
       );
     }
 
-    // Ensure even distribution if categories or subcategories are specified
+    // Ensure even distribution if categories are specified
     if (config?.categories && config.categories.length > 0) {
       // Group records by category
       const recordsByCategory: Record<string, VLGuardInput[]> = {};
@@ -175,11 +186,7 @@ export class VLGuardDatasetManager {
         const categoryRecords = recordsByCategory[normalizedCategory] || [];
 
         // Fisher-Yates shuffle and take up to perCategory records
-        const shuffled = [...categoryRecords];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
+        const shuffled = fisherYatesShuffle([...categoryRecords]);
         result.push(...shuffled.slice(0, perCategory));
 
         logger.debug(
@@ -192,148 +199,11 @@ export class VLGuardDatasetManager {
     }
 
     // If no categories specified, just shuffle and return the requested number
-    // Fisher-Yates shuffle for unbiased randomization
-    const shuffled = [...filteredRecords];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
+    const shuffled = fisherYatesShuffle([...filteredRecords]);
     const shuffledRecords = shuffled.slice(0, limit);
     logger.debug(`[vlguard] Selected ${shuffledRecords.length} random records`);
 
     return shuffledRecords;
-  }
-
-  /**
-   * Ensure the dataset is loaded into cache
-   */
-  private async ensureDatasetLoaded(): Promise<void> {
-    if (this.datasetCache !== null) {
-      logger.debug(`[vlguard] Using cached dataset with ${this.datasetCache.length} records`);
-      return;
-    }
-
-    // Fetch the entire dataset (442 records as of dataset version)
-    // Using a reasonable limit to avoid fetching excessive data if dataset grows
-    const fetchLimit = 1000;
-    logger.debug(`[vlguard] Fetching ${fetchLimit} records from VLGuard dataset`);
-
-    try {
-      const records = await fetchHuggingFaceDataset(DATASET_PATH, fetchLimit);
-
-      if (!records || records.length === 0) {
-        throw new Error(
-          'No records returned from VLGuard dataset. Check your Hugging Face API token.',
-        );
-      }
-
-      logger.debug(`[vlguard] Fetched ${records.length} total records`);
-
-      // Process VLGuard records
-      const processedRecordsPromise = Promise.all(
-        records.map(async (record) => {
-          // Validate required fields
-          if (!record.vars?.image) {
-            logger.warn('[vlguard] Record is missing image data, skipping');
-            return null;
-          }
-
-          // Type guards for record properties
-          const getStringField = (field: unknown, defaultValue: string = ''): string => {
-            return typeof field === 'string' ? field : defaultValue;
-          };
-
-          // Function to process the record with a valid image
-          const processRecord = (imageData: string): VLGuardInput => {
-            return {
-              image: imageData,
-              category: getStringField(record.vars?.harmful_category, 'unknown'),
-              subcategory: getStringField(record.vars?.harmful_subcategory, 'unknown'),
-              question: getStringField(record.vars?.question),
-            };
-          };
-
-          // Type guard for object with src property
-          const hasStringSrc = (obj: unknown): obj is { src: string } => {
-            return (
-              typeof obj === 'object' &&
-              obj !== null &&
-              'src' in obj &&
-              typeof (obj as any).src === 'string'
-            );
-          };
-
-          // Type guard for object with bytes property
-          const hasBytes = (obj: unknown): obj is { bytes: unknown } => {
-            return typeof obj === 'object' && obj !== null && 'bytes' in obj;
-          };
-
-          // Handle different image formats
-          const imageData = record.vars.image;
-
-          if (typeof imageData === 'string') {
-            if (imageData.startsWith('http')) {
-              // It's a URL, so we need to download and convert to base64
-              const base64Image = await fetchImageAsBase64(imageData);
-              if (!base64Image) {
-                logger.warn(`[vlguard] Failed to convert image URL to base64`);
-                return null;
-              }
-              return processRecord(base64Image);
-            } else {
-              // It's already a suitable string (base64 or other format)
-              return processRecord(imageData);
-            }
-          } else if (hasStringSrc(imageData)) {
-            // It's an object with an image URL, we need to download and convert
-            const imageUrl = imageData.src;
-            logger.debug('[vlguard] Found image URL from src property');
-            const base64Image = await fetchImageAsBase64(imageUrl);
-            if (!base64Image) {
-              logger.warn(`[vlguard] Failed to convert image URL to base64`);
-              return null;
-            }
-            return processRecord(base64Image);
-          } else if (hasBytes(imageData)) {
-            // Handle bytes format (common in Hugging Face datasets)
-            const bytes = imageData.bytes;
-            let base64Image: string;
-            if (typeof bytes === 'string') {
-              // If bytes is already a base64 string
-              base64Image = `data:image/jpeg;base64,${bytes}`;
-            } else if (bytes instanceof Buffer) {
-              // If bytes is a Buffer
-              base64Image = `data:image/jpeg;base64,${bytes.toString('base64')}`;
-            } else {
-              logger.warn('[vlguard] Unsupported bytes format for image');
-              return null;
-            }
-            return processRecord(base64Image);
-          } else {
-            logger.warn('[vlguard] Record has invalid image format, skipping');
-            return null;
-          }
-        }),
-      );
-
-      // Wait for all image processing to complete
-      const processedRecords = (await processedRecordsPromise).filter(
-        (record): record is VLGuardInput => record !== null,
-      );
-
-      logger.debug(`[vlguard] Processed ${processedRecords.length} images to base64 format`);
-
-      // Store in cache
-      this.datasetCache = processedRecords;
-      logger.debug(`[vlguard] Cached ${processedRecords.length} processed records`);
-    } catch (error) {
-      logger.error(
-        `[vlguard] Error fetching dataset: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw new Error(
-        `Failed to fetch VLGuard dataset: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 }
 

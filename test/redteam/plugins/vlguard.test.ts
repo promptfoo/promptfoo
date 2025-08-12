@@ -226,7 +226,7 @@ describe('VLGuardPlugin', () => {
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
 
       await expect(plugin.generateTests(5)).rejects.toThrow(
-        'Failed to generate VLGuard tests: Failed to fetch VLGuard dataset: No records returned from VLGuard dataset',
+        'Failed to generate VLGuard tests: Failed to fetch dataset: No records returned from dataset',
       );
     });
 
@@ -236,7 +236,7 @@ describe('VLGuardPlugin', () => {
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', {});
 
       await expect(plugin.generateTests(5)).rejects.toThrow(
-        'Failed to generate VLGuard tests: Failed to fetch VLGuard dataset: Network error',
+        'Failed to generate VLGuard tests: Failed to fetch dataset: Network error',
       );
     });
 
