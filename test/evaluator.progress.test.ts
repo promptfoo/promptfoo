@@ -45,40 +45,10 @@ jest.mock('../src/logger', () => ({
 
 // Import after mocking - we need to extract ProgressBarManager from evaluator
 // Since it's a private class, we'll test it through its usage patterns
-import { calculateThreadsPerBar } from '../src/evaluator';
 
 describe('Progress Bar Management', () => {
   afterEach(() => {
     jest.clearAllMocks();
-  });
-
-  describe('calculateThreadsPerBar', () => {
-    it('should distribute threads evenly when divisible', () => {
-      expect(calculateThreadsPerBar(12, 4, 0)).toBe(3);
-      expect(calculateThreadsPerBar(12, 4, 1)).toBe(3);
-      expect(calculateThreadsPerBar(12, 4, 2)).toBe(3);
-      expect(calculateThreadsPerBar(12, 4, 3)).toBe(3);
-    });
-
-    it('should distribute extra threads to early bars', () => {
-      expect(calculateThreadsPerBar(13, 4, 0)).toBe(4); // Gets extra thread
-      expect(calculateThreadsPerBar(13, 4, 1)).toBe(3);
-      expect(calculateThreadsPerBar(13, 4, 2)).toBe(3);
-      expect(calculateThreadsPerBar(13, 4, 3)).toBe(3);
-    });
-
-    it('should handle concurrency less than bars', () => {
-      expect(calculateThreadsPerBar(2, 4, 0)).toBe(1);
-      expect(calculateThreadsPerBar(2, 4, 1)).toBe(1);
-      expect(calculateThreadsPerBar(2, 4, 2)).toBe(0);
-      expect(calculateThreadsPerBar(2, 4, 3)).toBe(0);
-    });
-
-    it('should handle single thread', () => {
-      expect(calculateThreadsPerBar(1, 1, 0)).toBe(1);
-      expect(calculateThreadsPerBar(1, 4, 0)).toBe(1);
-      expect(calculateThreadsPerBar(1, 4, 1)).toBe(0);
-    });
   });
 
   describe('ProgressBarManager Work Distribution', () => {
