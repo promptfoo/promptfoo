@@ -125,29 +125,6 @@ const mockEvalsWithDifferentDatasets = [
   },
 ];
 
-const mockEvalsWithRedteam = [
-  {
-    evalId: 'eval-redteam-1',
-    createdAt: Date.now(),
-    description: 'Red Team Eval',
-    datasetId: 'dataset-1',
-    isRedteam: true,
-    label: 'eval-redteam-1',
-    numTests: 10,
-    passRate: 75,
-  },
-  {
-    evalId: 'eval-regular-1',
-    createdAt: Date.now(),
-    description: 'Regular Eval',
-    datasetId: 'dataset-1',
-    isRedteam: false,
-    label: 'eval-regular-1',
-    numTests: 5,
-    passRate: 100,
-  },
-];
-
 describe('EvalsDataGrid', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -599,37 +576,6 @@ describe('EvalsDataGrid', () => {
 
     // The first request should have been aborted and not display "Original Description"
     expect(screen.queryByText('Original Description')).not.toBeInTheDocument();
-  });
-
-  it('should correctly identify and style red team evaluations', async () => {
-    const mockResponse = {
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvalsWithRedteam }),
-    };
-    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
-
-    render(
-      <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      expect(callApi).toHaveBeenCalledWith(
-        '/results',
-        expect.objectContaining({
-          cache: 'no-store',
-          signal: expect.any(AbortSignal),
-        }),
-      );
-    });
-
-    await waitFor(() => {
-      // Red team eval should have redteam-row class
-      expect(screen.getByTestId('eval-eval-redteam-1')).toHaveClass('redteam-row');
-      // Regular eval should NOT have redteam-row class
-      expect(screen.getByTestId('eval-eval-regular-1')).not.toHaveClass('redteam-row');
-    });
   });
 
   it('should handle API responses where isRedteam is undefined or null without crashing', async () => {

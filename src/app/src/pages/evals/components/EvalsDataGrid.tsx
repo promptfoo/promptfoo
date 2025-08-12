@@ -1,7 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
-import RedTeamBadge from '@app/components/RedTeamBadge';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Link from '@mui/material/Link';
@@ -210,35 +209,24 @@ export default function EvalsDataGrid({
           flex: 0.5,
           minWidth: 120,
           renderCell: (params: GridRenderCellParams<Eval>) => {
-            const content =
-              params.row.evalId === focusedEvalId ? (
-                params.row.evalId
-              ) : (
-                <Link
-                  href={`/eval/${params.row.evalId}`}
-                  /**
-                   * Prevent the default behavior of the link, which is to navigate to the href.
-                   * Instead, we want to call the onEvalSelected callback which may or may not navigate.
-                   */
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onEvalSelected(params.row.evalId);
-                    return false;
-                  }}
-                >
-                  {params.row.evalId}
-                </Link>
-              );
-
-            if (params.row.isRedteam) {
-              return (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  {content}
-                  <RedTeamBadge />
-                </Box>
-              );
-            }
-            return content;
+            return params.row.evalId === focusedEvalId ? (
+              params.row.evalId
+            ) : (
+              <Link
+                href={`/eval/${params.row.evalId}`}
+                /**
+                 * Prevent the default behavior of the link, which is to navigate to the href.
+                 * Instead, we want to call the onEvalSelected callback which may or may not navigate.
+                 */
+                onClick={(e) => {
+                  e.preventDefault();
+                  onEvalSelected(params.row.evalId);
+                  return false;
+                }}
+              >
+                {params.row.evalId}
+              </Link>
+            );
           },
         },
         {
