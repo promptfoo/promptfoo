@@ -1338,7 +1338,7 @@ export const PLUGINS = [
   },
   {
     category: 'Dataset',
-    description: 'Tests handling of potentially unsafe image content with permissive licensing',
+    description: 'Tests handling of potentially unsafe image content using the VLGuard dataset',
     label: 'harmful',
     link: '/docs/red-team/plugins/vlguard/',
     name: 'VLGuard',

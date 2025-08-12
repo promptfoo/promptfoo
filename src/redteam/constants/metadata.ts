@@ -731,7 +731,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   vlguard:
-    'Tests handling of potentially unsafe image content using the VLGuard dataset with permissive licensing',
+    'Tests handling of potentially unsafe image content using the VLGuard dataset',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
