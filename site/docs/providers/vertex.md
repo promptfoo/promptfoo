@@ -770,7 +770,6 @@ For more details, see the [Google documentation on Grounding with Google Search]
 ## See Also
 
 - [Google AI Studio Provider](/docs/providers/google) - For direct Google AI Studio integration
-- [Google Vertex Credentials Example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-credentials) - Working example of using service account credentials
 - [Vertex AI Examples](https://github.com/promptfoo/promptfoo/tree/main/examples) - Browse working examples for Vertex AI
 - [Google Cloud Documentation](https://cloud.google.com/vertex-ai/generative-ai/docs) - Official Vertex AI documentation
 - [Model Garden](https://console.cloud.google.com/vertex-ai/publishers) - Access and enable additional models
