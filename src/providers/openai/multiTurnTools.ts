@@ -4,7 +4,7 @@ import type { CallApiContextParams, ProviderResponse, TokenUsage } from '../../t
 import { safeJsonStringify } from '../../util/json';
 import { getCurrentTimestamp } from '../../util/time';
 import type { OpenAiCompletionOptions } from './types';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
+import { calculateOpenAICost, getTokenUsage } from './util';
 
 /**
  * Default maximum number of iterations for multi-turn tool conversations
@@ -74,16 +74,16 @@ export async function handleMultiTurnToolConversation(
   initialMessages: OpenAI.Chat.ChatCompletionMessageParam[],
   options: MultiTurnToolOptions,
 ): Promise<MultiTurnToolResponse> {
-  const { config, modelName, context, executeFunctionCallback, callOpenAI } = options;
+  const { config, modelName, executeFunctionCallback, callOpenAI } = options;
 
   // Clone messages to avoid mutating the original array
   const messages = [...initialMessages];
 
-  let aggregatedTokenUsage: Partial<TokenUsage> = {};
+  const aggregatedTokenUsage: Partial<TokenUsage> = {};
   let totalCost = 0;
   let iterations = 0;
   let finalResponse: OpenAI.Chat.ChatCompletion | null = null;
-  let toolCallsHistory: ToolCallDetails[] = [];
+  const toolCallsHistory: ToolCallDetails[] = [];
   let naturalTermination = false;
 
   const maxIterations = config.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;

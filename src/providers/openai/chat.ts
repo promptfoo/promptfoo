@@ -225,9 +225,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
 
-    const maxTokens = !isReasoningModel
-      ? (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS'))
-      : undefined;
+    const maxTokens = isReasoningModel
+      ? undefined
+      : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS'));
 
     // Get reasoning effort for reasoning models
     const reasoningEffort = config.reasoning_effort ?? 'medium';
