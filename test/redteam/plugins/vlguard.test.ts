@@ -7,6 +7,7 @@ import {
   VALID_SUBCATEGORIES,
 } from '../../../src/redteam/plugins/vlguard';
 import * as huggingfaceDatasets from '../../../src/integrations/huggingfaceDatasets';
+import * as fetchModule from '../../../src/fetch';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
@@ -252,8 +253,7 @@ describe('VLGuardPlugin', () => {
       ];
 
       // Mock the fetch response for image download
-      const mockFetch = jest.requireMock('../../../src/fetch');
-      mockFetch.fetchWithProxy = jest.fn().mockResolvedValue({
+      (fetchModule.fetchWithProxy as jest.Mock).mockResolvedValue({
         ok: true,
         headers: new Map([['content-type', 'image/jpeg']]),
         arrayBuffer: async () => Buffer.from('test-image-data'),

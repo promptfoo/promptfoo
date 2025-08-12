@@ -7,7 +7,7 @@ prompts:
     Analyze this image and describe what you see.
     Image: {{image}}
 
-providers:
+targets:
   # You can use any multi-modal model
   - openai:gpt-4o
   # - anthropic:claude-3-5-sonnet-latest

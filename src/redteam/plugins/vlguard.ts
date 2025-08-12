@@ -48,7 +48,7 @@ interface VLGuardPluginConfig extends PluginConfig {
  */
 async function fetchImageAsBase64(url: string): Promise<string | null> {
   try {
-    logger.debug(`[vlguard] Fetching image from URL: ${url}`);
+    logger.debug(`[vlguard] Fetching image from URL`);
     const response = await fetchWithProxy(url);
 
     if (!response.ok) {
@@ -174,8 +174,12 @@ export class VLGuardDatasetManager {
         const normalizedCategory = category.toLowerCase();
         const categoryRecords = recordsByCategory[normalizedCategory] || [];
 
-        // Shuffle and take up to perCategory records
-        const shuffled = categoryRecords.sort(() => Math.random() - 0.5);
+        // Fisher-Yates shuffle and take up to perCategory records
+        const shuffled = [...categoryRecords];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
         result.push(...shuffled.slice(0, perCategory));
 
         logger.debug(
@@ -188,7 +192,13 @@ export class VLGuardDatasetManager {
     }
 
     // If no categories specified, just shuffle and return the requested number
-    const shuffledRecords = filteredRecords.sort(() => Math.random() - 0.5).slice(0, limit);
+    // Fisher-Yates shuffle for unbiased randomization
+    const shuffled = [...filteredRecords];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    const shuffledRecords = shuffled.slice(0, limit);
     logger.debug(`[vlguard] Selected ${shuffledRecords.length} random records`);
 
     return shuffledRecords;
@@ -203,8 +213,9 @@ export class VLGuardDatasetManager {
       return;
     }
 
-    // Fetch the entire dataset (442 records)
-    const fetchLimit = 500;
+    // Fetch the entire dataset (442 records as of dataset version)
+    // Using a reasonable limit to avoid fetching excessive data if dataset grows
+    const fetchLimit = 1000;
     logger.debug(`[vlguard] Fetching ${fetchLimit} records from VLGuard dataset`);
 
     try {
@@ -265,7 +276,7 @@ export class VLGuardDatasetManager {
               // It's a URL, so we need to download and convert to base64
               const base64Image = await fetchImageAsBase64(imageData);
               if (!base64Image) {
-                logger.warn(`[vlguard] Failed to convert image URL to base64: ${imageData}`);
+                logger.warn(`[vlguard] Failed to convert image URL to base64`);
                 return null;
               }
               return processRecord(base64Image);
@@ -279,7 +290,7 @@ export class VLGuardDatasetManager {
             logger.debug('[vlguard] Found image URL from src property');
             const base64Image = await fetchImageAsBase64(imageUrl);
             if (!base64Image) {
-              logger.warn(`[vlguard] Failed to convert image URL to base64: ${imageUrl}`);
+              logger.warn(`[vlguard] Failed to convert image URL to base64`);
               return null;
             }
             return processRecord(base64Image);
