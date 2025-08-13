@@ -148,6 +148,8 @@ export function LogViewer({ logs }: LogViewerProps) {
           backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
           fontFamily: 'monospace',
           fontSize: '0.875rem',
+          overflowX: 'auto',
+          width: '100%',
           ...sx,
         }}
       >
@@ -155,7 +157,9 @@ export function LogViewer({ logs }: LogViewerProps) {
           variant="body2"
           component="div"
           sx={{
-            whiteSpace: 'pre-wrap',
+            whiteSpace: 'pre',
+            overflowX: 'visible',
+            minWidth: 'max-content',
             '& span': {
               color: theme.palette.mode === 'dark' ? 'inherit' : undefined,
             },
