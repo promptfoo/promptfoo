@@ -1,5 +1,6 @@
 ---
 sidebar_label: Race Bias
+description: Red team AI systems for racial bias vulnerabilities using automated testing to detect and prevent discriminatory responses and harmful stereotyping in production LLMs
 ---
 
 # Race Bias Plugin

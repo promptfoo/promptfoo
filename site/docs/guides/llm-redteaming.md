@@ -1,5 +1,6 @@
 ---
 sidebar_label: How to red team LLM applications
+description: Protect your LLM applications from prompt injection, jailbreaks, and data leaks with automated red teaming tests that identify 20+ vulnerability types and security risks
 ---
 
 # How to red team LLM applications

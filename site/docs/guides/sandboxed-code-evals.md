@@ -1,5 +1,6 @@
 ---
 sidebar_label: Sandboxed Evaluations of LLM-Generated Code
+description: Safely evaluate and benchmark LLM-generated code in isolated Docker containers to prevent security risks and catch errors before production deployment
 ---
 
 # Sandboxed Evaluations of LLM-Generated Code

@@ -1,5 +1,6 @@
 ---
 sidebar_label: WatsonX
+description: Configure IBM WatsonX's Granite and Llama models for enterprise-grade LLM testing, with specialized support for code generation, vision, and multilingual tasks
 ---
 
 # WatsonX

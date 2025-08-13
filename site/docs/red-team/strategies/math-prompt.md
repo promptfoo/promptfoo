@@ -1,7 +1,7 @@
 ---
 sidebar_label: Math Prompt
 title: Math Prompt Strategy
-description: Test how AI systems handle malicious content encoded within mathematical notation and set theory
+description: Probe AI vulnerabilities using mathematical notation, LaTeX formatting, and set theory to encode and disguise harmful content
 ---
 
 # Math Prompt Strategy
