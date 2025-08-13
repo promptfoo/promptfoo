@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
@@ -190,6 +191,28 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
           errors.push('Top P must be between 0 and 1');
         }
       } else if (
+        [
+          'autogen',
+          'swarm',
+          'crewai',
+          'langgraph',
+          'llamaindex',
+          'dspy',
+          'pydantic-ai',
+          'beeai',
+          'gptswarm',
+          'swarms-framework',
+          'smol-agents',
+          'letta',
+        ].includes(providerType || '')
+      ) {
+        // Agent frameworks validation
+        if (!provider.id || provider.id.trim() === '') {
+          errors.push('Python file path is required');
+        } else if (!provider.id.startsWith('file://')) {
+          errors.push('Provider ID must start with file:// for Python agent files');
+        }
+      } else if (
         ['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
       ) {
         // Custom providers validation
@@ -326,6 +349,28 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
             rawConfigJson={rawConfigJson}
             setRawConfigJson={setRawConfigJson}
             bodyError={bodyError}
+          />
+        )}
+
+        {/* Agent frameworks */}
+        {[
+          'autogen',
+          'swarm',
+          'crewai',
+          'langgraph',
+          'llamaindex',
+          'dspy',
+          'pydantic-ai',
+          'beeai',
+          'gptswarm',
+          'swarms-framework',
+          'smol-agents',
+          'letta',
+        ].includes(providerType || '') && (
+          <AgentFrameworkConfiguration
+            selectedTarget={provider}
+            updateCustomTarget={updateCustomTarget}
+            agentType={providerType || ''}
           />
         )}
 
