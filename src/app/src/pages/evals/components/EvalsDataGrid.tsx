@@ -30,7 +30,7 @@ type Eval = {
   datasetId: string;
   description: string | null;
   evalId: string;
-  isRedteam: number;
+  isRedteam: boolean;
   label: string;
   numTests: number;
   passRate: number;
@@ -125,6 +125,7 @@ export default function EvalsDataGrid({
     invariant(focusedEvalId, 'focusedEvalId is required when filterByDatasetId is true');
   }
 
+  const theme = useTheme();
   const [evals, setEvals] = useState<Eval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -207,8 +208,8 @@ export default function EvalsDataGrid({
           headerName: 'ID',
           flex: 0.5,
           minWidth: 120,
-          renderCell: (params: GridRenderCellParams<Eval>) =>
-            params.row.evalId === focusedEvalId ? (
+          renderCell: (params: GridRenderCellParams<Eval>) => {
+            return params.row.evalId === focusedEvalId ? (
               params.row.evalId
             ) : (
               <Link
@@ -225,7 +226,8 @@ export default function EvalsDataGrid({
               >
                 {params.row.evalId}
               </Link>
-            ),
+            );
+          },
         },
         {
           field: 'createdAt',
@@ -355,7 +357,16 @@ export default function EvalsDataGrid({
             handleCellClick(params);
           }
         }}
-        getRowClassName={(params) => (params.id === focusedEvalId ? 'focused-row' : '')}
+        getRowClassName={(params) => {
+          const classes = [];
+          if (params.id === focusedEvalId) {
+            classes.push('focused-row');
+          }
+          if (params.row.isRedteam) {
+            classes.push('redteam-row');
+          }
+          return classes.join(' ');
+        }}
         sx={{
           border: 'none',
           '& .MuiDataGrid-row': {
@@ -373,6 +384,31 @@ export default function EvalsDataGrid({
           '& .focused-row': {
             backgroundColor: 'action.selected',
             cursor: 'default',
+            '&:hover': {
+              backgroundColor: 'action.selected',
+            },
+          },
+          '& .redteam-row': {
+            position: 'relative',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: '2px',
+              backgroundColor:
+                theme.palette.mode === 'dark'
+                  ? 'rgba(239, 83, 80, 0.5)' // Soft red for dark mode
+                  : 'rgba(211, 47, 47, 0.3)', // Muted red for light mode
+              transition: 'width 0.2s ease',
+            },
+            '&:hover::before': {
+              width: '3px',
+            },
+          },
+          '& .redteam-row.focused-row': {
+            backgroundColor: 'action.selected',
             '&:hover': {
               backgroundColor: 'action.selected',
             },
