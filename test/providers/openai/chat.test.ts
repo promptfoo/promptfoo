@@ -1356,6 +1356,17 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o1Body = JSON.parse(o1Call[1].body);
       expect(o1Body.max_tokens).toBeUndefined();
       expect(o1Body.max_completion_tokens).toBe(200);
+
+      // Test GPT-5 model should not include max_tokens
+      mockFetchWithCache.mockClear();
+      const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5', {
+        config: { max_tokens: 300 },
+      });
+      await gpt5Provider.callApi('Test prompt');
+      const gpt5Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const gpt5Body = JSON.parse(gpt5Call[1].body);
+      expect(gpt5Body.max_tokens).toBeUndefined();
+      expect(gpt5Body.max_completion_tokens).toBeUndefined();
     });
 
     it('should handle reasoning_effort for reasoning models', async () => {
