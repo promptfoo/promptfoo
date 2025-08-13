@@ -1,6 +1,6 @@
 ---
 title: MCP Security Testing Guide
-description: Learn how to perform security testing of Model Context Protocol (MCP) servers using Promptfoo, including red teaming scenarios, tool poisoning detection, and direct API security assessments.
+description: Secure Model Context Protocol servers through comprehensive red teaming, tool poisoning tests, and API vulnerability scanning
 sidebar_label: MCP Security Testing
 ---
 

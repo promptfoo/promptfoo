@@ -1,5 +1,6 @@
 ---
 sidebar_label: Hallucination
+description: Red team LLM hallucination vulnerabilities by testing fabrication triggers and false information generation to protect AI systems from producing misleading outputs
 ---
 
 # Hallucination Plugin

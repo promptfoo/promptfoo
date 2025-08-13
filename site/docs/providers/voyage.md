@@ -1,5 +1,6 @@
 ---
 sidebar_label: Voyage AI
+description: "Leverage Voyage AI's domain-specific embedding models for enhanced semantic search, retrieval, and similarity comparisons"
 ---
 
 # Voyage AI

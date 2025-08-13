@@ -1,5 +1,6 @@
 ---
 sidebar_label: Select Best
+description: 'Leverage AI models to automatically select and rank the best outputs from multiple LLM responses for quality optimization'
 ---
 
 # Select Best
