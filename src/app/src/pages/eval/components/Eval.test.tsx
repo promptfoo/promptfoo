@@ -1,6 +1,6 @@
 import * as usePageMetaHook from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
-import { act, render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
@@ -66,6 +66,7 @@ const baseMockTableStore = {
     .fn()
     .mockResolvedValue({ table: mockTable, config: {}, totalCount: 0, filteredCount: 0 }),
   resetFilters: vi.fn(),
+  setIsStreaming: vi.fn(),
 };
 
 describe('Eval Page Metadata', () => {
@@ -322,5 +323,24 @@ describe('Eval', () => {
     });
 
     expect(fetchEvalDataMock).not.toHaveBeenCalled();
+  });
+
+  it('should show the loading animation when a user navigates to a new eval by ID (explicit user-initiated load)', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      isFetching: true,
+      table: null,
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Eval fetchId="eval-123" />
+        </MemoryRouter>,
+      );
+    });
+
+    const loadingAnimation = screen.getByRole('progressbar');
+    expect(loadingAnimation).toBeVisible();
   });
 });

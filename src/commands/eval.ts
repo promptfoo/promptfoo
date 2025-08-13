@@ -234,7 +234,7 @@ export async function doEval(
 
     const options: EvaluateOptions = {
       ...evaluateOptions,
-      showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
+      showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
