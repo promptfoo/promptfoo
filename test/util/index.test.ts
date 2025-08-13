@@ -160,7 +160,7 @@ describe('util', () => {
       jest.mocked(getDb).mockReturnValue({
         select: jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
-            where: jest.fn().mockReturnValue({ all: jest.fn().mockResolvedValue([]) }),
+            where: jest.fn().mockResolvedValue([]),
           }),
         }),
         insert: jest.fn().mockReturnValue({

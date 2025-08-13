@@ -19,7 +19,9 @@ function escapeXml(text) {
 
 // Helper function to truncate text with ellipsis
 function truncateText(text, maxLength) {
-  if (text.length <= maxLength) return text;
+  if (text.length <= maxLength) {
+    return text;
+  }
   return text.substring(0, maxLength - 3) + '...';
 }
 
@@ -44,13 +46,27 @@ async function getLogoAsBase64() {
 
 // Get page type label
 function getPageTypeLabel(routePath) {
-  if (routePath.includes('/blog/')) return 'Posts';
-  if (routePath.includes('/guides/')) return 'Guide';
-  if (routePath.includes('/red-team')) return 'Security';
-  if (routePath.includes('/providers/')) return 'Provider';
-  if (routePath.includes('/integrations/')) return 'Integration';
-  if (routePath.includes('/enterprise/')) return 'Enterprise';
-  if (routePath.includes('/api-reference/')) return 'API Reference';
+  if (routePath.includes('/blog/')) {
+    return 'Posts';
+  }
+  if (routePath.includes('/guides/')) {
+    return 'Guide';
+  }
+  if (routePath.includes('/red-team')) {
+    return 'Security';
+  }
+  if (routePath.includes('/providers/')) {
+    return 'Provider';
+  }
+  if (routePath.includes('/integrations/')) {
+    return 'Integration';
+  }
+  if (routePath.includes('/enterprise/')) {
+    return 'Enterprise';
+  }
+  if (routePath.includes('/api-reference/')) {
+    return 'API Reference';
+  }
   return 'Documentation';
 }
 
@@ -315,11 +331,11 @@ async function extractTitleFromMarkdown(routePath, outDir) {
         if (h1Match) {
           return h1Match[1].trim();
         }
-      } catch (e) {
+      } catch (_e) {
         // File doesn't exist, try next
       }
     }
-  } catch (error) {
+  } catch (_error) {
     // Couldn't read file
   }
 
@@ -327,7 +343,7 @@ async function extractTitleFromMarkdown(routePath, outDir) {
 }
 
 module.exports = function (context, options) {
-  const { siteConfig } = context;
+  // const { siteConfig } = context;
 
   return {
     name: 'docusaurus-plugin-og-image',

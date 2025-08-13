@@ -1,12 +1,17 @@
-import { runDbMigrations } from '../../src/migrate';
+import { setupTestDatabase, cleanupTestDatabase } from '../testHelpers/database';
 import Eval from '../../src/models/eval';
 import { deleteAllEvals } from '../../src/util/database';
 import EvalFactory from '../factories/evalFactory';
 
 describe('delete all evals', () => {
   beforeAll(async () => {
-    await runDbMigrations();
+    await setupTestDatabase('test-util-deleteAll');
   });
+
+  afterAll(async () => {
+    await cleanupTestDatabase();
+  });
+
   it('should delete all evals', async () => {
     await EvalFactory.create();
     await EvalFactory.create();

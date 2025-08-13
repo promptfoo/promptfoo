@@ -1,3 +1,4 @@
+import { setupTestDatabase, cleanupTestDatabase } from './testHelpers/database';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 
@@ -12,7 +13,6 @@ import {
 } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
-import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types';
 import { processConfigFileReferences } from '../src/util/fileReference';
@@ -247,7 +247,14 @@ function toPrompt(text: string): Prompt {
 
 describe('evaluator', () => {
   beforeAll(async () => {
-    await runDbMigrations();
+    await setupTestDatabase('test-evaluator');
+  });
+
+  afterAll(async () => {
+    await cleanupTestDatabase();
+    // Clear all module mocks to prevent any lingering state
+    jest.restoreAllMocks();
+    jest.resetModules();
   });
 
   beforeEach(() => {
@@ -259,12 +266,6 @@ describe('evaluator', () => {
     if (global.gc) {
       global.gc(); // Force garbage collection
     }
-  });
-
-  afterAll(() => {
-    // Clear all module mocks to prevent any lingering state
-    jest.restoreAllMocks();
-    jest.resetModules();
   });
 
   it('evaluate with vars', async () => {
@@ -3366,7 +3367,11 @@ describe('formatVarsForDisplay', () => {
 
 describe('evaluator defaultTest merging', () => {
   beforeAll(async () => {
-    await runDbMigrations();
+    await setupTestDatabase('test-evaluator-defaultTest');
+  });
+
+  afterAll(async () => {
+    await cleanupTestDatabase();
   });
 
   beforeEach(() => {
@@ -3478,6 +3483,14 @@ describe('evaluator defaultTest merging', () => {
 });
 
 describe('Evaluator with external defaultTest', () => {
+  beforeAll(async () => {
+    await setupTestDatabase('test-evaluator-external');
+  });
+
+  afterAll(async () => {
+    await cleanupTestDatabase();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
