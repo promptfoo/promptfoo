@@ -1,6 +1,6 @@
 import * as usePageMetaHook from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
-import { act, render, screen } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
