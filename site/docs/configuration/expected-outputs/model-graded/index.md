@@ -328,7 +328,7 @@ The `contextTransform` property accepts a stringified Javascript expression whic
 type ContextTransform = (output: Output, context: Context) => string;
 
 /**
- * The provider's response output OR, if defined, the return value of a `transformResponse` function.
+ * The provider's response output OR, if using an HTTP(s) provider and `transformResponse` is defined, the return value of a `transformResponse` function.
  */
 type Output = string | object;
 
@@ -381,7 +381,7 @@ assert:
 ```
 
 :::note
-When a `transformResponse` function is defined on your provider, it will run before the `contextTransform` function and `output` will be its return value.
+When using an [HTTP(s) provider](/docs/providers/http) and `transformResponse` is defined, it will run before the `contextTransform` function and `output` will be its return value.
 :::
 
 If your expression should return `undefined` or `null`, for example because no context is available, add a fallback:
