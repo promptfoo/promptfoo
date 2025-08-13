@@ -1,0 +1,74 @@
+[
+  {
+    "assignees": [{ "id": "MDQ6VXNlcjcyMzU0ODE=", "login": "mldangelo", "name": "Michael" }],
+    "author": {
+      "id": "MDQ6VXNlcjcyMzU0ODE=",
+      "is_bot": false,
+      "login": "mldangelo",
+      "name": "Michael"
+    },
+    "createdAt": "2025-08-12T10:36:20Z",
+    "headRefName": "feat/red-team-indicators",
+    "isDraft": false,
+    "mergeStateStatus": "BEHIND",
+    "mergeable": "MERGEABLE",
+    "number": 5233,
+    "title": "chore(webui): add visual indicators for red team evaluations",
+    "updatedAt": "2025-08-12T16:17:13Z",
+    "url": "https://github.com/promptfoo/promptfoo/pull/5233"
+  },
+  {
+    "assignees": [{ "id": "MDQ6VXNlcjcyMzU0ODE=", "login": "mldangelo", "name": "Michael" }],
+    "author": {
+      "id": "MDQ6VXNlcjcyMzU0ODE=",
+      "is_bot": false,
+      "login": "mldangelo",
+      "name": "Michael"
+    },
+    "createdAt": "2025-08-02T22:14:34Z",
+    "headRefName": "migrate/turso-database",
+    "isDraft": false,
+    "mergeStateStatus": "DIRTY",
+    "mergeable": "CONFLICTING",
+    "number": 5160,
+    "title": "fix: migrate from better-sqlite3 to Turso/libSQL for proper async support",
+    "updatedAt": "2025-08-05T14:35:57Z",
+    "url": "https://github.com/promptfoo/promptfoo/pull/5160"
+  },
+  {
+    "assignees": [{ "id": "MDQ6VXNlcjcyMzU0ODE=", "login": "mldangelo", "name": "Michael" }],
+    "author": {
+      "id": "MDQ6VXNlcjMxMDMxMA==",
+      "is_bot": false,
+      "login": "typpo",
+      "name": "Ian Webster"
+    },
+    "createdAt": "2025-06-03T03:53:25Z",
+    "headRefName": "ian/20250602-205320",
+    "isDraft": false,
+    "mergeStateStatus": "DIRTY",
+    "mergeable": "CONFLICTING",
+    "number": 4288,
+    "title": "chore(webui): add loader for filtered results in eval results view",
+    "updatedAt": "2025-07-18T02:35:21Z",
+    "url": "https://github.com/promptfoo/promptfoo/pull/4288"
+  },
+  {
+    "assignees": [{ "id": "MDQ6VXNlcjcyMzU0ODE=", "login": "mldangelo", "name": "Michael" }],
+    "author": {
+      "id": "MDQ6VXNlcjcyMzU0ODE=",
+      "is_bot": false,
+      "login": "mldangelo",
+      "name": "Michael"
+    },
+    "createdAt": "2025-05-30T00:38:40Z",
+    "headRefName": "codex/add-filters-for-thumbed-up/down-rows",
+    "isDraft": false,
+    "mergeStateStatus": "DIRTY",
+    "mergeable": "CONFLICTING",
+    "number": 4247,
+    "title": "feat: add human rating filters",
+    "updatedAt": "2025-07-30T18:07:47Z",
+    "url": "https://github.com/promptfoo/promptfoo/pull/4247"
+  }
+]

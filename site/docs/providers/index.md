@@ -1,18 +1,18 @@
 ---
-sidebar_label: LLM Providers
+sidebar_position: 1
+sidebar_label: Introduction
 ---
 
-# LLM Providers
+# Providers
 
-Providers in promptfoo are the interfaces to various language models and AI services. This guide will help you understand how to configure and use providers in your promptfoo evaluations.
+promptfoo supports evaluating LLM prompt and model quality from various providers.
 
 ## Quick Start
 
-Here's a basic example of configuring providers in your promptfoo YAML config:
+Specify one or more providers in your configuration:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-sonnet-4-20250514
   - openai:gpt-4.1
   - openai:o4-mini
   - google:gemini-2.5-pro
@@ -61,6 +61,7 @@ providers:
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                        | `openrouter:mistral/7b-instruct`                                          |
 | [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations                      | `perplexity:sonar-pro`                                                    |
 | [Replicate](./replicate.md)                         | Various hosted models                                     | `replicate:stability-ai/sdxl`                                             |
+| [Slack](./slack.md)                                 | Human feedback via Slack channels/DMs                     | `slack:C0123ABCDEF` or `slack:channel:C0123ABCDEF`                        |
 | [Together AI](./togetherai.md)                      | Various hosted models                                     | Compatible with OpenAI syntax                                             |
 | [Voyage AI](./voyage.md)                            | Specialized embedding models                              | `voyage:voyage-3`                                                         |
 | [vLLM](./vllm.md)                                   | Local                                                     | Compatible with OpenAI syntax                                             |
@@ -105,172 +106,28 @@ Providers are specified using various syntax options:
    Example:
 
    ```yaml
-   - id: openai:gpt-4.1
+   - id: openai:gpt-4o
      config:
-       temperature: 0.7
-       max_tokens: 150
+       temperature: 0
+       max_tokens: 1024
    ```
 
-3. File-based configuration:
-
-   Load a single provider:
-
-   ```yaml title="provider.yaml"
-   id: openai:chat:gpt-4.1
-   config:
-     temperature: 0.7
-   ```
-
-   Or multiple providers:
-
-   ```yaml title="providers.yaml"
-   - id: openai:gpt-4.1
-     config:
-       temperature: 0.7
-   - id: anthropic:messages:claude-sonnet-4-20250514
-     config:
-       max_tokens: 1000
-   ```
-
-   Reference in your configuration:
-
-   ```yaml title="promptfooconfig.yaml"
-   providers:
-     - file://provider.yaml # single provider as an object
-     - file://providers.yaml # multiple providers as an array
-   ```
-
-## Configuring Providers
-
-Most providers use environment variables for authentication:
-
-```sh
-export OPENAI_API_KEY=your_api_key_here
-export ANTHROPIC_API_KEY=your_api_key_here
-```
-
-You can also specify API keys in your configuration file:
-
-```yaml
-providers:
-  - id: openai:gpt-4.1
-    config:
-      apiKey: your_api_key_here
-```
-
-## Custom Integrations
-
-promptfoo supports several types of custom integrations:
-
-1. File-based providers:
+3. External configuration files (YAML/JSON):
 
    ```yaml
-   providers:
-     - file://path/to/provider_config.yaml
+   - file://path/to/provider-config.yaml
    ```
 
-2. JavaScript providers:
+## Best Practices
 
-   ```yaml
-   providers:
-     - file://path/to/custom_provider.js
-   ```
+- **Test against multiple models**: Compare outputs across different providers to ensure robustness
+- **Use appropriate models for tasks**: Choose specialized models (e.g., code models for programming tasks)
+- **Configure parameters carefully**: Adjust temperature, max_tokens, and other parameters based on your use case
+- **Consider costs**: Balance model capability with API costs for large-scale evaluations
 
-3. Python providers:
+## Next Steps
 
-   ```yaml
-   providers:
-     - id: file://path/to/custom_provider.py
-   ```
-
-4. HTTP/HTTPS API:
-
-   ```yaml
-   providers:
-     - id: https://api.example.com/v1/chat/completions
-       config:
-         headers:
-           Authorization: 'Bearer your_api_key'
-   ```
-
-5. WebSocket:
-
-   ```yaml
-   providers:
-     - id: ws://example.com/ws
-       config:
-         messageTemplate: '{"prompt": "{{prompt}}"}'
-   ```
-
-6. Custom scripts:
-
-   ```yaml
-   providers:
-     - 'exec: python chain.py'
-   ```
-
-## Common Configuration Options
-
-Many providers support these common configuration options:
-
-- `temperature`: Controls randomness (0.0 to 1.0)
-- `max_tokens`: Maximum number of tokens to generate
-- `top_p`: Nucleus sampling parameter
-- `frequency_penalty`: Penalizes frequent tokens
-- `presence_penalty`: Penalizes new tokens based on presence in text
-- `stop`: Sequences where the API will stop generating further tokens
-
-Example:
-
-```yaml
-providers:
-  - id: openai:gpt-4.1
-    config:
-      temperature: 0.7
-      max_tokens: 150
-      top_p: 0.9
-      frequency_penalty: 0.5
-      presence_penalty: 0.5
-      stop: ["\n", 'Human:', 'AI:']
-```
-
-## Model Context Protocol (MCP)
-
-Promptfoo supports the Model Context Protocol (MCP) for enabling advanced tool use and agentic capabilities in LLM providers. MCP allows you to connect providers to external MCP servers to enable tool orchestration, memory, and more.
-
-### Basic MCP Configuration
-
-Enable MCP for a provider by adding the `mcp` block to your provider's configuration:
-
-```yaml
-providers:
-  - id: openai:gpt-4.1
-    config:
-      temperature: 0.7
-      mcp:
-        enabled: true
-        server:
-          command: npx
-          args: ['-y', '@modelcontextprotocol/server-memory']
-          name: memory
-```
-
-### Multiple MCP Servers
-
-You can connect a single provider to multiple MCP servers:
-
-```yaml
-providers:
-  - id: openai:gpt-4.1
-    config:
-      mcp:
-        enabled: true
-        servers:
-          - command: npx
-            args: ['-y', '@modelcontextprotocol/server-memory']
-            name: server_a
-          - url: http://localhost:8001
-            name: server_b
-```
-
-For detailed MCP documentation and advanced configurations, see the [MCP Integration Guide](../integrations/mcp.md).
+- Choose a [provider](./index.md) that fits your needs
+- Learn about [configuration options](/docs/configuration/guide)
+- Set up [test cases](/docs/configuration/guide/#test-cases) for evaluation
+- Run your first [evaluation](/docs/getting-started)

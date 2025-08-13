@@ -41,4 +41,9 @@ examples/grok-4-political-bias/results-multi-judge.json
 
 # LLM Tool Settings
 **/.claude/settings.local.json
+
+# Slack test files with credentials
+test-slack-setup.sh
+test-slack-live.yaml
+
 .serena/
