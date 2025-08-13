@@ -152,7 +152,7 @@ describe('constants', () => {
   });
 
   it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench']);
+    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench', 'vlguard']);
   });
 
   it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
@@ -161,6 +161,7 @@ describe('constants', () => {
       'agentic:memory-poisoning',
       'pliny',
       'unsafebench',
+      'vlguard',
     ];
 
     expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);
