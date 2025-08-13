@@ -5,6 +5,7 @@ import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
+import { AGENT_FRAMEWORKS } from './consts';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
@@ -190,22 +191,7 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         ) {
           errors.push('Top P must be between 0 and 1');
         }
-      } else if (
-        [
-          'autogen',
-          'swarm',
-          'crewai',
-          'langgraph',
-          'llamaindex',
-          'dspy',
-          'pydantic-ai',
-          'beeai',
-          'gptswarm',
-          'swarms-framework',
-          'smol-agents',
-          'letta',
-        ].includes(providerType || '')
-      ) {
+      } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
         // Agent frameworks validation
         if (!provider.id || provider.id.trim() === '') {
           errors.push('Python file path is required');
@@ -353,20 +339,7 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         )}
 
         {/* Agent frameworks */}
-        {[
-          'autogen',
-          'swarm',
-          'crewai',
-          'langgraph',
-          'llamaindex',
-          'dspy',
-          'pydantic-ai',
-          'beeai',
-          'gptswarm',
-          'swarms-framework',
-          'smol-agents',
-          'letta',
-        ].includes(providerType || '') && (
+        {AGENT_FRAMEWORKS.includes(providerType || '') && (
           <AgentFrameworkConfiguration
             selectedTarget={provider}
             updateCustomTarget={updateCustomTarget}
