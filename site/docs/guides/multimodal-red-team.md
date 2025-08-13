@@ -47,7 +47,7 @@ npx promptfoo@latest redteam run -c promptfooconfig.image-strategy.yaml
 # Run the UnsafeBench red team
 npx promptfoo@latest redteam run -c promptfooconfig.unsafebench.yaml
 
-# Run the VLGuard red team  
+# Run the VLGuard red team
 npx promptfoo@latest redteam run -c promptfooconfig.vlguard.yaml
 ```
 

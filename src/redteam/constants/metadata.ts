@@ -730,8 +730,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
-  vlguard:
-    'Tests handling of potentially unsafe image content using the VLGuard dataset',
+  vlguard: 'Tests handling of potentially unsafe image content using the VLGuard dataset',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',

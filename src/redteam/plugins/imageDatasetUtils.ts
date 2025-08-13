@@ -55,10 +55,7 @@ export function fisherYatesShuffle<T>(array: T[]): T[] {
  */
 export function hasStringSrc(obj: unknown): obj is { src: string } {
   return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    'src' in obj &&
-    typeof (obj as any).src === 'string'
+    typeof obj === 'object' && obj !== null && 'src' in obj && typeof (obj as any).src === 'string'
   );
 }
 
@@ -133,7 +130,9 @@ export abstract class ImageDatasetManager<T> {
    */
   protected async ensureDatasetLoaded(): Promise<void> {
     if (this.datasetCache !== null) {
-      logger.debug(`[${this.pluginId}] Using cached dataset with ${this.datasetCache.length} records`);
+      logger.debug(
+        `[${this.pluginId}] Using cached dataset with ${this.datasetCache.length} records`,
+      );
       return;
     }
 
@@ -143,16 +142,14 @@ export abstract class ImageDatasetManager<T> {
       const records = await fetchHuggingFaceDataset(this.datasetPath, this.fetchLimit);
 
       if (!records || records.length === 0) {
-        throw new Error(
-          `No records returned from dataset. Check your Hugging Face API token.`,
-        );
+        throw new Error(`No records returned from dataset. Check your Hugging Face API token.`);
       }
 
       logger.debug(`[${this.pluginId}] Fetched ${records.length} total records`);
 
       // Process records - to be implemented by subclass
       this.datasetCache = await this.processRecords(records);
-      
+
       logger.debug(`[${this.pluginId}] Cached ${this.datasetCache.length} processed records`);
     } catch (error) {
       logger.error(
