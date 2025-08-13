@@ -1,9 +1,22 @@
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
+import path from 'path';
+import fs from 'fs';
 
 import chalk from 'chalk';
+import { getDb } from '../database';
+import { modelAuditScansTable } from '../database/tables';
+import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
+import { createScanId } from '../models/modelAuditScan';
 import type { Command } from 'commander';
+import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
+
+// Get promptfoo version from package.json
+const promptfooPackage = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'),
+);
+const PROMPTFOO_VERSION = promptfooPackage.version;
 
 const execAsync = promisify(exec);
 
@@ -38,6 +51,8 @@ export function modelScanCommand(program: Command): void {
     .option('-v, --verbose', 'Enable verbose output')
     .option('--max-file-size <bytes>', 'Maximum file size to scan in bytes')
     .option('--max-total-size <bytes>', 'Maximum total bytes to scan before stopping')
+    .option('--no-write', 'Do not save scan results to database')
+    .option('-d, --description <text>', 'Description for the scan')
     .action(async (paths: string[], options) => {
       if (!paths || paths.length === 0) {
         logger.error(
@@ -64,9 +79,9 @@ export function modelScanCommand(program: Command): void {
         });
       }
 
-      if (options.format) {
-        args.push('--format', options.format);
-      }
+      // Force JSON format if writing to database
+      const outputFormat = options.write !== false ? 'json' : options.format || 'text';
+      args.push('--format', outputFormat);
 
       if (options.output) {
         args.push('--output', options.output);
@@ -90,22 +105,141 @@ export function modelScanCommand(program: Command): void {
 
       logger.info(`Running model scan on: ${paths.join(', ')}`);
 
-      const modelAudit = spawn('modelaudit', args, { stdio: 'inherit' });
-
-      modelAudit.on('error', (error) => {
-        logger.error(`Failed to start modelaudit: ${error.message}`);
-        logger.info('Make sure modelaudit is installed and available in your PATH.');
-        logger.info('Install it using: pip install modelaudit');
-        process.exit(1);
-      });
-
-      modelAudit.on('close', (code) => {
-        if (code === 0) {
-          logger.info('Model scan completed successfully.');
-        } else {
-          logger.error(`Model scan completed with issues. Exit code: ${code}`);
-          process.exit(code || 1);
+      // Get ModelAudit version
+      let modelAuditVersion: string | undefined;
+      try {
+        const versionResult = await execAsync('modelaudit --version');
+        const versionMatch = versionResult.stdout.match(/modelaudit(?:,)? version (\S+)/i);
+        if (versionMatch) {
+          modelAuditVersion = versionMatch[1];
         }
-      });
+      } catch (error) {
+        logger.debug(`Failed to get ModelAudit version: ${error}`);
+      }
+
+      // If writing is enabled (default), capture output to save to database
+      if (options.write !== false) {
+        let stdout = '';
+
+        const modelAudit = spawn('modelaudit', args);
+
+        modelAudit.stdout.on('data', (data) => {
+          stdout += data.toString();
+          if (!options.output) {
+            process.stdout.write(data);
+          }
+        });
+
+        modelAudit.stderr.on('data', (data) => {
+          process.stderr.write(data);
+        });
+
+        modelAudit.on('error', (error) => {
+          logger.error(`Failed to start modelaudit: ${error.message}`);
+          logger.info('Make sure modelaudit is installed and available in your PATH.');
+          logger.info('Install it using: pip install modelaudit');
+          process.exit(1);
+        });
+
+        modelAudit.on('close', async (code) => {
+          if (code === 0 || code === 1) {
+            try {
+              // Parse JSON output
+              const jsonMatch = stdout.match(/\{[\s\S]*\}/);
+              if (!jsonMatch) {
+                throw new Error('No JSON found in output');
+              }
+
+              let scanResults;
+              try {
+                scanResults = JSON.parse(jsonMatch[0]);
+              } catch (parseErr) {
+                logger.error(`Invalid JSON format in scan output: ${parseErr}`);
+                throw new Error('Invalid JSON format in scan output');
+              }
+
+              // Map critical to error for consistency
+              const mappedIssues = (scanResults.issues || []).map(
+                (issue: ModelAuditIssue) =>
+                  ({
+                    ...issue,
+                    severity: issue.severity === 'critical' ? 'error' : issue.severity,
+                  }) as ModelAuditIssue,
+              );
+
+              // Transform results
+              const transformedResults: ModelAuditScanResults = {
+                path: paths[0],
+                issues: mappedIssues,
+                success: true,
+                scannedFiles: scanResults.files_scanned || paths.length,
+                totalFiles: scanResults.files_total || paths.length,
+                duration: scanResults.scan_duration || null,
+                rawOutput: stdout,
+              };
+
+              // Save to database
+              const db = getDb();
+              const scanId = createScanId();
+
+              await db
+                .insert(modelAuditScansTable)
+                .values({
+                  id: scanId,
+                  createdAt: Date.now(),
+                  author: getAuthor(),
+                  description: options.description || null,
+                  primaryPath: path.resolve(paths[0]),
+                  results: transformedResults,
+                  config: {
+                    paths: paths.map((p) => path.resolve(p)),
+                    options: {
+                      blacklist: options.blacklist || [],
+                      timeout: options.timeout,
+                      maxFileSize: options.maxFileSize
+                        ? parseInt(options.maxFileSize, 10)
+                        : undefined,
+                      maxTotalSize: options.maxTotalSize
+                        ? parseInt(options.maxTotalSize, 10)
+                        : undefined,
+                      verbose: options.verbose || false,
+                    },
+                  },
+                  modelAuditVersion: modelAuditVersion || null,
+                  promptfooVersion: PROMPTFOO_VERSION,
+                })
+                .run();
+
+              logger.info(`Model scan completed successfully.`);
+              logger.info(chalk.green(`✓ Scan saved with ID: ${scanId}`));
+            } catch (err) {
+              logger.warn(`Failed to save scan results: ${err}`);
+              logger.info('Model scan completed but results were not saved to database.');
+            }
+          } else {
+            logger.error(`Model scan failed with exit code: ${code}`);
+            process.exit(code || 1);
+          }
+        });
+      } else {
+        // Original behavior - just stream output
+        const modelAudit = spawn('modelaudit', args, { stdio: 'inherit' });
+
+        modelAudit.on('error', (error) => {
+          logger.error(`Failed to start modelaudit: ${error.message}`);
+          logger.info('Make sure modelaudit is installed and available in your PATH.');
+          logger.info('Install it using: pip install modelaudit');
+          process.exit(1);
+        });
+
+        modelAudit.on('close', (code) => {
+          if (code === 0) {
+            logger.info('Model scan completed successfully.');
+          } else {
+            logger.error(`Model scan completed with issues. Exit code: ${code}`);
+            process.exit(code || 1);
+          }
+        });
+      }
     });
 }

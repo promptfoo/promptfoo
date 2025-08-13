@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Alert from '@mui/material/Alert';
@@ -5,6 +6,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import PathSelector from './PathSelector';
@@ -16,7 +18,7 @@ interface ConfigurationTabProps {
   onAddPath: (path: ScanPath) => void;
   onRemovePath: (index: number) => void;
   onShowOptions: () => void;
-  onScan: () => void;
+  onScan: (description?: string) => void;
   isScanning: boolean;
   error: string | null;
   onClearError: () => void;
@@ -39,6 +41,8 @@ export default function ConfigurationTab({
   currentWorkingDir,
   installationStatus,
 }: ConfigurationTabProps) {
+  const [description, setDescription] = useState('');
+
   const isCheckingInstallation = installationStatus?.checking ?? false;
   const isNotInstalled = installationStatus?.installed === false;
   const installationUnknown = installationStatus?.installed === null;
@@ -95,6 +99,16 @@ export default function ConfigurationTab({
         currentWorkingDir={currentWorkingDir}
       />
 
+      <TextField
+        fullWidth
+        label="Scan Description (Optional)"
+        placeholder="e.g., Pre-deployment security check"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        sx={{ mt: 3 }}
+        variant="outlined"
+      />
+
       <Box sx={{ mt: 4 }}>
         <Tooltip title={getScanButtonTooltip()} placement="top">
           <span>
@@ -102,7 +116,7 @@ export default function ConfigurationTab({
               variant="contained"
               size="large"
               fullWidth
-              onClick={onScan}
+              onClick={() => onScan(description)}
               disabled={scanButtonDisabled}
               color={isNotInstalled ? 'error' : 'primary'}
               startIcon={
