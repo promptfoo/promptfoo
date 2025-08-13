@@ -230,7 +230,12 @@ Deletes a specific resource.
 
 ## `promptfoo import <filepath>`
 
-Import an eval file from JSON format.
+Import an eval file from JSON format. Supports importing evaluations exported from promptfoo v2, v3, and v4.
+
+| Option         | Description                                             |
+| -------------- | ------------------------------------------------------- |
+| `-f, --force`  | Override existing eval with same ID                     |
+| `-n, --new-id` | Generate new ID instead of using the exported eval's ID |
 
 ## `promptfoo export <evalId>`
 
