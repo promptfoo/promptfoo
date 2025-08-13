@@ -2,9 +2,19 @@
 sidebar_position: 25
 ---
 
-# Conversation Relevance
+# Conversation relevance
 
-The `conversation-relevance` assertion evaluates whether responses in a conversation remain relevant throughout the dialogue. This is particularly useful for chatbot applications where maintaining conversational coherence is critical.
+The `conversation-relevance` assertion ensures your chatbot stays on topic throughout multi-turn conversations.
+
+**What it measures**: Given a conversation history, it evaluates whether each response remains relevant to the conversation context using a sliding window approach. This catches when chatbots drift off-topic or give unrelated answers.
+
+**Example**:
+
+- User: "What's the weather?" → Bot: "It's sunny today" ✓ Relevant
+- User: "What about tomorrow?" → Bot: "Tomorrow will be rainy" ✓ Relevant
+- User: "Should I bring an umbrella?" → Bot: "The capital of France is Paris" ✗ Irrelevant
+
+This metric is ideal for **chatbot quality assurance** and ensuring conversational coherence.
 
 ## How it works
 

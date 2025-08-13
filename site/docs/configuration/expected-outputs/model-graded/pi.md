@@ -2,9 +2,19 @@
 sidebar_position: 8
 ---
 
-# Pi Scorer
+# Pi scorer
 
-`pi` is an alternative approach to model grading that uses a dedicated scoring model instead of the "LLM as a judge" technique. It can evaluate input and output pairs against criteria.
+The `pi` assertion uses a specialized scoring model for consistent, deterministic evaluation of your LLM outputs.
+
+**What it measures**: Given evaluation criteria, Pi uses a purpose-built scoring model (not an LLM acting as judge) to evaluate outputs. It provides numeric scores without explanations, focusing on consistency - the same input always gets the same score.
+
+**Example**:
+
+- Criteria: "Response is clear and concise"
+- Output: Gets a consistent numeric score (e.g., 0.85)
+- Same output tested again: Gets exactly 0.85 (deterministic)
+
+This metric is ideal for **consistent benchmarking** when you need reproducible scores.
 
 :::note
 **Important**: Unlike `llm-rubric` which works with your existing providers, Pi requires a separate external API key from Pi Labs.
@@ -41,29 +51,47 @@ env:
 
 in your promptfoo config
 
-## How to use it
+## Required fields
 
-To use the `pi` assertion type, add it to your test configuration:
+The pi assertion requires:
+
+- `value` - The evaluation criteria
+- `threshold` (optional) - Minimum score from 0 to 1 (defaults to 0.5)
+- `WITHPI_API_KEY` - Environment variable with your Pi Labs API key
+- Output - The LLM's response to evaluate
+
+## Configuration
+
+### Basic usage
 
 ```yaml
 assert:
   - type: pi
-    # Specify the criteria for grading the LLM output
-    value: Is the response not apologetic and provides a clear, concise answer?
+    value: 'Is the response clear and concise without being apologetic?'
+    threshold: 0.5 # Default threshold
 ```
 
-This assertion will use the Pi scorer to grade the output based on the specified criteria.
+:::info
+The default threshold is 0.5. Set higher thresholds for stricter evaluation.
+:::
 
 ## How it works
 
-Under the hood, the `pi` assertion uses the `withpi` SDK to evaluate the output based on the criteria you provide.
+Pi scorer differs from LLM-as-judge approaches:
 
-Compared to LLM as a judge:
+1. **Dedicated scoring model**: Purpose-built for evaluation, not a general LLM
+2. **Deterministic scoring**: Same input → same score, every time
+3. **No reasoning provided**: Returns only numeric scores (0-1)
+4. **Consistent benchmarking**: Ideal for tracking improvements over time
 
-- The inputs of the eval are the same: `llm_input` and `llm_output`
-- Pi does not need a system prompt, and is pretrained to score
-- Pi always generates the same score, when given the same input
-- Pi requires a separate API key (see Prerequisites section)
+### Pi vs. LLM-as-judge comparison
+
+| Aspect           | Pi Scorer             | LLM-as-Judge (llm-rubric)      |
+| ---------------- | --------------------- | ------------------------------ |
+| Consistency      | 100% deterministic    | May vary between runs          |
+| Explanation      | No reasoning provided | Can provide detailed reasoning |
+| API Requirements | Separate Pi Labs key  | Uses your existing providers   |
+| Best for         | Benchmarking, CI/CD   | Understanding failures         |
 
 ## Threshold Support
 
@@ -88,27 +116,65 @@ You can use the [Pi Labs Copilot](https://build.withpi.ai) to interactively brai
 2. Test metrics on example outputs before integration
 3. Find the optimal threshold values for your use case
 
-## Example Configuration
+### Complete example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Use Pi scorer for consistent, deterministic evaluation'
+
+# Set your Pi API key
+env:
+  WITHPI_API_KEY: ${WITHPI_API_KEY} # Or hardcode for testing
+
 prompts:
-  - 'Explain {{concept}} in simple terms.'
+  - 'Explain {{concept}} in simple terms for a {{audience}}.'
+
 providers:
-  - openai:gpt-4.1
+  - id: openai:gpt-4o-mini
+
 tests:
-  - vars:
-      concept: quantum computing
+  - description: 'Evaluate beginner explanation'
+    vars:
+      concept: 'quantum computing'
+      audience: 'high school student'
+    assert:
+      # Pi provides consistent numeric scores
+      - type: pi
+        value: 'Is the explanation easy to understand without technical jargon?'
+        threshold: 0.7
+
+      - type: pi
+        value: 'Does the response use appropriate analogies or examples?'
+        threshold: 0.75
+
+  - description: 'Evaluate technical explanation'
+    vars:
+      concept: 'quantum computing'
+      audience: 'computer science graduate'
     assert:
       - type: pi
-        value: Is the explanation easy to understand without technical jargon?
-        threshold: 0.7
-      - type: pi
-        value: Does the response correctly explain the fundamental principles?
+        value: 'Does the response correctly explain the fundamental principles?'
         threshold: 0.8
+
+      - type: pi
+        value: 'Is the technical terminology used accurately?'
+        threshold: 0.85
 ```
 
-## See Also
+## When to use Pi vs. alternatives
 
-- [LLM Rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric)
-- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded)
-- [Pi Documentation](https://docs.withpi.ai) for more options, configuration, and calibration details
+- **Use `pi`** for consistent benchmarking and CI/CD pipelines
+- **Use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)** when you need reasoning for failures
+- **Use [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)** for complex evaluation with chain-of-thought
+
+## Related assertions
+
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - LLM-as-judge with explanations
+- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Chain-of-thought evaluation
+- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Binary yes/no evaluation
+
+## Further reading
+
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
+- [Pi Documentation](https://docs.withpi.ai) for calibration and advanced configuration
+- [Pi Labs Copilot](https://build.withpi.ai) for brainstorming metrics

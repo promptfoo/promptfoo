@@ -2,13 +2,32 @@
 sidebar_label: Select Best
 ---
 
-# Select Best
+# Select best
 
-The `select-best` assertion compares multiple outputs in the same test case and selects the one that best meets a specified criterion. This is useful for comparing different prompt or model variations to determine which produces the best result.
+The `select-best` assertion identifies which prompt or model produces the best output for a given criterion.
 
-### How to use it
+**What it measures**: Given multiple outputs from different prompts or providers, it evaluates which one best meets your specified criterion. Only the winning output passes; all others fail.
 
-To use the `select-best` assertion type, add it to your test configuration like this:
+**Example**:
+
+- Criterion: "Most engaging tweet"
+- Output A: Informative but dry → Fails
+- Output B: Funny and viral-worthy → Passes (winner)
+- Output C: Too long → Fails
+
+This metric is ideal for **A/B testing prompts** or **comparing model performance**.
+
+## Required fields
+
+The select-best assertion requires:
+
+- `value` - The criterion for selecting the best output
+- **Multiple prompts or providers** - To generate different outputs to compare
+- Output - Multiple outputs to evaluate against each other
+
+## Configuration
+
+### Basic usage
 
 ```yaml
 assert:
@@ -16,39 +35,76 @@ assert:
     value: 'choose the most concise and accurate response'
 ```
 
-Note: This assertion requires multiple prompts or providers to generate different outputs to compare.
+:::warning
+This assertion requires multiple prompts or providers in your test configuration. With only one output, there's nothing to compare.
+:::
 
-### How it works
+## How it works
 
-The select-best checker:
+The select-best evaluation process:
 
-1. Takes all outputs from the test case
-2. Evaluates each output against the specified criterion
-3. Selects the best output
-4. Returns pass=true for the winning output and pass=false for others
+1. **Collects all outputs** from different prompts/providers in the test
+2. **Evaluates each output** against your criterion using an LLM judge
+3. **Selects the winner** that best meets the criterion
+4. **Returns results**:
+   - **Pass**: Only for the winning output
+   - **Fail**: For all other outputs
 
-### Example Configuration
+This creates a clear winner-takes-all evaluation, perfect for optimization and comparison tasks.
 
-Here's a complete example showing how to use select-best to compare different prompt variations:
+### Complete example - Comparing prompts
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Compare different prompt strategies'
+
+# Multiple prompts to compare
 prompts:
   - 'Write a tweet about {{topic}}'
-  - 'Write a very concise, funny tweet about {{topic}}'
-  - 'Compose a tweet about {{topic}} that will go viral'
+  - 'Write a concise, funny tweet about {{topic}}'
+  - 'Compose a viral tweet about {{topic}} with emojis'
+
 providers:
-  - openai:gpt-4
+  - id: openai:gpt-4o-mini
+
 tests:
-  - vars:
+  - description: 'Find best prompt for engagement'
+    vars:
       topic: 'artificial intelligence'
     assert:
       - type: select-best
-        value: 'choose the tweet that is most likely to get high engagement'
-  - vars:
+        value: 'choose the tweet most likely to get high engagement'
+
+  - description: 'Find best prompt for education'
+    vars:
       topic: 'climate change'
     assert:
       - type: select-best
-        value: 'choose the tweet that best balances information and humor'
+        value: 'choose the most informative yet accessible tweet'
+```
+
+### Comparing models example
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Compare different models on same task'
+
+prompts:
+  - 'Explain {{concept}} in one paragraph'
+
+# Multiple providers to compare
+providers:
+  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4o
+  - id: anthropic:claude-3-haiku
+
+tests:
+  - description: 'Find best model for technical accuracy'
+    vars:
+      concept: 'quantum computing'
+    assert:
+      - type: select-best
+        value: 'choose the most technically accurate explanation'
 ```
 
 ### Overriding the Grader
@@ -96,6 +152,21 @@ defaultTest:
       Choose the best output by responding with its index (0 to {{ outputs | length - 1 }}).
 ```
 
-# Further reading
+## When to use select-best
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- **Prompt optimization**: Finding the best wording or structure
+- **Model selection**: Comparing different models on same tasks
+- **Style testing**: Identifying which approach works best for your use case
+- **A/B testing**: Evaluating variations systematically
+
+## Related assertions
+
+- [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - Accepts any output meeting a threshold
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - For individual scoring without comparison
+- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - For detailed evaluation with reasoning
+
+## Further reading
+
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more evaluation options
+- [Getting Started](/docs/getting-started) for promptfoo basics
+- [Prompt optimization guide](/docs/guides/prompt-optimization) for systematic improvement

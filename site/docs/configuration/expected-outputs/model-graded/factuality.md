@@ -4,17 +4,34 @@ sidebar_label: Factuality
 
 # Factuality
 
-The `factuality` assertion evaluates the factual consistency between an LLM output and a reference answer. It uses a structured prompt based on [OpenAI's evals](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml) to determine if the output is factually consistent with the reference.
+The `factuality` assertion checks if your LLM's output is factually consistent with a ground truth reference.
 
-## How to use it
+**What it measures**: Given a reference answer (ground truth) and the LLM's output, it evaluates whether they are factually consistent - the output doesn't have to match exactly, but it can't contradict the facts.
 
-To use the `factuality` assertion type, add it to your test configuration like this:
+**Example**:
+
+- Reference: "Paris is the capital of France with 2.2 million residents"
+- Good output: "The capital of France is Paris" ✓ (subset, consistent)
+- Good output: "Paris, France's capital, has 2.2M people in a metro area of 10M" ✓ (superset, consistent)
+- Bad output: "Lyon is the capital of France" ✗ (contradicts facts)
+
+This metric is ideal for **fact-checking** and ensuring accuracy against known correct answers.
+
+## Required fields
+
+The factuality assertion requires:
+
+- `value` - The reference answer/ground truth to check against
+- Output - The LLM's response to evaluate
+
+## Configuration
+
+### Basic usage
 
 ```yaml
 assert:
   - type: factuality
-    # Specify the reference statement to check against:
-    value: The Earth orbits around the Sun
+    value: 'The Earth orbits around the Sun' # Ground truth reference
 ```
 
 ## How it works
