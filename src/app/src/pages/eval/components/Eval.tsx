@@ -124,7 +124,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     // is a global store.
     resetFilters();
 
-    // Check for filter params in the URL
+    // Check for a `plugin` param in the URL; we support filtering on plugins via the URL which
+    // enables the "View Logs" functionality in Vulnerability reports.
     const pluginParam = searchParams.get('plugin');
 
     if (pluginParam) {
