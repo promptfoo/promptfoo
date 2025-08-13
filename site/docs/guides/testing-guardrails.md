@@ -368,28 +368,27 @@ def call_api(prompt, options, context):
             logger.info(f"Processing image input (format: {image_format})")
             logger.info(f"Image data length: {len(image_data) if image_data else 0}")
         
-        # Ensure image_data is properly formatted base64
-        if isinstance(image_data, str):
-            # Remove any data URL prefix if present
-            if image_data.startswith('data:'):
-                # Extract base64 part after comma
-                image_data = image_data.split(',')[1] if ',' in image_data else image_data
-            
-            # Validate base64 format
-            try:
-                # Test decode to validate
-                base64.b64decode(image_data)
-            except Exception as e:
-                logger.error(f"Invalid base64 image data: {e}")
+        # Ensure image_data is properly formatted base64, then decode once
+        try:
+            if isinstance(image_data, str):
+                # Remove any data URL prefix if present
+                if image_data.startswith('data:'):
+                    image_data = image_data.split(',', 1)[1] if ',' in image_data else image_data
+                # Strict base64 decode
+                image_bytes = base64.b64decode(image_data, validate=True)
+            elif isinstance(image_data, (bytes, bytearray)):
+                # If bytes are provided, assume already-decoded content
+                image_bytes = bytes(image_data)
+            else:
+                raise ValueError("Unsupported image data type; expected base64 string or bytes")
+
+            # Enforce 5MB limit proactively
+            if len(image_bytes) > 5 * 1024 * 1024:
                 return {
                     "output": None,
-                    "error": f"Invalid base64 image data: {str(e)}"
+                    "error": "Image size exceeds limits. Maximum size: 5MB."
                 }
-        
-        # Add image to content - AWS expects actual bytes, not base64 string
-        try:
-            # Decode base64 to bytes for AWS
-            image_bytes = base64.b64decode(image_data)
+
             content.append({
                 "image": {
                     "format": image_format.lower(),  # AWS expects lowercase
@@ -529,7 +528,7 @@ Configure image testing with a dedicated configuration file:
 
 ```yaml title="promptfooconfig_bedrock_images.yaml"
 # Image-only configuration for AWS Bedrock Guardrails
-providers:
+targets:
   - id: 'file://aws_bedrock_guardrails_with_images.py'
     config:
       region: us-east-1
@@ -577,11 +576,13 @@ redteam:
 ```
 
 :::warning Image Testing Requirements
-- **Separate Configuration**: Image testing requires its own configuration file - cannot be mixed with text plugins
+
+- **Separate Configuration**: Keeping image and text testing in a separate configuration file
 - **Format Support**: JPEG and PNG only (max 5MB)
 - **Base64 Handling**: Images must be decoded from base64 strings to bytes before sending to AWS
-- **Provider**: Use the image-specific provider, not the standard text provider
+- **Target**: Use the image-specific target, not the standard text target
 - **InjectVar**: Must use `injectVar: image` for image plugins to work properly
+
 :::
 
 Run image-only tests with:
