@@ -25,65 +25,50 @@ const getAgentTemplate = (framework: string): string => {
 };
 
 const frameworkInfo: Record<string, { name: string; description: string; pip: string }> = {
+  langchain: {
+    name: 'LangChain',
+    description: 'Framework for developing applications powered by language models',
+    pip: 'langchain langchain-openai',
+  },
+  agentflow: {
+    name: 'AgentFlow',
+    description: 'Framework for building and orchestrating AI agent workflows',
+    pip: 'agentflow',
+  },
   autogen: {
     name: 'AutoGen',
     description: 'Multi-agent collaborative framework from Microsoft',
     pip: 'pyautogen',
   },
-  swarm: {
-    name: 'Swarm',
-    description: 'Lightweight multi-agent orchestration from OpenAI',
-    pip: 'git+https://github.com/openai/swarm.git',
+  'semantic-kernel': {
+    name: 'Semantic Kernel',
+    description: 'Microsoft SDK for integrating AI into applications',
+    pip: 'semantic-kernel',
+  },
+  'atomic-agents': {
+    name: 'Atomic Agents',
+    description: 'Modular framework for building composable AI agents',
+    pip: 'atomic-agents',
   },
   crewai: {
     name: 'CrewAI',
     description: 'Framework for orchestrating role-playing autonomous AI agents',
     pip: 'crewai',
   },
-  langgraph: {
-    name: 'LangGraph',
-    description: 'Build stateful multi-agent applications with LangChain',
-    pip: 'langgraph langchain-openai',
+  rasa: {
+    name: 'RASA',
+    description: 'Open source framework for building conversational AI',
+    pip: 'rasa',
   },
-  llamaindex: {
-    name: 'LlamaIndex',
-    description: 'Data framework for LLM-based applications with RAG',
-    pip: 'llama-index',
+  'huggingface-agents': {
+    name: 'Hugging Face Transformers Agents',
+    description: 'Build agents using Hugging Face transformers library',
+    pip: 'transformers',
   },
-  dspy: {
-    name: 'DSPy',
-    description: 'Framework for algorithmically optimizing LM prompts',
-    pip: 'dspy-ai',
-  },
-  'pydantic-ai': {
-    name: 'Pydantic AI',
-    description: 'Agent framework with structured outputs using Pydantic',
-    pip: 'pydantic-ai',
-  },
-  beeai: {
-    name: 'BeeAI Framework',
-    description: 'Production-ready multi-agent systems from IBM',
-    pip: 'beeai-framework',
-  },
-  gptswarm: {
-    name: 'GPTSwarm',
-    description: 'Graph-based framework with RL and prompt optimization',
-    pip: 'gptswarm',
-  },
-  'swarms-framework': {
-    name: 'Swarms Framework',
-    description: 'Enterprise-grade multi-agent orchestration',
-    pip: 'swarms',
-  },
-  'smol-agents': {
-    name: 'SmolAgents',
-    description: 'Lightweight framework for micro-agent deployment',
-    pip: 'smol-agents',
-  },
-  letta: {
-    name: 'Letta (MemGPT)',
-    description: 'Framework for building modular AI agents with memory',
-    pip: 'letta',
+  langflow: {
+    name: 'Langflow',
+    description: 'Visual framework for building multi-agent LLM applications',
+    pip: 'langflow',
   },
 };
 

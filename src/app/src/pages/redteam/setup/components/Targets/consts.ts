@@ -1,19 +1,109 @@
 export const AGENT_FRAMEWORKS = [
+  'langchain',
+  'agentflow',
   'autogen',
-  'swarm',
+  'semantic-kernel',
+  'atomic-agents',
   'crewai',
-  'langgraph',
-  'llamaindex',
-  'dspy',
-  'pydantic-ai',
-  'beeai',
-  'gptswarm',
-  'swarms-framework',
-  'smol-agents',
-  'letta',
+  'rasa',
+  'huggingface-agents',
+  'langflow',
 ];
 
 export const AGENT_TEMPLATES: Record<string, string> = {
+  langchain: `import os
+from langchain.agents import create_react_agent, AgentExecutor
+from langchain_openai import ChatOpenAI
+from langchain.prompts import PromptTemplate
+from langchain.tools import Tool
+
+# Initialize the LLM
+llm = ChatOpenAI(
+    model="gpt-5",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=0.7,
+)
+
+def call_api(prompt, options, context):
+    """
+    Main entry point for promptfoo evaluation.
+    
+    Args:
+        prompt: The input prompt/query
+        options: Additional options from promptfoo
+        context: Evaluation context
+    
+    Returns:
+        dict: Response with 'output' key
+    """
+    # Define tools if needed
+    tools = []
+    
+    # Create a simple prompt template
+    prompt_template = PromptTemplate(
+        input_variables=["input", "agent_scratchpad"],
+        template="""Answer the following question: {input}
+        
+        {agent_scratchpad}"""
+    )
+    
+    # Create the agent
+    agent = create_react_agent(
+        llm=llm,
+        tools=tools,
+        prompt=prompt_template,
+    )
+    
+    # Create an executor
+    agent_executor = AgentExecutor(
+        agent=agent,
+        tools=tools,
+        verbose=True,
+        handle_parsing_errors=True,
+    )
+    
+    # Run the agent
+    result = agent_executor.invoke({"input": prompt})
+    
+    return {
+        "output": result.get("output", "No response generated"),
+    }
+`,
+
+  agentflow: `import os
+# AgentFlow is a hypothetical framework - adjust imports as needed
+# from agentflow import Agent, Workflow
+
+def call_api(prompt, options, context):
+    """
+    Main entry point for promptfoo evaluation.
+    
+    Args:
+        prompt: The input prompt/query
+        options: Additional options from promptfoo
+        context: Evaluation context
+    
+    Returns:
+        dict: Response with 'output' key
+    """
+    # TODO: Initialize your AgentFlow agent
+    # agent = Agent(
+    #     name="Assistant",
+    #     model="gpt-5",
+    # )
+    
+    # TODO: Create and run workflow
+    # workflow = Workflow(agent)
+    # result = workflow.run(prompt)
+    
+    # Placeholder response
+    response = f"AgentFlow response to: {prompt}"
+    
+    return {
+        "output": response,
+    }
+`,
+
   autogen: `import os
 from autogen import AssistantAgent, UserProxyAgent, config_list_from_json
 
@@ -68,19 +158,22 @@ def call_api(prompt, options, context):
     }
 `,
 
-  swarm: `import os
-from swarm import Swarm, Agent
+  'semantic-kernel': `import os
+from semantic_kernel import Kernel
+from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
+from semantic_kernel.prompt_template import PromptTemplateConfig
 
-# Initialize Swarm client
-client = Swarm()
+# Initialize Semantic Kernel
+kernel = Kernel()
 
-# Define your agent
-def create_agent():
-    return Agent(
-        name="Assistant",
-        instructions="You are a helpful AI assistant.",
-        model="gpt-5",
-    )
+# Add OpenAI service
+kernel.add_chat_service(
+    "chat-gpt",
+    OpenAIChatCompletion(
+        "gpt-5",
+        api_key=os.getenv("OPENAI_API_KEY"),
+    ),
+)
 
 def call_api(prompt, options, context):
     """
@@ -94,15 +187,58 @@ def call_api(prompt, options, context):
     Returns:
         dict: Response with 'output' key
     """
-    agent = create_agent()
-    
-    response = client.run(
-        agent=agent,
-        messages=[{"role": "user", "content": prompt}],
+    # Create a semantic function
+    prompt_config = PromptTemplateConfig(
+        template=prompt,
+        description="Process user query",
     )
     
+    # Create and invoke the function
+    function = kernel.create_semantic_function(
+        prompt_template=prompt,
+        function_name="query",
+        skill_name="main",
+    )
+    
+    # Run the function
+    result = kernel.run(function)
+    
     return {
-        "output": response.messages[-1]["content"],
+        "output": str(result),
+    }
+`,
+
+  'atomic-agents': `import os
+# Atomic Agents framework - adjust imports as needed
+# from atomic_agents import Agent, Task
+
+def call_api(prompt, options, context):
+    """
+    Main entry point for promptfoo evaluation.
+    
+    Args:
+        prompt: The input prompt/query
+        options: Additional options from promptfoo
+        context: Evaluation context
+    
+    Returns:
+        dict: Response with 'output' key
+    """
+    # TODO: Initialize your Atomic Agent
+    # agent = Agent(
+    #     name="Assistant",
+    #     capabilities=["reasoning", "analysis"],
+    # )
+    
+    # TODO: Process the task
+    # task = Task(description=prompt)
+    # result = agent.execute(task)
+    
+    # Placeholder response
+    response = f"Atomic Agents response to: {prompt}"
+    
+    return {
+        "output": response,
     }
 `,
 
@@ -151,34 +287,14 @@ def call_api(prompt, options, context):
     }
 `,
 
-  langgraph: `import os
-from typing import TypedDict, Annotated
-from langgraph.graph import StateGraph, END
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage
+  rasa: `import os
+from rasa.core.agent import Agent
+from rasa.core.interpreter import RasaNLUInterpreter
 
-# Define the state
-class State(TypedDict):
-    messages: list
-
-# Initialize the LLM
-llm = ChatOpenAI(
-    model="gpt-5",
-    api_key=os.getenv("OPENAI_API_KEY"),
-)
-
-def agent(state: State):
-    """Process messages with the LLM"""
-    response = llm.invoke(state["messages"])
-    return {"messages": state["messages"] + [response]}
-
-# Build the graph
-workflow = StateGraph(State)
-workflow.add_node("agent", agent)
-workflow.set_entry_point("agent")
-workflow.add_edge("agent", END)
-
-app = workflow.compile()
+# Load your trained RASA model
+# Note: You need to train your RASA model first
+interpreter = RasaNLUInterpreter("./models/nlu")
+agent = Agent.load("./models/dialogue", interpreter=interpreter)
 
 def call_api(prompt, options, context):
     """
@@ -192,121 +308,27 @@ def call_api(prompt, options, context):
     Returns:
         dict: Response with 'output' key
     """
-    initial_state = {
-        "messages": [HumanMessage(content=prompt)]
-    }
+    # Handle the message with RASA
+    responses = agent.handle_message(prompt)
     
-    result = app.invoke(initial_state)
-    
-    # Extract the last AI message
-    last_message = result["messages"][-1]
+    # Combine all responses
+    output = " ".join([r.get("text", "") for r in responses])
     
     return {
-        "output": last_message.content,
+        "output": output if output else "No response generated",
     }
 `,
 
-  llamaindex: `import os
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Document
-from llama_index.llms.openai import OpenAI
+  'huggingface-agents': `import os
+from transformers import Tool, ReactCodeAgent, HfEngine
 
-# Initialize LLM
-llm = OpenAI(
-    model="gpt-5",
-    api_key=os.getenv("OPENAI_API_KEY"),
-)
-
-def call_api(prompt, options, context):
-    """
-    Main entry point for promptfoo evaluation.
-    
-    Args:
-        prompt: The input prompt/query
-        options: Additional options from promptfoo
-        context: Evaluation context
-    
-    Returns:
-        dict: Response with 'output' key
-    """
-    # Create a simple document for demonstration
-    # In production, you'd load actual documents
-    documents = [Document(text="This is a sample document for the index.")]
-    
-    # Build index
-    index = VectorStoreIndex.from_documents(
-        documents,
-        llm=llm,
-    )
-    
-    # Query the index
-    query_engine = index.as_query_engine()
-    response = query_engine.query(prompt)
-    
-    return {
-        "output": str(response),
-    }
-`,
-
-  dspy: `import os
-import dspy
-from dspy.teleprompt import BootstrapFewShot
-
-# Configure DSPy
-lm = dspy.OpenAI(
-    model="gpt-5",
-    api_key=os.getenv("OPENAI_API_KEY"),
-)
-dspy.settings.configure(lm=lm)
-
-class BasicQA(dspy.Signature):
-    """Answer questions with short responses."""
-    question = dspy.InputField()
-    answer = dspy.OutputField(desc="short answer")
-
-class SimpleAgent(dspy.Module):
-    def __init__(self):
-        super().__init__()
-        self.generate_answer = dspy.ChainOfThought(BasicQA)
-    
-    def forward(self, question):
-        return self.generate_answer(question=question)
-
-# Initialize the agent
-agent = SimpleAgent()
-
-def call_api(prompt, options, context):
-    """
-    Main entry point for promptfoo evaluation.
-    
-    Args:
-        prompt: The input prompt/query
-        options: Additional options from promptfoo
-        context: Evaluation context
-    
-    Returns:
-        dict: Response with 'output' key
-    """
-    result = agent(prompt)
-    
-    return {
-        "output": result.answer,
-    }
-`,
-
-  'pydantic-ai': `import os
-from pydantic_ai import Agent
-from pydantic import BaseModel
-
-# Define your output model
-class Response(BaseModel):
-    answer: str
-    confidence: float = 1.0
+# Initialize the Hugging Face agent
+engine = HfEngine(model="meta-llama/Llama-3.3-70B-Instruct")
 
 # Create the agent
-agent = Agent(
-    "gpt-5",
-    result_type=Response,
-    system_prompt="You are a helpful AI assistant.",
+agent = ReactCodeAgent(
+    tools=[],  # Add tools as needed
+    llm_engine=engine,
 )
 
 def call_api(prompt, options, context):
@@ -321,10 +343,56 @@ def call_api(prompt, options, context):
     Returns:
         dict: Response with 'output' key
     """
-    result = agent.run_sync(prompt)
+    # Run the agent
+    result = agent.run(prompt)
     
     return {
-        "output": result.data.answer if result.data else "No response generated",
+        "output": str(result),
+    }
+`,
+
+  langflow: `import os
+import requests
+
+# Langflow API endpoint
+# Update this to your Langflow instance URL
+LANGFLOW_URL = "http://localhost:7860/api/v1/run"
+FLOW_ID = "your-flow-id"
+
+def call_api(prompt, options, context):
+    """
+    Main entry point for promptfoo evaluation.
+    
+    Args:
+        prompt: The input prompt/query
+        options: Additional options from promptfoo
+        context: Evaluation context
+    
+    Returns:
+        dict: Response with 'output' key
+    """
+    # Prepare the request to Langflow
+    payload = {
+        "inputs": {
+            "text": prompt
+        }
+    }
+    
+    # Make request to Langflow API
+    response = requests.post(
+        f"{LANGFLOW_URL}/{FLOW_ID}",
+        json=payload,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    if response.status_code == 200:
+        result = response.json()
+        output = result.get("outputs", {}).get("output", "No response")
+    else:
+        output = f"Error: {response.status_code}"
+    
+    return {
+        "output": output,
     }
 `,
 

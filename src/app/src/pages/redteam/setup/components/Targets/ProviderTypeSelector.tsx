@@ -26,15 +26,33 @@ import type { ProviderOptions } from '../../types';
 const allProviderOptions = [
   // Agentic Frameworks
   {
+    value: 'langchain',
+    label: 'LangChain',
+    description: 'Framework for developing applications powered by language models',
+    category: 'agents',
+  },
+  {
+    value: 'agentflow',
+    label: 'AgentFlow',
+    description: 'Framework for building and orchestrating AI agent workflows',
+    category: 'agents',
+  },
+  {
     value: 'autogen',
-    label: 'AutoGen (Microsoft)',
+    label: 'AutoGen',
     description: 'Multi-agent collaborative framework from Microsoft',
     category: 'agents',
   },
   {
-    value: 'swarm',
-    label: 'Swarm (OpenAI)',
-    description: 'Lightweight multi-agent orchestration from OpenAI',
+    value: 'semantic-kernel',
+    label: 'Semantic Kernel',
+    description: 'Microsoft SDK for integrating AI into applications',
+    category: 'agents',
+  },
+  {
+    value: 'atomic-agents',
+    label: 'Atomic Agents',
+    description: 'Modular framework for building composable AI agents',
     category: 'agents',
   },
   {
@@ -44,59 +62,24 @@ const allProviderOptions = [
     category: 'agents',
   },
   {
-    value: 'langgraph',
-    label: 'LangGraph',
-    description: 'Build stateful multi-agent applications with LangChain',
+    value: 'rasa',
+    label: 'RASA',
+    description: 'Open source framework for building conversational AI',
     category: 'agents',
   },
   {
-    value: 'llamaindex',
-    label: 'LlamaIndex',
-    description: 'Data framework for LLM-based applications with RAG',
+    value: 'huggingface-agents',
+    label: 'Hugging Face Transformers Agents',
+    description: 'Build agents using Hugging Face transformers library',
     category: 'agents',
   },
   {
-    value: 'dspy',
-    label: 'DSPy (Stanford)',
-    description: 'Framework for algorithmically optimizing LM prompts',
+    value: 'langflow',
+    label: 'Langflow',
+    description: 'Visual framework for building multi-agent LLM applications',
     category: 'agents',
   },
-  {
-    value: 'pydantic-ai',
-    label: 'Pydantic AI',
-    description: 'Agent framework with structured outputs using Pydantic',
-    category: 'agents',
-  },
-  {
-    value: 'beeai',
-    label: 'BeeAI Framework',
-    description: 'Production-ready multi-agent systems from IBM',
-    category: 'agents',
-  },
-  {
-    value: 'gptswarm',
-    label: 'GPTSwarm',
-    description: 'Graph-based framework with RL and prompt optimization',
-    category: 'agents',
-  },
-  {
-    value: 'swarms-framework',
-    label: 'Swarms Framework',
-    description: 'Enterprise-grade multi-agent orchestration',
-    category: 'agents',
-  },
-  {
-    value: 'smol-agents',
-    label: 'SmolAgents',
-    description: 'Lightweight framework for micro-agent deployment',
-    category: 'agents',
-  },
-  {
-    value: 'letta',
-    label: 'Letta (MemGPT)',
-    description: 'Framework for building modular AI agents with memory',
-    category: 'agents',
-  },
+
   // AI/ML API
   {
     value: 'aimlapi',
@@ -802,29 +785,60 @@ export default function ProviderTypeSelector({
         },
         'simulated-user',
       );
+    } else if (value === 'langchain') {
+      setProvider(
+        {
+          id: 'file:///path/to/langchain_agent.py',
+          config: {
+            framework: 'langchain',
+          },
+          label: currentLabel,
+        },
+        'langchain',
+      );
+    } else if (value === 'agentflow') {
+      setProvider(
+        {
+          id: 'file:///path/to/agentflow_agent.py',
+          config: {
+            framework: 'agentflow',
+          },
+          label: currentLabel,
+        },
+        'agentflow',
+      );
     } else if (value === 'autogen') {
       setProvider(
         {
           id: 'file:///path/to/autogen_agent.py',
           config: {
             framework: 'autogen',
-            model: 'openai:gpt-4.1',
           },
-          label: currentLabel || 'AutoGen Agent',
+          label: currentLabel,
         },
         'autogen',
       );
-    } else if (value === 'swarm') {
+    } else if (value === 'semantic-kernel') {
       setProvider(
         {
-          id: 'file:///path/to/swarm_agent.py',
+          id: 'file:///path/to/semantic_kernel_agent.py',
           config: {
-            framework: 'swarm',
-            model: 'openai:gpt-4.1',
+            framework: 'semantic-kernel',
           },
-          label: currentLabel || 'Swarm Agent',
+          label: currentLabel,
         },
-        'swarm',
+        'semantic-kernel',
+      );
+    } else if (value === 'atomic-agents') {
+      setProvider(
+        {
+          id: 'file:///path/to/atomic_agents.py',
+          config: {
+            framework: 'atomic-agents',
+          },
+          label: currentLabel,
+        },
+        'atomic-agents',
       );
     } else if (value === 'crewai') {
       setProvider(
@@ -832,119 +846,43 @@ export default function ProviderTypeSelector({
           id: 'file:///path/to/crewai_agent.py',
           config: {
             framework: 'crewai',
-            model: 'openai:gpt-4.1',
           },
-          label: currentLabel || 'CrewAI Agent',
+          label: currentLabel,
         },
         'crewai',
       );
-    } else if (value === 'langgraph') {
+    } else if (value === 'rasa') {
       setProvider(
         {
-          id: 'file:///path/to/langgraph_agent.py',
+          id: 'file:///path/to/rasa_agent.py',
           config: {
-            framework: 'langgraph',
-            model: 'openai:gpt-4.1',
+            framework: 'rasa',
           },
-          label: currentLabel || 'LangGraph Agent',
+          label: currentLabel,
         },
-        'langgraph',
+        'rasa',
       );
-    } else if (value === 'llamaindex') {
+    } else if (value === 'huggingface-agents') {
       setProvider(
         {
-          id: 'file:///path/to/llamaindex_agent.py',
+          id: 'file:///path/to/huggingface_agents.py',
           config: {
-            framework: 'llamaindex',
-            model: 'openai:gpt-4.1',
+            framework: 'huggingface-agents',
           },
-          label: currentLabel || 'LlamaIndex Agent',
+          label: currentLabel,
         },
-        'llamaindex',
+        'huggingface-agents',
       );
-    } else if (value === 'dspy') {
+    } else if (value === 'langflow') {
       setProvider(
         {
-          id: 'file:///path/to/dspy_agent.py',
+          id: 'file:///path/to/langflow_agent.py',
           config: {
-            framework: 'dspy',
-            model: 'openai:gpt-4.1',
+            framework: 'langflow',
           },
-          label: currentLabel || 'DSPy Agent',
+          label: currentLabel,
         },
-        'dspy',
-      );
-    } else if (value === 'pydantic-ai') {
-      setProvider(
-        {
-          id: 'file:///path/to/pydantic_ai_agent.py',
-          config: {
-            framework: 'pydantic-ai',
-            model: 'openai:gpt-4.1',
-          },
-          label: currentLabel || 'Pydantic AI Agent',
-        },
-        'pydantic-ai',
-      );
-    } else if (value === 'beeai') {
-      setProvider(
-        {
-          id: 'file:///path/to/beeai_agent.py',
-          config: {
-            framework: 'beeai',
-            model: 'openai:gpt-4.1',
-          },
-          label: currentLabel || 'BeeAI Agent',
-        },
-        'beeai',
-      );
-    } else if (value === 'gptswarm') {
-      setProvider(
-        {
-          id: 'file:///path/to/gptswarm_agent.py',
-          config: {
-            framework: 'gptswarm',
-            model: 'openai:gpt-4.1',
-          },
-          label: currentLabel || 'GPTSwarm Agent',
-        },
-        'gptswarm',
-      );
-    } else if (value === 'swarms-framework') {
-      setProvider(
-        {
-          id: 'file:///path/to/swarms_agent.py',
-          config: {
-            framework: 'swarms',
-            model: 'openai:gpt-4.1',
-          },
-          label: currentLabel || 'Swarms Agent',
-        },
-        'swarms-framework',
-      );
-    } else if (value === 'smol-agents') {
-      setProvider(
-        {
-          id: 'file:///path/to/smol_agents.py',
-          config: {
-            framework: 'smol-agents',
-            model: 'openai:gpt-4.1',
-          },
-          label: currentLabel || 'SmolAgents',
-        },
-        'smol-agents',
-      );
-    } else if (value === 'letta') {
-      setProvider(
-        {
-          id: 'file:///path/to/letta_agent.py',
-          config: {
-            framework: 'letta',
-            model: 'openai:gpt-4.1',
-          },
-          label: currentLabel || 'Letta Agent',
-        },
-        'letta',
+        'langflow',
       );
     } else {
       setProvider(
