@@ -3,6 +3,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
@@ -12,6 +13,8 @@ import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
+  private functionCallbackHandler = new FunctionCallbackHandler();
+
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
     'gpt-4o-2024-08-06',
@@ -23,6 +26,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-4.1-mini-2025-04-14',
     'gpt-4.1-nano',
     'gpt-4.1-nano-2025-04-14',
+    // GPT-5 models
+    'gpt-5',
+    'gpt-5-2025-08-07',
+    'gpt-5-chat-latest',
+    'gpt-5-nano',
+    'gpt-5-nano-2025-08-07',
+    'gpt-5-mini',
+    'gpt-5-mini-2025-08-07',
     'o1',
     'o1-2024-12-17',
     'o1-preview',
@@ -63,7 +74,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
-      this.modelName === 'codex-mini-latest'
+      this.modelName === 'codex-mini-latest' ||
+      this.modelName.startsWith('gpt-5')
     );
   }
 
@@ -187,7 +199,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       config.reasoning_effort &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.startsWith('gpt-5'))
     ) {
       body.reasoning_effort = config.reasoning_effort;
     }
@@ -196,7 +209,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       config.reasoning &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.startsWith('gpt-5'))
     ) {
       body.reasoning = config.reasoning;
     }
@@ -326,7 +340,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         }
 
         if (item.type === 'function_call') {
-          result = JSON.stringify(item);
+          // Skip completed status messages that are just status updates without meaningful arguments
+          if (item.status === 'completed' && (!item.arguments || item.arguments === '{}')) {
+            continue;
+          }
+
+          result = await this.functionCallbackHandler.processCalls(
+            item,
+            config.functionToolCallbacks,
+          );
         } else if (item.type === 'message' && item.role === 'assistant') {
           if (item.content) {
             for (const contentItem of item.content) {
@@ -345,7 +367,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                   data.annotations.push(...contentItem.annotations);
                 }
               } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-                result = JSON.stringify(contentItem);
+                result = await this.functionCallbackHandler.processCalls(
+                  contentItem,
+                  config.functionToolCallbacks,
+                );
               } else if (contentItem.type === 'refusal') {
                 refusal = contentItem.refusal;
                 isRefusal = true;

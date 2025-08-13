@@ -4,7 +4,6 @@ import fs from 'fs';
 import glob from 'glob';
 import { FILE_METADATA_KEY } from '../src/constants';
 import {
-  calculateThreadsPerBar,
   evaluate,
   formatVarsForDisplay,
   generateVarCombinations,
@@ -3244,49 +3243,6 @@ describe('runEval', () => {
         },
       },
     });
-  });
-});
-
-describe('calculateThreadsPerBar', () => {
-  it('should evenly distribute threads when concurrency is a multiple of numProgressBars', () => {
-    // 10 threads, 5 progress bars = 2 threads per bar
-    expect(calculateThreadsPerBar(10, 5, 0)).toBe(2);
-    expect(calculateThreadsPerBar(10, 5, 1)).toBe(2);
-    expect(calculateThreadsPerBar(10, 5, 4)).toBe(2);
-
-    // 12 threads, 6 progress bars = 2 threads per bar
-    expect(calculateThreadsPerBar(12, 6, 0)).toBe(2);
-    expect(calculateThreadsPerBar(12, 6, 5)).toBe(2);
-  });
-
-  it('should correctly distribute extra threads for the first N bars', () => {
-    // 11 threads, 5 progress bars = 2 threads for first bar, 2 for the rest
-    // floor(11/5) = 2 with 1 extra thread
-    expect(calculateThreadsPerBar(11, 5, 0)).toBe(3); // First bar gets 2+1
-    expect(calculateThreadsPerBar(11, 5, 1)).toBe(2);
-    expect(calculateThreadsPerBar(11, 5, 4)).toBe(2);
-
-    // 17 threads, 6 progress bars = 2 threads for first 5 bars, 2 for the last
-    // floor(17/6) = 2 with 5 extra threads
-    expect(calculateThreadsPerBar(17, 6, 0)).toBe(3); // First bar gets 2+1
-    expect(calculateThreadsPerBar(17, 6, 4)).toBe(3); // Fifth bar gets 2+1
-    expect(calculateThreadsPerBar(17, 6, 5)).toBe(2); // Last bar gets just 2
-  });
-
-  it('should handle edge cases', () => {
-    // 1 thread, 1 progress bar
-    expect(calculateThreadsPerBar(1, 1, 0)).toBe(1);
-
-    // More progress bars than threads (1 thread per bar until we run out)
-    expect(calculateThreadsPerBar(3, 5, 0)).toBe(1);
-    expect(calculateThreadsPerBar(3, 5, 1)).toBe(1);
-    expect(calculateThreadsPerBar(3, 5, 2)).toBe(1);
-    expect(calculateThreadsPerBar(3, 5, 3)).toBe(0);
-    expect(calculateThreadsPerBar(3, 5, 4)).toBe(0);
-
-    // Large numbers
-    expect(calculateThreadsPerBar(101, 20, 0)).toBe(6); // 5 with 1 extra
-    expect(calculateThreadsPerBar(101, 20, 19)).toBe(5); // Last bar gets no extra
   });
 });
 
