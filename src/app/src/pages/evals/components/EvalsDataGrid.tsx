@@ -198,6 +198,10 @@ export default function EvalsDataGrid({
     return rows_;
   }, [evals, filterByDatasetId, focusedEvalId]);
 
+  const hasRedteamEvals = useMemo(() => {
+    return evals.some(({ isRedteam }) => isRedteam === 1);
+  }, [evals]);
+
   const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
 
   const columns: GridColDef<Eval>[] = useMemo(
@@ -237,51 +241,56 @@ export default function EvalsDataGrid({
           },
           valueFormatter: (value: Eval['createdAt']) => new Date(value).toLocaleString(),
         },
-        {
-          field: 'isRedteam',
-          headerName: 'Type',
-          flex: 0.5,
-          type: 'singleSelect',
-          valueOptions: [
-            { value: true, label: 'Redteam' },
-            { value: false, label: 'Eval' },
-          ],
-          valueGetter: (value: Eval['isRedteam'], row: Eval) => value === 1,
-          renderCell: (params: GridRenderCellParams<Eval>) => {
-            const isRedteam = params.value as Eval['isRedteam'];
-            const displayType = isRedteam ? 'Redteam' : 'Eval';
+        // Only show the redteam column if there are redteam evals.
+        ...(hasRedteamEvals
+          ? [
+              {
+                field: 'isRedteam',
+                headerName: 'Type',
+                flex: 0.5,
+                type: 'singleSelect',
+                valueOptions: [
+                  { value: true, label: 'Redteam' },
+                  { value: false, label: 'Eval' },
+                ],
+                valueGetter: (value: Eval['isRedteam'], row: Eval) => value === 1,
+                renderCell: (params: GridRenderCellParams<Eval>) => {
+                  const isRedteam = params.value as Eval['isRedteam'];
+                  const displayType = isRedteam ? 'Redteam' : 'Eval';
 
-            return (
-              <Chip
-                label={displayType}
-                size="small"
-                variant="outlined"
-                sx={(theme) => ({
-                  borderColor: isRedteam
-                    ? theme.palette.error.light
-                    : theme.palette.mode === 'dark'
-                      ? theme.palette.grey[600]
-                      : theme.palette.text.disabled,
-                  color: isRedteam
-                    ? theme.palette.error.main
-                    : theme.palette.mode === 'dark'
-                      ? theme.palette.grey[300]
-                      : theme.palette.text.secondary,
-                  bgcolor: isRedteam
-                    ? alpha(theme.palette.error.main, 0.1)
-                    : theme.palette.mode === 'dark'
-                      ? theme.palette.grey[800]
-                      : theme.palette.grey[50],
-                  fontWeight: 500,
-                  '& .MuiChip-label': {
-                    px: 1.5,
-                  },
-                })}
-              />
-            );
-          },
-          cellClassName: 'dg-cursor-pointer',
-        },
+                  return (
+                    <Chip
+                      label={displayType}
+                      size="small"
+                      variant="outlined"
+                      sx={(theme) => ({
+                        borderColor: isRedteam
+                          ? theme.palette.error.light
+                          : theme.palette.mode === 'dark'
+                            ? theme.palette.grey[600]
+                            : theme.palette.text.disabled,
+                        color: isRedteam
+                          ? theme.palette.error.main
+                          : theme.palette.mode === 'dark'
+                            ? theme.palette.grey[300]
+                            : theme.palette.text.secondary,
+                        bgcolor: isRedteam
+                          ? alpha(theme.palette.error.main, 0.1)
+                          : theme.palette.mode === 'dark'
+                            ? theme.palette.grey[800]
+                            : theme.palette.grey[50],
+                        fontWeight: 500,
+                        '& .MuiChip-label': {
+                          px: 1.5,
+                        },
+                      })}
+                    />
+                  );
+                },
+                cellClassName: 'dg-cursor-pointer',
+              },
+            ]
+          : []),
         {
           field: 'description',
           headerName: 'Description',
@@ -324,7 +333,7 @@ export default function EvalsDataGrid({
           flex: 0.5,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
-    [focusedEvalId, onEvalSelected],
+    [focusedEvalId, onEvalSelected, hasRedteamEvals],
   );
 
   return (
