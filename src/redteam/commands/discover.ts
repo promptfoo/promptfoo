@@ -28,7 +28,7 @@ import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 
 const TargetPurposeDiscoveryStateSchema = z.object({
   currentQuestionIndex: z.number(),
-  answers: z.array(z.string()),
+  answers: z.array(z.any()),
 });
 
 export const TargetPurposeDiscoveryRequestSchema = z.object({
