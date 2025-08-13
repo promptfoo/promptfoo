@@ -575,6 +575,17 @@ async function extractMetadataFromMarkdown(routePath, outDir) {
         'site/blog',
         routePath.replace('/blog/', '').replace(/\/$/, '') + '.mdx',
       ),
+      // Additional blog path pattern for routes ending with /
+      path.join(
+        process.cwd(),
+        'site/blog',
+        routePath.replace('/blog/', '').replace(/\/$/, '').replace(/-$/, '') + '.md',
+      ),
+      path.join(
+        process.cwd(),
+        'site/blog',
+        routePath.replace('/blog/', '').replace(/\/$/, '').replace(/-$/, '') + '.mdx',
+      ),
       // Fallback without 'site' prefix
       path.join(process.cwd(), 'docs', routePath.replace('/docs/', '').replace(/\/$/, '') + '.md'),
       path.join(process.cwd(), 'docs', routePath.replace('/docs/', '').replace(/\/$/, '') + '.mdx'),
@@ -708,7 +719,7 @@ module.exports = function (context, options) {
               description: post.metadata.description,
               author: authorNames || null,
               date: post.metadata.date || post.metadata.formattedDate || null,
-              image: post.metadata.frontMatter?.image || null,
+              image: post.metadata.frontMatter?.image || post.metadata.image || null,
               breadcrumbs: ['Blog'],
             });
           });
