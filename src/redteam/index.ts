@@ -12,21 +12,20 @@ import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../ty
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
+import { ALIASED_PLUGIN_MAPPINGS } from './constants/frameworks';
+import { riskCategorySeverityMap, Severity } from './constants/metadata';
 import {
-  ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
-  riskCategorySeverityMap,
-  Severity,
-  STRATEGY_COLLECTION_MAPPINGS,
-  STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
-} from './constants';
+  type StrategyExemptPlugin,
+} from './constants/plugins';
+import { STRATEGY_COLLECTION_MAPPINGS, STRATEGY_COLLECTIONS } from './constants/strategies';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import { Plugins } from './plugins';
+import { normalizePluginName, Plugins } from './plugins';
 import { CustomPlugin } from './plugins/custom';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
@@ -34,7 +33,6 @@ import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
 import { extractGoalFromPrompt, getShortPluginId } from './util';
 
-import type { StrategyExemptPlugin } from './constants';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 
 /**
@@ -643,7 +641,8 @@ export async function synthesize({
     if (Object.keys(categories).includes(plugin.id)) {
       return false;
     }
-    const registeredPlugin = Plugins.find((p) => p.key === plugin.id);
+    const normalizedPluginId = normalizePluginName(plugin.id);
+    const registeredPlugin = Plugins.find((p) => p.key === normalizedPluginId);
 
     if (!registeredPlugin) {
       if (!plugin.id.startsWith('file://')) {
@@ -738,7 +737,8 @@ export async function synthesize({
     } else {
       logger.info(`Generating tests for ${plugin.id}...`);
     }
-    const { action } = Plugins.find((p) => p.key === plugin.id) || {};
+    const normalizedPluginId = normalizePluginName(plugin.id);
+    const { action } = Plugins.find((p) => p.key === normalizedPluginId) || {};
 
     if (action) {
       logger.debug(`Generating tests for ${plugin.id}...`);

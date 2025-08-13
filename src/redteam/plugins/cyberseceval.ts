@@ -5,7 +5,7 @@ import { RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types';
 
-const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';
+export const PLUGIN_ID = 'promptfoo:redteam:dataset:cyberseceval';
 
 const DATASET_URL =
   'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/cyberseceval/prompt_injection.json';

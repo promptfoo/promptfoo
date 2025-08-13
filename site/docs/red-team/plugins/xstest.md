@@ -30,7 +30,7 @@ Add to your YAML file:
 ```yaml
 redteam:
   plugins:
-    - xstest
+    - dataset:xstest
 ```
 
 Control the number of tests:
@@ -38,7 +38,7 @@ Control the number of tests:
 ```yaml
 redteam:
   plugins:
-    - id: xstest
+    - id: dataset:xstest
       numTests: 25
 ```
 
@@ -52,7 +52,7 @@ prompts:
 
 redteam:
   plugins:
-    - xstest
+    - dataset:xstest
 
 targets:
   - openai:gpt-4.1-mini

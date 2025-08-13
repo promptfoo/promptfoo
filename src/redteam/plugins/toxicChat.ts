@@ -4,7 +4,7 @@ import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types';
 
-const PLUGIN_ID = 'promptfoo:redteam:toxic-chat';
+export const PLUGIN_ID = 'promptfoo:redteam:dataset:toxic-chat';
 
 const DATASET_PATH = 'huggingface://datasets/lmsys/toxic-chat?config=toxicchat0124&split=train';
 

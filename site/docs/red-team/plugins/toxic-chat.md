@@ -13,7 +13,7 @@ This dataset contains real user conversations labeled for toxicity and jailbreak
 
 ```yaml
 plugins:
-  - id: toxic-chat
+  - id: dataset:toxic-chat
     # Optional: customize number of test cases (default: 5)
     numTests: 10
 ```

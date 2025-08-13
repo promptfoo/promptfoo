@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Remove any existing redteam.yaml to ensure fresh generation
+rm -f redteam.yaml
+
 # Run the CLI tool and capture the output
 output=$(npm run bin redteam generate -- -c test/redteam/integration/promptfooconfig.yaml)
 

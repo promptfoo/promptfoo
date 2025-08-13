@@ -1,7 +1,7 @@
-import { Severity } from '../../src/redteam/constants';
+import { Severity } from '../../src/redteam/constants/metadata';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
 
-import type { Plugin } from '../../src/redteam/constants';
+import type { Plugin } from '../../src/redteam/constants/plugins';
 import type { SavedRedteamConfig } from '../../src/redteam/types';
 
 describe('getRiskCategorySeverityMap', () => {
