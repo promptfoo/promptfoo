@@ -1,5 +1,6 @@
 ---
 sidebar_label: IBM BAM
+description: Configure IBM BAM's Llama-2-70b and Granite-13b models for enterprise-grade LLM testing with advanced parameters and secure API authentication via IBM SDK
 ---
 
 # IBM BAM

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Lambda Labs
+description: "Leverage Lambda Labs' GPU cloud infrastructure for high-performance model training, fine-tuning, and inference at scale"
 ---
 
 # Lambda Labs

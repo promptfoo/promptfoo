@@ -1,5 +1,6 @@
 ---
-sidebar_label: 'Configuring the Grader'
+sidebar_label: Configuring the Grader
+description: Red team LLM grading systems by validating output classification to prevent false negatives and ensure accurate vulnerability detection in AI security assessments
 ---
 
 # About the Grader

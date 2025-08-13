@@ -1,3 +1,7 @@
+---
+description: Complete documentation for promptfoo: open-source framework for LLM testing, red teaming, and evaluation with 50+ providers
+---
+
 # Website
 
 This website is built using [Docusaurus 2](https://docusaurus.io/), a modern static website generator.

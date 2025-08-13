@@ -1,6 +1,6 @@
 ---
 sidebar_position: 40
-description: Share your promptfoo evals with your team through cloud, enterprise, or self-hosted instances.
+description: Collaborate on LLM evaluations by sharing results via cloud platform, enterprise deployment, or self-hosted infrastructure
 keywords: [eval sharing, LLM testing, promptfoo sharing, collaboration, team sharing]
 ---
 
