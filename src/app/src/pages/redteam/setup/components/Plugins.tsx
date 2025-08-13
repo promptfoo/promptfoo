@@ -10,6 +10,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import { Grid2 } from '@mui/material';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -637,7 +638,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 Presets
               </Typography>
 
-              <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid2 container spacing={2} sx={{ mb: 3 }}>
                 {presets.map((preset) => {
                   const isSelected =
                     preset.name === 'Custom'
@@ -662,7 +663,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     </Grid>
                   );
                 })}
-              </Grid>
+              </Grid2>
             </Box>
 
             {/* Search and Filter section */}
@@ -1396,10 +1397,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     <Box
                       sx={{
                         p: 2,
-                        backgroundColor: 'grey.50',
+                        backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
                         borderRadius: 1,
                         border: '1px solid',
-                        borderColor: 'grey.300',
+                        borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
                         fontFamily: 'monospace',
                         fontSize: '0.875rem',
                         whiteSpace: 'pre-wrap',
