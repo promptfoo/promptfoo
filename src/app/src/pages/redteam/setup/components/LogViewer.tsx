@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useToast } from '@app/hooks/useToast';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -32,7 +32,6 @@ export function LogViewer({ logs }: LogViewerProps) {
     main: 0,
     fullscreen: 0,
   });
-  const [initialWidth, setInitialWidth] = React.useState<number | null>(null);
 
   const ansiConverter = useMemo(
     () =>
@@ -79,15 +78,6 @@ export function LogViewer({ logs }: LogViewerProps) {
       }
     }
   }, [logs, shouldAutoScroll]);
-
-  /**
-   * Get the initial width of the log container
-   */
-  useLayoutEffect(() => {
-    if (logsContainerRef.current && initialWidth === null) {
-      setInitialWidth(logsContainerRef.current.clientWidth);
-    }
-  }, [logsContainerRef, initialWidth]);
 
   const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement | null>) => {
     if (containerRef.current) {
@@ -158,8 +148,8 @@ export function LogViewer({ logs }: LogViewerProps) {
           backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
           fontFamily: 'monospace',
           fontSize: '0.875rem',
-          overflowX: 'scroll',
-          width: initialWidth ?? '100%',
+          overflowX: 'auto',
+          width: '100%',
           ...sx,
         }}
       >
@@ -167,7 +157,7 @@ export function LogViewer({ logs }: LogViewerProps) {
           variant="body2"
           component="div"
           sx={{
-            whiteSpace: 'pre-wrap',
+            whiteSpace: 'pre',
             '& span': {
               color: theme.palette.mode === 'dark' ? 'inherit' : undefined,
             },
