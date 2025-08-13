@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EditIcon from '@mui/icons-material/Edit';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -377,6 +378,7 @@ export default function ProviderTypeSelector({
   availableProviderIds,
 }: ProviderTypeSelectorProps) {
   const theme = useTheme();
+  const { recordEvent } = useTelemetry();
 
   const [selectedProviderType, setSelectedProviderType] = useState<string | undefined>(
     providerType,
@@ -399,6 +401,12 @@ export default function ProviderTypeSelector({
   // Handle category filter toggle
   const handleCategoryToggle = (category: string) => {
     setSelectedCategory(category);
+
+    // Track category filter usage
+    recordEvent('feature_used', {
+      feature: 'redteam_provider_category_filtered',
+      category: category,
+    });
   };
 
   useEffect(() => {
@@ -426,6 +434,17 @@ export default function ProviderTypeSelector({
     setIsExpanded(false); // Collapse after selection
 
     const currentLabel = provider?.label;
+
+    // Find the selected option to get its details
+    const selectedOption = allProviderOptions.find((option) => option.value === value);
+
+    // Track provider type selection
+    recordEvent('feature_used', {
+      feature: 'redteam_provider_type_selected',
+      provider_type: value,
+      provider_label: selectedOption?.label,
+      provider_category: selectedOption?.category,
+    });
 
     if (value === 'custom') {
       setProvider(
@@ -901,6 +920,12 @@ export default function ProviderTypeSelector({
     setIsExpanded(true);
     setSearchTerm(''); // Clear search when expanding
     setSelectedCategory(undefined); // Clear category filter when expanding
+
+    // Track when user changes their provider selection
+    recordEvent('feature_used', {
+      feature: 'redteam_provider_selection_changed',
+      previous_provider_type: selectedProviderType,
+    });
   };
 
   // Filter available options if availableProviderIds is provided, by search term, and by category

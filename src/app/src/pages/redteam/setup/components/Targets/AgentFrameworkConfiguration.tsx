@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
@@ -78,6 +79,7 @@ export default function AgentFrameworkConfiguration({
   agentType,
 }: AgentFrameworkConfigurationProps) {
   const [copied, setCopied] = useState(false);
+  const { recordEvent } = useTelemetry();
 
   const frameworkDetails = frameworkInfo[agentType] || {
     name: agentType,
@@ -90,6 +92,13 @@ export default function AgentFrameworkConfiguration({
     navigator.clipboard.writeText(template);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+
+    // Track template copy event
+    recordEvent('feature_used', {
+      feature: 'redteam_agent_template_copied',
+      agent_framework: agentType,
+      framework_name: frameworkDetails.name,
+    });
   };
 
   const handleDownloadTemplate = () => {
@@ -103,6 +112,14 @@ export default function AgentFrameworkConfiguration({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+
+    // Track template download event
+    recordEvent('feature_used', {
+      feature: 'redteam_agent_template_downloaded',
+      agent_framework: agentType,
+      framework_name: frameworkDetails.name,
+      filename: `${agentType}_agent.py`,
+    });
   };
 
   return (
