@@ -247,4 +247,117 @@ describe('TargetTypeSelection', () => {
       expect(footerNextButton).toBeEnabled();
     });
   });
+
+  it('should correctly update displayed providers and maintain selected provider state when switching between provider categories', async () => {
+    const mockSetProviderType = vi.fn();
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: {
+          id: 'openai:gpt-4.1',
+          label: '',
+          config: {},
+        },
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: 'openai',
+      setProviderType: mockSetProviderType,
+    });
+
+    renderComponent();
+
+    const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
+    fireEvent.change(nameInput, { target: { value: 'My Test API' } });
+
+    const inlineNextButton = screen.getByRole('button', {
+      name: 'Next: Select Target Type',
+    });
+    fireEvent.click(inlineNextButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    });
+
+    const changeButton = await screen.findByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: {
+          id: 'file:///path/to/langchain_agent.py',
+          label: '',
+          config: {
+            framework: 'langchain',
+          },
+        },
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: 'langchain',
+      setProviderType: mockSetProviderType,
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('LangChain')).toBeInTheDocument();
+    });
+
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: {
+          id: 'openai:gpt-4.1',
+          label: '',
+          config: {},
+        },
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: 'openai',
+      setProviderType: mockSetProviderType,
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    });
+  });
+
+  // [Tusk] FAILING TEST
+  it('should disable the Next button when an agent framework is selected but no agent file path is provided', async () => {
+    const mockSetProviderType = vi.fn();
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: {
+          id: '',
+          label: 'My Agent',
+          config: {
+            framework: 'langchain',
+          },
+        },
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: 'agents',
+      setProviderType: mockSetProviderType,
+    });
+
+    renderComponent();
+
+    const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
+    fireEvent.change(nameInput, { target: { value: 'My Agent' } });
+
+    const inlineNextButton = screen.getByRole('button', {
+      name: 'Next: Select Target Type',
+    });
+    fireEvent.click(inlineNextButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+    });
+
+    const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
+    expect(footerNextButton).toBeDisabled();
+  });
 });

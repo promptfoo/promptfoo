@@ -5,6 +5,7 @@ import { createTheme, ThemeProvider } from '@mui/material/styles';
 
 import ProviderConfigEditor, { ProviderConfigEditorRef } from './ProviderConfigEditor';
 import type { ProviderOptions } from '../../types';
+import { AGENT_FRAMEWORKS } from './consts';
 
 vi.mock('./HttpEndpointConfiguration', () => ({
   default: () => <div data-testid="http-config" />,
@@ -20,6 +21,9 @@ vi.mock('./BrowserAutomationConfiguration', () => ({
 }));
 vi.mock('./FoundationModelConfiguration', () => ({
   default: () => <div data-testid="fm-config" />,
+}));
+vi.mock('./AgentFrameworkConfiguration', () => ({
+  default: () => <div data-testid="agent-config" />,
 }));
 vi.mock('./CommonConfigurationOptions', () => ({
   default: ({ onValidationChange }: { onValidationChange?: (hasErrors: boolean) => void }) => {
@@ -129,6 +133,127 @@ describe('ProviderConfigEditor', () => {
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
       expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it("should return true from validate() for a valid agent framework provider (e.g., providerType is 'langchain', provider.id is 'file://path/to/agent.py')", () => {
+      const editorRef = React.createRef<ProviderConfigEditorRef>();
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+
+      const validAgentProvider: ProviderOptions = {
+        id: 'file://path/to/agent.py',
+        config: {},
+      };
+
+      renderWithTheme(
+        <ProviderConfigEditor
+          ref={editorRef}
+          provider={validAgentProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          providerType="langchain"
+        />,
+      );
+
+      const isValid = editorRef.current?.validate();
+
+      expect(isValid).toBe(true);
+      expect(mockSetError).toHaveBeenCalledWith(null);
+      expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    // [Tusk] FAILING TEST
+    it('should return false from validate() when agent framework provider ID is just "file://"', () => {
+      const editorRef = React.createRef<ProviderConfigEditorRef>();
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+
+      const invalidAgentProvider: ProviderOptions = {
+        id: 'file://',
+        config: {},
+      };
+
+      renderWithTheme(
+        <ProviderConfigEditor
+          ref={editorRef}
+          provider={invalidAgentProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          providerType={AGENT_FRAMEWORKS[0]}
+        />,
+      );
+
+      const isValid = editorRef.current?.validate();
+
+      expect(isValid).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith('Python file path is required');
+      expect(mockOnValidate).toHaveBeenCalledWith(false);
+    });
+
+    // [Tusk] FAILING TEST
+    it('should return false from validate() when agent framework provider ID contains only whitespace after file:// prefix', () => {
+      const editorRef = React.createRef<ProviderConfigEditorRef>();
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+
+      const whitespaceProvider: ProviderOptions = {
+        id: 'file://   ',
+        config: {},
+      };
+
+      renderWithTheme(
+        <ProviderConfigEditor
+          ref={editorRef}
+          provider={whitespaceProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          providerType={AGENT_FRAMEWORKS[0]}
+        />,
+      );
+
+      const isValid = editorRef.current?.validate();
+
+      expect(isValid).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith('Python file path is required');
+      expect(mockOnValidate).toHaveBeenCalledWith(false);
+    });
+
+    // [Tusk] FAILING TEST
+    it('should return false from validate() when agent framework provider has a non-Python file extension', () => {
+      const editorRef = React.createRef<ProviderConfigEditorRef>();
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      const mockOnValidate = vi.fn();
+
+      const invalidAgentProvider: ProviderOptions = {
+        id: 'file://path/to/agent.js',
+        config: {},
+      };
+
+      renderWithTheme(
+        <ProviderConfigEditor
+          ref={editorRef}
+          provider={invalidAgentProvider}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidate={mockOnValidate}
+          providerType="langchain"
+        />,
+      );
+
+      const isValid = editorRef.current?.validate();
+
+      expect(isValid).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith(
+        'Provider ID must start with file:// for Python agent files',
+      );
+      expect(mockOnValidate).toHaveBeenCalledWith(false);
     });
   });
 
@@ -298,6 +423,79 @@ describe('ProviderConfigEditor', () => {
     await waitFor(() => {
       expect(screen.getByTestId('http-config')).toBeInTheDocument();
     });
+  });
+
+  it('should update validation rules and rendered component when switching from agent framework to non-agent provider type', async () => {
+    const mockSetProvider = vi.fn();
+    const mockSetError = vi.fn();
+    const mockOnValidate = vi.fn();
+    const editorRef = React.createRef<ProviderConfigEditorRef>();
+
+    const initialProvider: ProviderOptions = {
+      id: 'file://path/to/agent.py',
+      config: {},
+    };
+
+    const TestComponent = () => {
+      const [providerType, setProviderType] = React.useState('langchain');
+      const [provider, setProvider] = React.useState(initialProvider);
+
+      return (
+        <>
+          <ProviderConfigEditor
+            ref={editorRef}
+            provider={provider}
+            setProvider={setProvider}
+            setError={mockSetError}
+            onValidate={mockOnValidate}
+            providerType={providerType}
+          />
+          <button data-testid="change-provider-type" onClick={() => setProviderType('http')}>
+            Change to HTTP Provider
+          </button>
+        </>
+      );
+    };
+
+    renderWithTheme(<TestComponent />);
+
+    expect(screen.getByTestId('agent-config')).toBeInTheDocument();
+
+    const changeProviderTypeButton = screen.getByTestId('change-provider-type');
+    act(() => {
+      changeProviderTypeButton.click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('http-config')).toBeInTheDocument();
+    });
+
+    const updatedProvider: ProviderOptions = {
+      id: 'http',
+      config: {
+        url: 'https://api.example.com/chat',
+        body: {
+          messages: [{ role: 'user', content: '{{prompt}}' }],
+        },
+      },
+    };
+
+    renderWithTheme(
+      <ProviderConfigEditor
+        ref={editorRef}
+        provider={updatedProvider}
+        setProvider={mockSetProvider}
+        setError={mockSetError}
+        onValidate={mockOnValidate}
+        providerType="http"
+      />,
+    );
+
+    const isValid = editorRef.current?.validate();
+
+    expect(isValid).toBe(true);
+    expect(mockSetError).toHaveBeenCalledWith(null);
+    expect(mockOnValidate).toHaveBeenCalledWith(true);
   });
 
   it('should render without crashing and apply default validation rules when providerType is undefined', () => {
