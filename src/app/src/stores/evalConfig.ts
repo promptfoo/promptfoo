@@ -9,6 +9,8 @@ export interface EvalConfigState {
   setConfig: (config: Partial<UnifiedConfig>) => void;
   /** Merge updates into the existing config */
   updateConfig: (updates: Partial<UnifiedConfig>) => void;
+  /** Update a specific provider's config without replacing the entire array */
+  updateProviderConfig: (providerId: string, config: Record<string, any>) => void;
   /** Reset config to defaults */
   reset: () => void;
   /** Get the test suite in the expected format */
@@ -39,6 +41,26 @@ export const useStore = create<EvalConfigState>()(
         set((state) => ({
           config: { ...state.config, ...updates },
         })),
+
+      updateProviderConfig: (providerId, newConfig) =>
+        set((state) => {
+          // Providers can be a string, function, or array
+          const currentProviders = state.config.providers;
+
+          // Only update if providers is an array
+          if (!Array.isArray(currentProviders)) {
+            return state;
+          }
+
+          return {
+            config: {
+              ...state.config,
+              providers: currentProviders.map((provider: any) =>
+                provider.id === providerId ? { ...provider, config: newConfig } : provider,
+              ),
+            },
+          };
+        }),
 
       reset: () => set({ config: { ...DEFAULT_CONFIG } }),
 
