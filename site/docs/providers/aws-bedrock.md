@@ -136,6 +136,11 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
+  - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
   - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
     config:
       region: 'us-east-1'
