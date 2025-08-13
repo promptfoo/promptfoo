@@ -158,6 +158,8 @@ export function LogViewer({ logs }: LogViewerProps) {
           component="div"
           sx={{
             whiteSpace: 'pre',
+            overflowX: 'visible',
+            minWidth: 'max-content',
             '& span': {
               color: theme.palette.mode === 'dark' ? 'inherit' : undefined,
             },
