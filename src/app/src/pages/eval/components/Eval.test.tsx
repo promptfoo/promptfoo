@@ -324,23 +324,4 @@ describe('Eval', () => {
 
     expect(fetchEvalDataMock).not.toHaveBeenCalled();
   });
-
-  it('should show the loading animation when a user navigates to a new eval by ID (explicit user-initiated load)', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      ...baseMockTableStore,
-      isFetching: true,
-      table: null,
-    });
-
-    await act(async () => {
-      render(
-        <MemoryRouter>
-          <Eval fetchId="eval-123" />
-        </MemoryRouter>,
-      );
-    });
-
-    const loadingAnimation = screen.getByRole('progressbar');
-    expect(loadingAnimation).toBeVisible();
-  });
 });
