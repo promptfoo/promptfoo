@@ -812,9 +812,7 @@ export default function ProviderTypeSelector({
       setProvider(
         {
           id: 'file:///path/to/langchain_agent.py',
-          config: {
-            framework: 'langchain',
-          },
+          config: {},
           label: currentLabel,
         },
         'langchain',
@@ -823,9 +821,7 @@ export default function ProviderTypeSelector({
       setProvider(
         {
           id: 'file:///path/to/autogen_agent.py',
-          config: {
-            framework: 'autogen',
-          },
+          config: {},
           label: currentLabel,
         },
         'autogen',
@@ -834,9 +830,7 @@ export default function ProviderTypeSelector({
       setProvider(
         {
           id: 'file:///path/to/crewai_agent.py',
-          config: {
-            framework: 'crewai',
-          },
+          config: {},
           label: currentLabel,
         },
         'crewai',
@@ -845,9 +839,7 @@ export default function ProviderTypeSelector({
       setProvider(
         {
           id: 'file:///path/to/llamaindex_agent.py',
-          config: {
-            framework: 'llamaindex',
-          },
+          config: {},
           label: currentLabel,
         },
         'llamaindex',
@@ -856,9 +848,7 @@ export default function ProviderTypeSelector({
       setProvider(
         {
           id: 'file:///path/to/langgraph_agent.py',
-          config: {
-            framework: 'langgraph',
-          },
+          config: {},
           label: currentLabel,
         },
         'langgraph',
@@ -867,9 +857,7 @@ export default function ProviderTypeSelector({
       setProvider(
         {
           id: 'file:///path/to/openai_agents.py',
-          config: {
-            framework: 'openai-agents-sdk',
-          },
+          config: {},
           label: currentLabel,
         },
         'openai-agents-sdk',
@@ -878,9 +866,7 @@ export default function ProviderTypeSelector({
       setProvider(
         {
           id: 'file:///path/to/pydantic_ai_agent.py',
-          config: {
-            framework: 'pydantic-ai',
-          },
+          config: {},
           label: currentLabel,
         },
         'pydantic-ai',
@@ -889,9 +875,7 @@ export default function ProviderTypeSelector({
       setProvider(
         {
           id: 'file:///path/to/google_adk_agent.py',
-          config: {
-            framework: 'google-adk',
-          },
+          config: {},
           label: currentLabel,
         },
         'google-adk',
@@ -900,9 +884,7 @@ export default function ProviderTypeSelector({
       setProvider(
         {
           id: 'file:///path/to/custom_agent.py',
-          config: {
-            framework: 'custom',
-          },
+          config: {},
           label: currentLabel,
         },
         'generic-agent',
