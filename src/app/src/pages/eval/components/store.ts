@@ -54,6 +54,7 @@ interface FetchEvalOptions {
   filterMode?: FilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
+  skipLoadingState?: boolean;
   filters?: ResultsFilter[];
 }
 
@@ -117,6 +118,8 @@ interface TableState {
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
+  isStreaming: boolean;
+  setIsStreaming: (isStreaming: boolean) => void;
 
   shouldHighlightSearchText: boolean;
 
@@ -327,6 +330,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
   highlightedResultsCount: 0,
 
   isFetching: false,
+  isStreaming: false,
+  setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
 
   shouldHighlightSearchText: false,
 
@@ -337,12 +342,17 @@ export const useTableStore = create<TableState>()((set, get) => ({
       filterMode = 'all',
       searchText = '',
       skipSettingEvalId = false,
+      skipLoadingState = false,
       filters = [],
     } = options;
 
     const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
-    set({ isFetching: true, shouldHighlightSearchText: false });
+    if (skipLoadingState) {
+      set({ shouldHighlightSearchText: false });
+    } else {
+      set({ isFetching: true, shouldHighlightSearchText: false });
+    }
 
     try {
       console.log(`Fetching data for eval ${id} with options:`, options);
@@ -397,7 +407,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
           version: data.version,
           author: data.author,
           evalId: skipSettingEvalId ? get().evalId : id,
-          isFetching: false,
+          isFetching: skipLoadingState ? prevState.isFetching : false,
           shouldHighlightSearchText: searchText !== '',
           filters: {
             ...prevState.filters,
@@ -413,11 +423,17 @@ export const useTableStore = create<TableState>()((set, get) => ({
         return data;
       }
 
-      set({ isFetching: false });
+      if (!skipLoadingState) {
+        set({ isFetching: false });
+      }
       return null;
     } catch (error) {
       console.error('Error fetching eval data:', error);
-      set({ isFetching: false });
+      if (skipLoadingState) {
+        set({ isStreaming: false });
+      } else {
+        set({ isFetching: false, isStreaming: false });
+      }
       return null;
     }
   },

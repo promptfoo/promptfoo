@@ -16,6 +16,16 @@ providers:
           allowed_tools: ['ask_question']
       max_output_tokens: 1000
       temperature: 0.3
+  - id: openai:responses:gpt-5-chat-latest
+    config:
+      tools:
+        - type: mcp
+          server_label: deepwiki
+          server_url: https://mcp.deepwiki.com/mcp
+          require_approval: never
+          allowed_tools: ['ask_question']
+      max_output_tokens: 1000
+      temperature: 0.3
 
 tests:
   - vars:

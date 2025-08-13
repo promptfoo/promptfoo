@@ -1256,6 +1256,89 @@ describe('util', () => {
           },
         ]);
       });
+
+      it('should correctly detect and process WebP images', () => {
+        // WebP file starts with "RIFF" (UklGR in base64) followed by file size
+        // This is a longer base64 string to meet the 100 character minimum requirement
+        const webpBase64 =
+          'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vuUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Here is a WebP image:\n${webpBase64}\nEnd of image.`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          webpImage: webpBase64,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Here is a WebP image:',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/webp',
+                  data: webpBase64,
+                },
+              },
+              {
+                text: 'End of image.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should correctly detect WebP images with variable file sizes', () => {
+        // Different valid WebP base64 strings that start with UklGR (not UklGRg)
+        // These represent "RIFF" followed by different file size bytes
+        // Each is padded to be over 100 characters to meet the minimum requirement
+        const webpVariants = [
+          'UklGRjAAAABXRUJQVlA4IBQAAAAwAQCdASoBAAEAAQAcJaACdLoB/AAAA0AA/v359OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+          'UklGRkAAAABXRUJQVlA4IEQAAAAwAgCdASoCAAIAAQAcJaACdLoD/AAAA8AAAAj17Zs+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+          'UklGRlAAAABXRUJQVlA4IEQAAAAwAgCdASoCAAIAAQAcJaACdLoD/AAAA8AAAAj17Zs+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+        ];
+
+        webpVariants.forEach((webpData, index) => {
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: webpData,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            [`webpImage${index}`]: webpData,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts).toEqual([
+            {
+              inlineData: {
+                mimeType: 'image/webp',
+                data: webpData,
+              },
+            },
+          ]);
+        });
+      });
     });
   });
 
