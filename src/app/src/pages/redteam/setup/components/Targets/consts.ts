@@ -590,19 +590,8 @@ def call_api(prompt, options, context):
 
 """
 GENERIC AGENT TEMPLATE FOR PROMPTFOO
-
-This template provides a flexible foundation for integrating ANY agent framework
-with promptfoo. Promptfoo is fully customizable and supports all Python-based
-agent frameworks through this standard interface.
-
-Whether you're using:
-- A proprietary agent framework
-- A custom-built agent system
-- A framework not listed in our presets
-- A hybrid approach combining multiple frameworks
-
-Simply implement the call_api function below to bridge your agent with promptfoo's
-evaluation system.
+This template works with any Python-based agent framework. Simply implement 
+the call_api function below to connect your agent to promptfoo's evaluation system.
 """
 
 # TODO: Import your agent framework libraries here
@@ -615,7 +604,7 @@ def call_api(prompt, options, context):
     """
     Main entry point for promptfoo evaluation.
     
-    This is the ONLY function you need to implement. Promptfoo will call this
+    This is the only function you need to implement. Promptfoo will call this
     function with test prompts and evaluate the responses.
     
     Args:
@@ -665,19 +654,6 @@ def call_api(prompt, options, context):
         #     "completion": 70
         # }
     }
-
-# Optional: Add helper functions for your agent
-def initialize_agent(config=None):
-    """Helper function to initialize your agent with configuration."""
-    pass
-
-def process_with_tools(agent, prompt, tools=None):
-    """Helper function if your agent uses tools/functions."""
-    pass
-
-def handle_conversation(agent, messages):
-    """Helper function for multi-turn conversations."""
-    pass
 `,
 
   // Default template for frameworks without specific templates

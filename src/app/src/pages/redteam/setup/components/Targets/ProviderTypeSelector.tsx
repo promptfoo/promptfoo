@@ -70,16 +70,17 @@ const allProviderOptions = [
   },
   {
     value: 'google-adk',
-    label: "Google's ADK",
+    label: 'Google ADK',
     description: 'Google AI Development Kit for building agents',
     category: 'agents',
   },
   {
     value: 'generic-agent',
-    label: 'Custom Agent',
+    label: 'Other Agent',
     description:
-      'Any agent framework - promptfoo is fully customizable and supports all agent frameworks',
+      'Any agent framework - Promptfoo is fully customizable and supports all agent frameworks',
     category: 'agents',
+    last: true,
   },
 
   // AI/ML API
@@ -362,7 +363,9 @@ const allProviderOptions = [
     description: "X.AI's Grok models",
     category: 'model',
   },
-].sort((a, b) => a.label.localeCompare(b.label));
+].sort((a, b) => {
+  return a.last ? 1 : b.last ? -1 : a.label.localeCompare(b.label);
+});
 
 interface ProviderTypeSelectorProps {
   provider: ProviderOptions | undefined;
