@@ -265,7 +265,11 @@ describe('VLGuardPlugin', () => {
       const tests = await plugin.generateTests(1);
 
       expect(tests).toHaveLength(1);
-      expect(tests[0].vars.image).toMatch(/^data:image\/jpeg;base64,/);
+      const firstTest = tests[0];
+      expect(firstTest).toBeDefined();
+      if (firstTest && firstTest.vars) {
+        expect(firstTest.vars.image).toMatch(/^data:image\/jpeg;base64,/);
+      }
     });
 
     it('should warn when fewer records are available than requested', async () => {
@@ -298,6 +302,7 @@ describe('VLGuardPlugin', () => {
             harmful_category: 'deception',
             harmful_subcategory: 'disinformation',
             question: 'test question 1',
+            // image field is missing entirely
           },
         },
         {
@@ -308,7 +313,7 @@ describe('VLGuardPlugin', () => {
             question: 'test question 2',
           },
         },
-      ];
+      ] as any[];
 
       mockFetchHuggingFaceDataset.mockResolvedValue(mockRecords);
 
@@ -317,7 +322,11 @@ describe('VLGuardPlugin', () => {
 
       // Should only include the record with valid image data
       expect(tests).toHaveLength(1);
-      expect(tests[0].vars.image).toBe('data:image/jpeg;base64,test2');
+      const firstTest = tests[0];
+      expect(firstTest).toBeDefined();
+      if (firstTest && firstTest.vars) {
+        expect(firstTest.vars.image).toBe('data:image/jpeg;base64,test2');
+      }
     });
   });
 });

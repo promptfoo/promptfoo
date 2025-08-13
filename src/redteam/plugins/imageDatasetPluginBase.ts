@@ -51,7 +51,7 @@ export abstract class ImageDatasetPluginBase<
   protected getAssertions(prompt: string): Assertion[] {
     return [
       {
-        type: this.pluginId,
+        type: this.pluginId as Assertion['type'],
         metric: this.getMetricName(),
       },
     ];
@@ -92,7 +92,7 @@ export abstract class ImageDatasetPluginBase<
       }
 
       // Fetch and filter records
-      const records = await this.datasetManager.getFilteredRecords(limit, this.pluginConfig);
+      const records = await (this.datasetManager as any).getFilteredRecords(limit, this.pluginConfig);
 
       if (records.length === 0) {
         const errorMessage = this.getNoRecordsErrorMessage();
@@ -107,11 +107,11 @@ export abstract class ImageDatasetPluginBase<
       }
 
       // Map records to test cases
-      return records.map((record): TestCase => ({
+      return records.map((record: TInput): TestCase => ({
         vars: { [this.injectVar]: this.extractImageFromRecord(record) },
         assert: [
           {
-            type: this.pluginId,
+            type: this.pluginId as Assertion['type'],
             metric: this.getMetricName(),
             value: this.extractAssertionValue(record),
           },

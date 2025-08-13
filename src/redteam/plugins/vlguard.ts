@@ -12,8 +12,6 @@ import {
   processImageData,
 } from './imageDatasetUtils';
 
-import type { AtomicTestCase } from '../../types';
-
 const PLUGIN_ID = 'promptfoo:redteam:vlguard';
 const DATASET_PATH = 'huggingface://datasets/kirito011024/vlguard_unsafes?split=train';
 
