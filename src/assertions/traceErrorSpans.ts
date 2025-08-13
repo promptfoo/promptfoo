@@ -65,7 +65,12 @@ function isErrorSpan(span: TraceSpan): boolean {
 
 export const handleTraceErrorSpans = ({ assertion, context }: AssertionParams): GradingResult => {
   if (!context.trace || !context.trace.spans) {
-    throw new Error('No trace data available for trace-error-spans assertion');
+    return {
+      pass: false,
+      score: 0,
+      reason: 'No trace data available for trace-error-spans assertion',
+      assertion,
+    };
   }
 
   const value = assertion.value;

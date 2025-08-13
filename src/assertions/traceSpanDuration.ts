@@ -30,7 +30,12 @@ function calculatePercentile(durations: number[], percentile: number): number {
 
 export const handleTraceSpanDuration = ({ assertion, context }: AssertionParams): GradingResult => {
   if (!context.trace || !context.trace.spans) {
-    throw new Error('No trace data available for trace-span-duration assertion');
+    return {
+      pass: false,
+      score: 0,
+      reason: 'No trace data available for trace-span-duration assertion',
+      assertion,
+    };
   }
 
   const value = assertion.value as TraceSpanDurationValue;

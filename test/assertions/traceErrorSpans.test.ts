@@ -351,9 +351,13 @@ describe('handleTraceErrorSpans', () => {
       renderedValue: { max_count: 0 },
     };
 
-    expect(() => handleTraceErrorSpans(params)).toThrow(
-      'No trace data available for trace-error-spans assertion',
-    );
+    const result = handleTraceErrorSpans(params);
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'No trace data available for trace-error-spans assertion',
+      assertion: params.assertion,
+    });
   });
 
   it('should handle empty trace spans', () => {
