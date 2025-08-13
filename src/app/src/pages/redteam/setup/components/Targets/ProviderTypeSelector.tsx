@@ -33,27 +33,9 @@ const allProviderOptions = [
     category: 'agents',
   },
   {
-    value: 'agentflow',
-    label: 'AgentFlow',
-    description: 'Framework for building and orchestrating AI agent workflows',
-    category: 'agents',
-  },
-  {
     value: 'autogen',
     label: 'AutoGen',
     description: 'Multi-agent collaborative framework from Microsoft',
-    category: 'agents',
-  },
-  {
-    value: 'semantic-kernel',
-    label: 'Semantic Kernel',
-    description: 'Microsoft SDK for integrating AI into applications',
-    category: 'agents',
-  },
-  {
-    value: 'atomic-agents',
-    label: 'Atomic Agents',
-    description: 'Modular framework for building composable AI agents',
     category: 'agents',
   },
   {
@@ -63,21 +45,40 @@ const allProviderOptions = [
     category: 'agents',
   },
   {
-    value: 'rasa',
-    label: 'RASA',
-    description: 'Open source framework for building conversational AI',
+    value: 'llamaindex',
+    label: 'LlamaIndex',
+    description: 'Data framework for LLM applications with RAG capabilities',
     category: 'agents',
   },
   {
-    value: 'huggingface-agents',
-    label: 'Hugging Face Transformers Agents',
-    description: 'Build agents using Hugging Face transformers library',
+    value: 'langgraph',
+    label: 'LangGraph',
+    description: 'Build stateful, multi-actor applications with LLMs',
     category: 'agents',
   },
   {
-    value: 'langflow',
-    label: 'Langflow',
-    description: 'Visual framework for building multi-agent LLM applications',
+    value: 'openai-agents-sdk',
+    label: 'OpenAI Agents SDK',
+    description: 'Official OpenAI SDK for building AI agents',
+    category: 'agents',
+  },
+  {
+    value: 'pydantic-ai',
+    label: 'PydanticAI',
+    description: 'Type-safe AI agents with structured outputs using Pydantic',
+    category: 'agents',
+  },
+  {
+    value: 'google-adk',
+    label: "Google's ADK",
+    description: 'Google AI Development Kit for building agents',
+    category: 'agents',
+  },
+  {
+    value: 'generic-agent',
+    label: 'Custom Agent',
+    description:
+      'Any agent framework - promptfoo is fully customizable and supports all agent frameworks',
     category: 'agents',
   },
 
@@ -815,17 +816,6 @@ export default function ProviderTypeSelector({
         },
         'langchain',
       );
-    } else if (value === 'agentflow') {
-      setProvider(
-        {
-          id: 'file:///path/to/agentflow_agent.py',
-          config: {
-            framework: 'agentflow',
-          },
-          label: currentLabel,
-        },
-        'agentflow',
-      );
     } else if (value === 'autogen') {
       setProvider(
         {
@@ -836,28 +826,6 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'autogen',
-      );
-    } else if (value === 'semantic-kernel') {
-      setProvider(
-        {
-          id: 'file:///path/to/semantic_kernel_agent.py',
-          config: {
-            framework: 'semantic-kernel',
-          },
-          label: currentLabel,
-        },
-        'semantic-kernel',
-      );
-    } else if (value === 'atomic-agents') {
-      setProvider(
-        {
-          id: 'file:///path/to/atomic_agents.py',
-          config: {
-            framework: 'atomic-agents',
-          },
-          label: currentLabel,
-        },
-        'atomic-agents',
       );
     } else if (value === 'crewai') {
       setProvider(
@@ -870,38 +838,71 @@ export default function ProviderTypeSelector({
         },
         'crewai',
       );
-    } else if (value === 'rasa') {
+    } else if (value === 'llamaindex') {
       setProvider(
         {
-          id: 'file:///path/to/rasa_agent.py',
+          id: 'file:///path/to/llamaindex_agent.py',
           config: {
-            framework: 'rasa',
+            framework: 'llamaindex',
           },
           label: currentLabel,
         },
-        'rasa',
+        'llamaindex',
       );
-    } else if (value === 'huggingface-agents') {
+    } else if (value === 'langgraph') {
       setProvider(
         {
-          id: 'file:///path/to/huggingface_agents.py',
+          id: 'file:///path/to/langgraph_agent.py',
           config: {
-            framework: 'huggingface-agents',
+            framework: 'langgraph',
           },
           label: currentLabel,
         },
-        'huggingface-agents',
+        'langgraph',
       );
-    } else if (value === 'langflow') {
+    } else if (value === 'openai-agents-sdk') {
       setProvider(
         {
-          id: 'file:///path/to/langflow_agent.py',
+          id: 'file:///path/to/openai_agents.py',
           config: {
-            framework: 'langflow',
+            framework: 'openai-agents-sdk',
           },
           label: currentLabel,
         },
-        'langflow',
+        'openai-agents-sdk',
+      );
+    } else if (value === 'pydantic-ai') {
+      setProvider(
+        {
+          id: 'file:///path/to/pydantic_ai_agent.py',
+          config: {
+            framework: 'pydantic-ai',
+          },
+          label: currentLabel,
+        },
+        'pydantic-ai',
+      );
+    } else if (value === 'google-adk') {
+      setProvider(
+        {
+          id: 'file:///path/to/google_adk_agent.py',
+          config: {
+            framework: 'google-adk',
+          },
+          label: currentLabel,
+        },
+        'google-adk',
+      );
+    } else if (value === 'generic-agent') {
+      setProvider(
+        {
+          id: 'file:///path/to/custom_agent.py',
+          config: {
+            framework: 'custom',
+          },
+          label: currentLabel,
+        },
+        'generic-agent',
       );
     } else {
       setProvider(

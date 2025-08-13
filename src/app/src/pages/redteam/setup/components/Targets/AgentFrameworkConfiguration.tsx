@@ -31,45 +31,46 @@ const frameworkInfo: Record<string, { name: string; description: string; pip: st
     description: 'Framework for developing applications powered by language models',
     pip: 'langchain langchain-openai',
   },
-  agentflow: {
-    name: 'AgentFlow',
-    description: 'Framework for building and orchestrating AI agent workflows',
-    pip: 'agentflow',
-  },
   autogen: {
     name: 'AutoGen',
     description: 'Multi-agent collaborative framework from Microsoft',
     pip: 'pyautogen',
-  },
-  'semantic-kernel': {
-    name: 'Semantic Kernel',
-    description: 'Microsoft SDK for integrating AI into applications',
-    pip: 'semantic-kernel',
-  },
-  'atomic-agents': {
-    name: 'Atomic Agents',
-    description: 'Modular framework for building composable AI agents',
-    pip: 'atomic-agents',
   },
   crewai: {
     name: 'CrewAI',
     description: 'Framework for orchestrating role-playing autonomous AI agents',
     pip: 'crewai',
   },
-  rasa: {
-    name: 'RASA',
-    description: 'Open source framework for building conversational AI',
-    pip: 'rasa',
+  llamaindex: {
+    name: 'LlamaIndex',
+    description: 'Data framework for LLM applications with RAG capabilities',
+    pip: 'llama-index',
   },
-  'huggingface-agents': {
-    name: 'Hugging Face Transformers Agents',
-    description: 'Build agents using Hugging Face transformers library',
-    pip: 'transformers',
+  langgraph: {
+    name: 'LangGraph',
+    description: 'Build stateful, multi-actor applications with LLMs',
+    pip: 'langgraph langchain-openai',
   },
-  langflow: {
-    name: 'Langflow',
-    description: 'Visual framework for building multi-agent LLM applications',
-    pip: 'langflow',
+  'openai-agents-sdk': {
+    name: 'OpenAI Agents SDK',
+    description: 'Official OpenAI SDK for building AI agents with Swarm',
+    pip: 'git+https://github.com/openai/swarm.git',
+  },
+  'pydantic-ai': {
+    name: 'PydanticAI',
+    description: 'Type-safe AI agents with structured outputs using Pydantic',
+    pip: 'pydantic-ai',
+  },
+  'google-adk': {
+    name: "Google's ADK",
+    description: 'Google AI Development Kit for building agents with Gemini',
+    pip: 'google-genai',
+  },
+  'generic-agent': {
+    name: 'Custom Agent',
+    description:
+      'Any agent framework - promptfoo is fully customizable and supports all agent frameworks',
+    pip: '# Install your agent framework dependencies',
   },
 };
 
@@ -107,7 +108,8 @@ export default function AgentFrameworkConfiguration({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${agentType}_agent.py`;
+    const filename = agentType === 'generic-agent' ? 'custom_agent.py' : `${agentType}_agent.py`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -118,7 +120,7 @@ export default function AgentFrameworkConfiguration({
       feature: 'redteam_agent_template_downloaded',
       agent_framework: agentType,
       framework_name: frameworkDetails.name,
-      filename: `${agentType}_agent.py`,
+      filename: filename,
     });
   };
 
@@ -131,9 +133,16 @@ export default function AgentFrameworkConfiguration({
         <Typography variant="body2" sx={{ mb: 2 }}>
           {frameworkDetails.description}
         </Typography>
-        <Typography variant="caption" sx={{ fontFamily: 'monospace', display: 'block', mb: 1 }}>
-          Install with: <strong>pip install {frameworkDetails.pip}</strong>
-        </Typography>
+        {agentType === 'generic-agent' ? (
+          <Typography variant="body2" sx={{ mb: 1, fontStyle: 'italic' }}>
+            💡 <strong>Tip:</strong> Promptfoo works with ANY Python-based agent framework. Simply
+            implement the call_api function in your Python file to connect your agent.
+          </Typography>
+        ) : (
+          <Typography variant="caption" sx={{ fontFamily: 'monospace', display: 'block', mb: 1 }}>
+            Install with: <strong>pip install {frameworkDetails.pip}</strong>
+          </Typography>
+        )}
       </Alert>
 
       <Stack spacing={3}>
@@ -166,7 +175,7 @@ export default function AgentFrameworkConfiguration({
               startIcon={<DownloadIcon />}
               onClick={handleDownloadTemplate}
             >
-              Download {agentType}_agent.py
+              Download {agentType === 'generic-agent' ? 'custom_agent.py' : `${agentType}_agent.py`}
             </Button>
           </Stack>
         </Box>
@@ -177,12 +186,24 @@ export default function AgentFrameworkConfiguration({
           </Typography>
           <ol style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
             <li>Save the template to a Python file</li>
-            <li>
-              Install required dependencies: <code>pip install {frameworkDetails.pip}</code>
-            </li>
-            <li>
-              Customize the agent logic in the <code>call_api</code> function
-            </li>
+            {agentType === 'generic-agent' ? (
+              <>
+                <li>Install your agent framework's dependencies</li>
+                <li>
+                  Replace the TODOs in the <code>call_api</code> function with your agent
+                  implementation
+                </li>
+              </>
+            ) : (
+              <>
+                <li>
+                  Install required dependencies: <code>pip install {frameworkDetails.pip}</code>
+                </li>
+                <li>
+                  Customize the agent logic in the <code>call_api</code> function
+                </li>
+              </>
+            )}
             <li>Update the Provider ID field above with the file path</li>
           </ol>
         </Alert>
