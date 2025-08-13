@@ -1,6 +1,6 @@
 ---
 title: Recreating Mistral Magistral AIME2024 Benchmarks in promptfoo
-description: 'Replicate Mistral Magistral's AIME2024 math benchmark achieving 73.6% accuracy with detailed evaluation methodology and comparisons'
+description: Replicate Mistral Magistral AIME2024 math benchmark achieving 73.6% accuracy with detailed evaluation methodology and comparisons
 image: /img/docs/mistral-magistral-aime2024-evaluation-results.png
 keywords:
   [

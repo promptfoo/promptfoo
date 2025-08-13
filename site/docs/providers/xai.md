@@ -1,6 +1,6 @@
 ---
 title: xAI (Grok) Provider
-description: 'Deploy xAI's Grok models including Grok-3 with advanced reasoning for complex analysis and conversational AI applications'
+description: Deploy xAI Grok models including Grok-3 with advanced reasoning for complex analysis and conversational AI applications
 keywords: [xai, grok, grok-3, grok-2, reasoning, vision, llm]
 ---
 
