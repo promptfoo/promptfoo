@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const { Resvg } = require('@resvg/resvg-js');
 const matter = require('gray-matter');
+const sharp = require('sharp');
 
 // Constants for image generation
 const WIDTH = 1200;
@@ -114,17 +115,52 @@ async function getLogoAsBase64() {
 }
 
 // Helper function to convert image to base64
-async function getImageAsBase64(imagePath) {
+async function getImageAsBase64(imagePath, maxWidth = 520, maxHeight = 430) {
   try {
     // Handle relative paths from frontmatter
-    const fullPath = imagePath.startsWith('/')
-      ? path.join(process.cwd(), 'site/static', imagePath)
-      : path.join(process.cwd(), 'site', imagePath);
+    // Check if we're already in the site directory
+    const cwd = process.cwd();
+    const inSiteDir = cwd.endsWith('/site');
 
-    const imageBuffer = await fs.readFile(fullPath);
+    let fullPath;
+    if (imagePath.startsWith('/')) {
+      // Absolute path from static directory
+      if (inSiteDir) {
+        fullPath = path.join(cwd, 'static', imagePath);
+      } else {
+        fullPath = path.join(cwd, 'site/static', imagePath);
+      }
+    } else {
+      // Relative path
+      if (inSiteDir) {
+        fullPath = path.join(cwd, imagePath);
+      } else {
+        fullPath = path.join(cwd, 'site', imagePath);
+      }
+    }
+
     const ext = path.extname(fullPath).toLowerCase().replace('.', '');
-    const mimeType = ext === 'svg' ? 'svg+xml' : ext;
-    return `data:image/${mimeType};base64,${imageBuffer.toString('base64')}`;
+
+    // For SVG files, don't use sharp
+    if (ext === 'svg') {
+      const imageBuffer = await fs.readFile(fullPath);
+      return `data:image/svg+xml;base64,${imageBuffer.toString('base64')}`;
+    }
+
+    // Use sharp to resize and resample images with high quality
+    const resizedBuffer = await sharp(fullPath)
+      .resize(maxWidth, maxHeight, {
+        fit: 'inside',
+        withoutEnlargement: true,
+        kernel: sharp.kernel.lanczos3, // High-quality resampling
+      })
+      .png({
+        quality: 95,
+        compressionLevel: 6,
+      })
+      .toBuffer();
+
+    return `data:image/png;base64,${resizedBuffer.toString('base64')}`;
   } catch (error) {
     console.warn(`Could not load image ${imagePath}:`, error.message);
     return null;
@@ -195,6 +231,15 @@ async function generateSvgTemplate(metadata = {}) {
   const hasImage = image && !image.startsWith('http');
   const imageBase64 = hasImage ? await getImageAsBase64(image) : null;
   const hasValidImage = hasImage && imageBase64;
+
+  // Debug image processing
+  if (routePath && routePath.includes('/blog/') && image) {
+    console.log(`  Template for ${routePath}:`);
+    console.log('    Has image:', hasImage);
+    console.log('    Image path:', image);
+    console.log('    Image loaded:', !!imageBase64);
+    console.log('    Has valid image:', hasValidImage);
+  }
 
   // Get page type
   const pageType = getPageTypeLabel(routePath);
@@ -736,8 +781,12 @@ module.exports = function (context, options) {
             // Try to get metadata from multiple sources
             let fileMetadata = { title: metadata.title };
 
-            // If no title from route metadata, try reading the markdown file
-            if (!fileMetadata.title) {
+            // For blog posts, always try to read the markdown file to get the image
+            // Blog plugin doesn't expose custom frontmatter fields like image
+            if (routePath.startsWith('/blog/')) {
+              fileMetadata = await extractMetadataFromMarkdown(routePath, outDir);
+            } else if (!fileMetadata.title) {
+              // For docs, only read if we don't have a title
               fileMetadata = await extractMetadataFromMarkdown(routePath, outDir);
             }
 
@@ -751,6 +800,17 @@ module.exports = function (context, options) {
               date: fileMetadata.date || metadata.date,
               image: fileMetadata.image || metadata.image,
             };
+
+            // Debug for specific blog posts
+            if (
+              routePath.includes('/blog/') &&
+              (routePath.includes('100k') || routePath.includes('excessive'))
+            ) {
+              console.log(`\nProcessing ${routePath}:`);
+              console.log('  Image from file:', fileMetadata.image);
+              console.log('  Image from metadata:', metadata.image);
+              console.log('  Final image:', fullMetadata.image);
+            }
 
             // Final fallback for title to path parsing
             if (!fullMetadata.title) {
