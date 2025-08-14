@@ -1,5 +1,6 @@
 ---
 sidebar_position: 2
+description: "Deploy Anthropic's Claude models including Opus, Sonnet, and Haiku for advanced reasoning and conversational AI applications"
 ---
 
 # Anthropic
@@ -26,6 +27,7 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description                      |
 | -------------------------------------------------------------------------- | -------------------------------- |
+| `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Latest Claude 4.1 Opus model     |
 | `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Latest Claude 4 Opus model       |
 | `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Latest Claude 4 Sonnet model     |
 | `anthropic:messages:claude-3-7-sonnet-20250219` (claude-3-7-sonnet-latest) | Latest Claude 3.7 Sonnet model   |

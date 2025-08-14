@@ -1,5 +1,6 @@
 ---
 sidebar_position: 7
+description: 'Comprehensive overview of model-graded evaluation techniques leveraging AI models to assess quality, safety, and accuracy'
 ---
 
 # Model-graded metrics
@@ -25,6 +26,10 @@ Context-based:
 - [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
 - [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+
+Conversational:
+
+- [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - ensure that responses remain relevant throughout a conversation
 
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 

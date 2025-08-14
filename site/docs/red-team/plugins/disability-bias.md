@@ -1,5 +1,6 @@
 ---
 sidebar_label: Disability Bias
+description: Red team AI systems for disability bias and discrimination vulnerabilities using automated testing to protect users from harmful stereotypes and ensure ethical AI outputs
 ---
 
 # Disability Bias Plugin

@@ -589,8 +589,8 @@ describe('loadApiProvider', () => {
   it('loadApiProvider with openrouter', async () => {
     const provider = await loadApiProvider('openrouter:mistralai/mistral-medium');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    // Intentionally openai, because it's just a wrapper around openai
-    expect(provider.id()).toBe('mistralai/mistral-medium');
+    // OpenRouter provider now returns id with prefix
+    expect(provider.id()).toBe('openrouter:mistralai/mistral-medium');
   });
 
   it('loadApiProvider with github', async () => {

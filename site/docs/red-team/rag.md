@@ -1,5 +1,6 @@
 ---
 sidebar_position: 10000
+description: Red team RAG applications by testing for prompt injection, context manipulation, and data poisoning attacks to protect corporate knowledge bases from data breaches
 ---
 
 # How to red team RAG applications

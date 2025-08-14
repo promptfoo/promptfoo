@@ -1,7 +1,7 @@
 ---
 sidebar_label: CI/CD
 title: CI/CD Integration for LLM Eval and Security
-description: Integrate promptfoo into CI/CD pipelines for automated prompt eval, security scanning, and quality assurance
+description: Automate LLM testing in CI/CD pipelines with GitHub Actions, GitLab CI, and Jenkins for continuous security and quality checks
 keywords:
   [
     ci/cd,

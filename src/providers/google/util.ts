@@ -417,7 +417,7 @@ function isValidBase64Image(data: string): boolean {
       data.startsWith('/9j/') || // JPEG
       data.startsWith('iVBORw0KGgo') || // PNG
       data.startsWith('R0lGODlh') || // GIF
-      data.startsWith('UklGRg') // WebP
+      data.startsWith('UklGR') // WebP
     );
   } catch {
     return false;
@@ -431,7 +431,7 @@ function getMimeTypeFromBase64(base64Data: string): string {
     return 'image/png';
   } else if (base64Data.startsWith('R0lGODlh')) {
     return 'image/gif';
-  } else if (base64Data.startsWith('UklGRg')) {
+  } else if (base64Data.startsWith('UklGR')) {
     return 'image/webp';
   }
   // Default to jpeg for unknown formats

@@ -30,17 +30,21 @@ export const handleContextRecall = async ({
 
   const context = await resolveContext(assertion, test, output, prompt, prompt, providerResponse);
 
+  // RAGAS context-recall checks if ground truth (renderedValue) can be attributed to context
+  const result = await matchesContextRecall(
+    context, // context parameter (used as {{context}} in prompt)
+    renderedValue, // ground truth parameter (used as {{groundTruth}} in prompt)
+    assertion.threshold ?? 0,
+    test.options,
+    test.vars,
+  );
+
   return {
     assertion,
-    ...(await matchesContextRecall(
-      context,
-      renderedValue,
-      assertion.threshold ?? 0,
-      test.options,
-      test.vars,
-    )),
+    ...result,
     metadata: {
       context,
+      ...(result.metadata || {}),
     },
   };
 };

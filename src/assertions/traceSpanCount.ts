@@ -20,12 +20,7 @@ function matchesPattern(spanName: string, pattern: string): boolean {
 
 export const handleTraceSpanCount = ({ assertion, context }: AssertionParams): GradingResult => {
   if (!context.trace || !context.trace.spans) {
-    return {
-      pass: false,
-      score: 0,
-      reason: 'No trace data available for trace-span-count assertion',
-      assertion,
-    };
+    throw new Error('No trace data available for trace-span-count assertion');
   }
 
   const value = assertion.value as TraceSpanCountValue;

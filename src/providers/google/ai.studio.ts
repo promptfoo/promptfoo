@@ -242,10 +242,22 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     if (this.initializationPromise) {
       await this.initializationPromise;
     }
+    if (!this.getApiKey()) {
+      throw new Error(
+        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
-      this.config.systemInstruction,
+      config.systemInstruction,
     );
 
     // Determine API version based on model
@@ -253,33 +265,30 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const allTools = [
-      ...mcpTools,
-      ...(this.config.tools ? loadFile(this.config.tools, context?.vars) : []),
-    ];
+    const allTools = [...mcpTools, ...(config.tools ? loadFile(config.tools, context?.vars) : [])];
     // --- End MCP tool injection logic ---
 
     const body: Record<string, any> = {
       contents,
       generationConfig: {
-        ...(this.config.temperature !== undefined && { temperature: this.config.temperature }),
-        ...(this.config.topP !== undefined && { topP: this.config.topP }),
-        ...(this.config.topK !== undefined && { topK: this.config.topK }),
-        ...(this.config.stopSequences !== undefined && {
-          stopSequences: this.config.stopSequences,
+        ...(config.temperature !== undefined && { temperature: config.temperature }),
+        ...(config.topP !== undefined && { topP: config.topP }),
+        ...(config.topK !== undefined && { topK: config.topK }),
+        ...(config.stopSequences !== undefined && {
+          stopSequences: config.stopSequences,
         }),
-        ...(this.config.maxOutputTokens !== undefined && {
-          maxOutputTokens: this.config.maxOutputTokens,
+        ...(config.maxOutputTokens !== undefined && {
+          maxOutputTokens: config.maxOutputTokens,
         }),
-        ...this.config.generationConfig,
+        ...config.generationConfig,
       },
-      safetySettings: this.config.safetySettings,
-      ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
+      safetySettings: config.safetySettings,
+      ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
-    if (this.config.responseSchema) {
+    if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
         throw new Error(
           '`responseSchema` provided but `generationConfig.response_schema` already set.',
@@ -287,7 +296,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       }
 
       const schema = maybeLoadFromExternalFile(
-        renderVarsInObject(this.config.responseSchema, context?.vars),
+        renderVarsInObject(config.responseSchema, context?.vars),
       );
 
       body.generationConfig.response_schema = schema;

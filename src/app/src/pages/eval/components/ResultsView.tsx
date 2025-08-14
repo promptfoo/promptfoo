@@ -472,67 +472,16 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  /**
-   * Apply filters from URL params.
-   */
-  React.useEffect(() => {
-    const pluginParam = searchParams.get('plugin');
-
-    if (pluginParam) {
-      const { addFilter, resetFilters } = useTableStore.getState();
-
-      resetFilters();
-
-      addFilter({
-        type: 'plugin',
-        operator: 'equals',
-        value: pluginParam,
-      });
-
-      setSearchParams((prev) => {
-        const newParams = new URLSearchParams(prev);
-        newParams.delete('plugin');
-        return newParams;
-      });
-    }
-  }, [searchParams, setSearchParams]);
-
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
-  /**
-   * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
-   * (and the rendering of duplicative, useless scrollbars).
-   */
-  React.useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, []);
-
   return (
     <>
-      <Box
-        id="results-view-container"
-        px={2}
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-        ref={(el: HTMLDivElement | null) => {
-          const top = el?.getBoundingClientRect().top;
-          if (top) {
-            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-            el.style.height = `calc(100vh - ${top}px)`;
-          }
-        }}
-      >
-        <Box>
+      <Box px={2} pt={2}>
+        <Box sx={{ transition: 'all 0.3s ease' }}>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
               <TextField
@@ -851,7 +800,6 @@ export default function ResultsView({
           showStats={showInferenceDetails}
           filterMode={filterMode}
           failureFilter={failureFilter}
-          searchText={searchText}
           debouncedSearchText={debouncedSearchValue}
           onFailureFilterToggle={handleFailureFilterToggle}
           onSearchTextChange={handleSearchTextChange}

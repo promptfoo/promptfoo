@@ -33,10 +33,11 @@ import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere'
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { EchoProvider } from './echo';
 import { FalImageGenerationProvider } from './fal';
+import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
-import { GoogleLiveProvider } from './google/live';
 import { GoogleImageProvider } from './google/image';
+import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { HeliconeGatewayProvider } from './helicone';
@@ -68,6 +69,7 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { createOpenRouterProvider } from './openrouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
 import { PortkeyChatCompletionProvider } from './portkey';
@@ -89,7 +91,6 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
-import { createGitHubProvider } from './github/index';
 
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -203,7 +204,7 @@ export const providerMap: ProviderFactory[] = [
       }
 
       throw new Error(
-        dedent`Unknown Anthropic model type or model name: ${modelType}. Use one of the following formats: 
+        dedent`Unknown Anthropic model type or model name: ${modelType}. Use one of the following formats:
         - anthropic:messages:<model name> - For Messages API
         - anthropic:completion:<model name> - For Completion API
         - anthropic:<model name> - Shorthand for Messages API with a known model name`,
@@ -732,26 +733,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
-        ...providerOptions,
-        config: {
-          ...providerOptions.config,
-          apiBaseUrl: 'https://openrouter.ai/api/v1',
-          apiKeyEnvar: 'OPENROUTER_API_KEY',
-          passthrough: {
-            // Pass through OpenRouter-specific options
-            // https://openrouter.ai/docs/requests
-            ...(providerOptions.config.transforms && {
-              transforms: providerOptions.config.transforms,
-            }),
-            ...(providerOptions.config.models && { models: providerOptions.config.models }),
-            ...(providerOptions.config.route && { route: providerOptions.config.route }),
-            ...(providerOptions.config.provider && { provider: providerOptions.config.provider }),
-            ...(providerOptions.config.passthrough || {}),
-          },
-        },
+      return createOpenRouterProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
       });
     },
   },

@@ -64,6 +64,13 @@ export interface Reasoning {
   summary?: 'auto' | 'concise' | 'detailed' | null;
 }
 
+export type GPT5Reasoning = Omit<Reasoning, 'effort'> & {
+  effort?: ReasoningEffort | 'minimal';
+};
+
+/** Verbosity level supported by GPT-5 models */
+export type GPT5Verbosity = 'low' | 'medium' | 'high';
+
 // OpenAI MCP tool configuration for Responses API
 export interface OpenAiMCPTool {
   type: 'mcp';
@@ -135,7 +142,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   seed?: number;
   passthrough?: object;
   reasoning_effort?: ReasoningEffort;
-  reasoning?: Reasoning;
+  reasoning?: Reasoning | GPT5Reasoning;
   service_tier?: ('auto' | 'default' | 'premium') | null;
   modalities?: string[];
   audio?: {
@@ -168,4 +175,9 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
     AssistantFunctionCallback | string
   >;
   mcp?: MCPConfig;
+
+  /**
+   * GPT-5 only: Controls the verbosity of the model's responses. Ignored for non-GPT-5 models.
+   */
+  verbosity?: GPT5Verbosity;
 };

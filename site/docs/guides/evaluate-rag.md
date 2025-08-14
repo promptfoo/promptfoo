@@ -1,5 +1,6 @@
 ---
 sidebar_position: 2
+description: Benchmark RAG pipeline performance by evaluating document retrieval accuracy and LLM output quality with factuality and context adherence metrics for 2-step analysis
 ---
 
 # Evaluating RAG pipelines

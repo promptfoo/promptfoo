@@ -116,6 +116,17 @@ question,__expected1,__expected2,__expected3
 "What is 2+2?","equals: 4","contains: four","javascript: output.length < 10"
 ```
 
+:::note
+**contains-any** and **contains-all** expect comma-delimited values inside the `__expected` column.
+
+```csv title="test_cases.csv"
+translated_text,__expected
+"<span>Hola</span> <b>mundo</b>","contains-any: <b>,</span>"
+```
+
+If you write `"contains-any: <b> </span>"`, promptfoo treats `<b> </span>` as a single search term rather than two separate tags.
+:::
+
 ### Special CSV Columns
 
 | Column                            | Purpose                    | Example             |
