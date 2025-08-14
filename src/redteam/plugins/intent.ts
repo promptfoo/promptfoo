@@ -1,9 +1,4 @@
 import dedent from 'dedent';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import invariant from '../../util/invariant';
-import { sleep } from '../../util/time';
-import { extractGoalFromPrompt } from '../util';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,
@@ -13,6 +8,11 @@ import type {
   PluginConfig,
   TestCase,
 } from '../../types';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
+import { extractGoalFromPrompt } from '../util';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 const PLUGIN_ID = 'promptfoo:redteam:intent';
 
@@ -60,7 +60,6 @@ export class IntentPlugin extends RedteamPluginBase {
           metadata: {
             goal: extractedIntent,
             pluginId: this.id,
-            pluginConfig: undefined,
           },
         });
       } else {
@@ -81,7 +80,6 @@ export class IntentPlugin extends RedteamPluginBase {
           metadata: {
             goal: extractedIntent,
             pluginId: this.id,
-            pluginConfig: undefined,
           },
         });
       }
