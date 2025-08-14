@@ -25,8 +25,8 @@ export default function EvalsIndexPage() {
       maxWidth="xl"
       style={{
         height: offsetTop > 0 ? `calc(100vh - ${offsetTop}px)` : '100%',
-        paddingBottom: '16px',
       }}
+      sx={{ py: 2 }}
       ref={containerRef}
     >
       <EvalsDataGrid onEvalSelected={(evalId) => navigate(`/eval/${evalId}`)} showUtilityButtons />
