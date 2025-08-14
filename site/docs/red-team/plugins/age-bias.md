@@ -1,5 +1,6 @@
 ---
 sidebar_label: Age Bias
+description: Red team age discrimination vulnerabilities by testing AI responses for harmful stereotypes and biases to protect users from discriminatory model outputs
 ---
 
 # Age Bias Plugin

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Context Faithfulness
+description: 'Measure LLM faithfulness to source context by detecting hallucinations, fabrications, and unsupported claims in responses'
 ---
 
 # Context faithfulness

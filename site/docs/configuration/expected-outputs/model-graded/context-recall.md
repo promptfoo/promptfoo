@@ -1,5 +1,6 @@
 ---
 sidebar_label: Context Recall
+description: 'Quantify retrieval quality by measuring how thoroughly LLM responses incorporate all relevant context information provided'
 ---
 
 # Context recall

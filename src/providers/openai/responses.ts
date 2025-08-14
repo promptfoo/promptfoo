@@ -382,12 +382,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           }
         } else if (item.type === 'tool_result') {
           result = JSON.stringify(item);
-        } else if (item.type === 'reasoning') {
+        } else if (item.type === 'reasoning' && item.summary && item.summary.length > 0) {
           // Handle reasoning output from deep research models
           if (result) {
             result += '\n';
           }
-          result += `Reasoning: ${JSON.stringify(item.summary)}`;
+          result += `Reasoning: ${item.summary.map((s: { text: string }) => s.text).join('\n')}\n`;
         } else if (item.type === 'web_search_call') {
           // Handle web search calls from deep research models
           if (result) {

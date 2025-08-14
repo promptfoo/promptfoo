@@ -1,5 +1,6 @@
 ---
 sidebar_label: Context Relevance
+description: 'Assess RAG retrieval quality by evaluating context relevance, precision, and usefulness for answering user queries effectively'
 ---
 
 # Context relevance

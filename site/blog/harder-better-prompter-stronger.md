@@ -1,6 +1,6 @@
 ---
 title: 'Harder, Better, Prompter, Stronger: AI system prompt hardening'
-description: 'Learn essential techniques for hardening AI system prompts against injection attacks, unauthorized access, and security vulnerabilities. Includes practical examples using Promptfoo evaluations.'
+description: 'Learn techniques for hardening AI prompts against injection attacks and security vulnerabilities with Promptfoo examples'
 image: /img/blog/harder-better-prompter-stronger/header.jpg
 keywords:
   [

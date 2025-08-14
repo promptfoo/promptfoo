@@ -1,6 +1,6 @@
 ---
 title: Release Notes
-description: Monthly summaries of Promptfoo releases, features, and improvements for the open-source LLM testing framework
+description: Track monthly Promptfoo releases featuring new providers, security plugins, performance improvements, and community contributions
 tags: [releases, changelog, updates, features]
 keywords: [Promptfoo releases, changelog, updates, features, monthly summaries]
 ---

@@ -1,7 +1,7 @@
 ---
 sidebar_label: Video Inputs
 title: Video Jailbreaking Strategy
-description: Test how AI systems handle video-encoded text inputs that may bypass content filters
+description: Evaluate video-capable AI models against adversarial video inputs with embedded text designed to bypass safety filters
 ---
 
 # Video Jailbreaking

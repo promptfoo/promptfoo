@@ -1,6 +1,6 @@
 ---
 title: 'Red Team Your LLM with BeaverTails'
-description: 'Test your LLM against 700+ harmful prompts across 14 risk categories. See how well your model handles everything from hate speech to misinformation using the BeaverTails dataset.'
+description: 'Evaluate LLM safety using BeaverTails dataset with 700+ harmful prompts spanning harassment, violence, and deception categories'
 image: /img/blog/beavertails/beaver-coding.jpg
 keywords:
   [
