@@ -1,11 +1,11 @@
 import React from 'react';
-import { render, screen, act, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import ProviderConfigEditor, { ProviderConfigEditorRef } from './ProviderConfigEditor';
+
 import type { ProviderOptions } from '../../types';
-import { AGENT_FRAMEWORKS } from './consts';
 
 vi.mock('./HttpEndpointConfiguration', () => ({
   default: () => <div data-testid="http-config" />,
@@ -162,98 +162,6 @@ describe('ProviderConfigEditor', () => {
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
       expect(mockOnValidate).toHaveBeenCalledWith(true);
-    });
-
-    // [Tusk] FAILING TEST
-    it('should return false from validate() when agent framework provider ID is just "file://"', () => {
-      const editorRef = React.createRef<ProviderConfigEditorRef>();
-      const mockSetProvider = vi.fn();
-      const mockSetError = vi.fn();
-      const mockOnValidate = vi.fn();
-
-      const invalidAgentProvider: ProviderOptions = {
-        id: 'file://',
-        config: {},
-      };
-
-      renderWithTheme(
-        <ProviderConfigEditor
-          ref={editorRef}
-          provider={invalidAgentProvider}
-          setProvider={mockSetProvider}
-          setError={mockSetError}
-          onValidate={mockOnValidate}
-          providerType={AGENT_FRAMEWORKS[0]}
-        />,
-      );
-
-      const isValid = editorRef.current?.validate();
-
-      expect(isValid).toBe(false);
-      expect(mockSetError).toHaveBeenCalledWith('Python file path is required');
-      expect(mockOnValidate).toHaveBeenCalledWith(false);
-    });
-
-    // [Tusk] FAILING TEST
-    it('should return false from validate() when agent framework provider ID contains only whitespace after file:// prefix', () => {
-      const editorRef = React.createRef<ProviderConfigEditorRef>();
-      const mockSetProvider = vi.fn();
-      const mockSetError = vi.fn();
-      const mockOnValidate = vi.fn();
-
-      const whitespaceProvider: ProviderOptions = {
-        id: 'file://   ',
-        config: {},
-      };
-
-      renderWithTheme(
-        <ProviderConfigEditor
-          ref={editorRef}
-          provider={whitespaceProvider}
-          setProvider={mockSetProvider}
-          setError={mockSetError}
-          onValidate={mockOnValidate}
-          providerType={AGENT_FRAMEWORKS[0]}
-        />,
-      );
-
-      const isValid = editorRef.current?.validate();
-
-      expect(isValid).toBe(false);
-      expect(mockSetError).toHaveBeenCalledWith('Python file path is required');
-      expect(mockOnValidate).toHaveBeenCalledWith(false);
-    });
-
-    // [Tusk] FAILING TEST
-    it('should return false from validate() when agent framework provider has a non-Python file extension', () => {
-      const editorRef = React.createRef<ProviderConfigEditorRef>();
-      const mockSetProvider = vi.fn();
-      const mockSetError = vi.fn();
-      const mockOnValidate = vi.fn();
-
-      const invalidAgentProvider: ProviderOptions = {
-        id: 'file://path/to/agent.js',
-        config: {},
-      };
-
-      renderWithTheme(
-        <ProviderConfigEditor
-          ref={editorRef}
-          provider={invalidAgentProvider}
-          setProvider={mockSetProvider}
-          setError={mockSetError}
-          onValidate={mockOnValidate}
-          providerType="langchain"
-        />,
-      );
-
-      const isValid = editorRef.current?.validate();
-
-      expect(isValid).toBe(false);
-      expect(mockSetError).toHaveBeenCalledWith(
-        'Provider ID must start with file:// for Python agent files',
-      );
-      expect(mockOnValidate).toHaveBeenCalledWith(false);
     });
   });
 

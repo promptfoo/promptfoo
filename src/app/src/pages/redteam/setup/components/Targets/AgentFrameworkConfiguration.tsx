@@ -18,7 +18,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { AGENT_TEMPLATES } from './consts';
+import { AGENT_TEMPLATE } from './consts';
 
 import type { ProviderOptions } from '../../types';
 
@@ -27,11 +27,6 @@ interface AgentFrameworkConfigurationProps {
   updateCustomTarget: (field: string, value: any) => void;
   agentType: string;
 }
-
-// Template generators for different frameworks
-const getAgentTemplate = (framework: string): string => {
-  return AGENT_TEMPLATES[framework] || AGENT_TEMPLATES.default;
-};
 
 const frameworkInfo: Record<string, { name: string; description: string; pip: string }> = {
   langchain: {
@@ -61,8 +56,8 @@ const frameworkInfo: Record<string, { name: string; description: string; pip: st
   },
   'openai-agents-sdk': {
     name: 'OpenAI Agents SDK',
-    description: 'Official OpenAI SDK for building AI agents with Swarm',
-    pip: 'git+https://github.com/openai/swarm.git',
+    description: 'Official OpenAI SDK for building AI agents.',
+    pip: 'openai-agents',
   },
   'pydantic-ai': {
     name: 'PydanticAI',
@@ -98,8 +93,7 @@ export default function AgentFrameworkConfiguration({
   };
 
   const handleCopyTemplate = () => {
-    const template = getAgentTemplate(agentType);
-    navigator.clipboard.writeText(template);
+    navigator.clipboard.writeText(AGENT_TEMPLATE);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
 
@@ -112,8 +106,7 @@ export default function AgentFrameworkConfiguration({
   };
 
   const handleDownloadTemplate = () => {
-    const template = getAgentTemplate(agentType);
-    const blob = new Blob([template], { type: 'text/plain' });
+    const blob = new Blob([AGENT_TEMPLATE], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -147,9 +140,7 @@ export default function AgentFrameworkConfiguration({
     setCopied(false);
   };
 
-  const template = getAgentTemplate(agentType);
-  const templateFilename =
-    agentType === 'generic-agent' ? 'custom_agent.py' : `${agentType}_agent.py`;
+  const templateFilename = 'agent_template.py';
 
   return (
     <Box>
@@ -275,7 +266,7 @@ export default function AgentFrameworkConfiguration({
                 fontFamily: 'Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace',
               }}
             >
-              <code>{template}</code>
+              <code>{AGENT_TEMPLATE}</code>
             </Box>
           </Paper>
         </DialogContent>

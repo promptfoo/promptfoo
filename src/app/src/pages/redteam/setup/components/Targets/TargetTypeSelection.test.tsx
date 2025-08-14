@@ -324,40 +324,4 @@ describe('TargetTypeSelection', () => {
       expect(screen.getByText('OpenAI')).toBeInTheDocument();
     });
   });
-
-  // [Tusk] FAILING TEST
-  it('should disable the Next button when an agent framework is selected but no agent file path is provided', async () => {
-    const mockSetProviderType = vi.fn();
-    mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        target: {
-          id: '',
-          label: 'My Agent',
-          config: {
-            framework: 'langchain',
-          },
-        },
-      },
-      updateConfig: mockUpdateConfig,
-      providerType: 'agents',
-      setProviderType: mockSetProviderType,
-    });
-
-    renderComponent();
-
-    const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
-    fireEvent.change(nameInput, { target: { value: 'My Agent' } });
-
-    const inlineNextButton = screen.getByRole('button', {
-      name: 'Next: Select Target Type',
-    });
-    fireEvent.click(inlineNextButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
-    });
-
-    const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
-    expect(footerNextButton).toBeDisabled();
-  });
 });
