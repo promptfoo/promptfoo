@@ -1262,6 +1262,99 @@ describe('dereferenceConfig', () => {
     expect(dereferencedConfig).toEqual(expectedOutput);
   });
 
+  it('should preserve the response format json schema when dereferencing', async () => {
+    const rawConfig = {
+      prompts: [{ $ref: '#/definitions/prompt' }],
+      tests: [],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      providers: [
+        {
+          name: 'openai:gpt-4',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'kubectl_describe',
+                strict: true,
+                schema: {
+                  $defs: {
+                    KubernetesResourceKind: {
+                      enum: ['deployment', 'node'],
+                      title: 'KubernetesResourceKind',
+                      type: 'string',
+                    },
+                  },
+                  properties: {
+                    kind: { $ref: '#/$defs/KubernetesResourceKind' },
+                    namespace: {
+                      anyOf: [{ type: 'string' }, { type: 'null' }],
+                      default: null,
+                      title: 'Namespace',
+                    },
+                    name: { title: 'Name', type: 'string' },
+                  },
+                  required: ['kind', 'name'],
+                  title: 'KubectlDescribe',
+                  type: 'object',
+                },
+              },
+            },
+          },
+        },
+      ],
+      definitions: {
+        prompt: 'hello world',
+      },
+    };
+    const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
+    const expectedOutput = {
+      prompts: ['hello world'],
+      tests: [],
+      evaluateOptions: {},
+      commandLineOptions: {},
+      providers: [
+        {
+          name: 'openai:gpt-4',
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'kubectl_describe',
+                strict: true,
+                schema: {
+                  $defs: {
+                    KubernetesResourceKind: {
+                      enum: ['deployment', 'node'],
+                      title: 'KubernetesResourceKind',
+                      type: 'string',
+                    },
+                  },
+                  properties: {
+                    kind: { $ref: '#/$defs/KubernetesResourceKind' },
+                    namespace: {
+                      anyOf: [{ type: 'string' }, { type: 'null' }],
+                      default: null,
+                      title: 'Namespace',
+                    },
+                    name: { title: 'Name', type: 'string' },
+                  },
+                  required: ['kind', 'name'],
+                  title: 'KubectlDescribe',
+                  type: 'object',
+                },
+              },
+            },
+          },
+        },
+      ],
+      definitions: {
+        prompt: 'hello world',
+      },
+    };
+    expect(dereferencedConfig).toEqual(expectedOutput);
+  });
+
   it('should preserve handle string functions/tools when dereferencing', async () => {
     const rawConfig = {
       description: 'Test config with function parameters',
