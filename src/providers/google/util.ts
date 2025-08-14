@@ -264,6 +264,29 @@ export function maybeCoerceToGeminiFormat(contents: any): {
 }
 
 let cachedAuth: GoogleAuth | undefined;
+
+/**
+ * Loads and processes Google credentials from various sources
+ */
+export function loadCredentials(credentials?: string): string | undefined {
+  if (!credentials) {
+    return undefined;
+  }
+
+  if (credentials.startsWith('file://')) {
+    try {
+      return maybeLoadFromExternalFile(credentials) as string;
+    } catch (error) {
+      throw new Error(`Failed to load credentials from file: ${error}`);
+    }
+  }
+
+  return credentials;
+}
+
+/**
+ * Creates a Google client with optional custom credentials
+ */
 export async function getGoogleClient({ credentials }: { credentials?: string } = {}) {
   if (!cachedAuth) {
     let GoogleAuth;
@@ -280,23 +303,45 @@ export async function getGoogleClient({ credentials }: { credentials?: string } 
     }
   }
 
+  const processedCredentials = loadCredentials(credentials);
+
   let client;
-  if (credentials) {
+  if (processedCredentials) {
     try {
-      client = await cachedAuth.fromJSON(JSON.parse(credentials));
+      client = await cachedAuth.fromJSON(JSON.parse(processedCredentials));
     } catch (error) {
       logger.error(`[Vertex] Could not load credentials: ${error}`);
       throw new Error(`[Vertex] Could not load credentials: ${error}`);
     }
   } else {
-    // Load from env var if credentials are not provided
     client = await cachedAuth.getClient();
   }
 
-  // Get project ID - this may be undefined when using credentials
   const projectId = await cachedAuth.getProjectId();
-
   return { client, projectId };
+}
+
+/**
+ * Gets project ID from config, environment, or Google client
+ */
+export async function resolveProjectId(
+  config: { projectId?: string; credentials?: string },
+  env?: Record<string, string>,
+): Promise<string> {
+  const processedCredentials = loadCredentials(config.credentials);
+  const { projectId: googleProjectId } = await getGoogleClient({
+    credentials: processedCredentials,
+  });
+
+  return (
+    googleProjectId ||
+    config.projectId ||
+    env?.VERTEX_PROJECT_ID ||
+    env?.GOOGLE_PROJECT_ID ||
+    process.env.VERTEX_PROJECT_ID ||
+    process.env.GOOGLE_PROJECT_ID ||
+    ''
+  );
 }
 
 export async function hasGoogleDefaultCredentials() {

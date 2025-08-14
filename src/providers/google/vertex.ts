@@ -5,7 +5,6 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
@@ -16,8 +15,10 @@ import {
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
+  loadCredentials,
   loadFile,
   mergeParts,
+  resolveProjectId,
 } from './util';
 
 import type {
@@ -75,14 +76,8 @@ class VertexGenericProvider implements ApiProvider {
     );
   }
 
-  async getProjectId() {
-    const { projectId } = await this.getClientAndProjectId();
-    return (
-      projectId ||
-      this.config.projectId ||
-      this.env?.VERTEX_PROJECT_ID ||
-      getEnvString('VERTEX_PROJECT_ID')
-    );
+  async getProjectId(): Promise<string> {
+    return await resolveProjectId(this.config, this.env);
   }
 
   getApiKey(): string | undefined {
@@ -124,38 +119,11 @@ class VertexGenericProvider implements ApiProvider {
 
   /**
    * Helper method to get Google client with credentials support
-   * Handles file:// paths by loading the credentials from the specified file
    */
   async getClientWithCredentials() {
-    let credentials = this.config.credentials;
-
-    if (credentials && credentials.startsWith('file://')) {
-      try {
-        credentials = maybeLoadFromExternalFile(credentials) as string;
-      } catch (error) {
-        throw new Error(`Failed to load credentials from file: ${error}`);
-      }
-    }
-
+    const credentials = loadCredentials(this.config.credentials);
     const { client } = await getGoogleClient({ credentials });
     return client;
-  }
-
-  /**
-   * Helper method to get Google client and project ID
-   */
-  async getClientAndProjectId() {
-    let credentials = this.config.credentials;
-
-    if (credentials && credentials.startsWith('file://')) {
-      try {
-        credentials = maybeLoadFromExternalFile(credentials) as string;
-      } catch (error) {
-        throw new Error(`Failed to load credentials from file: ${error}`);
-      }
-    }
-
-    return await getGoogleClient({ credentials });
   }
 
   // @ts-ignore: Prompt is not used in this implementation
@@ -930,38 +898,11 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
   /**
    * Helper method to get Google client with credentials support
-   * Handles file:// paths by loading the credentials from the specified file
    */
   async getClientWithCredentials() {
-    let credentials = this.config.credentials;
-
-    if (credentials && credentials.startsWith('file://')) {
-      try {
-        credentials = maybeLoadFromExternalFile(credentials) as string;
-      } catch (error) {
-        throw new Error(`Failed to load credentials from file: ${error}`);
-      }
-    }
-
+    const credentials = loadCredentials(this.config.credentials);
     const { client } = await getGoogleClient({ credentials });
     return client;
-  }
-
-  /**
-   * Helper method to get Google client and project ID
-   */
-  async getClientAndProjectId() {
-    let credentials = this.config.credentials;
-
-    if (credentials && credentials.startsWith('file://')) {
-      try {
-        credentials = maybeLoadFromExternalFile(credentials) as string;
-      } catch (error) {
-        throw new Error(`Failed to load credentials from file: ${error}`);
-      }
-    }
-
-    return await getGoogleClient({ credentials });
   }
 
   id() {
@@ -976,14 +917,8 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     return this.config.apiVersion || 'v1';
   }
 
-  async getProjectId() {
-    const { projectId } = await this.getClientAndProjectId();
-    return (
-      projectId ||
-      this.config.projectId ||
-      this.env?.VERTEX_PROJECT_ID ||
-      getEnvString('VERTEX_PROJECT_ID')
-    );
+  async getProjectId(): Promise<string> {
+    return await resolveProjectId(this.config, this.env);
   }
 
   async callApi(): Promise<ProviderResponse> {

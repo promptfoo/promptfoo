@@ -57,6 +57,8 @@ jest.mock('../../../src/cache', () => ({
 jest.mock('../../../src/providers/google/util', () => ({
   ...jest.requireActual('../../../src/providers/google/util'),
   getGoogleClient: jest.fn(),
+  loadCredentials: jest.fn(),
+  resolveProjectId: jest.fn(),
 }));
 
 jest.mock('../../../src/esm', () => ({
@@ -118,6 +120,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
+    
+    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
+    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     const response = await provider.callGeminiApi('test prompt');
 
@@ -280,6 +285,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
+    
+    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
+    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     const response = await provider.callGeminiApi('What is the weather in San Francisco?');
 
@@ -371,6 +379,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
+    
+    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
+    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     const response = await provider.callGeminiApi('test prompt', {
       vars: { location: 'San Francisco' },
@@ -437,6 +448,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
+    
+    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
+    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     provider = new VertexChatProvider('gemini-2.0-flash-001');
     await provider.callGeminiApi('test prompt');
@@ -1060,6 +1074,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
+    
+    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
+    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     const response = await provider.callLlamaApi('test prompt');
 
@@ -1130,6 +1147,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
+    
+    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
+    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     await provider.callLlamaApi('test prompt');
 
@@ -1215,6 +1235,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
+    
+    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
+    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     await provider.callGeminiApi('test prompt');
 
@@ -1290,6 +1313,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
+    
+    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
+    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     await provider.callClaudeApi('test prompt');
 
@@ -1337,6 +1363,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
+    
+    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
+    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     await provider.callClaudeApi('test prompt');
 
@@ -1387,6 +1416,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
+    
+    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
+    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     await provider.callClaudeApi('test prompt');
 

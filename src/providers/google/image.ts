@@ -1,10 +1,9 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
-import { getGoogleClient } from './util';
+import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
 
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
@@ -63,48 +62,15 @@ export class GoogleImageProvider implements ApiProvider {
 
   /**
    * Helper method to get Google client with credentials support
-   * Handles file:// paths by loading the credentials from the specified file
    */
   private async getClientWithCredentials() {
-    let credentials = this.config.credentials;
-
-    if (credentials && credentials.startsWith('file://')) {
-      try {
-        credentials = maybeLoadFromExternalFile(credentials) as string;
-      } catch (error) {
-        throw new Error(`Failed to load credentials from file: ${error}`);
-      }
-    }
-
+    const credentials = loadCredentials(this.config.credentials);
     const { client } = await getGoogleClient({ credentials });
     return client;
   }
 
-  /**
-   * Helper method to get Google client and project ID
-   */
-  private async getClientAndProjectId() {
-    let credentials = this.config.credentials;
-
-    if (credentials && credentials.startsWith('file://')) {
-      try {
-        credentials = maybeLoadFromExternalFile(credentials) as string;
-      } catch (error) {
-        throw new Error(`Failed to load credentials from file: ${error}`);
-      }
-    }
-
-    return await getGoogleClient({ credentials });
-  }
-
-  private async getProjectId() {
-    const { projectId } = await this.getClientAndProjectId();
-    return (
-      projectId ||
-      this.config.projectId ||
-      getEnvString('GOOGLE_PROJECT_ID') ||
-      this.env?.GOOGLE_PROJECT_ID
-    );
+  private async getProjectId(): Promise<string> {
+    return await resolveProjectId(this.config, this.env);
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {

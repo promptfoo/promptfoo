@@ -210,7 +210,10 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         });
       } else if (this.providerName === 'vertex') {
         const provider = new GatewayVertex();
-        const parentClass = new VertexEmbeddingProvider(this.modelName, this.config, this.env);
+        const parentClass = new VertexEmbeddingProvider(this.modelName, {
+          config: this.config,
+          env: this.env,
+        });
         const client = await parentClass.getClientWithCredentials();
         const projectId = await parentClass.getProjectId();
         const token = await client.getAccessToken();
