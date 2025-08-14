@@ -1,6 +1,6 @@
 ---
 title: "How to Red Team Gemini: Complete Security Testing Guide for Google's AI Models"
-description: 'Google Gemini handles text, images, and code - creating unique attack surfaces. Learn how to red team these multimodal capabilities and test for new vulnerabilities.'
+description: 'Comprehensive guide to red teaming Google Gemini models for multimodal vulnerabilities across text, vision, and code generation'
 image: /img/blog/red-team-gemini.png
 keywords:
   [

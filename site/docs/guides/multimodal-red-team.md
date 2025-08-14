@@ -1,6 +1,6 @@
 ---
 title: Multi-Modal Red Teaming
-description: Learn how to use promptfoo to test the robustness of multi-modal LLMs against adversarial inputs involving text, images, and audio.
+description: Red team multimodal AI systems using adversarial text, images, audio, and video inputs to identify cross-modal vulnerabilities
 keywords:
   [
     red teaming,

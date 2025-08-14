@@ -1,5 +1,6 @@
 ---
 sidebar_label: Portkey AI
+description: Integrate Portkey AI gateway with promptfoo for LLM testing, including prompt management, observability, and custom configurations with OpenAI models and APIs.
 ---
 
 # Portkey AI integration

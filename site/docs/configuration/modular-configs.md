@@ -2,7 +2,7 @@
 sidebar_position: 999
 sidebar_label: Managing Large Configs
 title: Managing Large Promptfoo Configurations
-description: Learn how to structure, organize, and modularize large promptfoo configurations for better maintainability and reusability.
+description: Organize complex promptfoo configurations using modular YAML structures, file imports, and environment-specific settings
 keywords:
   [
     promptfoo configuration,

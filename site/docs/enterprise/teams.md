@@ -2,7 +2,7 @@
 sidebar_label: Managing Roles and Teams
 sidebar_position: 20
 title: Managing Roles and Teams in Promptfoo Enterprise
-description: Learn how to create teams, assign roles, and implement role-based access control (RBAC) in Promptfoo Enterprise
+description: Implement team collaboration with role-based access control, project permissions, and audit logging in Promptfoo Enterprise
 keywords: [roles, teams, permissions, users, organizations, rbac, access control]
 ---
 
