@@ -264,24 +264,84 @@ export function maybeCoerceToGeminiFormat(contents: any): {
 }
 
 let cachedAuth: GoogleAuth | undefined;
-export async function getGoogleClient() {
+
+/**
+ * Loads and processes Google credentials from various sources
+ */
+export function loadCredentials(credentials?: string): string | undefined {
+  if (!credentials) {
+    return undefined;
+  }
+
+  if (credentials.startsWith('file://')) {
+    try {
+      return maybeLoadFromExternalFile(credentials) as string;
+    } catch (error) {
+      throw new Error(`Failed to load credentials from file: ${error}`);
+    }
+  }
+
+  return credentials;
+}
+
+/**
+ * Creates a Google client with optional custom credentials
+ */
+export async function getGoogleClient({ credentials }: { credentials?: string } = {}) {
   if (!cachedAuth) {
     let GoogleAuth;
     try {
       const importedModule = await import('google-auth-library');
       GoogleAuth = importedModule.GoogleAuth;
+      cachedAuth = new GoogleAuth({
+        scopes: 'https://www.googleapis.com/auth/cloud-platform',
+      });
     } catch {
       throw new Error(
         'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
       );
     }
-    cachedAuth = new GoogleAuth({
-      scopes: 'https://www.googleapis.com/auth/cloud-platform',
-    });
   }
-  const client = await cachedAuth.getClient();
+
+  const processedCredentials = loadCredentials(credentials);
+
+  let client;
+  if (processedCredentials) {
+    try {
+      client = await cachedAuth.fromJSON(JSON.parse(processedCredentials));
+    } catch (error) {
+      logger.error(`[Vertex] Could not load credentials: ${error}`);
+      throw new Error(`[Vertex] Could not load credentials: ${error}`);
+    }
+  } else {
+    client = await cachedAuth.getClient();
+  }
+
   const projectId = await cachedAuth.getProjectId();
   return { client, projectId };
+}
+
+/**
+ * Gets project ID from config, environment, or Google client
+ */
+export async function resolveProjectId(
+  config: { projectId?: string; credentials?: string },
+  env?: Record<string, string>,
+): Promise<string> {
+  const processedCredentials = loadCredentials(config.credentials);
+  const { projectId: googleProjectId } = await getGoogleClient({
+    credentials: processedCredentials,
+  });
+
+  return (
+    googleProjectId ||
+    config.projectId ||
+    env?.VERTEX_PROJECT_ID ||
+    env?.GOOGLE_PROJECT_ID ||
+    process.env.VERTEX_PROJECT_ID ||
+    process.env.GOOGLE_PROJECT_ID ||
+    ''
+  );
 }
 
 export async function hasGoogleDefaultCredentials() {
