@@ -1,5 +1,5 @@
-import { GoogleImageProvider } from '../../../src/providers/google/image';
 import { fetchWithCache } from '../../../src/cache';
+import { GoogleImageProvider } from '../../../src/providers/google/image';
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),
@@ -23,7 +23,7 @@ describe('GoogleImageProvider', () => {
     process.env.GOOGLE_API_KEY = 'test-api-key';
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     delete process.env.GEMINI_API_KEY;
-    
+
     // Set up default mock behaviors
     mockLoadCredentials.mockImplementation((creds) => creds);
     mockResolveProjectId.mockResolvedValue('test-project');
