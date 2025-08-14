@@ -4,6 +4,7 @@ import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ProviderTypeSelector from './ProviderTypeSelector';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 
 import type { ProviderOptions } from '../../types';
 
@@ -11,6 +12,12 @@ const renderWithTheme = (ui: React.ReactElement) => {
   const theme = createTheme({ palette: { mode: 'light' } });
   return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
 };
+
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: vi.fn().mockReturnValue({
+    recordEvent: vi.fn(),
+  }),
+}));
 
 describe('ProviderTypeSelector', () => {
   it('should update selectedProviderType and call setProvider with the correct provider configuration when a provider type card is selected', () => {
@@ -228,7 +235,6 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
-
   it('should show collapsed view when provider is selected and expand when Change button is clicked', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
@@ -447,5 +453,248 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+  });
+  it('should call setProvider with the correct configuration when an agentic framework is selected', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'http',
+      label: 'My Test Provider',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="http"
+      />,
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    const langchainProviderCard = screen
+      .getByText('LangChain')
+      .closest('div[class*="MuiPaper-root"]');
+    expect(langchainProviderCard).toBeInTheDocument();
+
+    if (langchainProviderCard) {
+      fireEvent.click(langchainProviderCard);
+    }
+
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      {
+        id: 'file:///path/to/langchain_agent.py',
+        config: {},
+        label: 'My Test Provider',
+      },
+      'langchain',
+    );
+
+    expect(screen.getByText('LangChain')).toBeVisible();
+    expect(
+      screen.getByText('Framework for developing applications powered by language models'),
+    ).toBeVisible();
+  });
+
+  it('should filter provider options to show only agentic frameworks when the Agents category chip is selected', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+    );
+
+    const agentsChip = screen.getByRole('button', { name: 'Agents' });
+    fireEvent.click(agentsChip);
+
+    expect(screen.getByText('LangChain')).toBeVisible();
+    expect(screen.getByText('AutoGen')).toBeVisible();
+    expect(screen.getByText('CrewAI')).toBeVisible();
+    expect(screen.getByText('LlamaIndex')).toBeVisible();
+    expect(screen.getByText('LangGraph')).toBeVisible();
+    expect(screen.getByText('OpenAI Agents SDK')).toBeVisible();
+    expect(screen.getByText('PydanticAI')).toBeVisible();
+    expect(screen.getByText('Google ADK')).toBeVisible();
+    expect(screen.getByText('Other Agent')).toBeVisible();
+
+    expect(screen.queryByText('AI/ML API')).toBeNull();
+    expect(screen.queryByText('AI21 Labs')).toBeNull();
+    expect(screen.queryByText('Amazon SageMaker')).toBeNull();
+  });
+
+  it('should call recordEvent with the correct parameters when a category chip is selected or a provider type is selected', () => {
+    const mockSetProvider = vi.fn();
+    const mockRecordEvent = vi.fn();
+
+    (useTelemetry as any).mockReturnValue({
+      recordEvent: mockRecordEvent,
+    });
+
+    const initialProvider: ProviderOptions = {
+      id: '',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
+    );
+
+    const agentsCategoryChip = screen.getByRole('button', { name: 'Agents' });
+    fireEvent.click(agentsCategoryChip);
+
+    expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+      feature: 'redteam_provider_category_filtered',
+      category: 'agents',
+    });
+
+    const langchainProviderCard = screen
+      .getByText('LangChain')
+      .closest('div[class*="MuiPaper-root"]');
+    if (langchainProviderCard) {
+      fireEvent.click(langchainProviderCard);
+    }
+
+    expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+      feature: 'redteam_provider_type_selected',
+      provider_type: 'langchain',
+      provider_label: 'LangChain',
+      provider_category: 'agents',
+    });
+  });
+
+  it('should call recordEvent with the correct parameters when the Change button is clicked', () => {
+    const mockSetProvider = vi.fn();
+    const mockRecordEvent = vi.fn();
+
+    (useTelemetry as any).mockReturnValue({ recordEvent: mockRecordEvent });
+
+    const initialProvider: ProviderOptions = {
+      id: 'http',
+      label: 'My Test Provider',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="http"
+      />,
+    );
+
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
+    expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
+      feature: 'redteam_provider_selection_changed',
+      previous_provider_type: 'http',
+    });
+  });
+
+  it('should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'http',
+      label: 'My Test Provider',
+      config: {},
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="http"
+      />,
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    const langchainProviderCard = screen
+      .getByText('LangChain')
+      .closest('div[class*="MuiPaper-root"]');
+    expect(langchainProviderCard).toBeInTheDocument();
+
+    if (langchainProviderCard) {
+      fireEvent.click(langchainProviderCard);
+    }
+
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      {
+        id: 'file:///path/to/langchain_agent.py',
+        config: {},
+        label: 'My Test Provider',
+      },
+      'langchain',
+    );
+
+    expect(screen.getByText('LangChain')).toBeVisible();
+    expect(
+      screen.getByText('Framework for developing applications powered by language models'),
+    ).toBeVisible();
+  });
+
+  it('should correctly transform provider configuration when switching from a non-agent provider to an agent provider, preserving the provider label', () => {
+    const mockSetProvider = vi.fn();
+    const initialProvider: ProviderOptions = {
+      id: 'http',
+      label: 'My HTTP Provider',
+      config: {
+        url: '',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: '{{prompt}}',
+        }),
+      },
+    };
+
+    renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="http"
+      />,
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+
+    const changeButton = screen.getByRole('button', { name: 'Change' });
+    fireEvent.click(changeButton);
+
+    const langchainProviderCard = screen
+      .getByText('LangChain')
+      .closest('div[class*="MuiPaper-root"]');
+    expect(langchainProviderCard).toBeInTheDocument();
+
+    if (langchainProviderCard) {
+      fireEvent.click(langchainProviderCard);
+    }
+
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      {
+        id: 'file:///path/to/langchain_agent.py',
+        config: {},
+        label: 'My HTTP Provider',
+      },
+      'langchain',
+    );
+
+    expect(screen.getByText('LangChain')).toBeVisible();
+    expect(
+      screen.getByText('Framework for developing applications powered by language models'),
+    ).toBeVisible();
   });
 });
