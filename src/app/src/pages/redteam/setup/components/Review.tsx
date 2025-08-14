@@ -16,6 +16,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import { Grid2 } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -29,7 +30,6 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -106,6 +106,74 @@ export default function Review({
   const hasTestVariables =
     config.defaultTest?.vars && Object.keys(config.defaultTest.vars).length > 0;
   const [isAdvancedConfigExpanded, setIsAdvancedConfigExpanded] = useState(hasTestVariables);
+
+  // Parse purpose text into sections
+  const parsedPurposeSections = useMemo(() => {
+    if (!config.purpose) {
+      return [];
+    }
+
+    const sections: { title: string; content: string }[] = [];
+    const lines = config.purpose.split('\n');
+    let currentSection: { title: string; content: string } | null = null;
+    let inCodeBlock = false;
+    let contentLines: string[] = [];
+
+    for (const line of lines) {
+      // Check if we're entering or exiting a code block
+      if (line === '```') {
+        inCodeBlock = !inCodeBlock;
+        continue;
+      }
+
+      // Check if this is a section header (ends with colon and not in code block)
+      if (!inCodeBlock && line.endsWith(':') && !line.startsWith(' ') && !line.startsWith('\t')) {
+        // Save previous section if exists
+        if (currentSection) {
+          currentSection.content = contentLines.join('\n').trim();
+          if (currentSection.content) {
+            sections.push(currentSection);
+          }
+        }
+        // Start new section
+        currentSection = { title: line.slice(0, -1), content: '' };
+        contentLines = [];
+      } else if (currentSection) {
+        // Add to current section content
+        contentLines.push(line);
+      }
+    }
+
+    // Save last section
+    if (currentSection) {
+      currentSection.content = contentLines.join('\n').trim();
+      if (currentSection.content) {
+        sections.push(currentSection);
+      }
+    }
+
+    // If no sections were found, treat the entire text as a single section
+    if (sections.length === 0 && config.purpose.trim()) {
+      sections.push({ title: 'Application Details', content: config.purpose.trim() });
+    }
+
+    return sections;
+  }, [config.purpose]);
+
+  // State to track which purpose sections are expanded (auto-expand first section)
+  const [expandedPurposeSections, setExpandedPurposeSections] = useState<Set<string>>(new Set());
+
+  const togglePurposeSection = (sectionTitle: string) => {
+    setExpandedPurposeSections((prev: Set<string>) => {
+      const newSet = new Set(prev);
+      if (newSet.has(sectionTitle)) {
+        newSet.delete(sectionTitle);
+      } else {
+        newSet.add(sectionTitle);
+      }
+      return newSet;
+    });
+  };
 
   const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     updateConfig('description', event.target.value);
@@ -407,8 +475,8 @@ export default function Review({
           Configuration Summary
         </Typography>
 
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+        <Grid2 container spacing={3}>
+          <Grid2 size={6}>
             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Plugins ({pluginSummary.length})
@@ -447,9 +515,9 @@ export default function Review({
                 </>
               )}
             </Paper>
-          </Grid>
+          </Grid2>
 
-          <Grid item xs={12} md={6}>
+          <Grid2 size={6}>
             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Strategies ({strategySummary.length})
@@ -490,10 +558,10 @@ export default function Review({
                 </>
               )}
             </Paper>
-          </Grid>
+          </Grid2>
 
           {customPolicies.length > 0 && (
-            <Grid item xs={12} md={6}>
+            <Grid2 size={6}>
               <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
                   Custom Policies ({customPolicies.length})
@@ -548,11 +616,11 @@ export default function Review({
                   ))}
                 </Stack>
               </Paper>
-            </Grid>
+            </Grid2>
           )}
 
           {intents.length > 0 && (
-            <Grid item xs={12} md={6}>
+            <Grid2 size={6}>
               <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
                   Intents ({intents.length})
@@ -625,17 +693,56 @@ export default function Review({
                   )}
                 </Stack>
               </Paper>
-            </Grid>
+            </Grid2>
           )}
 
-          <Grid item xs={12}>
+          <Grid2 size={12}>
             <Paper elevation={2} sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Additional Details
               </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={12}>
-                  <Typography variant="subtitle2">Purpose</Typography>
+              <Grid2 container spacing={2}>
+                <Grid2 size={12}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      mb: 1,
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="subtitle2">Application Details</Typography>
+                      {parsedPurposeSections.length > 0 && (
+                        <Chip
+                          label={`${parsedPurposeSections.length} section${parsedPurposeSections.length !== 1 ? 's' : ''}`}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 20, fontSize: '0.75rem' }}
+                        />
+                      )}
+                    </Box>
+                    {parsedPurposeSections.length > 1 && (
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          if (expandedPurposeSections.size === parsedPurposeSections.length) {
+                            setExpandedPurposeSections(new Set());
+                          } else {
+                            setExpandedPurposeSections(
+                              new Set(parsedPurposeSections.map((s) => s.title)),
+                            );
+                          }
+                        }}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        {expandedPurposeSections.size === parsedPurposeSections.length
+                          ? 'Collapse All'
+                          : 'Expand All'}
+                      </Button>
+                    )}
+                  </Box>
+
                   {(!config.purpose?.trim() || config.purpose.length < 100) &&
                   !isFoundationModelProvider(config.target.id) ? (
                     <Box sx={{ mb: 2 }}>
@@ -656,43 +763,107 @@ export default function Review({
                       </Button>
                     </Box>
                   ) : null}
-                  <Typography
-                    variant="body2"
-                    onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                    sx={{
-                      whiteSpace: 'pre-wrap',
-                      padding: 1,
-                      borderRadius: 1,
-                      backgroundColor: 'background.paper',
-                      cursor: 'pointer',
-                      display: '-webkit-box',
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
-                      '&:hover': {
-                        backgroundColor: 'action.hover',
-                      },
-                    }}
-                  >
-                    {config.purpose || 'Not specified'}
-                  </Typography>
-                  {config.purpose && config.purpose.split('\n').length > 6 && (
+
+                  {parsedPurposeSections.length > 0 ? (
+                    <Stack spacing={2} sx={{ mt: 1 }}>
+                      {parsedPurposeSections.map((section, index) => (
+                        <Box
+                          key={index}
+                          sx={{
+                            border: `1px solid ${theme.palette.divider}`,
+                            borderRadius: 1,
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <Box
+                            onClick={() => togglePurposeSection(section.title)}
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              p: 1.5,
+                              backgroundColor: theme.palette.action.hover,
+                              cursor: 'pointer',
+                              '&:hover': {
+                                backgroundColor: theme.palette.action.selected,
+                              },
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="body2" fontWeight="medium">
+                                {section.title}
+                              </Typography>
+                            </Box>
+                            <ExpandMoreIcon
+                              sx={{
+                                transform: expandedPurposeSections.has(section.title)
+                                  ? 'rotate(180deg)'
+                                  : 'rotate(0deg)',
+                                transition: 'transform 0.2s',
+                              }}
+                            />
+                          </Box>
+                          {expandedPurposeSections.has(section.title) && (
+                            <Box sx={{ p: 2, backgroundColor: 'background.paper' }}>
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  whiteSpace: 'pre-wrap',
+                                  color: 'text.secondary',
+                                }}
+                              >
+                                {section.content}
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      ))}
+                    </Stack>
+                  ) : config.purpose ? (
                     <Typography
-                      variant="caption"
-                      sx={{
-                        color: 'primary.main',
-                        cursor: 'pointer',
-                        mt: 0.5,
-                        display: 'block',
-                      }}
+                      variant="body2"
                       onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                      sx={{
+                        whiteSpace: 'pre-wrap',
+                        padding: 1,
+                        borderRadius: 1,
+                        backgroundColor: 'background.paper',
+                        cursor: 'pointer',
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
+                        '&:hover': {
+                          backgroundColor: 'action.hover',
+                        },
+                      }}
                     >
-                      {isPurposeExpanded ? 'Show less' : 'Show more'}
+                      {config.purpose}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      Not specified
                     </Typography>
                   )}
-                </Grid>
+                  {config.purpose &&
+                    parsedPurposeSections.length === 0 &&
+                    config.purpose.split('\n').length > 6 && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'primary.main',
+                          cursor: 'pointer',
+                          mt: 0.5,
+                          display: 'block',
+                        }}
+                        onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                      >
+                        {isPurposeExpanded ? 'Show less' : 'Show more'}
+                      </Typography>
+                    )}
+                </Grid2>
                 {config.testGenerationInstructions && (
-                  <Grid item xs={12} sm={12}>
+                  <Grid2 size={12}>
                     <Typography variant="subtitle2">Test Generation Instructions</Typography>
                     <Typography
                       variant="body2"
@@ -729,12 +900,12 @@ export default function Review({
                           {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
                         </Typography>
                       )}
-                  </Grid>
+                  </Grid2>
                 )}
-              </Grid>
+              </Grid2>
             </Paper>
-          </Grid>
-        </Grid>
+          </Grid2>
+        </Grid2>
 
         <Divider sx={{ my: 4 }} />
 
@@ -747,6 +918,7 @@ export default function Review({
             mb: 4,
             '&:before': { display: 'none' },
             boxShadow: theme.shadows[1],
+            borderRadius: 1,
           }}
         >
           <AccordionSummary

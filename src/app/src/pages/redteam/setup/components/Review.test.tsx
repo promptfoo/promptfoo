@@ -209,4 +209,130 @@ describe('Review Component', () => {
 
     expect(defaultTestVariables.closest('paper')).toBeNull();
   });
+
+  it('should display an Expand All button when multiple parsedPurposeSections exist, and clicking it should expand/collapse all sections', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: 'Section1:\nContent1\nSection2:\nContent2',
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    const expandAllButton = screen.getByText('Expand All');
+    expect(expandAllButton).toBeInTheDocument();
+
+    fireEvent.click(expandAllButton);
+
+    const collapseAllButton = screen.getByText('Collapse All');
+    expect(collapseAllButton).toBeInTheDocument();
+
+    expect(screen.getByText('Content1')).toBeVisible();
+    expect(screen.getByText('Content2')).toBeVisible();
+
+    fireEvent.click(collapseAllButton);
+
+    expect(screen.queryByText('Content1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Content2')).not.toBeInTheDocument();
+
+    const expandAllButtonAgain = screen.getByText('Expand All');
+    expect(expandAllButtonAgain).toBeInTheDocument();
+  });
+
+  it('should correctly toggle purpose section expansion on multiple clicks', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: `Section 1:
+Content 1
+
+Section 2:
+Content 2`,
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    const sectionHeaders = await screen.findAllByText(/Section 1/);
+    const firstSectionHeader = sectionHeaders[0];
+
+    fireEvent.click(firstSectionHeader);
+    const sectionContent = await screen.findByText('Content 1');
+    expect(sectionContent).toBeVisible();
+
+    fireEvent.click(firstSectionHeader);
+    expect(sectionContent).not.toBeVisible();
+  });
+
+  it('should not treat indented lines ending with colons as section headers', () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: `
+Application Details:
+  This is a test application.
+  It has some indented lines:
+    - line 1:
+    - line 2:
+`,
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    const sectionTitles = screen.getAllByRole('heading', { name: 'Application Details' });
+    expect(sectionTitles.length).toBe(1);
+  });
+
+  it('handles extremely long section headers and content without breaking layout', () => {
+    const longHeader = 'This is an extremely long section header that should wrap appropriately:';
+    const longContent =
+      'This is an extremely long section content that should wrap appropriately. '.repeat(50);
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: `${longHeader}\n${longContent}`,
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    const sectionHeaderElement = screen.getByText(longHeader.slice(0, -1));
+    fireEvent.click(sectionHeaderElement);
+
+    expect(
+      screen.getByText((content) => {
+        return content.includes(longContent.substring(0, 50));
+      }),
+    ).toBeInTheDocument();
+  });
 });

@@ -50,6 +50,8 @@ import type { RedteamStrategy } from '@promptfoo/types';
 import type { Config, RedteamUITarget } from './types';
 import './page.css';
 
+export const SIDEBAR_WIDTH = 240;
+
 const StyledTabs = styled(Tabs)(({ theme }) => ({
   '& .MuiTabs-indicator': {
     left: 0,
@@ -157,8 +159,8 @@ const OuterSidebarContainer = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   height: '100%',
-  width: '280px',
-  minWidth: '280px',
+  width: SIDEBAR_WIDTH,
+  minWidth: SIDEBAR_WIDTH,
   borderRight: `1px solid ${theme.palette.divider}`,
 }));
 
@@ -224,8 +226,8 @@ const StatusSection = styled(Box)(({ theme }) => ({
   borderBottom: `1px solid ${theme.palette.divider}`,
   borderRight: `1px solid ${theme.palette.divider}`,
   backgroundColor: theme.palette.background.paper,
-  width: '280px',
-  minWidth: '280px',
+  width: SIDEBAR_WIDTH,
+  minWidth: SIDEBAR_WIDTH,
   '& .configName': {
     fontSize: '1rem',
     fontWeight: 500,
