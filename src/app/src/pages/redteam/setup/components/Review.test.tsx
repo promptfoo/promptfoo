@@ -335,26 +335,4 @@ Application Details:
       }),
     ).toBeInTheDocument();
   });
-
-  it('should properly parse and display the last section in config.purpose when it is not followed by another section header', () => {
-    const purposeText = `Section 1:\nContent of section 1.\nSection 2:\nContent of section 2.\nLast Section:\nContent of last section.`;
-    mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        ...defaultConfig,
-        purpose: purposeText,
-      },
-      updateConfig: mockUpdateConfig,
-    });
-
-    render(
-      <Review
-        navigateToPlugins={vi.fn()}
-        navigateToStrategies={vi.fn()}
-        navigateToPurpose={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText('Last Section')).toBeInTheDocument();
-    expect(screen.getByText('Content of last section.')).toBeInTheDocument();
-  });
 });

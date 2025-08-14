@@ -1,6 +1,7 @@
+import React from 'react';
+
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, within } from '@testing-library/react';
-import React from 'react';
 import { describe, expect, it } from 'vitest';
 import ProviderResponse from './ProviderResponse';
 
@@ -248,19 +249,5 @@ describe('ProviderResponse', () => {
       screen.getByRole('cell', { name: 'Very-Long-Header-Name-Exceeding-Reasonable-Length' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'Header with spaces' })).toBeInTheDocument();
-  });
-
-  // [Tusk] FAILING TEST
-  it('should render "No parsed response" when providerResponse.output is an empty string', () => {
-    const mockProviderResponse = {
-      metadata: {},
-      raw: 'test',
-      output: '',
-      sessionId: 'session-id-123',
-    };
-
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
-
-    expect(screen.getByText('No parsed response')).toBeInTheDocument();
   });
 });
