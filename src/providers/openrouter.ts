@@ -72,8 +72,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
 
     // Make the API call directly
-    logger.debug(`Calling OpenRouter API for Gemini model: ${JSON.stringify(body)}`);
-
+    logger.debug(`Calling OpenRouter API: model=${this.modelName}`);
     let data, status, statusText;
     let cached = false;
 
