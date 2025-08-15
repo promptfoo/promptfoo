@@ -26,6 +26,7 @@ authors: [michael]
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
+import SafetySecurityQuiz from './ai-safety-vs-security/components/SafetySecurityQuiz';
 
 Teams keep mixing up AI safety and AI security in LLM apps. Safety protects people from harmful model outputs. Security protects the model, data, and surrounding systems from adversaries. You need both.
 
@@ -666,6 +667,14 @@ As of August 2025, here's what's actually working:
 Want to automate this testing? [Promptfoo's red teaming tools](/docs/red-team) handle both safety and security testing out of the box, aligned with [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/), [NIST AI RMF](https://www.nist.gov/itl/ai-risk-management-framework), and [MITRE ATLAS](https://atlas.mitre.org/) guidelines.
 
 Now go forth and build AIs that are both safe AND secure. Your lawyers will thank you.
+
+---
+
+## Test Your Understanding 🧠
+
+Think you've mastered the difference between AI safety and security? Take our interactive quiz to test your knowledge! The questions start easy and get progressively harder, testing your ability to apply these concepts to real-world scenarios.
+
+<SafetySecurityQuiz />
 
 ---
 
