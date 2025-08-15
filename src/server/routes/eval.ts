@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { Router } from 'express';
+import { Router, json } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
@@ -24,11 +24,31 @@ import type {
 
 export const evalRouter = Router();
 
+// Ensure body parsing for this router (helps with Docker environments)
+evalRouter.use(json({ limit: '100mb' }));
+
 // Running jobs
 export const evalJobs = new Map<string, Job>();
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
-  const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
+  if (!req.body) {
+    logger.error('Request body is undefined in /api/eval/job endpoint', {
+      headers: req.headers,
+      contentType: req.get('content-type'),
+      method: req.method,
+      url: req.url,
+    });
+    res.status(400).json({
+      error:
+        'Request body is missing. Please ensure Content-Type header is set to application/json',
+    });
+    return;
+  }
+
+  // Ensure evaluateOptions exists with defaults if not provided
+  const body = req.body as EvaluateTestSuiteWithEvaluateOptions;
+  const evaluateOptions = body.evaluateOptions || { maxConcurrency: 4, repeat: 1 };
+  const { evaluateOptions: _, ...testSuite } = body;
   const id = uuidv4();
   evalJobs.set(id, {
     evalId: null,
