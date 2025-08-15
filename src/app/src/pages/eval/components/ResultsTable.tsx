@@ -567,7 +567,7 @@ function ResultsTable({
                   | undefined;
                 const isMediaFile = fileMetadata && fileMetadata[varName];
 
-                if (isMediaFile) {
+                if (isMediaFile && typeof value === 'string') {
                   // Handle various media types
                   const mediaMetadata = fileMetadata[varName];
                   const mediaType = mediaMetadata.type;
