@@ -1,6 +1,7 @@
 import React from 'react';
 
 import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
 import RiskCard from './RiskCard';
 import type { TopLevelCategory } from '@promptfoo/redteam/constants';
@@ -28,6 +29,9 @@ const RiskCategories: React.FC<{
 
   return (
     <Stack spacing={4}>
+      <Typography variant="h5" id="table">
+        Risk Categories
+      </Typography>
       {categories.map((category, index) => {
         const categoryName = category.name as TopLevelCategory;
         const subCategories = riskCategories[categoryName];

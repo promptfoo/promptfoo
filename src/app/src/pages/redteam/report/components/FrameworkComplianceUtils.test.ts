@@ -267,6 +267,24 @@ describe('getPluginDisplayName', () => {
 });
 
 describe('getSeverityColor', () => {
+  const mockTheme = {
+    palette: {
+      error: {
+        main: '#d32f2f',
+      },
+      warning: {
+        main: '#f57c00',
+        light: '#fbc02d',
+      },
+      success: {
+        main: '#7cb342',
+      },
+      grey: {
+        500: '#757575',
+      },
+    },
+  } as any;
+
   it.each([
     { severity: Severity.Critical, expectedColor: '#d32f2f' },
     { severity: Severity.High, expectedColor: '#f57c00' },
@@ -279,7 +297,7 @@ describe('getSeverityColor', () => {
   ])(
     'should return $expectedColor when given $severity as input',
     ({ severity, expectedColor }) => {
-      const result = getSeverityColor(severity);
+      const result = getSeverityColor(severity, mockTheme);
 
       expect(result).toBe(expectedColor);
     },
