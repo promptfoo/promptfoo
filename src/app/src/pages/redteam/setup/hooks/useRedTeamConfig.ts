@@ -314,8 +314,6 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
       },
       resetConfig: () => {
         set({ config: defaultConfig, providerType: undefined });
-        // There's a bunch of state that's not persisted that we want to reset
-        window.location.href = '/redteam/setup';
       },
       updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) =>
         set((state) => {
