@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { fromError } from 'zod-validation-error';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';

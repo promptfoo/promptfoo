@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
 import type { TestSuite } from '../../../types';
 import { createToolResponse } from '../lib/utils';
@@ -30,11 +30,10 @@ export function registerGenerateDatasetTool(server: McpServer) {
         ),
 
       numSamples: z
-        .number()
         .int()
         .min(1)
         .max(100)
-        .default(10)
+        .prefault(10)
         .describe('Number of test samples to generate (1-100)'),
 
       provider: z

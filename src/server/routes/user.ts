@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { fromError } from 'zod-validation-error';
 import { getEnvBool } from '../../envars';
 import {

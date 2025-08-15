@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { AbstractTool } from '../../../../src/commands/mcp/lib/baseTool';
 import { ValidationError } from '../../../../src/commands/mcp/lib/errors';
 import type { ToolResult } from '../../../../src/commands/mcp/lib/types';

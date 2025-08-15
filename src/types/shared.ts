@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // for reasoning models
 export const CompletionTokenDetailsSchema = z.object({

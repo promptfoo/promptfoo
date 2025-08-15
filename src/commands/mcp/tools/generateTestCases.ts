@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
 import type { TestSuite } from '../../../types';
 import { createToolResponse } from '../lib/utils';
@@ -31,11 +31,10 @@ export function registerGenerateTestCasesTool(server: McpServer) {
         ),
 
       numTestCases: z
-        .number()
         .int()
         .min(1)
         .max(50)
-        .default(5)
+        .prefault(5)
         .describe('Number of test cases to generate (1-50)'),
 
       assertionTypes: z

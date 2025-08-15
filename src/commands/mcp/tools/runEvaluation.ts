@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import logger from '../../../logger';
 import type { CommandLineOptions, EvaluateOptions } from '../../../types';
 import { loadDefaultConfig } from '../../../util/config/default';
@@ -100,9 +100,9 @@ export function registerRunEvaluationTool(server: McpServer) {
         .optional()
         .describe('Number of times to repeat the evaluation (1-10)'),
       delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
-      cache: z.boolean().optional().default(true).describe('Enable caching of results'),
-      write: z.boolean().optional().default(false).describe('Write results to database'),
-      share: z.boolean().optional().default(false).describe('Create shareable URL for results'),
+      cache: z.boolean().optional().prefault(true).describe('Enable caching of results'),
+      write: z.boolean().optional().prefault(false).describe('Write results to database'),
+      share: z.boolean().optional().prefault(false).describe('Create shareable URL for results'),
     },
     async (args) => {
       try {

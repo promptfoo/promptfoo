@@ -1,12 +1,12 @@
 import confirm from '@inquirer/confirm';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import type { Command } from 'commander';
 
-const EmailSchema = z.string().email();
+const EmailSchema = z.email();
 
 export function configCommand(program: Command) {
   const configCommand = program.command('config').description('Edit configuration settings');
