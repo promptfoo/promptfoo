@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './SafetySecurityQuiz.module.css';
 
@@ -205,12 +205,16 @@ export default function SafetySecurityQuiz() {
   };
 
   const handleAnswerSelect = (answerIndex: number) => {
-    if (showExplanation) return;
+    if (showExplanation) {
+      return;
+    }
     setSelectedAnswer(answerIndex);
   };
 
   const handleSubmit = () => {
-    if (selectedAnswer === null) return;
+    if (selectedAnswer === null) {
+      return;
+    }
 
     const isCorrect = selectedAnswer === questions[currentQuestion].correctAnswer;
     if (isCorrect && answers[currentQuestion] === null) {
@@ -258,9 +262,15 @@ export default function SafetySecurityQuiz() {
 
   const getScoreMessage = () => {
     const percentage = (score / questions.length) * 100;
-    if (percentage >= 90) return 'Excellent! You have a strong grasp of AI Safety vs Security.';
-    if (percentage >= 70) return 'Good job! You understand the key differences well.';
-    if (percentage >= 50) return 'Not bad! Review the article to strengthen your understanding.';
+    if (percentage >= 90) {
+      return 'Excellent! You have a strong grasp of AI Safety vs Security.';
+    }
+    if (percentage >= 70) {
+      return 'Good job! You understand the key differences well.';
+    }
+    if (percentage >= 50) {
+      return 'Not bad! Review the article to strengthen your understanding.';
+    }
     return 'Keep learning! Re-read the article and try again.';
   };
 
