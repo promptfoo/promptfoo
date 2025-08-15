@@ -55,7 +55,7 @@ describe('OpenRouter', () => {
       });
     });
 
-    describe('Gemini thinking tokens handling', () => {
+    describe('Thinking tokens handling', () => {
       beforeEach(() => {
         process.env.OPENROUTER_API_KEY = 'test-key';
       });
@@ -64,7 +64,7 @@ describe('OpenRouter', () => {
         delete process.env.OPENROUTER_API_KEY;
       });
 
-      it('should handle Gemini reasoning field correctly when both reasoning and content are present', async () => {
+      it('should handle reasoning field correctly when both reasoning and content are present', async () => {
         const mockResponse = {
           choices: [
             {
@@ -94,7 +94,7 @@ describe('OpenRouter', () => {
         expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
       });
 
-      it('should hide Gemini reasoning when showThinking is false', async () => {
+      it('should hide reasoning when showThinking is false', async () => {
         const providerWithoutThinking = new OpenRouterProvider('google/gemini-2.5-pro', {
           config: { showThinking: false },
         });
@@ -158,8 +158,39 @@ describe('OpenRouter', () => {
         expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
       });
 
-      it('should handle non-Gemini models without reasoning field', async () => {
+      it('should handle models with reasoning field', async () => {
         const nonGeminiProvider = new OpenRouterProvider('anthropic/claude-3.5-sonnet', {});
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: 'Regular response with reasoning',
+                reasoning: 'Thinking about the best way to respond to this query',
+              },
+            },
+          ],
+          usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await nonGeminiProvider.callApi('Test prompt');
+
+        // All models now handle reasoning field when present
+        const expectedOutput =
+          'Thinking: Thinking about the best way to respond to this query\n\nRegular response with reasoning';
+        expect(result.output).toBe(expectedOutput);
+        expect(result.tokenUsage).toEqual({ total: 30, prompt: 10, completion: 20 });
+      });
+
+      it('should handle models without reasoning field', async () => {
+        const provider = new OpenRouterProvider('anthropic/claude-3.5-sonnet', {});
 
         const mockResponse = {
           choices: [
@@ -179,7 +210,7 @@ describe('OpenRouter', () => {
         });
         mockedFetchWithRetries.mockResolvedValueOnce(response);
 
-        const result = await nonGeminiProvider.callApi('Test prompt');
+        const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('Regular response without reasoning');
         expect(result.tokenUsage).toEqual({ total: 30, prompt: 10, completion: 20 });
