@@ -290,6 +290,12 @@ export const providerMap: ProviderFactory[] = [
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
+      // Handle AgentCore
+      if (modelType === 'agentcore' || modelType === 'agent-core') {
+        const { AwsBedrockAgentCoreProvider } = await import('./bedrock/agentcore');
+        return new AwsBedrockAgentCoreProvider(modelName, providerOptions);
+      }
+
       if (modelType === 'completion') {
         // Backwards compatibility: `completion` used to be required
         return new AwsBedrockCompletionProvider(modelName, providerOptions);

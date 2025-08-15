@@ -696,6 +696,22 @@ This approach allows you to:
 
 See the [Knowledge Base contextTransform example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for complete configuration examples.
 
+## AgentCore
+
+AWS Bedrock AgentCore provides a managed service for deploying and operating AI agents at scale. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock AgentCore Provider](./bedrock-agentcore.md) documentation.
+
+Quick example:
+
+```yaml
+providers:
+  - bedrock:agentcore:YOUR_AGENT_ID
+    config:
+      enableTrace: true
+      memoryConfig:
+        type: short-term
+        enabled: true
+```
+
 ## See Also
 
 - [Amazon SageMaker Provider](./sagemaker.md) - For custom-deployed or fine-tuned models on AWS
