@@ -1,3 +1,4 @@
+// biome-ignore lint/correctness/noUnusedImports: React is needed for JSX
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './SafetySecurityQuiz.module.css';
