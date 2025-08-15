@@ -92,7 +92,7 @@ Enable agent memory for context-aware responses:
 
 ```yaml
 config:
-  memoryId: LONG_TERM_MEMORY # Persistent memory across sessions
+  memoryId: LONG_TERM_MEMORY # or SHORT_TERM_MEMORY
 ```
 
 ### Trace Information

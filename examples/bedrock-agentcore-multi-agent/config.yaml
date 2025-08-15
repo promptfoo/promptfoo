@@ -49,27 +49,27 @@ providers:
 prompts:
   - id: technical-issue
     content: |
-      My application keeps crashing when I try to upload files larger than 10MB. 
+      My application keeps crashing when I try to upload files larger than 10MB.
       Error code: UPLOAD_SIZE_EXCEEDED. How can I fix this?
 
   - id: billing-question
     content: |
-      I was charged twice for my subscription last month. 
+      I was charged twice for my subscription last month.
       Can you help me get a refund for the duplicate charge?
 
   - id: product-recommendation
     content: |
-      I need a solution for real-time data processing that can handle 
+      I need a solution for real-time data processing that can handle
       100,000 events per second. What product do you recommend?
 
   - id: complex-issue
     content: |
-      I upgraded my plan but I'm still seeing the old limits. 
+      I upgraded my plan but I'm still seeing the old limits.
       Also, the API is returning 403 errors even though my payment went through.
 
   - id: escalation-needed
     content: |
-      This is the third time I'm contacting support about the same issue. 
+      This is the third time I'm contacting support about the same issue.
       I need to speak with a manager about getting a full refund and account closure.
 
 tests:
@@ -88,7 +88,7 @@ tests:
       - type: javascript
         value: |
           // Check if technical solution is provided
-          output.toLowerCase().includes('limit') || 
+          output.toLowerCase().includes('limit') ||
           output.toLowerCase().includes('configuration') ||
           output.toLowerCase().includes('setting')
 
@@ -107,7 +107,7 @@ tests:
       - type: javascript
         value: |
           // Check for customer service tone
-          output.toLowerCase().includes('sorry') || 
+          output.toLowerCase().includes('sorry') ||
           output.toLowerCase().includes('apologize') ||
           output.toLowerCase().includes('help')
 
@@ -128,7 +128,7 @@ tests:
       - type: javascript
         value: |
           // Check if throughput requirements are acknowledged
-          output.includes('100,000') || 
+          output.includes('100,000') ||
           output.toLowerCase().includes('high throughput') ||
           output.toLowerCase().includes('scale')
 
@@ -209,14 +209,14 @@ tests:
           // Check if agent used comparison tools
           if (metadata && metadata.trace && metadata.trace.toolCalls) {
             const toolsUsed = metadata.trace.toolCalls.map(t => t.name);
-            return toolsUsed.some(tool => 
-              tool.includes('compare') || 
+            return toolsUsed.some(tool =>
+              tool.includes('compare') ||
               tool.includes('pricing') ||
               tool.includes('plan')
             );
           }
           // Pass if no trace available but response is relevant
-          return output.toLowerCase().includes('enterprise') && 
+          return output.toLowerCase().includes('enterprise') &&
                  output.toLowerCase().includes('pro');
 
 # Performance and Quality Metrics
@@ -242,3 +242,4 @@ defaultTest:
 options:
   cache: false # Disable caching for accurate latency measurements
   maxConcurrency: 2 # Limit concurrent agent calls to avoid rate limits
+

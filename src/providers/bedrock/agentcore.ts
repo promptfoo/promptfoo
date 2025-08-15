@@ -27,11 +27,11 @@ interface BedrockAgentCoreOptions {
   sessionToken?: string;
   profile?: string;
   region?: string;
-  
+
   // Required Agent Configuration
   agentId: string;
   agentAliasId: string;
-  
+
   // Session Management
   sessionId?: string;
   sessionState?: {
@@ -53,14 +53,14 @@ interface BedrockAgentCoreOptions {
     }>;
     invocationId?: string;
   };
-  
+
   // Memory Configuration
   memoryId?: string;
-  
+
   // Execution Configuration
   enableTrace?: boolean;
   endSession?: boolean;
-  
+
   // Inference Configuration
   inferenceConfig?: {
     temperature?: number;
@@ -69,17 +69,21 @@ interface BedrockAgentCoreOptions {
     maximumLength?: number;
     stopSequences?: string[];
   };
-  
+
   // Guardrails
   guardrailConfiguration?: {
     guardrailId: string;
     guardrailVersion: string;
   };
-  
+
   // Prompt Override
   promptOverrideConfiguration?: {
     promptConfigurations: Array<{
-      promptType: 'PRE_PROCESSING' | 'ORCHESTRATION' | 'POST_PROCESSING' | 'KNOWLEDGE_BASE_RESPONSE_GENERATION';
+      promptType:
+        | 'PRE_PROCESSING'
+        | 'ORCHESTRATION'
+        | 'POST_PROCESSING'
+        | 'KNOWLEDGE_BASE_RESPONSE_GENERATION';
       promptCreationMode: 'DEFAULT' | 'OVERRIDDEN';
       promptState?: 'ENABLED' | 'DISABLED';
       basePromptTemplate?: string;
@@ -93,7 +97,7 @@ interface BedrockAgentCoreOptions {
       parserMode?: 'DEFAULT' | 'OVERRIDDEN';
     }>;
   };
-  
+
   // Knowledge Base Configuration
   knowledgeBaseConfigurations?: Array<{
     knowledgeBaseId: string;
@@ -105,7 +109,7 @@ interface BedrockAgentCoreOptions {
       };
     };
   }>;
-  
+
   // Action Group Configuration
   actionGroups?: Array<{
     actionGroupName: string;
@@ -122,7 +126,7 @@ interface BedrockAgentCoreOptions {
     };
     description?: string;
   }>;
-  
+
   // Content Filtering
   inputDataConfig?: {
     bypassLambdaParsing?: boolean;
@@ -139,7 +143,7 @@ interface BedrockAgentCoreOptions {
  * AWS Bedrock AgentCore provider for invoking deployed AI agents.
  * Supports all AgentCore features including memory, knowledge bases, action groups,
  * guardrails, and session management.
- * 
+ *
  * @example Basic usage
  * ```yaml
  * providers:
@@ -148,7 +152,7 @@ interface BedrockAgentCoreOptions {
  *       agentAliasId: PROD_ALIAS
  *       region: us-east-1
  * ```
- * 
+ *
  * @example With memory and session
  * ```yaml
  * providers:
@@ -159,7 +163,7 @@ interface BedrockAgentCoreOptions {
  *       memoryId: LONG_TERM_MEMORY
  *       enableTrace: true
  * ```
- * 
+ *
  * @example With guardrails and inference config
  * ```yaml
  * providers:
@@ -175,12 +179,9 @@ interface BedrockAgentCoreOptions {
  *         maximumLength: 2048
  * ```
  */
-export class AwsBedrockAgentCoreProvider
-  extends AwsBedrockGenericProvider
-  implements ApiProvider
-{
+export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private agentRuntimeClient?: BedrockAgentRuntimeClient;
-  config: BedrockAgentCoreOptions;  // Make public to match base class
+  config: BedrockAgentCoreOptions; // Make public to match base class
 
   constructor(
     agentId: string,
@@ -222,7 +223,7 @@ export class AwsBedrockAgentCoreProvider
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
     if (!this.agentRuntimeClient) {
       let handler;
-      
+
       // Configure proxy if needed
       if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')) {
         try {
@@ -276,7 +277,8 @@ export class AwsBedrockAgentCoreProvider
 
     // Handle returnControlInvocationResults if present
     if (this.config.sessionState.returnControlInvocationResults) {
-      sessionState.returnControlInvocationResults = this.config.sessionState.returnControlInvocationResults;
+      sessionState.returnControlInvocationResults =
+        this.config.sessionState.returnControlInvocationResults;
     }
 
     return sessionState;
@@ -292,7 +294,7 @@ export class AwsBedrockAgentCoreProvider
 
     // Build inference config according to AWS SDK types
     const inferenceConfig: any = {};
-    
+
     if (this.config.inferenceConfig.maximumLength !== undefined) {
       inferenceConfig.maximumLength = this.config.inferenceConfig.maximumLength;
     }
@@ -323,23 +325,23 @@ export class AwsBedrockAgentCoreProvider
   }> {
     let output = '';
     const traces: any[] = [];
-    
+
     if (response.completion) {
       const decoder = new TextDecoder();
-      
+
       try {
         for await (const event of response.completion) {
           // Process text chunks
           if (event.chunk?.bytes) {
             output += decoder.decode(event.chunk.bytes, { stream: true });
           }
-          
+
           // Collect trace information if enabled
           if (this.config.enableTrace && event.trace) {
             traces.push(event.trace);
           }
         }
-        
+
         // Final decode to flush any remaining bytes
         output += decoder.decode();
       } catch (error) {
@@ -347,7 +349,7 @@ export class AwsBedrockAgentCoreProvider
         throw error;
       }
     }
-    
+
     return {
       output,
       trace: traces.length > 0 ? traces : undefined,
@@ -369,7 +371,11 @@ export class AwsBedrockAgentCoreProvider
     const client = await this.getAgentRuntimeClient();
 
     // Generate session ID if not provided
-    const sessionId = this.config.sessionId || `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const sessionId =
+      this.config.sessionId ||
+      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? `session-${crypto.randomUUID()}`
+        : `session-${Date.now()}-${Math.random().toString(36).substring(7)}`);
 
     // Build the complete input with all supported features
     const input: InvokeAgentCommandInput = {
@@ -378,13 +384,13 @@ export class AwsBedrockAgentCoreProvider
       agentAliasId: this.config.agentAliasId,
       sessionId,
       inputText: prompt,
-      
+
       // Optional features
       enableTrace: this.config.enableTrace,
       endSession: this.config.endSession,
       sessionState: this.buildSessionState(),
       memoryId: this.config.memoryId,
-      
+
       // Advanced configurations - use 'as any' to bypass strict typing for preview features
       // The AWS SDK types may not be fully up to date with all AgentCore features
       ...(this.config.inferenceConfig && {
@@ -411,7 +417,7 @@ export class AwsBedrockAgentCoreProvider
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
     const cache = await getCache();
-    const cacheKey = `bedrock:agentcore:${this.config.agentId}:${JSON.stringify({ 
+    const cacheKey = `bedrock:agentcore:${this.config.agentId}:${JSON.stringify({
       prompt,
       inferenceConfig: this.config.inferenceConfig,
       knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
@@ -434,10 +440,10 @@ export class AwsBedrockAgentCoreProvider
       // Invoke the agent
       const { InvokeAgentCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
       const response = await client.send(new InvokeAgentCommand(input));
-      
+
       // Process the streaming response
       const { output, trace, sessionId: responseSessionId } = await this.processResponse(response);
-      
+
       // Build the result
       const result: ProviderResponse = {
         output,
@@ -445,12 +451,12 @@ export class AwsBedrockAgentCoreProvider
           ...(responseSessionId && { sessionId: responseSessionId }),
           ...(trace && { trace }),
           ...(this.config.memoryId && { memoryId: this.config.memoryId }),
-          ...(this.config.guardrailConfiguration && { 
+          ...(this.config.guardrailConfiguration && {
             guardrails: {
               applied: true,
               guardrailId: this.config.guardrailConfiguration.guardrailId,
               guardrailVersion: this.config.guardrailConfiguration.guardrailVersion,
-            }
+            },
           }),
         },
       };
@@ -467,7 +473,7 @@ export class AwsBedrockAgentCoreProvider
       return result;
     } catch (error: any) {
       logger.error(`AgentCore invocation failed: ${error}`);
-      
+
       // Provide helpful error messages
       if (error.name === 'ResourceNotFoundException') {
         return {
@@ -486,7 +492,7 @@ export class AwsBedrockAgentCoreProvider
           error: 'Rate limit exceeded. Please retry later.',
         };
       }
-      
+
       return {
         error: `Failed to invoke agent: ${error.message || String(error)}`,
       };

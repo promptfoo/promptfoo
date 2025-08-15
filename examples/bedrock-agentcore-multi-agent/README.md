@@ -13,7 +13,7 @@ A customer support system with specialized agents:
 
 ## 🏗️ Architecture
 
-```
+```text
 Customer Query
       ↓
 [Supervisor Agent] ← Monitors & Routes

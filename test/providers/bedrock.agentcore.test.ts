@@ -8,10 +8,12 @@ jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
 }));
 
 jest.mock('../../src/cache', () => ({
-  getCache: jest.fn(() => Promise.resolve({
-    get: jest.fn(() => Promise.resolve(null)),
-    set: jest.fn(),
-  })),
+  getCache: jest.fn(() =>
+    Promise.resolve({
+      get: jest.fn(() => Promise.resolve(null)),
+      set: jest.fn(),
+    }),
+  ),
   isCacheEnabled: jest.fn(() => false),
 }));
 

@@ -34,85 +34,85 @@ providers:
       # Required
       agentId: ABCDEFGHIJ
       agentAliasId: PROD_ALIAS_ID
-      
+
       # AWS Authentication (optional - uses default chain if not provided)
       region: us-east-1
       accessKeyId: YOUR_ACCESS_KEY
       secretAccessKey: YOUR_SECRET_KEY
-      sessionToken: YOUR_SESSION_TOKEN  # For temporary credentials
-      profile: my-aws-profile            # Use AWS SSO profile
-      
+      sessionToken: YOUR_SESSION_TOKEN # For temporary credentials
+      profile: my-aws-profile # Use AWS SSO profile
+
       # Session Management
-      sessionId: user-session-123        # Maintain conversation state
+      sessionId: user-session-123 # Maintain conversation state
       sessionState:
         sessionAttributes:
-          userId: "user-123"
-          department: "engineering"
+          userId: 'user-123'
+          department: 'engineering'
         promptSessionAttributes:
-          context: "technical support"
-        invocationId: "inv-456"         # Track specific invocations
-      
+          context: 'technical support'
+        invocationId: 'inv-456' # Track specific invocations
+
       # Memory Configuration
-      memoryId: LONG_TERM_MEMORY        # or SHORT_TERM_MEMORY
-      
+      memoryId: LONG_TERM_MEMORY # or SHORT_TERM_MEMORY
+
       # Execution Options
-      enableTrace: true                  # Get detailed execution traces
-      endSession: false                  # Keep session alive
-      
+      enableTrace: true # Get detailed execution traces
+      endSession: false # Keep session alive
+
       # Inference Configuration
       inferenceConfig:
         temperature: 0.7
         topP: 0.9
         topK: 50
         maximumLength: 2048
-        stopSequences: ["END", "STOP"]
-      
+        stopSequences: ['END', 'STOP']
+
       # Guardrails
       guardrailConfiguration:
         guardrailId: GUARDRAIL_ID
-        guardrailVersion: "1"
-      
+        guardrailVersion: '1'
+
       # Knowledge Base Configuration
       knowledgeBaseConfigurations:
         - knowledgeBaseId: KB_ID_1
           retrievalConfiguration:
             vectorSearchConfiguration:
               numberOfResults: 5
-              overrideSearchType: HYBRID  # or SEMANTIC
+              overrideSearchType: HYBRID # or SEMANTIC
               filter:
-                category: "technical"
+                category: 'technical'
         - knowledgeBaseId: KB_ID_2
-      
+
       # Action Groups (Tools)
       actionGroups:
-        - actionGroupName: "calculator"
+        - actionGroupName: 'calculator'
           actionGroupExecutor:
-            lambda: "arn:aws:lambda:..."
-          description: "Math operations"
-        - actionGroupName: "database"
+            lambda: 'arn:aws:lambda:...'
+          description: 'Math operations'
+        - actionGroupName: 'database'
           actionGroupExecutor:
             customControl: RETURN_CONTROL
           apiSchema:
             s3:
-              s3BucketName: "my-bucket"
-              s3ObjectKey: "api-schema.json"
-      
+              s3BucketName: 'my-bucket'
+              s3ObjectKey: 'api-schema.json'
+
       # Prompt Override
       promptOverrideConfiguration:
         promptConfigurations:
           - promptType: PRE_PROCESSING
             promptCreationMode: OVERRIDDEN
-            basePromptTemplate: "Custom preprocessing: {input}"
+            basePromptTemplate: 'Custom preprocessing: {input}'
             inferenceConfiguration:
               temperature: 0.5
           - promptType: ORCHESTRATION
             promptState: DISABLED
-      
+
       # Content Filtering
       inputDataConfig:
         bypassLambdaParsing: false
         filters:
-          - name: "pii-filter"
+          - name: 'pii-filter'
             type: PREPROCESSING
             inputType: TEXT
             outputType: TEXT
@@ -132,7 +132,7 @@ tests:
       - bedrock:agentcore:support-agent
         config:
           sessionId: "customer-session-001"
-  
+
   - vars:
       query: "What's the status of my order?"
     providers:
@@ -152,7 +152,7 @@ Configure agent memory for different use cases:
 # Short-term memory (session-based)
 config:
   memoryId: SHORT_TERM_MEMORY
-  
+
 # Long-term memory (persistent)
 config:
   memoryId: LONG_TERM_MEMORY
@@ -165,14 +165,14 @@ Connect agents to knowledge bases for RAG capabilities:
 ```yaml
 config:
   knowledgeBaseConfigurations:
-    - knowledgeBaseId: "technical-docs-kb"
+    - knowledgeBaseId: 'technical-docs-kb'
       retrievalConfiguration:
         vectorSearchConfiguration:
           numberOfResults: 10
           overrideSearchType: HYBRID
           filter:
-            documentType: "manual"
-            product: "widget-pro"
+            documentType: 'manual'
+            product: 'widget-pro'
 ```
 
 ### Action Groups (Tools)
@@ -182,14 +182,14 @@ Enable agents to use tools and APIs:
 ```yaml
 config:
   actionGroups:
-    - actionGroupName: "weather-api"
+    - actionGroupName: 'weather-api'
       actionGroupExecutor:
-        lambda: "arn:aws:lambda:us-east-1:123456789:function:WeatherAPI"
-      description: "Get weather information"
-    
-    - actionGroupName: "database-query"
+        lambda: 'arn:aws:lambda:us-east-1:123456789:function:WeatherAPI'
+      description: 'Get weather information'
+
+    - actionGroupName: 'database-query'
       actionGroupExecutor:
-        customControl: RETURN_CONTROL  # Agent returns control to caller
+        customControl: RETURN_CONTROL # Agent returns control to caller
 ```
 
 ### Guardrails
@@ -199,8 +199,8 @@ Apply content filtering and safety measures:
 ```yaml
 config:
   guardrailConfiguration:
-    guardrailId: "content-filter-001"
-    guardrailVersion: "2"
+    guardrailId: 'content-filter-001'
+    guardrailVersion: '2'
 ```
 
 ### Inference Control
@@ -210,11 +210,11 @@ Fine-tune agent response generation:
 ```yaml
 config:
   inferenceConfig:
-    temperature: 0.3        # Lower for more deterministic responses
+    temperature: 0.3 # Lower for more deterministic responses
     topP: 0.95
     topK: 40
     maximumLength: 4096
-    stopSequences: ["END_RESPONSE", "\n\n"]
+    stopSequences: ['END_RESPONSE', "\n\n"]
 ```
 
 ### Trace Information
@@ -227,7 +227,7 @@ config:
 
 tests:
   - vars:
-      query: "Calculate 25 * 4"
+      query: 'Calculate 25 * 4'
     assert:
       - type: javascript
         value: |
@@ -242,6 +242,7 @@ tests:
 The provider supports multiple authentication methods:
 
 1. **Environment Variables** (recommended):
+
    ```bash
    export AWS_ACCESS_KEY_ID=your_access_key
    export AWS_SECRET_ACCESS_KEY=your_secret_key
@@ -249,12 +250,14 @@ The provider supports multiple authentication methods:
    ```
 
 2. **AWS Profile**:
+
    ```yaml
    config:
      profile: my-aws-profile
    ```
 
 3. **Explicit Credentials**:
+
    ```yaml
    config:
      accessKeyId: YOUR_ACCESS_KEY
@@ -328,7 +331,7 @@ tests:
           sessionState:
             sessionAttributes:
               customerId: "CUST-456"
-  
+
   # Second turn - test context retention
   - vars:
       query: "What warranty options are available?"
@@ -377,7 +380,7 @@ tests:
       - type: javascript
         value: |
           // Verify the weather API was called
-          metadata?.trace?.some(trace => 
+          metadata?.trace?.some(trace =>
             trace.actionGroupTrace?.actionGroupName === 'weather-api'
           )
 ```
@@ -394,6 +397,7 @@ The provider includes specific error messages for common issues:
 ## Performance Optimization
 
 1. **Use Caching** for identical queries:
+
    ```yaml
    providers:
      - bedrock:agentcore:AGENT_ID
@@ -402,18 +406,19 @@ The provider includes specific error messages for common issues:
    ```
 
 2. **Optimize Knowledge Base Queries**:
+
    ```yaml
    knowledgeBaseConfigurations:
      - knowledgeBaseId: KB_ID
        retrievalConfiguration:
          vectorSearchConfiguration:
-           numberOfResults: 3  # Limit to necessary results
+           numberOfResults: 3 # Limit to necessary results
    ```
 
 3. **Control Response Length**:
    ```yaml
    inferenceConfig:
-     maximumLength: 1024  # Limit response size
+     maximumLength: 1024 # Limit response size
    ```
 
 ## Troubleshooting
@@ -421,6 +426,7 @@ The provider includes specific error messages for common issues:
 ### Agent Not Responding
 
 1. Verify agent is deployed and alias is active:
+
    ```bash
    aws bedrock-agent get-agent --agent-id YOUR_AGENT_ID
    aws bedrock-agent get-agent-alias --agent-id YOUR_AGENT_ID --agent-alias-id YOUR_ALIAS_ID
@@ -438,20 +444,22 @@ The provider includes specific error messages for common issues:
 ### Session/Memory Not Working
 
 Ensure consistent session IDs and correct memory type:
+
 ```yaml
 config:
-  sessionId: "consistent-session-id"
-  memoryId: "LONG_TERM_MEMORY"  # Must match agent configuration
+  sessionId: 'consistent-session-id'
+  memoryId: 'LONG_TERM_MEMORY' # Must match agent configuration
 ```
 
 ### Knowledge Base Not Returning Results
 
 Verify knowledge base is synced and accessible:
+
 ```bash
 aws bedrock-agent list-agent-knowledge-bases --agent-id YOUR_AGENT_ID
 ```
 
-## Additional Resources
+## See Also
 
 - [AWS Bedrock AgentCore Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html)
 - [Agent API Reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html)
