@@ -1,8 +1,8 @@
 ---
 title: 'AI Safety vs AI Security in LLM Applications: What Teams Must Know'
 description: 'AI safety vs AI security for LLM apps. Clear examples, test configs, and OWASP-aligned defenses so teams prevent harmful outputs and block adversaries.'
-image: /img/blog/ai-safety-vs-security/ai-safety-security-comparison.png
-imageAlt: 'Comparison diagram of AI safety vs AI security in LLM applications'
+image: /img/blog/ai-safety-vs-security/safety-vs-security-core.jpg
+imageAlt: 'AI Safety vs Security - Red panda mascot showing the split between protecting people from harmful content (safety) and defending systems from hackers (security)'
 keywords:
   [
     ai safety,
@@ -21,7 +21,7 @@ keywords:
     agent security,
     llm output sanitization,
   ]
-date: 2025-01-17
+date: 2025-08-17
 authors: [michael]
 ---
 
