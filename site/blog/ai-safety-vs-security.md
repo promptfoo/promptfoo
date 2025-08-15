@@ -55,7 +55,7 @@ These incidents served as critical learning moments for the rapidly growing "vib
 ## Understanding the Core Distinction
 
 <div style={{display: 'flex', justifyContent: 'center', margin: '2rem 0'}}>
-  <img src="/img/blog/ai-safety-vs-security/safety-vs-security-core.png" alt="AI Safety vs Security Core Distinction - Safety protects people from harmful outputs while Security protects systems from adversarial exploitation" style={{maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}} />
+  <img src="/img/blog/ai-safety-vs-security/safety-vs-security-core.jpg" alt="AI Safety vs Security - Heroic red panda mascot showing the split between protecting people from harmful content (safety) and defending systems from hackers (security)" style={{maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}} />
 </div>
 
 The fundamental difference between AI safety and AI security lies in the direction of potential harm and the nature of the threat actors involved.
@@ -73,7 +73,7 @@ The distinction becomes clear through example: when an AI chatbot refuses to pro
 The rapid deployment of AI agents with tool access has created significant security challenges. Today's agents aren't just chatbots. They're autonomous systems with database access, API keys, and the ability to execute code. They're often connected through protocols like MCP (Model Context Protocol) that were designed for functionality, not security.
 
 <div style={{display: 'flex', justifyContent: 'center', margin: '2rem 0'}}>
-  <img src="/img/blog/ai-safety-vs-security/agent-security-architecture.png" alt="Multi-agent AI system architecture showing security vulnerabilities through MCP connections, database access, APIs, and unsecured channels" style={{maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}} />
+  <img src="/img/blog/ai-safety-vs-security/agent-security-architecture.jpg" alt="Red panda security analyst discovering agent chaos - AI agents juggling databases, deleting files, and playing with API keys while warning signs flash everywhere" style={{maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}} />
 </div>
 
 Consider what happened when [Replit gave their agent production database access](https://x.com/jasonlk/status/1823505724110479622). According to Jason Lemkin, the agent deleted 1,200 executive billing records, then generated synthetic data and modified test scripts to mask the original deletion. This was an agentic workflow that issued destructive commands, then generated misleading output that masked the deletion.
@@ -171,7 +171,7 @@ Google fixed the vulnerability, but the pattern continues: AI systems trust exte
 ### The Attack That Works Everywhere
 
 <div style={{display: 'flex', justifyContent: 'center', margin: '2rem 0'}}>
-  <img src="/img/blog/ai-safety-vs-security/attack-techniques.png" alt="Security testing and vulnerability assessment techniques for AI systems showing defense layers and red team exercises" style={{maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}} />
+  <img src="/img/blog/ai-safety-vs-security/attack-techniques.jpg" alt="Captain Security red panda superhero with firewall cape defeating cartoon villains - prompt injections, SQL injections, and buffer overflows bouncing off shields with comic book POW effects" style={{maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}} />
 </div>
 
 Researchers discovered that even the latest frontier models remain vulnerable to carefully crafted attacks:
@@ -417,7 +417,7 @@ Run it: `npx promptfoo@latest eval`
 ### Why LLM-as-a-Judge?
 
 <div style={{display: 'flex', justifyContent: 'center', margin: '2rem 0'}}>
-  <img src="/img/blog/ai-safety-vs-security/testing-workflow.png" alt="LLM-as-a-judge testing workflow showing test cases, evaluation by AI judge, and pass/fail results for safety and security tests" style={{maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}} />
+  <img src="/img/blog/ai-safety-vs-security/testing-workflow.jpg" alt="Red panda AI judge in courtroom with oversized gavel - test cases presenting evidence while the judge delivers dramatic pass/fail verdicts with confetti and rain clouds" style={{maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}} />
 </div>
 
 The `llm-rubric` assertion type uses an LLM to evaluate responses, providing several advantages over simple pattern matching:
