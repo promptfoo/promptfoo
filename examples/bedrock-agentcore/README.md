@@ -14,25 +14,27 @@ This example demonstrates how to use AWS Bedrock AgentCore with promptfoo to tes
 
 ## Setup
 
-1. **Get your Agent ID**: 
+1. **Get your Agent ID**:
    - Go to the AWS Bedrock Console
    - Navigate to Agents
    - Copy your agent ID (format: `ABCDEFGHIJ`)
 
 2. **Configure AWS Credentials** (choose one method):
-   
+
    Via environment variables:
+
    ```bash
    export AWS_ACCESS_KEY_ID=your_access_key
    export AWS_SECRET_ACCESS_KEY=your_secret_key
    export AWS_REGION=us-east-1
    ```
-   
+
    Via AWS CLI profile:
+
    ```bash
    aws configure --profile my-bedrock-profile
    ```
-   
+
    Via IAM role (if running on EC2/Lambda)
 
 3. **Update config.yaml**:
@@ -53,54 +55,59 @@ npx promptfoo view
 ## Configuration Options
 
 ### Basic Usage
+
 ```yaml
 providers:
   - bedrock:agentcore:YOUR_AGENT_ID
 ```
 
 ### Advanced Configuration
+
 ```yaml
 providers:
   - id: bedrock:agentcore:my-agent
     config:
       agentId: YOUR_AGENT_ID
-      agentAliasId: PROD_ALIAS     # Optional: specific version/alias
-      region: us-east-1             # AWS region
-      sessionId: session-123        # Maintain conversation state
-      enableTrace: true             # Get detailed execution traces
-      memoryConfig:
-        type: short-term            # or 'long-term'
-        enabled: true
+      agentAliasId: PROD_ALIAS # Optional: specific version/alias
+      region: us-east-1 # AWS region
+      sessionId: session-123 # Maintain conversation state
+      enableTrace: true # Get detailed execution traces
+      memoryId: SHORT_TERM_MEMORY # or LONG_TERM_MEMORY
 ```
 
 ## Features
 
 ### Session Management
+
 The provider supports maintaining conversation state across multiple interactions:
+
 ```yaml
 config:
-  sessionId: my-session-123  # Use the same session ID for related queries
+  sessionId: my-session-123 # Use the same session ID for related queries
 ```
 
 ### Memory Integration
+
 Enable agent memory for context-aware responses:
+
 ```yaml
 config:
-  memoryConfig:
-    type: long-term  # Persistent memory across sessions
-    enabled: true
+  memoryId: LONG_TERM_MEMORY # Persistent memory across sessions
 ```
 
 ### Trace Information
+
 Get detailed execution traces including tool calls and reasoning:
+
 ```yaml
 config:
-  enableTrace: true  # Response will include trace metadata
+  enableTrace: true # Response will include trace metadata
 ```
 
 ## Testing Agent Capabilities
 
 The example config includes tests for:
+
 - Basic agent responses
 - Tool/function calling (e.g., calculator)
 - Memory retention
@@ -116,15 +123,14 @@ The example config includes tests for:
 ## IAM Permissions
 
 Your AWS credentials need the following permissions:
+
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeAgent"
-      ],
+      "Action": ["bedrock:InvokeAgent"],
       "Resource": "arn:aws:bedrock:*:*:agent/*"
     }
   ]

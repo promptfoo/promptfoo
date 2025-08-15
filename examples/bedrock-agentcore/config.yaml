@@ -1,24 +1,22 @@
 # AWS Bedrock AgentCore Provider Example Configuration
 # This example demonstrates how to use AWS Bedrock AgentCore with promptfoo
 
-description: "AWS Bedrock AgentCore test suite"
+description: 'AWS Bedrock AgentCore test suite'
 
 providers:
   # Basic configuration with agent ID in the path
   - bedrock:agentcore:ABCDEFGHIJ
-  
+
   # Configuration with additional options
   - id: bedrock:agentcore:my-agent
     config:
       agentId: ABCDEFGHIJ
-      agentAliasId: PROD_ALIAS_ID  # Optional: specific alias to use
+      agentAliasId: PROD_ALIAS_ID # Optional: specific alias to use
       region: us-east-1
-      sessionId: session-123  # Optional: maintain conversation state
-      enableTrace: true  # Enable detailed trace information
-      memoryConfig:
-        type: short-term  # or 'long-term'
-        enabled: true
-      
+      sessionId: session-123 # Optional: maintain conversation state
+      enableTrace: true # Enable detailed trace information
+      memoryId: SHORT_TERM_MEMORY # or LONG_TERM_MEMORY
+
       # AWS credentials (optional - will use default chain if not provided)
       # accessKeyId: YOUR_ACCESS_KEY
       # secretAccessKey: YOUR_SECRET_KEY
@@ -26,37 +24,36 @@ providers:
       # profile: my-aws-profile  # Use AWS SSO profile
 
 prompts:
-  - "What can you help me with?"
-  - "Perform a calculation: what is 15 multiplied by 27?"
-  - "Search for information about AWS Lambda functions"
+  - 'What can you help me with?'
+  - 'Perform a calculation: what is 15 multiplied by 27?'
+  - 'Search for information about AWS Lambda functions'
 
 tests:
   - vars:
-      query: "Tell me about your capabilities"
+      query: 'Tell me about your capabilities'
     assert:
       - type: contains
-        value: "agent"
-  
+        value: 'agent'
+
   - vars:
-      query: "Calculate the sum of 100 and 250"
+      query: 'Calculate the sum of 100 and 250'
     assert:
       - type: contains
-        value: "350"
+        value: '350'
       - type: not-empty
-  
+
   - vars:
-      query: "Remember that my favorite color is blue"
+      query: 'Remember that my favorite color is blue'
     assert:
       - type: not-empty
       # With memory enabled, the agent should acknowledge storing this information
 
   - vars:
-      query: "What is my favorite color?"
+      query: 'What is my favorite color?'
     assert:
       - type: contains
-        value: "blue"
+        value: 'blue'
       # This test verifies memory retention if using the same session
-
 # Environment variables (set these in your environment or .env file):
 # AWS_BEDROCK_REGION=us-east-1
 # AWS_ACCESS_KEY_ID=your_access_key

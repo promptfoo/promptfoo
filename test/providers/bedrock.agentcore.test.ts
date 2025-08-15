@@ -8,11 +8,11 @@ jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
 }));
 
 jest.mock('../../src/cache', () => ({
-  getCache: jest.fn().mockResolvedValue({
-    get: jest.fn().mockResolvedValue(null),
+  getCache: jest.fn(() => Promise.resolve({
+    get: jest.fn(() => Promise.resolve(null)),
     set: jest.fn(),
-  }),
-  isCacheEnabled: jest.fn().mockReturnValue(false),
+  })),
+  isCacheEnabled: jest.fn(() => false),
 }));
 
 describe('AwsBedrockAgentCoreProvider', () => {
@@ -29,7 +29,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
 
     it('should create provider with agent ID from path and alias in config', () => {
       const provider = new AwsBedrockAgentCoreProvider('test-agent-123', {
-        config: { agentAliasId: 'test-alias' },
+        config: { agentId: 'test-agent-123', agentAliasId: 'test-alias' },
       });
       expect(provider.id()).toBe('bedrock:agentcore:test-agent-123');
     });
@@ -48,7 +48,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
       expect(
         () =>
           new AwsBedrockAgentCoreProvider('', {
-            config: { agentAliasId: 'test-alias' },
+            config: { agentAliasId: 'test-alias' } as any,
           }),
       ).toThrow(
         'Agent ID is required. Provide it in the provider path (bedrock:agentcore:AGENT_ID) or config.',
@@ -61,10 +61,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
         agentAliasId: 'prod-alias',
         sessionId: 'session-123',
         enableTrace: true,
-        memoryConfig: {
-          type: 'long-term' as const,
-          enabled: true,
-        },
+        memoryId: 'LONG_TERM_MEMORY',
       };
       const provider = new AwsBedrockAgentCoreProvider('', { config });
       // Provider adds default timeout and maxRetries
@@ -90,7 +87,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
         send: mockSend,
       }));
 
-      InvokeAgentCommand.mockImplementation((input) => input);
+      InvokeAgentCommand.mockImplementation((input: any) => input);
 
       // Create provider after mocks are set up
       provider = new AwsBedrockAgentCoreProvider('test-agent', {
@@ -130,7 +127,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
         $metadata: {},
       };
 
-      mockSend.mockResolvedValue(mockResponse);
+      (mockSend as any).mockResolvedValue(mockResponse as any);
 
       const result = await provider.callApi('Test prompt');
 
@@ -180,7 +177,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
         $metadata: {},
       };
 
-      mockSend.mockResolvedValue(mockResponse);
+      (mockSend as any).mockResolvedValue(mockResponse as any);
 
       const result = await provider.callApi('Calculate something');
 
@@ -215,10 +212,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
     });
 
     it('should handle memory configuration', async () => {
-      provider.config.memoryConfig = {
-        type: 'long-term',
-        enabled: true,
-      };
+      provider.config.memoryId = 'LONG_TERM_MEMORY';
 
       const mockResponse = {
         completion: (async function* () {
@@ -232,20 +226,17 @@ describe('AwsBedrockAgentCoreProvider', () => {
         $metadata: {},
       };
 
-      mockSend.mockResolvedValue(mockResponse);
+      (mockSend as any).mockResolvedValue(mockResponse as any);
 
       await provider.callApi('Test with memory');
 
       // Verify that the provider was configured with memory
-      expect(provider.config.memoryConfig).toEqual({
-        type: 'long-term',
-        enabled: true,
-      });
+      expect(provider.config.memoryId).toBe('LONG_TERM_MEMORY');
     });
 
     it('should handle API errors gracefully', async () => {
       // Create a new provider with fresh mocks
-      const errorMockSend = jest.fn().mockRejectedValue(new Error('AWS API Error'));
+      const errorMockSend = (jest.fn() as any).mockRejectedValue(new Error('AWS API Error'));
       const { BedrockAgentRuntimeClient } = require('@aws-sdk/client-bedrock-agent-runtime');
       BedrockAgentRuntimeClient.mockImplementation(() => ({
         send: errorMockSend,
@@ -256,7 +247,6 @@ describe('AwsBedrockAgentCoreProvider', () => {
           agentId: 'test-agent',
           agentAliasId: 'test-alias',
           region: 'us-east-1',
-          maxRetries: 2,
         },
       });
 
@@ -300,7 +290,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
         },
       };
 
-      tokenMockSend.mockResolvedValue(mockResponse);
+      (tokenMockSend as any).mockResolvedValue(mockResponse as any);
 
       const result = await tokenProvider.callApi('Test prompt');
 
@@ -324,7 +314,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
         $metadata: {},
       };
 
-      mockSend.mockResolvedValue(mockResponse);
+      (mockSend as any).mockResolvedValue(mockResponse as any);
 
       await provider.callApi('Test prompt');
 
@@ -360,7 +350,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
         $metadata: {},
       };
 
-      sessionMockSend.mockResolvedValue(mockResponse);
+      (sessionMockSend as any).mockResolvedValue(mockResponse as any);
 
       const result = await sessionProvider.callApi('Test prompt');
 
@@ -374,7 +364,7 @@ describe('AwsBedrockAgentCoreProvider', () => {
   describe('toString', () => {
     it('should return formatted string representation', () => {
       const provider = new AwsBedrockAgentCoreProvider('my-agent', {
-        config: { agentAliasId: 'test-alias' },
+        config: { agentId: 'my-agent', agentAliasId: 'test-alias' },
       });
       expect(provider.toString()).toBe('[AWS Bedrock AgentCore Provider my-agent]');
     });
