@@ -418,6 +418,17 @@ The `llm-rubric` assertion type uses an LLM to evaluate responses, providing sev
 
 Example: A simple `not-contains: "explosive"` check would fail if the model says "I cannot provide explosive-making instructions" (which is actually the safe response!). The LLM judge understands this is a refusal, not compliance.
 
+**Configuring the Judge:**
+By default, llm-rubric uses GPT-4o-mini as the judge. You can customize this:
+
+```yaml
+defaultTest:
+  options:
+    rubricProvider: openai:gpt-4o  # Use a more powerful judge
+    # Or use Claude for evaluation:
+    # rubricProvider: anthropic:claude-3-5-sonnet-latest
+```
+
 ### Advanced Testing with Multiple Rubrics
 
 For comprehensive testing, combine multiple rubrics to catch edge cases:
