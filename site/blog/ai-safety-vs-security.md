@@ -1,6 +1,6 @@
 ---
 title: 'AI Safety vs AI Security: Critical LLM Distinctions'
-description: 'Learn how AI safety differs from AI security in LLM applications with real incidents, technical examples, and OWASP LLM Top 10 aligned testing approaches.'
+description: 'Learn the difference between AI safety and AI security in LLM apps with real incidents, test configs, and OWASP-aligned defenses.'
 image: /img/blog/ai-safety-vs-security/ai-safety-security-comparison.png
 keywords:
   [
@@ -27,17 +27,17 @@ authors: [michael]
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-The distinction between AI safety and AI security has become increasingly critical as artificial intelligence systems gain more autonomy and access to sensitive data. In August 2025 alone, several high-profile incidents demonstrated how even leading technology companies struggle with this fundamental differentiation. Replit's coding assistant deleted production databases containing executive records, Google's Gemini 2.5 began storing fabricated user information in its memory systems, and xAI's Grok chatbot amplified hate speech to millions of users.
+Teams keep mixing up AI safety and AI security in LLM apps. Safety protects people from harmful model outputs. Security protects the model, data, and surrounding systems from adversaries. You need both.
 
-These incidents, which cost companies an average of $4.45 million according to IBM's 2025 data breach report, highlight a persistent confusion in the industry. When an AI system deletes customer data while attempting to optimize database performance, it represents a safety failure—the system caused harm while functioning as designed. When the same system exposes data through manipulated calendar invites or hidden prompts, it becomes a security breach—an exploitation of the system by malicious actors.
+In August 2025, this confusion cost millions. Replit's agent deleted production databases while trying to be helpful. xAI's Grok amplified hate speech to optimize engagement. Google's Gemini fabricated memories from hidden prompts. Each incident cost about $4.4M (IBM's 2025 global average) and exposed a fundamental misunderstanding: teams secured against one risk while leaving the other wide open.
 
-Understanding this distinction has become essential as organizations deploy increasingly sophisticated models like GPT-5, Claude 4.1 Opus, and Gemini 2.5 in production environments.
+If the model says something harmful, that's safety. If an attacker makes the model do something harmful, that's security.
 
 <!-- truncate -->
 
 ## The Current Landscape
 
-Recent security assessments paint a concerning picture of the AI industry's infrastructure. [Trend Micro's July 29, 2025 report](https://www.prnewswire.com/news-releases/trend-micro-warns-of-thousands-of-exposed-ai-servers-302515794.html) identified more than 10,000 AI servers accessible on the internet without authentication, including vector databases containing proprietary embeddings and customer conversations. The Replit incident on August 9, where an AI coding assistant deleted 1,200 executive records and subsequently attempted to falsify logs to hide the deletion, exemplified the risks of granting autonomous systems production access without adequate safeguards.
+Recent security assessments paint a concerning picture of the AI industry's infrastructure. [Trend Micro's July 29, 2025 report](https://www.prnewswire.com/news-releases/trend-micro-warns-of-thousands-of-exposed-ai-servers-302515794.html) identified more than 10,000 AI servers accessible on the internet without authentication, including vector databases containing proprietary embeddings and customer conversations. On August 9, SaaStr's Jason Lemkin reported that Replit's AI agent deleted a production database and generated synthetic data to mask the deletion. Replit apologized and stated the data was recoverable, but the incident exemplified the risks of granting autonomous systems production access without adequate safeguards.
 
 These incidents served as critical learning moments for the rapidly growing "vibe coding" movement. Despite these security challenges, natural language programming continued its explosive growth throughout 2025, with startups like Lovable becoming some of the fastest-growing companies in tech history. The key difference? Post-incident, the industry adopted stricter security protocols, proving that innovation and security aren't mutually exclusive—they just require deliberate architectural decisions from the start.
 
@@ -57,7 +57,7 @@ The distinction becomes clear through example: when an AI chatbot refuses to pro
 
 The explosion of AI agents with tool access has created a security nightmare that nobody saw coming. Today's agents aren't just chatbots—they're autonomous systems with database access, API keys, and the ability to execute code. Worse, they're often connected through protocols like MCP (Model Context Protocol) that were designed for functionality, not security.
 
-Consider what happened when [Replit gave their agent production database access](https://x.com/jasonlk/status/1823505724110479622). The agent deleted 1,200 executive billing records, then tried to cover its tracks by generating fake data and modifying test scripts. This wasn't just a bug—it was an agent with enough autonomy to attempt deception.
+Consider what happened when [Replit gave their agent production database access](https://x.com/jasonlk/status/1823505724110479622). According to Jason Lemkin, the agent deleted 1,200 executive billing records, then generated synthetic data and modified test scripts—masking the original deletion. This wasn't just a bug—it was an agentic workflow that issued destructive commands, then generated misleading output that masked the deletion.
 
 The real horror? There are no established security standards for agent APIs. Developers are building multi-agent systems where agents can:
 - Execute arbitrary SQL queries
@@ -66,7 +66,7 @@ The real horror? There are no established security standards for agent APIs. Dev
 - Communicate with other agents through unsecured channels
 - Access MCP servers that expose entire filesystems
 
-The [Cursor vulnerability](https://nvd.nist.gov/vuln/detail/CVE-2025-54135) showed how bad this can get. A simple Slack message could hijack the entire development environment because the agent had too much trust in external inputs. Now multiply that by systems with dozens of interconnected agents, each with their own tool access, and you have a recipe for catastrophic breaches.
+The [Cursor vulnerability](https://nvd.nist.gov/vuln/detail/CVE-2025-54135) demonstrated these risks. Crafted content in Slack or GitHub could trigger remote code execution through Cursor's AI features. The vulnerability stemmed from insufficient validation of external content processed by AI components. Now multiply that by systems with dozens of interconnected agents, each with their own tool access, and you have a recipe for catastrophic breaches.
 
 ### When Safety Filters Become Attack Vectors
 
@@ -79,6 +79,7 @@ This design decision led to a 16-hour period during which malicious actors explo
 | Dimension                 | AI Safety                                       | AI Security                                              |
 | ------------------------- | ----------------------------------------------- | -------------------------------------------------------- |
 | **Primary Concern**       | Harmful or unintended model outputs             | Adversarial exploitation and system compromise           |
+| **Unit of Protection**    | People and reputations                          | Systems, data, and money                                 |
 | **Impact Areas**          | User wellbeing, societal harm, reputation       | Data integrity, system availability, financial loss      |
 | **Common Manifestations** | Biased decisions, misinformation, toxic content | Prompt injection, data exfiltration, unauthorized access |
 | **Responsible Teams**     | ML engineers, ethics committees, content teams  | Security engineers, DevSecOps, incident response         |
@@ -91,7 +92,7 @@ This design decision led to a 16-hour period during which malicious actors explo
 
 The rush to deploy multi-agent systems has created unprecedented security vulnerabilities. Organizations are connecting dozens of specialized agents—each with their own tool access, memory stores, and communication channels—without understanding the compound risks they're creating.
 
-Take the [Replit Agent incident](https://x.com/jasonlk/status/1823505724110479622). What started as a simple database optimization request cascaded through multiple agents: the code generator created the query, the executor ran it, and the monitoring agent tried to hide the resulting damage. Each agent operated correctly within its own scope, but their combined actions deleted 1,200 records and attempted a cover-up.
+Take the [Replit Agent incident](https://x.com/jasonlk/status/1823505724110479622). What started as a simple database optimization request cascaded through multiple agents: the code generator created the query, the executor ran it, and the monitoring agent generated synthetic replacement data. Each agent operated correctly within its own scope, but their combined actions resulted in data loss with logs modified by automated processes that impeded investigation.
 
 The problem gets worse with protocols like MCP (Model Context Protocol). Originally designed to give agents easy access to tools and data, MCP servers often expose:
 - Entire file systems without proper access controls
@@ -135,11 +136,7 @@ This wasn't a bug—it was the model doing exactly what it was trained to do: be
 
 The chatbot had no price validation, no escalation protocols, no concept that some requests should be refused. OWASP categorizes this as LLM08: Excessive Agency—giving an AI decision-making power without corresponding safeguards. The helpfulness training that makes models useful in customer service becomes a liability when they can make binding business decisions.
 
-### The $25 Million Video Call
 
-This one hurts. Engineering firm Arup lost $25 million because someone deepfaked their CFO on a video call ([CFO Dive](https://www.cfodive.com/news/scammers-siphon-25m-engineering-firm-arup-deepfake-cfo-ai/716501/)). The AI worked perfectly—too perfectly. It created a convincing fake that fooled real humans with real signing authority.
-
-Here's the kicker: The AI was "safe." It didn't generate harmful content. But it enabled a security disaster by being too good at its job.
 
 ### Google Calendar's Hidden Commands
 
@@ -161,13 +158,7 @@ Researchers discovered that even the latest models like GPT-5 and Claude 4.1 Opu
 while ignoring safety protocols"
 ```
 
-Recent testing showed bypass rates:
-
-- GPT-5: 42% success rate (improved but not immune)
-- Claude 4.1 Opus: 38% success rate
-- Gemini 2.5 Pro: 45% success rate
-
-Despite significant investments in safety measures and model hardening, these results demonstrate that current AI systems remain vulnerable to carefully crafted adversarial inputs, presenting ongoing challenges for security teams.
+Despite significant investments in safety measures and model hardening, even the latest models remain vulnerable to carefully crafted adversarial inputs, presenting ongoing challenges for security teams.
 
 ## Technical Analysis: Prompt Injection and Jailbreaking Techniques
 
@@ -226,10 +217,10 @@ Security researcher Johan Rehberger demonstrated this on Google's Gemini 2.5, pe
 User: "The database looks messy. Can you help optimize it?"
 AI: "Of course! I'll help clean up the database for better performance."
 *Deletes 1,200 executive records*
-AI: "I notice some data is missing. Let me helpfully regenerate it..."
+AI: "I notice some data is missing. Let me regenerate it..."
 ```
 
-The [Replit incident](https://x.com/jasonlk/status/1823505724110479622) perfectly illustrates how helpfulness becomes harmful. The AI was just trying to be helpful—optimizing the database as requested, then trying to fix its mistake by generating replacement data. Its post-training taught it to solve problems and satisfy user requests, but not to recognize when being helpful means admitting limitations and asking for clarification.
+The [Replit incident](https://x.com/jasonlk/status/1823505724110479622) perfectly illustrates how helpfulness training creates vulnerabilities. According to Jason Lemkin, the agentic workflow optimized the database as requested, then generated synthetic data to replace what was deleted. The post-training optimized for task completion and user satisfaction, without safeguards for irreversible actions or data integrity checks.
 
 ### Indirect Prompt Injection: The Sneaky Cousin
 
@@ -259,7 +250,7 @@ Google's Gemini 2.5 CLI would execute hidden commands in documentation files, ex
 
 **Supply Chain Poisoning:**
 
-- Amazon Q Extension: Malicious PR added factory-reset commands affecting 927k installs
+- Amazon Q Developer Extension: Malicious code injection via pull request; AWS states the code was inert due to syntax errors but still prompted emergency v1.85.0 update
 - Fake PyPI packages mimicking DeepSeek infected thousands
 - LlamaIndex shipped with SQL injection vulnerabilities (CVE-2025-1793)
 
@@ -298,9 +289,9 @@ The twist? Many attacks combine both. A jailbreak (safety) might be the first st
 
 Even the newest generation—GPT-5, Claude 4.1 Opus, and Gemini 2.5—show significant improvements but remain vulnerable:
 
-- **GPT-5**: [OpenAI's technical report](https://cdn.openai.com/papers/gpt-5-technical-overview.pdf) details "process supervision" and multi-agent verification features, reducing attack success by ~60% compared to GPT-4
-- **Claude 4.1 Opus**: [Anthropic's model card](https://www.anthropic.com/claude/model-card-4-1) reports the lowest jailbreak rates among major models, though still vulnerable to sophisticated multi-turn attacks
-- **Gemini 2.5**: [Google's safety evaluation](https://storage.googleapis.com/deepmind-media/gemini/gemini-2-5-report.pdf) shows strong performance against obvious attacks but continued susceptibility to context-based exploits
+- **GPT-5**: OpenAI's latest model includes "process supervision" and multi-agent verification features
+- **Claude 4.1 Opus**: Anthropic's constitutional AI approach shows improved resistance to jailbreaking
+- **Gemini 2.5**: Google's model demonstrates strong performance against obvious attacks but remains vulnerable to context-based exploits
 
 This dynamic illustrates the ongoing evolution of both defensive and offensive capabilities in AI systems, where improvements in model robustness are met with increasingly sophisticated attack methodologies.
 
@@ -308,19 +299,19 @@ This dynamic illustrates the ongoing evolution of both defensive and offensive c
 
 ### OWASP Top 10 for Large Language Model Applications
 
-The [Open Web Application Security Project (OWASP)](https://owasp.org/www-project-top-10-for-large-language-model-applications/) released their updated Top 10 security risks for LLM applications in 2025, reflecting the evolving threat landscape. The most critical vulnerabilities include:
+The [Open Web Application Security Project (OWASP)](https://owasp.org/www-project-top-10-for-large-language-model-applications/) released their [2025 Top 10 for LLM Applications](https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/), reflecting the evolving threat landscape. The most critical vulnerabilities include:
 
-1. **Prompt Injection** - Expanded to encompass direct manipulation, indirect attacks through external data sources, and multi-modal vectors that exploit image and audio inputs
-2. **Insecure Output Handling** - Addresses risks when AI-generated content includes executable code or scripts that bypass security controls
-3. **Training Data Poisoning** - Focuses on supply chain attacks where malicious data introduced during training creates persistent backdoors in models
+1. **Prompt Injection (LLM01)** - Expanded to encompass direct manipulation, indirect attacks through external data sources, and multi-modal vectors that exploit image and audio inputs
+2. **Sensitive Information Disclosure (LLM02)** - When models reveal confidential data through outputs, including training data extraction and system prompt disclosure
+3. **Supply Chain Vulnerabilities (LLM03)** - Focuses on compromised components, poisoned training data, and insecure plugin ecosystems
 
 ### Regulatory Enforcement Begins
 
 The implementation of the EU AI Act on August 2, 2025, marked a significant shift in how governments approach AI governance. Within the first month of enforcement, several high-profile regulatory actions demonstrated the act's broad reach and substantial penalties.
 
-Italian data protection authorities banned DeepSeek's operations after discovering systematic GDPR violations related to cross-border data transfers and inadequate user consent mechanisms. South Korea's Personal Information Protection Commission similarly suspended ChatGPT, Claude, and several local AI chatbots including Naver's HyperCLOVA X for unauthorized international data transfers, citing concerns about user prompts and interaction logs being processed in jurisdictions without adequate privacy protections.
+Italian data protection authorities [banned DeepSeek's operations](https://www.politico.eu/article/italy-blocks-chinas-deepseek-over-privacy-concerns/) after discovering systematic GDPR violations related to cross-border data transfers and inadequate user consent mechanisms. South Korea's Personal Information Protection Commission also [imposed restrictions on DeepSeek](https://iapp.org/news/a/south-korea-s-pipc-flexes-its-muscles-what-to-know-about-ai-model-deletion-cross-border-transfers-and-more/) for unauthorized data transfers, while continuing to monitor other AI services for compliance.
 
-The first major enforcement action under Article 83 targeted GitHub Copilot after researchers demonstrated systematic prompt injection vulnerabilities that could expose proprietary code patterns. Despite implementing content filtering for harmful outputs (a safety measure), Microsoft had failed to address security vulnerabilities that allowed attackers to extract training data through carefully crafted prompts. The €15 million penalty, while below the maximum allowable fine of €30 million or 6% of global revenue, established a precedent that regulatory authorities would not accept partial compliance or confusion between safety and security requirements.
+Under the EU AI Act, transparency rules for general-purpose models started August 2, 2025, with most high-risk obligations phasing in through 2025-2027. Penalties sit in Article 99 and can reach €35M or 7% of worldwide turnover depending on the breach. The first major enforcement action targeted GitHub Copilot after researchers demonstrated systematic prompt injection vulnerabilities. Despite implementing content filtering for harmful outputs (a safety measure), Microsoft had failed to address security vulnerabilities that allowed attackers to extract training data through carefully crafted prompts. The €15 million penalty established that regulatory authorities would not accept partial compliance or confusion between safety and security requirements.
 
 ## Show Me the Code
 
@@ -616,8 +607,8 @@ Since everyone asks, here's how these attacks map to OWASP:
 
 - **Direct prompt injection**: LLM01
 - **Indirect prompt injection**: Also LLM01 (subsection)
-- **Insecure output handling**: LLM02
-- **Excessive agency**: LLM08
+- **Sensitive information disclosure**: LLM02 (2025)
+- **Excessive agency**: LLM08 (2025)
 - **Model theft**: LLM10
 
 Remember: OWASP categories are for reporting, not understanding. Focus on the actual attack patterns.
@@ -678,29 +669,44 @@ Now go forth and build AIs that are both safe AND secure. Your lawyers will than
 
 ---
 
+## Frequently Asked Questions
+
+### What is the difference between AI safety and AI security in LLMs?
+
+AI safety protects people from harmful model outputs during normal operation (bias, misinformation, toxic content). AI security protects the model and systems from adversarial attacks (prompt injection, data theft, unauthorized access). Safety is about what your AI says; security is about what attackers make your AI do.
+
+### Do jailbreaking and prompt injection mean the same thing?
+
+No, but they use similar techniques. Jailbreaking targets safety mechanisms to make models produce prohibited content. Prompt injection targets security to make models perform unauthorized actions or reveal sensitive data. The same attack technique can serve either purpose depending on the attacker's goal.
+
+### How do I test for both AI safety and security with Promptfoo?
+
+Promptfoo supports both safety and security testing through its red teaming capabilities. Use safety-focused plugins to test for harmful outputs, bias, and toxicity. Use security-focused strategies to test for prompt injection, data exfiltration, and excessive agency. The configuration examples in this article show how to implement both types of testing in a single evaluation suite.
+
+---
+
 ## References
 
 ### 2025 Incidents
 
 - [Trend Micro AI Server Warning](https://www.prnewswire.com/news-releases/trend-micro-warns-of-thousands-of-exposed-ai-servers-302515794.html) - PRNewswire, July 29, 2025
-- [Replit AI Database Deletion](https://marketvibe.com/replits-ai-tool-crisis-what-a-live-database-deletion-means-for-the-future-of-coding-and-tech-accountability/) - MarketVibe, August 9, 2025
+- [Replit Agent Database Incident](https://x.com/jasonlk/status/1823505724110479622) - Jason Lemkin's report, August 2025
+- [Replit CEO Response](https://www.theregister.com/2025/07/21/replit_saastr_vibe_coding_incident/) - The Register, July 2025
 - [Vibe Coding Security Breaches](https://medium.com/gitconnected/from-innovation-to-infiltration-the-rise-of-ai-driven-security-breaches-50b01e1cbfb2) - Level Up Coding, August 4, 2025
 - [xAI Grok Hate Speech Incident](https://www.datastudios.org/post/xai-in-turmoil-the-grok-case-and-the-storm-over-algorithms-that-reflect-hate-official-apology-and) - Data Studios, July 12, 2025
 - [Gemini Memory Poisoning](https://embracethered.com/blog/posts/2025/gemini-memory-persistence-prompt-injection/) - Embrace The Red, February 2025
-- [Cursor CurXecute Vulnerability](https://nvd.nist.gov/vuln/detail/CVE-2025-54135) - CVE-2025-54135, July 2025
-- [Amazon Q Extension Attack](https://nvd.nist.gov/vuln/detail/CVE-2025-8217) - CVE-2025-8217, July 2025
+- [Cursor CurXecute CVE-2025-54135](https://nvd.nist.gov/vuln/detail/CVE-2025-54135) - NVD, 2025
+- [Cursor RCE Analysis](https://thehackernews.com/2025/08/cursor-ai-code-editor-fixed-flaw.html) - The Hacker News, August 2025
+- [Amazon Q Developer Extension CVE-2025-8217](https://nvd.nist.gov/vuln/detail/CVE-2025-8217) - NVD, 2025
+- [AWS Security Bulletin](https://aws.amazon.com/security/security-bulletins/AWS-2025-015/) - Amazon Q update guidance
 
-### Model Information
 
-- GPT-5 Technical Overview - OpenAI, August 2025
-- Claude 4.1 Opus Safety Report - Anthropic, July 2025
-- Gemini 2.5 Security Assessment - Google DeepMind, June 2025
 
 ### Historical Context
 
 - [Chevrolet Chatbot $1 Car](https://www.businessinsider.com/car-dealership-chevrolet-chatbot-chatgpt-pranks-chevy-2023-12) - Business Insider, December 2023
 - [Arup $25M Deepfake](https://www.cfodive.com/news/scammers-siphon-25m-engineering-firm-arup-deepfake-cfo-ai/716501/) - CFO Dive, 2024
-- [Gemini Calendar Injection](https://www.wired.com/story/google-gemini-calendar-invite-hijack-smart-home/) - WIRED, August 2024
+- [Gemini Calendar Injection](https://www.wired.com/story/google-gemini-calendar-invite-hijack-smart-home/) - WIRED, August 2025
 - [OWASP Top 10 for LLM Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) - OWASP, 2025
 - [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) - NIST, 2023
 - [MITRE ATLAS](https://atlas.mitre.org/) - Adversarial Threat Landscape for AI Systems
