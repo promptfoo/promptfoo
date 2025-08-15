@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './SafetySecurityQuiz.module.css';
 
@@ -236,7 +236,7 @@ export default function SafetySecurityQuiz() {
       // Mark difficulty intro as shown if we're showing a new one
       const nextDifficulty = questions[currentQuestion + 1].difficulty;
       if (!shownDifficultyIntros.has(nextDifficulty)) {
-        setShownDifficultyIntros(new Set([...shownDifficultyIntros, nextDifficulty]));
+        setShownDifficultyIntros(new Set(Array.from(shownDifficultyIntros).concat(nextDifficulty)));
       }
     } else {
       setQuizComplete(true);
