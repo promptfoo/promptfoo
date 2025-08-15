@@ -355,31 +355,31 @@
   .questionCard {
     padding: 1.5rem;
   }
-  
+
   .questionText {
     font-size: 1rem;
   }
-  
+
   .option {
     padding: 0.875rem 1rem;
   }
-  
+
   .optionText {
     font-size: 0.9375rem;
   }
-  
+
   .completionTitle {
     font-size: 1.5rem;
   }
-  
+
   .scoreNumber {
     font-size: 2.5rem;
   }
-  
+
   .scorePercentage {
     font-size: 1.5rem;
   }
-  
+
   .summaryItem {
     margin: 0.25rem;
     padding: 0.25rem 0.5rem;
@@ -390,24 +390,24 @@
   .container {
     padding: 0 0.5rem;
   }
-  
+
   .questionCard {
     padding: 1rem;
   }
-  
+
   .questionHeader {
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .difficulty {
     align-self: flex-start;
   }
-  
+
   .navigation {
     flex-direction: column;
   }
-  
+
   .navButton {
     width: 100%;
   }
@@ -442,4 +442,4 @@ html[data-theme='dark'] .correctExplanation {
 
 html[data-theme='dark'] .incorrectExplanation {
   background: rgba(239, 68, 68, 0.1);
-} 
+}
