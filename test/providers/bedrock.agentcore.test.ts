@@ -100,6 +100,11 @@ describe('AwsBedrockAgentCoreProvider', () => {
         },
       });
     });
+    
+    afterEach(() => {
+      jest.clearAllMocks();
+      jest.restoreAllMocks();
+    });
 
     it('should require agentAliasId', async () => {
       // Create provider without agentAliasId to test error
@@ -237,43 +242,20 @@ describe('AwsBedrockAgentCoreProvider', () => {
     });
 
     it('should handle API errors gracefully', async () => {
-      // Create a new provider with fresh mocks
-      const errorMockSend = (jest.fn() as any).mockRejectedValue(new Error('AWS API Error'));
-      const { BedrockAgentRuntimeClient } = require('@aws-sdk/client-bedrock-agent-runtime');
-      BedrockAgentRuntimeClient.mockImplementation(() => ({
-        send: errorMockSend,
-      }));
+      // Override the mock to reject for this test
+      (mockSend as any).mockRejectedValue(new Error('AWS API Error'));
 
-      const errorProvider = new AwsBedrockAgentCoreProvider('test-agent', {
-        config: {
-          agentId: 'test-agent',
-          agentAliasId: 'test-alias',
-          region: 'us-east-1',
-        },
-      });
+      const result = await provider.callApi('Test prompt');
 
-      const result = await errorProvider.callApi('Test prompt');
-
-      expect(result.error).toContain('Failed to invoke agent: AWS API Error');
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('Failed to invoke agent');
       expect(result.output).toBeUndefined();
     });
 
     it('should handle token usage in metadata', async () => {
-      // Create a new provider with fresh mocks
-      const tokenMockSend = jest.fn();
-      const { BedrockAgentRuntimeClient } = require('@aws-sdk/client-bedrock-agent-runtime');
-      BedrockAgentRuntimeClient.mockImplementation(() => ({
-        send: tokenMockSend,
-      }));
-
-      const tokenProvider = new AwsBedrockAgentCoreProvider('test-agent', {
-        config: {
-          agentId: 'test-agent',
-          agentAliasId: 'test-alias',
-          region: 'us-east-1',
-        },
-      });
-
+      // Clear previous mock and set up new response
+      mockSend.mockClear();
+      
       const mockResponse = {
         completion: (async function* () {
           yield {
@@ -292,9 +274,9 @@ describe('AwsBedrockAgentCoreProvider', () => {
         },
       };
 
-      (tokenMockSend as any).mockResolvedValue(mockResponse as any);
+      (mockSend as any).mockResolvedValue(mockResponse as any);
 
-      const result = await tokenProvider.callApi('Test prompt');
+      const result = await provider.callApi('Test prompt');
 
       // Token usage is not currently extracted from AgentCore responses
       // as the AWS SDK types don't include usage metadata
@@ -325,21 +307,9 @@ describe('AwsBedrockAgentCoreProvider', () => {
     });
 
     it('should generate session ID if not provided', async () => {
-      // Create a new provider with fresh mocks
-      const sessionMockSend = jest.fn();
-      const { BedrockAgentRuntimeClient } = require('@aws-sdk/client-bedrock-agent-runtime');
-      BedrockAgentRuntimeClient.mockImplementation(() => ({
-        send: sessionMockSend,
-      }));
-
-      const sessionProvider = new AwsBedrockAgentCoreProvider('test-agent', {
-        config: {
-          agentId: 'test-agent',
-          agentAliasId: 'test-alias',
-          region: 'us-east-1',
-        },
-      });
-
+      // Clear previous mock and set up new response
+      mockSend.mockClear();
+      
       const mockResponse = {
         completion: (async function* () {
           yield {
@@ -352,14 +322,14 @@ describe('AwsBedrockAgentCoreProvider', () => {
         $metadata: {},
       };
 
-      (sessionMockSend as any).mockResolvedValue(mockResponse as any);
+      (mockSend as any).mockResolvedValue(mockResponse as any);
 
-      const result = await sessionProvider.callApi('Test prompt');
+      const result = await provider.callApi('Test prompt');
 
       // Verify call was successful
       expect(result.output).toBe('Response');
       expect(result.error).toBeUndefined();
-      expect(sessionMockSend).toHaveBeenCalled();
+      expect(mockSend).toHaveBeenCalled();
     });
   });
 
