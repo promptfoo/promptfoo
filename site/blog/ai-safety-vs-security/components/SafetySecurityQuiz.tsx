@@ -174,6 +174,32 @@ export default function SafetySecurityQuiz() {
   const [score, setScore] = useState(0);
   const [quizComplete, setQuizComplete] = useState(false);
   const [answers, setAnswers] = useState<(number | null)[]>(new Array(questions.length).fill(null));
+  const [shownDifficultyIntros, setShownDifficultyIntros] = useState<Set<string>>(new Set());
+
+  const difficultyIntros = {
+    easy: {
+      title: "Starting Easy",
+      description: "These questions test your basic understanding of what constitutes AI safety versus security issues."
+    },
+    medium: {
+      title: "Getting Trickier",
+      description: "Now we'll explore scenarios where the distinction becomes less obvious, including real-world agent behaviors."
+    },
+    hard: {
+      title: "Expert Level",
+      description: "These questions examine complex attack chains, multi-agent systems, and how safety training creates security vulnerabilities."
+    }
+  };
+
+  const getCurrentDifficultyIntro = () => {
+    const currentDifficulty = questions[currentQuestion].difficulty;
+    const prevDifficulty = currentQuestion > 0 ? questions[currentQuestion - 1].difficulty : null;
+    
+    if (currentDifficulty !== prevDifficulty && !shownDifficultyIntros.has(currentDifficulty)) {
+      return difficultyIntros[currentDifficulty];
+    }
+    return null;
+  };
 
   const handleAnswerSelect = (answerIndex: number) => {
     if (showExplanation) return;
@@ -199,6 +225,12 @@ export default function SafetySecurityQuiz() {
       setCurrentQuestion(currentQuestion + 1);
       setSelectedAnswer(answers[currentQuestion + 1]);
       setShowExplanation(answers[currentQuestion + 1] !== null);
+      
+      // Mark difficulty intro as shown if we're showing a new one
+      const nextDifficulty = questions[currentQuestion + 1].difficulty;
+      if (!shownDifficultyIntros.has(nextDifficulty)) {
+        setShownDifficultyIntros(new Set([...shownDifficultyIntros, nextDifficulty]));
+      }
     } else {
       setQuizComplete(true);
     }
@@ -285,14 +317,15 @@ export default function SafetySecurityQuiz() {
 
   const question = questions[currentQuestion];
   const isCorrect = selectedAnswer === question.correctAnswer;
+  const difficultyIntro = getCurrentDifficultyIntro();
 
   return (
     <div className={styles.container}>
       <div className={styles.header}>
         <div className={styles.progress}>
           <div className={styles.progressBar}>
-            <div
-              className={styles.progressFill}
+            <div 
+              className={styles.progressFill} 
               style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
             />
           </div>
@@ -304,6 +337,20 @@ export default function SafetySecurityQuiz() {
           Score: {score}/{questions.length}
         </div>
       </div>
+
+      <AnimatePresence mode="wait">
+        {difficultyIntro && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={styles.difficultyIntro}
+          >
+            <h4 className={styles.difficultyIntroTitle}>{difficultyIntro.title}</h4>
+            <p className={styles.difficultyIntroDescription}>{difficultyIntro.description}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence mode="wait">
         <motion.div
