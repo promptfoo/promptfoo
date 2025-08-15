@@ -231,7 +231,28 @@ Deletes a specific resource.
 
 ## `promptfoo import <filepath>`
 
-Import an eval file from JSON format.
+Import an eval record from JSON format.
+
+**Options:**
+
+| Option        | Description                                        |
+| ------------- | -------------------------------------------------- |
+| `-f, --force` | Overwrite existing evaluation if it already exists |
+
+**Example:**
+
+```bash
+# Import an evaluation from a JSON file
+promptfoo import eval-results.json
+
+# Import with verbose logging
+promptfoo import -v eval-results.json
+
+# Force overwrite if evaluation already exists
+promptfoo import --force eval-results.json
+```
+
+The imported evaluation will be stored in your local database and can be viewed using `promptfoo view`.
 
 ## `promptfoo export <evalId>`
 
@@ -240,6 +261,21 @@ Export an eval record to JSON format. To export the most recent, use evalId `lat
 | Option                    | Description                                 |
 | ------------------------- | ------------------------------------------- |
 | `-o, --output <filepath>` | File to write. Writes to stdout by default. |
+
+**Examples:**
+
+```bash
+# Export a specific evaluation to a file
+promptfoo export abc-123-def -o results.json
+
+# Export the most recent evaluation
+promptfoo export latest -o latest-eval.json
+
+# Export to stdout (can be piped to other commands)
+promptfoo export abc-123-def > eval-output.json
+```
+
+The exported file contains the complete evaluation data including configuration, prompts, results, and metadata.
 
 ## `promptfoo validate`
 
