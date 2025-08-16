@@ -40,6 +40,7 @@ import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import EvalResult from './evalResult';
+import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 
 interface FilteredCountRow {
   count: number | null;
@@ -409,14 +410,8 @@ export default class Eval {
   }
 
   async getResultsCount(): Promise<number> {
-    const db = getDb();
-    const result = db
-      .select({ count: sql<number>`count(*)` })
-      .from(evalResultsTable)
-      .where(eq(evalResultsTable.evalId, this.id))
-      .all();
-    const count = result[0]?.count ?? 0;
-    return Number(count);
+    // Use cached count for better performance
+    return getCachedResultsCount(this.id);
   }
 
   async fetchResultsByTestIdx(testIdx: number) {
@@ -581,14 +576,31 @@ export default class Eval {
       testIndices = opts.testIndices;
       filteredCount = testIndices.length;
     } else {
-      // Query for test indices based on filters
-      const queryResult = await this.queryTestIndices({
-        offset: opts.offset,
-        limit: opts.limit,
-        filterMode: opts.filterMode,
-        searchQuery: opts.searchQuery,
-        filters: opts.filters,
-      });
+      // Use optimized query for simple cases, fall back to original for complex filters
+      const hasComplexFilters = opts.filters && opts.filters.length > 0;
+
+      let queryResult;
+      if (hasComplexFilters) {
+        // Fall back to original query for complex filters
+        logger.debug('Using original query for complex filters');
+        queryResult = await this.queryTestIndices({
+          offset: opts.offset,
+          limit: opts.limit,
+          filterMode: opts.filterMode,
+          searchQuery: opts.searchQuery,
+          filters: opts.filters,
+        });
+      } else {
+        // Use optimized query for better performance
+        logger.debug('Using optimized query for table page');
+        queryResult = await queryTestIndicesOptimized(this.id, {
+          offset: opts.offset,
+          limit: opts.limit,
+          filterMode: opts.filterMode,
+          searchQuery: opts.searchQuery,
+          filters: opts.filters,
+        });
+      }
 
       testIndices = queryResult.testIndices;
       filteredCount = queryResult.filteredCount;
