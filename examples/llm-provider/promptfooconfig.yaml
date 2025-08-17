@@ -1,0 +1,106 @@
+# Example configuration for the LLM provider
+# This provider integrates with the LLM Python package (https://llm.datasette.io/)
+
+# Prerequisites:
+# 1. Install the LLM package: pip install llm
+# 2. Install needed plugins:
+#    - llm install llm-ollama (for local models)
+#    - llm install llm-claude-3 (for Anthropic models)
+#    - llm install llm-gemini (for Google models)
+# 3. Set up API keys (if using cloud models):
+#    - llm keys set openai
+#    - llm keys set anthropic
+#    - llm keys set gemini
+
+providers:
+  # OpenAI models
+  - llm:gpt-4o-mini
+  - llm:gpt-3.5-turbo
+
+  # Anthropic models
+  - id: llm:claude-3-haiku
+    config:
+      anthropic_api_key: ${ANTHROPIC_API_KEY}
+
+  # Google models
+  - id: llm:gemini-2.0-flash
+    config:
+      gemini_api_key: ${GEMINI_API_KEY}
+      temperature: 0.7
+      max_tokens: 1000
+
+  # Local models via Ollama (requires Ollama to be running)
+  - llm:llama3.2:latest
+  - llm:mistral:latest
+
+  # Custom configuration example
+  - id: llm:gpt-4o-mini
+    label: 'GPT-4o-mini Creative'
+    config:
+      temperature: 0.9
+      system_prompt: 'You are a creative writing assistant. Be imaginative and poetic.'
+
+  - id: llm:gpt-4o-mini
+    label: 'GPT-4o-mini Technical'
+    config:
+      temperature: 0.2
+      system_prompt: 'You are a technical documentation writer. Be precise and clear.'
+
+prompts:
+  - 'Write a {{style}} description of {{topic}}'
+  - |
+    Generate a {{format}} about {{topic}}.
+    Requirements:
+    - Be creative
+    - Use vivid language
+    - Keep it under 200 words
+
+tests:
+  - vars:
+      style: 'poetic'
+      topic: 'artificial intelligence'
+      format: 'haiku'
+    assert:
+      - type: contains
+        value: '5-7-5'
+      - type: llm-rubric
+        value: 'The output should be poetic and follow haiku structure'
+
+  - vars:
+      style: 'technical'
+      topic: 'machine learning'
+      format: 'explanation'
+    assert:
+      - type: javascript
+        value: output.length > 50 && output.length < 500
+      - type: llm-rubric
+        value: 'The output should be technically accurate and clear'
+
+  - vars:
+      style: 'humorous'
+      topic: 'databases'
+      format: 'joke'
+    assert:
+      - type: llm-rubric
+        value: 'The output should be funny and related to databases'
+      - type: not-contains
+        value: 'error'
+
+  - vars:
+      style: 'educational'
+      topic: 'quantum computing'
+      format: 'summary'
+    assert:
+      - type: contains-any
+        value:
+          - 'qubit'
+          - 'superposition'
+          - 'entanglement'
+      - type: llm-rubric
+        value: 'The output should be educational and accurate about quantum computing'
+
+# Optional: Set default test options
+defaultTest:
+  options:
+    # Add a delay between API calls to avoid rate limiting
+    delay: 100

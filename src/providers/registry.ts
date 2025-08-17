@@ -1238,4 +1238,15 @@ export const providerMap: ProviderFactory[] = [
       });
     },
   },
+  {
+    test: (providerPath: string) => providerPath.startsWith('llm:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createLLMProvider } = await import('./llm');
+      return createLLMProvider(providerPath, providerOptions, context.env);
+    },
+  },
 ];
