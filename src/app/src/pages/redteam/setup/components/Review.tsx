@@ -9,10 +9,10 @@ import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
-import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -29,11 +29,9 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
@@ -48,6 +46,8 @@ import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
+import { RunOptions } from './RunOptions';
+import { getEstimatedDuration, getEstimatedProbes } from './strategies/utils';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 
@@ -87,14 +87,11 @@ export default function Review({
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
-  const [debugMode, setDebugMode] = React.useState(false);
   const [maxConcurrency, setMaxConcurrency] = React.useState(
     String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
   );
-  const [delayMs, setDelayMs] = React.useState('0');
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
-  const [isRunSettingsDialogOpen, setIsRunSettingsDialogOpen] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
@@ -282,8 +279,6 @@ export default function Review({
   };
 
   const handleRunWithSettings = async () => {
-    setIsRunSettingsDialogOpen(false);
-
     // Check email verification first
     const emailResult = await checkEmailStatus();
 
@@ -355,9 +350,9 @@ export default function Review({
         body: JSON.stringify({
           config: getUnifiedConfig(config),
           force: forceRegeneration,
-          verbose: debugMode,
+          verbose: config.target.config.verbose,
           maxConcurrency,
-          delayMs,
+          delay: config.target.config.delay,
         }),
       });
 
@@ -697,31 +692,49 @@ export default function Review({
           )}
 
           <Grid2 size={12}>
-            <Paper elevation={2} sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Additional Details
-              </Typography>
-              <Grid2 container spacing={2}>
+            <Accordion
+              expanded={isPurposeExpanded}
+              onChange={(e, expanded) => {
+                setIsPurposeExpanded(expanded);
+              }}
+              sx={{
+                '&:before': { display: 'none' },
+                boxShadow: theme.shadows[1],
+                borderRadius: 1,
+              }}
+            >
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon />}
+                sx={{
+                  '& .MuiAccordionSummary-content': {
+                    alignItems: 'center',
+                    gap: 2,
+                  },
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <InfoOutlinedIcon fontSize="small" color="action" />
+                  <Typography variant="h6">Application Details</Typography>
+                  {parsedPurposeSections.length > 0 && (
+                    <Chip
+                      label={`${parsedPurposeSections.length} section${parsedPurposeSections.length !== 1 ? 's' : ''}`}
+                      size="small"
+                      variant="outlined"
+                      sx={{ height: 20, fontSize: '0.75rem' }}
+                    />
+                  )}
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0 }}>
                 <Grid2 size={12}>
                   <Box
                     sx={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
+                      justifyContent: 'flex-end',
                       mb: 1,
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="subtitle2">Application Details</Typography>
-                      {parsedPurposeSections.length > 0 && (
-                        <Chip
-                          label={`${parsedPurposeSections.length} section${parsedPurposeSections.length !== 1 ? 's' : ''}`}
-                          size="small"
-                          variant="outlined"
-                          sx={{ height: 20, fontSize: '0.75rem' }}
-                        />
-                      )}
-                    </Box>
                     {parsedPurposeSections.length > 1 && (
                       <Button
                         size="small"
@@ -861,49 +874,52 @@ export default function Review({
                         {isPurposeExpanded ? 'Show less' : 'Show more'}
                       </Typography>
                     )}
+
+                  {config.testGenerationInstructions && (
+                    <Grid2 size={12}>
+                      <Typography variant="subtitle2">Test Generation Instructions</Typography>
+                      <Typography
+                        variant="body2"
+                        onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                        sx={{
+                          whiteSpace: 'pre-wrap',
+                          padding: 1,
+                          borderRadius: 1,
+                          backgroundColor: 'background.paper',
+                          cursor: 'pointer',
+                          display: '-webkit-box',
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
+                          '&:hover': {
+                            backgroundColor: 'action.hover',
+                          },
+                        }}
+                      >
+                        {config.testGenerationInstructions}
+                      </Typography>
+                      {config.testGenerationInstructions &&
+                        config.testGenerationInstructions.split('\n').length > 6 && (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: 'primary.main',
+                              cursor: 'pointer',
+                              mt: 0.5,
+                              display: 'block',
+                            }}
+                            onClick={() =>
+                              setIsTestInstructionsExpanded(!isTestInstructionsExpanded)
+                            }
+                          >
+                            {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
+                          </Typography>
+                        )}
+                    </Grid2>
+                  )}
                 </Grid2>
-                {config.testGenerationInstructions && (
-                  <Grid2 size={12}>
-                    <Typography variant="subtitle2">Test Generation Instructions</Typography>
-                    <Typography
-                      variant="body2"
-                      onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
-                      sx={{
-                        whiteSpace: 'pre-wrap',
-                        padding: 1,
-                        borderRadius: 1,
-                        backgroundColor: 'background.paper',
-                        cursor: 'pointer',
-                        display: '-webkit-box',
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
-                        '&:hover': {
-                          backgroundColor: 'action.hover',
-                        },
-                      }}
-                    >
-                      {config.testGenerationInstructions}
-                    </Typography>
-                    {config.testGenerationInstructions &&
-                      config.testGenerationInstructions.split('\n').length > 6 && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: 'primary.main',
-                            cursor: 'pointer',
-                            mt: 0.5,
-                            display: 'block',
-                          }}
-                          onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
-                        >
-                          {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
-                        </Typography>
-                      )}
-                  </Grid2>
-                )}
-              </Grid2>
-            </Paper>
+              </AccordionDetails>
+            </Accordion>
           </Grid2>
         </Grid2>
 
@@ -948,6 +964,68 @@ export default function Review({
         <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
           Running Your Configuration
         </Typography>
+
+        <RunOptions
+          numTests={config.numTests}
+          runOptions={{
+            maxConcurrency: config.maxConcurrency,
+            delay: config.target.config.delay,
+          }}
+          updateConfig={updateConfig}
+          updateRunOption={(key, value) => {
+            if (key === 'delay') {
+              updateConfig('target', {
+                ...config.target,
+                config: { ...config.target.config, delay: value },
+              });
+            } else if (key === 'maxConcurrency') {
+              updateConfig('maxConcurrency', value);
+            } else if (key === 'verbose') {
+              updateConfig('target', {
+                ...config.target,
+                config: { ...config.target.config, verbose: value },
+              });
+            }
+          }}
+        />
+
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            mb: 3,
+            p: 2,
+            borderRadius: 1,
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography variant="body1" color="text.secondary">
+              Estimated Probes:
+            </Typography>
+          </Box>
+          <Typography variant="body1" fontWeight="bold" color="primary.main">
+            {getEstimatedProbes(config).toLocaleString()}
+          </Typography>
+          <Tooltip title="Probes are the number of requests to target application">
+            <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
+          </Tooltip>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography variant="body1" color="text.secondary">
+                Estimated Duration:
+              </Typography>
+            </Box>
+            <Typography variant="body1" fontWeight="bold" color="primary.main">
+              {getEstimatedDuration(config)}
+            </Typography>
+            <Tooltip title="Estimated time includes test generation and probe execution. Actual time may vary based on target response times and network conditions.">
+              <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
+            </Tooltip>
+          </Box>
+        </Box>
 
         <Paper elevation={2} sx={{ p: 3 }}>
           <Box sx={{ mb: 4 }}>
@@ -1035,15 +1113,6 @@ export default function Review({
                     </Button>
                   </>
                 )}
-                <Tooltip title="Run Settings">
-                  <IconButton
-                    onClick={() => setIsRunSettingsDialogOpen(true)}
-                    disabled={isRunning}
-                    size="small"
-                  >
-                    <SettingsIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
               </Box>
             </Box>
             {logs.length > 0 && <LogViewer logs={logs} />}
@@ -1072,139 +1141,6 @@ export default function Review({
                 Cancel Existing & Run New
               </Button>
             </Box>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isRunSettingsDialogOpen} onClose={() => setIsRunSettingsDialogOpen(false)}>
-          <DialogTitle>Run Settings</DialogTitle>
-          <DialogContent>
-            <Stack spacing={4} sx={{ mt: 1, minWidth: 300 }}>
-              {/*
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={forceRegeneration}
-                  onChange={(e) => setForceRegeneration(e.target.checked)}
-                  disabled={isRunning}
-                />
-              }
-              label={
-                <Box>
-                  <Typography variant="body1">Force regeneration</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Generate new test cases even if no changes are detected
-                  </Typography>
-                </Box>
-              }
-            />
-            */}
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={debugMode}
-                    onChange={(e) => setDebugMode(e.target.checked)}
-                    disabled={isRunning}
-                  />
-                }
-                label={
-                  <Box>
-                    <Typography variant="body1">Debug mode</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Show additional debug information in logs
-                    </Typography>
-                  </Box>
-                }
-              />
-              <Box>
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="Number of test cases"
-                  value={config.numTests}
-                  onChange={(e) => {
-                    const value = Number(e.target.value);
-                    if (!Number.isNaN(value) && value > 0 && Number.isInteger(value)) {
-                      updateConfig('numTests', value);
-                    }
-                  }}
-                  disabled={isRunning}
-                  helperText="Number of test cases to generate for each plugin"
-                />
-              </Box>
-              <Box>
-                <Tooltip
-                  title={
-                    Number(maxConcurrency) > 1
-                      ? 'Disabled because max concurrency is greater than 1'
-                      : ''
-                  }
-                  placement="top"
-                >
-                  <span>
-                    <TextField
-                      fullWidth
-                      type="number"
-                      label="Delay between API calls (ms)"
-                      value={delayMs}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Ensure non-negative numbers only
-                        if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
-                          setDelayMs(value);
-                          // If delay is set, disable concurrency by setting it to 1
-                          if (Number(value) > 0) {
-                            setMaxConcurrency('1');
-                          }
-                        }
-                      }}
-                      disabled={isRunning || Number(maxConcurrency) > 1}
-                      inputProps={{ min: 0, step: 1 }}
-                      InputProps={{
-                        endAdornment: <Typography variant="caption">ms</Typography>,
-                      }}
-                      helperText="Add a delay between API calls to avoid rate limits"
-                    />
-                  </span>
-                </Tooltip>
-              </Box>
-              <Box>
-                <Tooltip
-                  title={Number(delayMs) > 0 ? 'Disabled because delay is set' : ''}
-                  placement="top"
-                >
-                  <span>
-                    <TextField
-                      fullWidth
-                      type="number"
-                      label="Max concurrency"
-                      value={maxConcurrency}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Ensure non-negative numbers only
-                        if (!Number.isNaN(Number(value)) && Number(value) >= 0) {
-                          setMaxConcurrency(value);
-                          updateConfig('maxConcurrency', Number(value));
-                          // If concurrency > 1, disable delay by setting it to 0
-                          if (Number(value) > 1) {
-                            setDelayMs('0');
-                          }
-                        }
-                      }}
-                      disabled={isRunning || Number(delayMs) > 0}
-                      inputProps={{ min: 1, step: 1 }}
-                      InputProps={{
-                        endAdornment: <Typography variant="caption">instances</Typography>,
-                      }}
-                      helperText="Maximum number of concurrent evaluations"
-                    />
-                  </span>
-                </Tooltip>
-              </Box>
-
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-                <Button onClick={() => setIsRunSettingsDialogOpen(false)}>Close</Button>
-              </Box>
-            </Stack>
           </DialogContent>
         </Dialog>
 
