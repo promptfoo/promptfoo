@@ -8,7 +8,6 @@ sidebar_label: Write for Promptfoo
 
 If you enjoy Promptfoo, would love to help others learn to use it, and are looking to build your reputation as a writer, this might be just the thing for you!
 
-
 ## Types of content we value
 
 We welcome contributions in various formats:
@@ -40,6 +39,7 @@ We also expect support for up to 30 days to keep the article updated. For exampl
 ## Process
 
 Email tabs@promptfoo.dev with:
+
 - Topic
 - Outline
 - Estimated length
