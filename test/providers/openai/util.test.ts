@@ -196,6 +196,26 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 1.5 + 500 * 6.0) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for gpt-5', () => {
+    const cost = calculateOpenAICost('gpt-5', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 1.25 + 500 * 10) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5-chat-latest', () => {
+    const cost = calculateOpenAICost('gpt-5-chat-latest', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 1.25 + 500 * 10) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5-nano', () => {
+    const cost = calculateOpenAICost('gpt-5-nano', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 0.05 + 500 * 0.4) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5-mini', () => {
+    const cost = calculateOpenAICost('gpt-5-mini', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 0.25 + 500 * 2) / 1e6, 6);
+  });
+
   it('should handle undefined token counts', () => {
     const cost = calculateOpenAICost('gpt-4', {}, undefined, undefined);
     expect(cost).toBeUndefined();

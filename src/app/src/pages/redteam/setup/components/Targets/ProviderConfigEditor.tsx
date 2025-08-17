@@ -1,9 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
+import { AGENT_FRAMEWORKS } from './consts';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
@@ -121,6 +123,8 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         }
       } else if (field in updatedTarget.config) {
         (updatedTarget.config as any)[field] = value;
+      } else if (field === 'label') {
+        updatedTarget.label = value;
       }
       setProvider(updatedTarget);
     };
@@ -186,6 +190,13 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
           (provider.config.top_p < 0 || provider.config.top_p > 1)
         ) {
           errors.push('Top P must be between 0 and 1');
+        }
+      } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
+        // Agent frameworks validation
+        if (!provider.id || provider.id.trim() === '') {
+          errors.push('Python file path is required');
+        } else if (!provider.id.startsWith('file://')) {
+          errors.push('Provider ID must start with file:// for Python agent files');
         }
       } else if (
         ['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
@@ -324,6 +335,15 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
             rawConfigJson={rawConfigJson}
             setRawConfigJson={setRawConfigJson}
             bodyError={bodyError}
+          />
+        )}
+
+        {/* Agent frameworks */}
+        {AGENT_FRAMEWORKS.includes(providerType || '') && (
+          <AgentFrameworkConfiguration
+            selectedTarget={provider}
+            updateCustomTarget={updateCustomTarget}
+            agentType={providerType || ''}
           />
         )}
 

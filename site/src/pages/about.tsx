@@ -84,6 +84,12 @@ const AboutPageContent = () => {
                 bio: 'Michael brings extensive experience in AI and engineering leadership. As the former VP of Engineering and Head of AI at Smile Identity, he has a track record of scaling ML solutions to serve over 100 million people across hundreds of enterprises.',
               },
               {
+                name: 'Lily Liu',
+                title: 'Business Operations Lead',
+                image: '/img/team/lily.jpeg',
+                bio: 'Lily brings investment and operational expertise from CVC Capital Partners and Evercore, where she spent five years evaluating software companies and tech M&A deals. At Promptfoo, she builds the systems and processes that enable our rapid growth while maintaining operational excellence. She holds a BS in Computer Science from Stanford.',
+              },
+              {
                 name: 'Steve Klein',
                 title: 'Staff Engineer',
                 image: '/img/team/steve.jpeg',
@@ -122,7 +128,7 @@ const AboutPageContent = () => {
               {
                 name: 'Will Holley',
                 title: 'Senior Engineer',
-                image: '/img/team/will.jpg',
+                image: '/img/team/will.jpeg',
                 bio: 'Will has a passion for building secure and reliable systems. He brings experience leading teams that develop AI for the financial services industry.',
               },
               {

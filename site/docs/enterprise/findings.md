@@ -2,7 +2,7 @@
 sidebar_label: Findings and Reports
 sidebar_position: 50
 title: Findings and Reports in Promptfoo Enterprise
-description: Learn how to analyze vulnerability findings, review security reports, and export results in Promptfoo Enterprise
+description: Analyze vulnerability findings with severity scoring, remediation tracking, and compliance reporting in Promptfoo Enterprise
 keywords:
   [findings, security reports, llm vulnerabilities, red team results, vulnerability management]
 ---

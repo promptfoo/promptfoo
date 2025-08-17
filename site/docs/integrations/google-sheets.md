@@ -1,5 +1,6 @@
 ---
 sidebar_label: Google Sheets
+description: Import and export LLM test cases with Google Sheets integration. Configure public or authenticated access, write evaluation results, and run model-graded metrics.
 ---
 
 # Google Sheets Integration

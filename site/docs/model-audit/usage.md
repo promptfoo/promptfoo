@@ -1,6 +1,7 @@
 ---
 sidebar_label: Advanced Usage
 sidebar_position: 120
+description: Automate LLM model scanning across cloud providers with remote storage integration, CI/CD workflows, and programmatic controls for advanced security testing
 ---
 
 # Advanced Usage

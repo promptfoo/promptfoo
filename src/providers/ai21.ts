@@ -4,7 +4,7 @@ import logger from '../logger';
 import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvVarKey } from '../envars';
-import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
+import type { ApiProvider, CallApiContextParams, ProviderResponse, TokenUsage } from '../types';
 import type { EnvOverrides } from '../types/env';
 
 const AI21_CHAT_MODELS = [
@@ -115,24 +115,30 @@ export class AI21ChatCompletionProvider implements ApiProvider {
     );
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
       throw new Error(
         'AI21 API key is not set. Set the AI21_API_KEY environment variable or add `apiKey` or `apiKeyEnvar` to the provider config.',
       );
     }
 
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const body = {
       model: this.modelName,
       messages,
-      temperature: this.config?.temperature ?? 0.1,
-      top_p: this.config?.top_p || 1,
-      max_tokens: this.config?.max_tokens || 1024,
+      temperature: config?.temperature ?? 0.1,
+      top_p: config?.top_p || 1,
+      max_tokens: config?.max_tokens || 1024,
       n: 1,
       stop: [],
-      response_format: this.config.response_format || { type: 'text' },
+      response_format: config.response_format || { type: 'text' },
     };
 
     const url = `${this.getApiUrl()}/chat/completions`;
@@ -181,7 +187,7 @@ export class AI21ChatCompletionProvider implements ApiProvider {
       cached,
       cost: calculateAI21Cost(
         this.modelName,
-        this.config,
+        config,
         data.usage?.prompt_tokens,
         data.usage?.completion_tokens,
       ),

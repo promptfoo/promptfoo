@@ -109,6 +109,15 @@ export const evalResultsTable = sqliteTable(
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
     testIdxIdx: index('eval_result_test_idx').on(table.testIdx),
 
+    evalTestIdx: index('eval_result_eval_test_idx').on(table.evalId, table.testIdx),
+    evalSuccessIdx: index('eval_result_eval_success_idx').on(table.evalId, table.success),
+    evalFailureIdx: index('eval_result_eval_failure_idx').on(table.evalId, table.failureReason),
+    evalTestSuccessIdx: index('eval_result_eval_test_success_idx').on(
+      table.evalId,
+      table.testIdx,
+      table.success,
+    ),
+
     responseIdx: index('eval_result_response_idx').on(table.response),
 
     gradingResultReasonIdx: index('eval_result_grading_result_reason_idx').on(

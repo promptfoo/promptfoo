@@ -1,6 +1,6 @@
 ---
 title: 'OWASP Top 10 LLM Security Risks (2025) – 5-Minute TLDR'
-description: 'Learn the 10 biggest LLM security risks and practical fixes, in a 5-minute TLDR. Updated for OWASP 2025.'
+description: 'Master OWASP Top 10 LLM security vulnerabilities with practical mitigation strategies in this comprehensive 2025 guide'
 image: /img/blog/owasp-top10/red_panda_list.jpg
 keywords:
   [

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 2
 sidebar_label: Quickstart
+description: Start red teaming LLMs in minutes by scanning 50+ vulnerabilities including jailbreaks, prompt injection, and data exfiltration
 ---
 
 import CodeBlock from '@theme/CodeBlock';

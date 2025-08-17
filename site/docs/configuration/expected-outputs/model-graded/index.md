@@ -1,5 +1,6 @@
 ---
 sidebar_position: 7
+description: 'Comprehensive overview of model-graded evaluation techniques leveraging AI models to assess quality, safety, and accuracy'
 ---
 
 # Model-graded metrics

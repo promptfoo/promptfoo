@@ -1,5 +1,6 @@
 ---
 sidebar_label: Azure Pipelines
+description: Integrate promptfoo LLM testing with Azure Pipelines CI/CD using step-by-step setup, environment variables, and matrix testing configurations for automated AI evaluation
 ---
 
 # Azure Pipelines Integration

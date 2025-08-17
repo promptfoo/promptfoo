@@ -1,7 +1,7 @@
 ---
 sidebar_label: Pandamonium
 title: Pandamonium Jailbreaking Strategy
-description: Advanced automated red teaming technique that dynamically generates conversations to bypass safety measures
+description: Deploy Pandamonium's adaptive red teaming to dynamically generate attack conversations that evolve to bypass AI defenses
 ---
 
 # Pandamonium (experimental)

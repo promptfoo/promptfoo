@@ -1,5 +1,6 @@
 ---
 sidebar_label: Google AI / Gemini
+description: Configure Google's Gemini models with support for text, images, and video inputs through Google AI Studio API for comprehensive multimodal LLM testing and evaluation
 ---
 
 # Google AI / Gemini

@@ -5,7 +5,9 @@ import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import { alpha, styled } from '@mui/material/styles';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { SIDEBAR_WIDTH } from '../page';
 
 interface PageWrapperProps {
   title: string;
@@ -17,6 +19,7 @@ interface PageWrapperProps {
   backLabel?: string;
   nextDisabled?: boolean;
   backDisabled?: boolean;
+  warningMessage?: string;
 }
 
 const Root = styled(Box)(({ theme }) => ({
@@ -40,7 +43,10 @@ const HeaderContainer = styled(Box, {
   position: 'sticky',
   top: 0,
   zIndex: 10,
-  backgroundColor: alpha(theme.palette.background.default, 0.95),
+  backgroundColor:
+    theme.palette.mode === 'dark'
+      ? alpha(theme.palette.background.default, 0.9)
+      : alpha(theme.palette.background.default, 0.95),
   backdropFilter: 'blur(8px)',
   borderBottom: `1px solid ${theme.palette.divider}`,
   padding: theme.spacing(isMinimized ? 1.5 : 3, 3),
@@ -85,7 +91,7 @@ const ContentBox = styled(Box)(({ theme }) => ({
 const NavigationContainer = styled(Box)(({ theme }) => ({
   position: 'fixed',
   bottom: 0,
-  left: '280px', // Account for sidebar width
+  left: SIDEBAR_WIDTH, // Account for sidebar width
   right: 0,
   zIndex: 15,
   backgroundColor: alpha(theme.palette.background.paper, 0.95),
@@ -107,6 +113,7 @@ export default function PageWrapper({
   backLabel = 'Back',
   nextDisabled = false,
   backDisabled = false,
+  warningMessage,
 }: PageWrapperProps) {
   const [isMinimized, setIsMinimized] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -160,15 +167,30 @@ export default function PageWrapper({
           </Box>
           <Box>
             {onNext && (
-              <Button
-                variant="contained"
-                onClick={onNext}
-                endIcon={<KeyboardArrowRightIcon />}
-                disabled={nextDisabled}
-                sx={{ px: 4, py: 1, mr: '72px' }}
-              >
-                {nextLabel}
-              </Button>
+              <Tooltip title={warningMessage || ''} arrow placement="top">
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'inline-block',
+                    cursor: nextDisabled ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <Button
+                    variant="contained"
+                    onClick={onNext}
+                    endIcon={<KeyboardArrowRightIcon />}
+                    disabled={nextDisabled}
+                    sx={{
+                      px: 4,
+                      py: 1,
+                      mr: '72px',
+                      pointerEvents: nextDisabled ? 'none' : 'auto',
+                    }}
+                  >
+                    {nextLabel}
+                  </Button>
+                </Box>
+              </Tooltip>
             )}
           </Box>
         </NavigationContainer>

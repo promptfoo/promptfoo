@@ -1,6 +1,6 @@
 ---
 title: Multi-Modal Red Teaming
-description: Learn how to use promptfoo to test the robustness of multi-modal LLMs against adversarial inputs involving text, images, and audio.
+description: Red team multimodal AI systems using adversarial text, images, audio, and video inputs to identify cross-modal vulnerabilities
 keywords:
   [
     red teaming,
@@ -61,7 +61,11 @@ This approach uses a fixed image while generating various potentially problemati
 
 This approach converts potentially harmful text into images and then sends those images to the model. It tests whether harmful content embedded in images can bypass safety filters that would catch the same content in plain text. For more details, see [Image Jailbreaking](/docs/red-team/strategies/image).
 
-#### 3. UnsafeBench Dataset Testing
+#### 3. Text-to-Video Conversion (Video Strategy)
+
+This approach converts potentially harmful text into videos with text overlay and then sends those videos to the model. It tests whether harmful content embedded in videos can bypass safety filters that would catch the same content in plain text. For more details, see [Video Jailbreaking](/docs/red-team/strategies/video).
+
+#### 4. UnsafeBench Dataset Testing
 
 This approach uses real unsafe images from the [UnsafeBench](https://huggingface.co/datasets/yiting/UnsafeBench) dataset to test how models respond to potentially harmful visual content across various categories. It evaluates whether models can properly detect and refuse to engage with unsafe imagery.
 
@@ -493,5 +497,6 @@ npx promptfoo@latest redteam run -c promptfooconfig.yaml
 - [Red Team Strategies](/docs/red-team/strategies/)
 - [Image Inputs Strategy](/docs/red-team/strategies/image)
 - [Audio Inputs Strategy](/docs/red-team/strategies/audio)
+- [Video Inputs Strategy](/docs/red-team/strategies/video)
 - [LLM Red Teaming Guide](/docs/red-team/)
 - [Testing Guardrails](/docs/guides/testing-guardrails)

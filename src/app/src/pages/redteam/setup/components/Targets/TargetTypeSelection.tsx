@@ -67,6 +67,13 @@ export default function TargetTypeSelection({
 
     // If target type section is shown and selection is valid, proceed to next step
     if (showTargetTypeSection && isValidSelection()) {
+      // Track provider type selection when moving to next step
+      recordEvent('feature_used', {
+        feature: 'redteam_config_provider_selected',
+        provider_type: providerType,
+        provider_id: selectedTarget.id,
+        provider_label: selectedTarget.label,
+      });
       onNext();
     }
   };

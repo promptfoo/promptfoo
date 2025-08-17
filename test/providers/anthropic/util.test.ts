@@ -74,6 +74,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -97,6 +98,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -123,6 +125,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -159,6 +162,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -193,6 +197,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -218,6 +223,7 @@ describe('Anthropic utilities', () => {
                 cited_text: 'The sky is blue.',
                 document_index: 0,
                 document_title: 'Nature Facts',
+                file_id: null,
                 start_char_index: 0,
                 end_char_index: 15,
               },
@@ -233,6 +239,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -264,6 +271,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -297,6 +305,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -327,6 +336,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,
@@ -357,6 +367,7 @@ describe('Anthropic utilities', () => {
         usage: {
           input_tokens: 0,
           output_tokens: 0,
+          cache_creation: null,
           cache_creation_input_tokens: 0,
           cache_read_input_tokens: 0,
           server_tool_use: null,

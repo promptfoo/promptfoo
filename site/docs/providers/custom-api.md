@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Javascript
+description: Configure custom JavaScript providers to integrate any API or service with promptfoo's testing framework using TypeScript, CommonJS, or ESM modules
 ---
 
 # Javascript Provider
