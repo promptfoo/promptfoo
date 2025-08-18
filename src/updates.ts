@@ -51,7 +51,7 @@ export async function getModelAuditLatestVersion(): Promise<string | null> {
   try {
     const response = await fetchWithTimeout('https://pypi.org/pypi/modelaudit/json', {}, 1000);
     if (!response.ok) {
-      throw new Error('Failed to fetch package information for modelaudit');
+      return null;
     }
     const data = (await response.json()) as { info: { version: string } };
     return data.info.version;
