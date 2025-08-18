@@ -1,0 +1,21 @@
+{
+  "name": "promptfoo-bbq-example",
+  "version": "1.0.0",
+  "description": "BBQ (Bias Benchmark for QA) evaluation example for Promptfoo",
+  "main": "prompt.py",
+  "scripts": {
+    "eval": "promptfoo eval",
+    "view": "promptfoo view"
+  },
+  "keywords": [
+    "promptfoo",
+    "bbq",
+    "bias-benchmark", 
+    "llm-evaluation",
+    "bias-testing",
+    "social-bias"
+  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "license": "MIT"
+}
