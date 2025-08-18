@@ -36,6 +36,7 @@ import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
+import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
@@ -224,6 +225,7 @@ export function createApp() {
   app.use('/api/configs', configsRouter);
   app.use('/api/model-audit', modelAuditRouter);
   app.use('/api/traces', tracesRouter);
+  app.use('/api/version', versionRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
