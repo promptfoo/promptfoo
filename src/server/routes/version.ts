@@ -57,6 +57,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       selfHosted,
       isNpx,
       updateCommands,
+      commandType: updateCommands.commandType,
     };
 
     res.json(response);
@@ -74,6 +75,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       selfHosted,
       isNpx,
       updateCommands,
+      commandType: updateCommands.commandType,
     });
   }
 });

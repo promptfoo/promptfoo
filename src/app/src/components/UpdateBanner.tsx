@@ -49,18 +49,13 @@ const UpdateActions = styled(Box)({
 export default function UpdateBanner() {
   const { versionInfo, loading, error, dismissed, dismiss } = useVersionCheck();
   const [copySnackbarOpen, setCopySnackbarOpen] = useState(false);
-  const [selectedCommand, setSelectedCommand] = useState<'primary' | 'alternative'>('primary');
 
-  const handleCopyCommand = async (commandType: 'primary' | 'alternative' = 'primary') => {
-    const command =
-      commandType === 'primary'
-        ? versionInfo?.updateCommands?.primary
-        : versionInfo?.updateCommands?.alternative;
+  const handleCopyCommand = async () => {
+    const command = versionInfo?.updateCommands?.primary;
 
     if (command) {
       try {
         await navigator.clipboard.writeText(command);
-        setSelectedCommand(commandType);
         setCopySnackbarOpen(true);
       } catch (error) {
         // Fallback for browsers that don't support clipboard API or when it fails
@@ -74,7 +69,6 @@ export default function UpdateBanner() {
         textarea.select();
         try {
           document.execCommand('copy');
-          setSelectedCommand(commandType);
           setCopySnackbarOpen(true);
         } catch (fallbackError) {
           console.error('Fallback copy also failed:', fallbackError);
@@ -139,22 +133,15 @@ export default function UpdateBanner() {
                 size="small"
                 variant="outlined"
                 startIcon={<ContentCopyIcon sx={{ fontSize: '0.875rem' }} />}
-                onClick={() => handleCopyCommand('primary')}
+                onClick={handleCopyCommand}
                 sx={{ textTransform: 'none' }}
                 title={versionInfo.updateCommands.primary}
               >
-                Copy Command
-              </Button>
-            )}
-            {versionInfo?.updateCommands?.alternative && (
-              <Button
-                size="small"
-                variant="text"
-                onClick={() => handleCopyCommand('alternative')}
-                sx={{ textTransform: 'none', fontSize: '0.75rem' }}
-                title={versionInfo.updateCommands.alternative}
-              >
-                or {versionInfo.isNpx ? 'global install' : 'npx'}
+                {versionInfo.commandType === 'docker' 
+                  ? 'Copy Docker Command'
+                  : versionInfo.commandType === 'npx'
+                  ? 'Copy npx Command' 
+                  : 'Copy Update Command'}
               </Button>
             )}
           </UpdateActions>
@@ -164,11 +151,7 @@ export default function UpdateBanner() {
         open={copySnackbarOpen}
         autoHideDuration={3000}
         onClose={handleCloseCopySnackbar}
-        message={`Command copied to clipboard: ${
-          selectedCommand === 'primary'
-            ? versionInfo?.updateCommands?.primary
-            : versionInfo?.updateCommands?.alternative
-        }`}
+        message={`Update command copied to clipboard`}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
     </>

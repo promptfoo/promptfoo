@@ -11,6 +11,7 @@ interface VersionInfo {
     primary: string;
     alternative: string | null;
   };
+  commandType?: 'docker' | 'npx' | 'npm';
 }
 
 interface UseVersionCheckResult {
