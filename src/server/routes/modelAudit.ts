@@ -187,11 +187,11 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
     const resolvedPath = path.isAbsolute(expandedPath)
       ? expandedPath
       : path.resolve(SAFE_ROOT, expandedPath);
-    
+
     let absolutePath: string;
     try {
       absolutePath = fs.realpathSync(resolvedPath);
-    } catch (err) {
+    } catch (_err) {
       // If realpath fails, the path doesn't exist - check if the resolved path is safe first
       const normalizedPath = path.resolve(resolvedPath);
       if (!normalizedPath.startsWith(SAFE_ROOT + path.sep) && normalizedPath !== SAFE_ROOT) {
