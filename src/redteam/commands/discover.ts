@@ -18,6 +18,7 @@ import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { discoverRateLimit, type RateLimitInfo } from '../extraction/rateLimit';
 
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 
@@ -56,6 +57,17 @@ const TargetPurposeDiscoveryResultSchema = z.object({
       })
       .nullable(),
   ),
+  rateLimit: z
+    .object({
+      detected: z.boolean(),
+      detectionMethod: z.enum(['headers', 'probing', 'none']),
+      requestsPerSecond: z.number().optional(),
+      requestsPerMinute: z.number().optional(),
+      burstCapacity: z.number().optional(),
+      headers: z.record(z.string()).optional(),
+      confidence: z.enum(['high', 'medium', 'low']),
+    })
+    .optional(),
 });
 
 export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
@@ -70,6 +82,8 @@ export const ArgsSchema = z
   .object({
     config: z.string().optional(),
     target: z.string().optional(),
+    rateLimitProbing: z.boolean().optional(),
+    skipRateLimits: z.boolean().optional(),
   })
   // Config and target are mutually exclusive:
   .refine((data) => !(data.config && data.target), {
@@ -133,12 +147,14 @@ export function normalizeTargetPurposeDiscoveryResult(
  * @param target - The target API provider.
  * @param prompt - The prompt to use for the discovery.
  * @param showProgress - Whether to show the progress bar.
+ * @param options - Discovery options including rate limit discovery settings.
  * @returns The discovery result.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   prompt?: Prompt,
   showProgress: boolean = true,
+  options?: { includeRateLimitDiscovery?: boolean; activeProbing?: boolean },
 ): Promise<TargetPurposeDiscoveryResult | undefined> {
   // Generate a unique session id to pass to the target across all turns.
   const sessionId = randomUUID();
@@ -255,7 +271,44 @@ export async function doTargetPurposeDiscovery(
     pbar?.stop();
   }
 
-  return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
+  // Rate limit discovery
+  let rateLimitInfo: RateLimitInfo | undefined;
+
+  if (options?.includeRateLimitDiscovery !== false) {
+    if (showProgress) {
+      console.log('Discovering rate limits...');
+    }
+    try {
+      rateLimitInfo = await discoverRateLimit(target, {
+        activeProbing: options?.activeProbing,
+      });
+    } catch (error) {
+      logger.error(`${LOG_PREFIX} Error during rate limit discovery: ${error}`);
+      // Continue without rate limit info if discovery fails
+      rateLimitInfo = { detected: false, detectionMethod: 'none', confidence: 'low' };
+    }
+  }
+
+  if (discoveryResult) {
+    const normalizedResult = normalizeTargetPurposeDiscoveryResult(discoveryResult);
+    return {
+      ...normalizedResult,
+      rateLimit: rateLimitInfo,
+    };
+  }
+
+  // If no discovery result but we have rate limit info, return minimal result
+  if (rateLimitInfo) {
+    return {
+      purpose: null,
+      limitations: null,
+      user: null,
+      tools: [],
+      rateLimit: rateLimitInfo,
+    };
+  }
+
+  return undefined;
 }
 
 // ========================================================
@@ -283,6 +336,11 @@ export function discoverCommand(
     )
     .option('-c, --config <path>', 'Path to `promptfooconfig.yaml` configuration file.')
     .option('-t, --target <id>', 'UUID of a target defined in Promptfoo Cloud to scan.')
+    .option(
+      '--rate-limit-probing',
+      'Enable active rate limit probing (may send additional requests)',
+    )
+    .option('--skip-rate-limits', 'Skip rate limit discovery entirely')
     .action(async (rawArgs: Args) => {
       // Check that remote generation is enabled:
       if (neverGenerateRemote()) {
@@ -367,7 +425,10 @@ export function discoverCommand(
       }
 
       try {
-        const discoveryResult = await doTargetPurposeDiscovery(target);
+        const discoveryResult = await doTargetPurposeDiscovery(target, undefined, true, {
+          includeRateLimitDiscovery: !args.skipRateLimits,
+          activeProbing: args.rateLimitProbing,
+        });
 
         if (discoveryResult) {
           if (discoveryResult.purpose) {
@@ -393,12 +454,53 @@ export function discoverCommand(
             logger.info(discoveryResult.user);
           }
 
+          // Rate limiting information
+          if (discoveryResult.rateLimit) {
+            if (discoveryResult.rateLimit.detected) {
+              logger.info(chalk.bold(chalk.green('\n5. Rate limiting information:\n')));
+
+              if (discoveryResult.rateLimit.requestsPerSecond) {
+                logger.info(
+                  `  • Limit: ${discoveryResult.rateLimit.requestsPerSecond} requests/second`,
+                );
+              }
+              if (discoveryResult.rateLimit.requestsPerMinute) {
+                logger.info(
+                  `  • Limit: ${discoveryResult.rateLimit.requestsPerMinute} requests/minute`,
+                );
+              }
+              if (discoveryResult.rateLimit.burstCapacity) {
+                logger.info(
+                  `  • Burst capacity: ${discoveryResult.rateLimit.burstCapacity} requests`,
+                );
+              }
+
+              logger.info(`  • Detection method: ${discoveryResult.rateLimit.detectionMethod}`);
+              logger.info(`  • Confidence: ${discoveryResult.rateLimit.confidence}`);
+
+              if (
+                discoveryResult.rateLimit.headers &&
+                Object.keys(discoveryResult.rateLimit.headers).length > 0
+              ) {
+                logger.info('  • Headers found:');
+                Object.entries(discoveryResult.rateLimit.headers).forEach(([key, value]) => {
+                  logger.info(`    - ${key}: ${value}`);
+                });
+              }
+            } else {
+              logger.info(chalk.bold(chalk.yellow('\n5. Rate limiting information:\n')));
+              logger.info('  • No rate limits detected');
+              logger.info('  • Consider enabling active probing with --rate-limit-probing');
+            }
+          }
+
           // If no meaningful information was discovered, inform the user
           if (
             !discoveryResult.purpose &&
             !discoveryResult.limitations &&
             (!discoveryResult.tools || discoveryResult.tools.length === 0) &&
-            !discoveryResult.user
+            !discoveryResult.user &&
+            (!discoveryResult.rateLimit || !discoveryResult.rateLimit.detected)
           ) {
             logger.info(
               chalk.yellow('\nNo meaningful information was discovered about the target.'),

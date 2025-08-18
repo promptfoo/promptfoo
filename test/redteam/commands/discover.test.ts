@@ -22,6 +22,19 @@ describe('ArgsSchema', () => {
     expect(success).toBe(false);
     expect(error?.issues[0].message).toBe('Cannot specify both config and target!');
   });
+
+  it('should accept rate limit options', () => {
+    const args = {
+      config: 'test',
+      rateLimitProbing: true,
+      skipRateLimits: false,
+    };
+
+    const { success, data } = ArgsSchema.safeParse(args);
+    expect(success).toBe(true);
+    expect(data?.rateLimitProbing).toBe(true);
+    expect(data?.skipRateLimits).toBe(false);
+  });
 });
 
 describe('normalizeTargetPurposeDiscoveryResult', () => {
@@ -169,6 +182,11 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+      rateLimit: {
+        detected: false,
+        detectionMethod: 'headers',
+        confidence: 'high',
+      },
     });
   });
 
@@ -241,6 +259,11 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+      rateLimit: {
+        detected: false,
+        detectionMethod: 'headers',
+        confidence: 'high',
+      },
     });
   });
 
@@ -290,6 +313,11 @@ describe('doTargetPurposeDiscovery', () => {
       limitations: null,
       tools: [],
       user: null,
+      rateLimit: {
+        detected: false,
+        detectionMethod: 'headers',
+        confidence: 'high',
+      },
     });
   });
 
@@ -347,6 +375,130 @@ describe('doTargetPurposeDiscovery', () => {
         { name: 'tool2', description: 'desc2', arguments: [] },
       ],
       user: 'Test user',
+      rateLimit: {
+        detected: false,
+        detectionMethod: 'headers',
+        confidence: 'high',
+      },
+    });
+  });
+
+  it('should include rate limit discovery by default', async () => {
+    const mockResponses = [
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: null,
+          tools: [],
+          user: null,
+        },
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+    ];
+
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    const target = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'I am a test assistant',
+        metadata: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: {
+              'x-ratelimit-limit': '100',
+              'x-ratelimit-remaining': '99',
+            },
+          },
+        },
+      }),
+    };
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target, undefined, false);
+
+    expect(discoveredPurpose).toEqual({
+      purpose: 'Test purpose',
+      limitations: null,
+      tools: [],
+      user: null,
+      rateLimit: {
+        detected: true,
+        detectionMethod: 'headers',
+        confidence: 'high',
+        requestsPerMinute: 100,
+        requestsPerSecond: 1,
+        headers: {
+          limit: '100',
+          remaining: '99',
+        },
+      },
+    });
+  });
+
+  it('should skip rate limit discovery when disabled', async () => {
+    const mockResponses = [
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: null,
+          tools: [],
+          user: null,
+        },
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+      },
+    ];
+
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+
+    const target = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({
+        output: 'I am a test assistant',
+        metadata: {
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: {
+              'x-ratelimit-limit': '100',
+            },
+          },
+        },
+      }),
+    };
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target, undefined, false, {
+      includeRateLimitDiscovery: false,
+    });
+
+    expect(discoveredPurpose).toEqual({
+      purpose: 'Test purpose',
+      limitations: null,
+      tools: [],
+      user: null,
+      // No rateLimit field when disabled
     });
   });
 });

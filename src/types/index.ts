@@ -15,6 +15,7 @@ import type {
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
+import type { RateLimitInfo } from '../redteam/extraction/rateLimit';
 import type { EnvOverrides } from '../types/env';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
@@ -345,6 +346,11 @@ export interface EvaluateSummaryV2 {
   results: EvaluateResult[];
   table: EvaluateTable;
   stats: EvaluateStats;
+  discovery?: {
+    purpose?: string;
+    entities?: string[];
+    rateLimit?: RateLimitInfo;
+  };
 }
 
 export type EvalTableDTO = {
