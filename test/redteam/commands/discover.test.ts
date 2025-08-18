@@ -113,6 +113,10 @@ describe('doTargetPurposeDiscovery', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   it('should handle empty prompt', async () => {
     const mockResponses = [
       {
@@ -431,17 +435,9 @@ describe('doTargetPurposeDiscovery', () => {
       tools: [],
       user: null,
       rateLimit: {
-        detected: true,
-        detectionMethod: 'headers',
-        confidence: 'medium',
-        requestsPerMinute: 100,
-        requestsPerSecond: 1,
-        timeWindow: 'unknown',
-        headers: {
-          limit: '100',
-          remaining: '99',
-        },
-        warnings: ['Unable to determine time window for rate limit 100, assuming per-minute'],
+        detected: false,
+        detectionMethod: 'none',
+        confidence: 'high',
       },
     });
   });
@@ -487,7 +483,7 @@ describe('doTargetPurposeDiscovery', () => {
       rateLimit: {
         detected: false,
         detectionMethod: 'none',
-        confidence: 'low',
+        confidence: 'high', // New passive implementation returns high confidence when no response provided
       },
     });
   });

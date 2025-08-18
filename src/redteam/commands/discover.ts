@@ -18,7 +18,7 @@ import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
-import { discoverRateLimit } from '../extraction/rateLimit';
+import { discoverRateLimit, RateLimitInfoSchema } from '../extraction/rateLimit';
 
 import type { ApiProvider, Prompt, RateLimitInfo, UnifiedConfig } from '../../types';
 
@@ -57,19 +57,7 @@ const TargetPurposeDiscoveryResultSchema = z.object({
       })
       .nullable(),
   ),
-  rateLimit: z
-    .object({
-      detected: z.boolean(),
-      detectionMethod: z.enum(['headers', 'none']),
-      requestsPerSecond: z.number().min(0).max(10000).optional(),
-      requestsPerMinute: z.number().min(0).max(600000).optional(),
-      requestsPerHour: z.number().min(0).max(36000000).optional(),
-      timeWindow: z.string().optional(),
-      headers: z.record(z.string()).optional(),
-      confidence: z.enum(['high', 'medium', 'low']),
-      warnings: z.array(z.string()).optional(),
-    })
-    .optional(),
+  rateLimit: RateLimitInfoSchema.optional(),
 });
 
 export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
@@ -173,6 +161,7 @@ export async function doTargetPurposeDiscovery(
   let done = false;
   let question: string | undefined;
   let discoveryResult: TargetPurposeDiscoveryResult | undefined;
+  let lastProviderResponse: any | undefined;
   let state = TargetPurposeDiscoveryStateSchema.parse({
     currentQuestionIndex: 0,
     answers: [],
@@ -240,6 +229,7 @@ export async function doTargetPurposeDiscovery(
           vars: { sessionId },
           bustCache: true,
         });
+        lastProviderResponse = targetResponse;
 
         if (targetResponse.error) {
           const errorMessage = `Error from target: ${targetResponse.error}`;
@@ -276,7 +266,10 @@ export async function doTargetPurposeDiscovery(
     logger.info('Discovering rate limits...');
   }
   try {
-    rateLimitInfo = await discoverRateLimit(target);
+    rateLimitInfo = await discoverRateLimit(target, {
+      response: lastProviderResponse,
+      fallbackToRequest: false, // Keep truly passive
+    });
   } catch (error) {
     logger.error(`${LOG_PREFIX} Error during rate limit discovery: ${error}`);
     // Continue without rate limit info if discovery fails

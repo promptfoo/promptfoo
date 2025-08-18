@@ -21,13 +21,44 @@ export const RateLimitInfoSchema = z.object({
  * This is a safe, non-intrusive method that checks for standard rate limit headers.
  *
  * @param provider - The API provider to test
+ * @param opts - Options for rate limit discovery
+ * @param opts.response - Existing ProviderResponse to parse headers from (preferred)
+ * @param opts.fallbackToRequest - Allow making a new API call if no response provided
  * @returns Rate limit information detected from headers
  */
-export async function discoverRateLimit(provider: ApiProvider): Promise<RateLimitInfo> {
+export async function discoverRateLimit(
+  provider: ApiProvider,
+  opts?: { response?: unknown; fallbackToRequest?: boolean },
+): Promise<RateLimitInfo> {
   logger.debug('[RateLimit] Starting passive rate limit discovery');
 
-  // Only passive detection - removed active probing due to safety and reliability concerns
-  return await checkRateLimitHeaders(provider);
+  // Prefer parsing headers from an existing response (no extra calls)
+  const headers = (opts?.response as any)?.metadata?.http?.headers;
+  if (headers && typeof headers === 'object') {
+    // Reuse existing parsing path
+    const lowerHeaders: Record<string, string> = {};
+    Object.entries(headers).forEach(([key, value]) => {
+      if (typeof key === 'string' && (typeof value === 'string' || typeof value === 'number')) {
+        lowerHeaders[key.toLowerCase()] = String(value);
+      }
+    });
+
+    const rateLimitDetection = detectRateLimitHeaders(lowerHeaders);
+    if (rateLimitDetection.detected) {
+      logger.debug(`[RateLimit] Rate limits detected: ${JSON.stringify(rateLimitDetection, null, 2)}`);
+      return rateLimitDetection;
+    }
+    
+    return { detected: false, detectionMethod: 'headers', confidence: 'high' };
+  }
+
+  // Fallback to making a request only if explicitly allowed
+  if (opts?.fallbackToRequest) {
+    return await checkRateLimitHeaders(provider);
+  }
+
+  // No headers available and no fallback request allowed
+  return { detected: false, detectionMethod: 'none', confidence: 'high' };
 }
 
 /**
@@ -162,24 +193,24 @@ function parseRateLimitHeaders(headers: Record<string, string>, warnings: string
     if (parsedLimit !== null) {
       // Determine time window - default to per-minute if not specified
       const timeWindow = headers.window || headers.reset || 'unknown';
+      
+      // Parse numeric values first, then fall back to symbolic windows
+      const seconds = Number(timeWindow);
+      const isNumber = !Number.isNaN(seconds);
 
-      if (timeWindow.includes('3600') || timeWindow.includes('hour') || timeWindow.includes('h')) {
+      if ((isNumber && seconds === 3600) || /\b(1h|hour)\b/i.test(timeWindow)) {
         result.requestsPerHour = parsedLimit;
         result.requestsPerMinute = Math.floor(parsedLimit / 60);
         result.requestsPerSecond = Math.floor(parsedLimit / 3600);
         result.timeWindow = '1h';
         result.confidence = 'high';
-      } else if (timeWindow.includes('900') || timeWindow.includes('15m')) {
+      } else if ((isNumber && seconds === 900) || /\b15m\b/i.test(timeWindow)) {
         // Twitter-style 15-minute windows
         result.requestsPerMinute = Math.floor(parsedLimit / 15);
         result.requestsPerSecond = Math.floor(parsedLimit / 900);
         result.timeWindow = '15m';
         result.confidence = 'high';
-      } else if (
-        timeWindow.includes('60') ||
-        timeWindow.includes('minute') ||
-        timeWindow.includes('m')
-      ) {
+      } else if ((isNumber && seconds === 60) || /\b(1m|minute)\b/i.test(timeWindow)) {
         result.requestsPerMinute = parsedLimit;
         result.requestsPerSecond = Math.floor(parsedLimit / 60);
         result.timeWindow = '1m';
