@@ -1,5 +1,6 @@
 ---
 sidebar_position: 60
+description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, and native builds in your LLM testing pipeline
 ---
 
 # Troubleshooting

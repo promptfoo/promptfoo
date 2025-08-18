@@ -1,7 +1,7 @@
 ---
 sidebar_label: Multi-turn Jailbreaks
 title: Multi-turn Jailbreaks Strategy
-description: Gradually escalate prompt harm over multiple conversation turns to identify vulnerabilities in AI systems
+description: Execute multi-turn attack sequences that gradually escalate harmful content to bypass conversation-level safety mechanisms
 ---
 
 # Multi-turn Jailbreaks Strategy

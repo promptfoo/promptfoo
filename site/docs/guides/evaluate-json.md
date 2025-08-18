@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating JSON outputs
+description: Validate and test LLM JSON outputs with automated schema checks and field assertions to ensure reliable, well-formed data structures in your AI applications
 ---
 
 # LLM evaluation techniques for JSON outputs

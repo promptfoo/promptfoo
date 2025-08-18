@@ -209,4 +209,61 @@ describe('Review Component', () => {
 
     expect(defaultTestVariables.closest('paper')).toBeNull();
   });
+
+  it('should not treat indented lines ending with colons as section headers', () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: `
+Application Details:
+  This is a test application.
+  It has some indented lines:
+    - line 1:
+    - line 2:
+`,
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    const sectionTitles = screen.getAllByRole('heading', { name: 'Application Details' });
+    expect(sectionTitles.length).toBe(1);
+  });
+
+  it('handles extremely long section headers and content without breaking layout', () => {
+    const longHeader = 'This is an extremely long section header that should wrap appropriately:';
+    const longContent =
+      'This is an extremely long section content that should wrap appropriately. '.repeat(50);
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: `${longHeader}\n${longContent}`,
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    const sectionHeaderElement = screen.getByText(longHeader.slice(0, -1));
+    fireEvent.click(sectionHeaderElement);
+
+    expect(
+      screen.getByText((content) => {
+        return content.includes(longContent.substring(0, 50));
+      }),
+    ).toBeInTheDocument();
+  });
 });

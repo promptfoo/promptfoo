@@ -11,9 +11,10 @@ const orderRedTeam = (redteam: any): any => {
     'purpose',
     'entities',
     'plugins',
+    'testGenerationInstructions',
     'strategies',
     'numTests',
-    'testGenerationInstructions',
+    'maxConcurrency',
   ] as const;
 
   redTeamOrder.forEach((key) => {

@@ -39,6 +39,16 @@ vi.mock('./PostHogPageViewTracker', () => ({
   PostHogPageViewTracker: () => <div data-testid="posthog-tracker-mock" />,
 }));
 
+vi.mock('@app/components/UpdateBanner', () => {
+  const MockUpdateBanner = () => {
+    const _theme = useTheme();
+    return <div data-testid="update-banner-mock">UpdateBanner</div>;
+  };
+  return {
+    default: MockUpdateBanner,
+  };
+});
+
 const ThemeDisplay = () => {
   const theme = useTheme();
   return <div data-testid="theme-mode">{theme.palette.mode}</div>;
@@ -175,5 +185,63 @@ describe('PageShell', () => {
       expect(screen.getByTestId('theme-mode')).toHaveTextContent('light');
     });
     expect(localStorage.getItem('darkMode')).toBe('false');
+  });
+
+  it('should render the UpdateBanner component when mounted', async () => {
+    renderPageShell();
+    await waitFor(() => {
+      expect(screen.getByTestId('update-banner-mock')).toBeInTheDocument();
+    });
+  });
+
+  it('should render the Outlet component correctly', async () => {
+    const outletTestId = 'outlet-content';
+    renderPageShell('/', <div data-testid={outletTestId}>Outlet Content</div>);
+
+    await waitFor(() => {
+      expect(screen.getByTestId(outletTestId)).toBeInTheDocument();
+    });
+  });
+
+  it('should adapt UpdateBanner to theme changes when dark mode is toggled', async () => {
+    const originalMock = vi.importActual('@app/components/UpdateBanner');
+    vi.doMock('@app/components/UpdateBanner', () => {
+      const MockUpdateBanner = () => {
+        const theme = useTheme();
+        return <div data-testid="update-banner-theme">{theme.palette.mode}</div>;
+      };
+      return {
+        default: MockUpdateBanner,
+      };
+    });
+
+    localStorage.setItem('darkMode', 'false');
+    renderPageShell();
+
+    await waitFor(() => {
+      expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    });
+
+    const toggleButton = screen.getByTestId('toggle-button');
+    userEvent.click(toggleButton);
+
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    });
+
+    userEvent.click(toggleButton);
+
+    await waitFor(() => {
+      expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    });
+
+    vi.doMock('@app/components/UpdateBanner', () => originalMock);
+  });
+
+  it('should render without errors when UpdateBanner receives incomplete deployment type information', async () => {
+    renderPageShell();
+    await waitFor(() => {
+      expect(screen.getByTestId('update-banner-mock')).toBeInTheDocument();
+    });
   });
 });

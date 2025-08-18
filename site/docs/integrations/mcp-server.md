@@ -1,6 +1,6 @@
 ---
 title: Promptfoo MCP Server
-description: Use promptfoo as an MCP server to provide AI eval tools to external AI agents and development environments
+description: Deploy promptfoo as Model Context Protocol server enabling external AI agents to access evaluation and red teaming capabilities
 sidebar_label: MCP Server
 sidebar_position: 21
 ---

@@ -2539,6 +2539,83 @@ describe('OpenAiResponsesProvider', () => {
         undefined,
       );
     });
+
+    it('should handle reasoning items with empty summary correctly', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'reasoning',
+            summary: [], // Empty array (edge case)
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Final answer',
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockData,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('o3-deep-research', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ type: 'web_search_preview' } as any],
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      // Should only include the valid reasoning summary and final answer
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Final answer');
+      expect(result.output).not.toContain('Reasoning: []');
+    });
+  });
+
+  it('should handle reasoning items with summary correctly', async () => {
+    const mockData = {
+      output: [
+        {
+          type: 'reasoning',
+          summary: [{ type: 'summary_text', text: 'Valid reasoning summary' }],
+        },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Final answer' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+    };
+
+    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockData,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    const result = await provider.callApi('Test prompt');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Reasoning: Valid reasoning summary\nFinal answer');
   });
 
   describe('response format handling', () => {
