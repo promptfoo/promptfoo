@@ -131,11 +131,11 @@ export default function CloudStatusIndicator() {
                 🔗 Share evaluation results with your {isEnterprise ? 'organization' : 'team'}
               </Typography>
               <Typography component="li" variant="body2" sx={{ mb: 1 }}>
-                🎯 Advanced red teaming with {isEnterprise ? 'enterprise' : 'team-wide'}{' '}
+                🎯 Collaborative red team testing and {isEnterprise ? 'enterprise' : 'team'}{' '}
                 configurations
               </Typography>
               <Typography component="li" variant="body2">
-                ✨ New features and updates as they're released
+                📊 Centralized dashboard and reporting
               </Typography>
             </Box>
           </Box>

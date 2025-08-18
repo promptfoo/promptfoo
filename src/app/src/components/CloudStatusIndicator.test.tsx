@@ -175,9 +175,9 @@ describe('CloudStatusIndicator', () => {
     expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
     expect(screen.getByText(/Share evaluation results with your team/)).toBeInTheDocument();
     expect(
-      screen.getByText(/Advanced red teaming with team-wide configurations/),
+      screen.getByText(/Collaborative red team testing and team configurations/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/New features and updates as they're released/)).toBeInTheDocument();
+    expect(screen.getByText(/Centralized dashboard and reporting/)).toBeInTheDocument();
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'cloud_status_icon_click',
       authenticated: false,
@@ -203,7 +203,7 @@ describe('CloudStatusIndicator', () => {
     expect(screen.getByText('Connect to Promptfoo Enterprise')).toBeInTheDocument();
     expect(screen.getByText(/Share evaluation results with your organization/)).toBeInTheDocument();
     expect(
-      screen.getByText(/Advanced red teaming with enterprise configurations/),
+      screen.getByText(/Collaborative red team testing and enterprise configurations/),
     ).toBeInTheDocument();
   });
 
