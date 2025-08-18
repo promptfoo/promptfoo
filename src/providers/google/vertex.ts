@@ -277,34 +277,38 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (this.initializationPromise) {
       await this.initializationPromise;
     }
+
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
-      this.config.systemInstruction,
+      config.systemInstruction,
     );
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const allTools = [
-      ...mcpTools,
-      ...(this.config.tools ? loadFile(this.config.tools, context?.vars) : []),
-    ];
+    const allTools = [...mcpTools, ...(config.tools ? loadFile(config.tools, context?.vars) : [])];
     // --- End MCP tool injection logic ---
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
       generationConfig: {
-        context: this.config.context,
-        examples: this.config.examples,
-        stopSequences: this.config.stopSequences,
-        temperature: this.config.temperature,
-        maxOutputTokens: this.config.maxOutputTokens,
-        topP: this.config.topP,
-        topK: this.config.topK,
-        ...this.config.generationConfig,
+        context: config.context,
+        examples: config.examples,
+        stopSequences: config.stopSequences,
+        temperature: config.temperature,
+        maxOutputTokens: config.maxOutputTokens,
+        topP: config.topP,
+        topK: config.topK,
+        ...config.generationConfig,
       },
-      ...(this.config.safetySettings ? { safetySettings: this.config.safetySettings } : {}),
-      ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
+      ...(config.safetySettings ? { safetySettings: config.safetySettings } : {}),
+      ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };
@@ -476,12 +480,12 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
     try {
       // Handle function tool callbacks
-      if (this.config.functionToolCallbacks && isValidJson(response.output)) {
+      if (config.functionToolCallbacks && isValidJson(response.output)) {
         const structured_output = JSON.parse(response.output);
         if (structured_output.functionCall) {
           const results = [];
           const functionName = structured_output.functionCall.name;
-          if (this.config.functionToolCallbacks[functionName]) {
+          if (config.functionToolCallbacks[functionName]) {
             try {
               const functionResult = await this.executeFunctionCallback(
                 functionName,
@@ -490,6 +494,7 @@ export class VertexChatProvider extends VertexGenericProvider {
                     ? JSON.parse(structured_output.functionCall.args)
                     : structured_output.functionCall.args,
                 ),
+                config,
               );
               results.push(functionResult);
             } catch (error) {
@@ -825,14 +830,18 @@ export class VertexChatProvider extends VertexGenericProvider {
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<any> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    config: any,
+  ): Promise<any> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
 
       // If not loaded yet, try to load it now
       if (!callback) {
-        const callbackRef = this.config.functionToolCallbacks?.[functionName];
+        const callbackRef = config.functionToolCallbacks?.[functionName];
 
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;

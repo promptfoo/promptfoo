@@ -1,5 +1,6 @@
 ---
 sidebar_label: Bitbucket Pipelines
+description: Integrate promptfoo LLM testing with Bitbucket Pipelines CI/CD to automate evaluations, track results, and catch regressions in your AI models using built-in assertions
 ---
 
 # Bitbucket Pipelines Integration

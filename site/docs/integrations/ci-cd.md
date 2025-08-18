@@ -1,7 +1,7 @@
 ---
 sidebar_label: CI/CD
 title: CI/CD Integration for LLM Eval and Security
-description: Integrate promptfoo into CI/CD pipelines for automated prompt eval, security scanning, and quality assurance
+description: Automate LLM testing in CI/CD pipelines with GitHub Actions, GitLab CI, and Jenkins for continuous security and quality checks
 keywords:
   [
     ci/cd,
@@ -31,29 +31,13 @@ If you're using GitHub Actions, check out our [dedicated GitHub Actions guide](/
 
 For other platforms, here's a basic example:
 
-````bash
+```bash
 # Run eval (no global install required)
 npx promptfoo@latest eval -c promptfooconfig.yaml -o results.json
 
 # Run security scan (red teaming)
 npx promptfoo@latest redteam run
-```typescript
-interface OutputFile {
-  evalId?: string;
-  results: EvaluateSummary;
-  config: Partial<UnifiedConfig>;
-  shareableUrl: string | null;
-  metadata?: {
-    promptfooVersion: string;
-    nodeVersion: string;
-    platform: string;
-    arch: string;
-    exportedAt: string;
-    evaluationCreatedAt?: string;
-    author?: string;
-  };
-}
-````
+```
 
 ## Prerequisites
 

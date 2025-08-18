@@ -203,6 +203,32 @@ export async function writeOutput(
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
+
+    // Sanitize data for XML builder to prevent textValue.replace errors
+    const sanitizeForXml = (obj: any): any => {
+      if (obj === null || obj === undefined) {
+        return '';
+      }
+      if (typeof obj === 'boolean' || typeof obj === 'number') {
+        return String(obj);
+      }
+      if (typeof obj === 'string') {
+        return obj;
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(sanitizeForXml);
+      }
+      if (typeof obj === 'object') {
+        const sanitized: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+          sanitized[key] = sanitizeForXml(value);
+        }
+        return sanitized;
+      }
+      // For any other type, convert to string
+      return String(obj);
+    };
+
     const xmlBuilder = new XMLBuilder({
       ignoreAttributes: false,
       format: true,
@@ -211,9 +237,9 @@ export async function writeOutput(
     const xmlData = xmlBuilder.build({
       promptfoo: {
         evalId: evalRecord.id,
-        results: summary,
-        config: evalRecord.config,
-        shareableUrl: shareableUrl || undefined,
+        results: sanitizeForXml(summary),
+        config: sanitizeForXml(evalRecord.config),
+        shareableUrl: shareableUrl || '',
       },
     });
     fs.writeFileSync(outputPath, xmlData);

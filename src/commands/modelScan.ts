@@ -3,6 +3,7 @@ import { promisify } from 'util';
 
 import chalk from 'chalk';
 import logger from '../logger';
+import { checkModelAuditUpdates } from '../updates';
 import type { Command } from 'commander';
 
 const execAsync = promisify(exec);
@@ -54,6 +55,9 @@ export function modelScanCommand(program: Command): void {
         logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
         process.exit(1);
       }
+
+      // Check for modelaudit updates
+      await checkModelAuditUpdates();
 
       const args = ['scan', ...paths];
 
