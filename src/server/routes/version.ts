@@ -55,7 +55,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
     const isNpx = isRunningUnderNpx();
     const updateCommands = getUpdateCommands({ selfHosted, isNpx });
-    
+
     const response = {
       currentVersion: VERSION,
       latestVersion,
@@ -71,7 +71,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
     const isNpx = isRunningUnderNpx();
     const updateCommands = getUpdateCommands({ selfHosted, isNpx });
-    
+
     res.status(500).json({
       error: 'Failed to check version',
       currentVersion: VERSION,

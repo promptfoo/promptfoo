@@ -52,10 +52,11 @@ export default function UpdateBanner() {
   const [selectedCommand, setSelectedCommand] = useState<'primary' | 'alternative'>('primary');
 
   const handleCopyCommand = (commandType: 'primary' | 'alternative' = 'primary') => {
-    const command = commandType === 'primary' 
-      ? versionInfo?.updateCommands?.primary
-      : versionInfo?.updateCommands?.alternative;
-    
+    const command =
+      commandType === 'primary'
+        ? versionInfo?.updateCommands?.primary
+        : versionInfo?.updateCommands?.alternative;
+
     if (command) {
       navigator.clipboard.writeText(command);
       setSelectedCommand(commandType);
@@ -140,9 +141,11 @@ export default function UpdateBanner() {
         open={copySnackbarOpen}
         autoHideDuration={3000}
         onClose={handleCloseCopySnackbar}
-        message={`Command copied to clipboard: ${selectedCommand === 'primary' 
-          ? versionInfo?.updateCommands?.primary 
-          : versionInfo?.updateCommands?.alternative}`}
+        message={`Command copied to clipboard: ${
+          selectedCommand === 'primary'
+            ? versionInfo?.updateCommands?.primary
+            : versionInfo?.updateCommands?.alternative
+        }`}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
     </>
