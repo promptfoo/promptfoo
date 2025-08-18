@@ -1,9 +1,9 @@
-import { discoverRateLimit, type RateLimitInfo } from '../../../src/redteam/extraction/rateLimit';
+import { discoverRateLimit } from '../../../src/redteam/extraction/rateLimit';
 import type { ApiProvider, ProviderResponse } from '../../../src/types';
 
-describe('Rate Limit Discovery', () => {
+describe('Rate Limit Discovery (Fixed Implementation)', () => {
   describe('discoverRateLimit', () => {
-    it('should detect rate limits from headers', async () => {
+    it('should detect standard rate limits from X-RateLimit headers', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: jest.fn().mockResolvedValue({
@@ -15,25 +15,84 @@ describe('Rate Limit Discovery', () => {
               headers: {
                 'x-ratelimit-limit': '100',
                 'x-ratelimit-remaining': '99',
-                'x-ratelimit-reset': '1609459200'
-              }
-            }
-          }
-        } as ProviderResponse)
+                'x-ratelimit-reset': '1709459299',
+              },
+            },
+          },
+        } as ProviderResponse),
       };
 
       const result = await discoverRateLimit(mockProvider);
 
       expect(result.detected).toBe(true);
       expect(result.detectionMethod).toBe('headers');
-      expect(result.confidence).toBe('high');
-      expect(result.requestsPerMinute).toBe(100);
+      expect(result.confidence).toBe('medium'); // Medium confidence due to unknown time window
+      expect(result.requestsPerMinute).toBe(100); // Default assumption for unknown window
       expect(result.requestsPerSecond).toBe(1); // 100/60 rounded down
-      expect(result.headers).toEqual({
-        limit: '100',
-        remaining: '99',
-        reset: '1609459200'
-      });
+      expect(result.timeWindow).toBe('unknown'); // No window specified
+      expect(result.warnings).toContain(
+        'Unable to determine time window for rate limit 100, assuming per-minute',
+      );
+      expect(result.headers).toHaveProperty('limit', '100');
+      expect(result.headers).toHaveProperty('remaining', '99');
+    });
+
+    it('should detect GitHub-style rate limits with proper time windows', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'test response',
+          metadata: {
+            http: {
+              status: 200,
+              statusText: 'OK',
+              headers: {
+                'x-ratelimit-limit': '5000',
+                'x-ratelimit-remaining': '4999',
+                'x-ratelimit-reset': '3600', // 1 hour
+              },
+            },
+          },
+        } as ProviderResponse),
+      };
+
+      const result = await discoverRateLimit(mockProvider);
+
+      expect(result.detected).toBe(true);
+      expect(result.detectionMethod).toBe('headers');
+      expect(result.confidence).toBe('high'); // High confidence with clear time window
+      expect(result.requestsPerHour).toBe(5000);
+      expect(result.requestsPerMinute).toBe(83); // 5000/60 rounded down
+      expect(result.requestsPerSecond).toBe(1); // 5000/3600 rounded down
+      expect(result.timeWindow).toBe('1h');
+    });
+
+    it('should detect Twitter-style 15-minute windows', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'test response',
+          metadata: {
+            http: {
+              status: 200,
+              statusText: 'OK',
+              headers: {
+                'x-rate-limit-limit': '300',
+                'x-rate-limit-remaining': '299',
+                'x-rate-limit-reset': '900', // 15 minutes
+              },
+            },
+          },
+        } as ProviderResponse),
+      };
+
+      const result = await discoverRateLimit(mockProvider);
+
+      expect(result.detected).toBe(true);
+      expect(result.confidence).toBe('high');
+      expect(result.requestsPerMinute).toBe(20); // 300/15
+      expect(result.requestsPerSecond).toBe(0); // 300/900 rounded down
+      expect(result.timeWindow).toBe('15m');
     });
 
     it('should return no detection when no rate limit headers present', async () => {
@@ -46,34 +105,59 @@ describe('Rate Limit Discovery', () => {
               status: 200,
               statusText: 'OK',
               headers: {
-                'content-type': 'application/json'
-              }
-            }
-          }
-        } as ProviderResponse)
+                'content-type': 'application/json',
+                server: 'nginx',
+              },
+            },
+          },
+        } as ProviderResponse),
       };
 
       const result = await discoverRateLimit(mockProvider);
 
       expect(result.detected).toBe(false);
       expect(result.detectionMethod).toBe('headers');
-      expect(result.confidence).toBe('high');
+      expect(result.confidence).toBe('high'); // High confidence that we checked properly
+      expect(result.headers).toBeUndefined();
+      expect(result.warnings).toBeUndefined();
     });
 
     it('should handle API errors gracefully', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: jest.fn().mockRejectedValue(new Error('API Error'))
+        callApi: jest.fn().mockRejectedValue(new Error('Network timeout')),
       };
 
       const result = await discoverRateLimit(mockProvider);
 
       expect(result.detected).toBe(false);
-      expect(result.detectionMethod).toBe('headers');
-      expect(result.confidence).toBe('low');
+      expect(result.detectionMethod).toBe('none');
+      expect(result.confidence).toBe('low'); // Low confidence due to error
     });
 
-    it('should detect case-insensitive headers', async () => {
+    it('should handle missing or malformed headers gracefully', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'test response',
+          metadata: {
+            http: {
+              status: 200,
+              statusText: 'OK',
+              headers: null, // Malformed headers
+            },
+          },
+        } as ProviderResponse),
+      };
+
+      const result = await discoverRateLimit(mockProvider);
+
+      expect(result.detected).toBe(false);
+      expect(result.detectionMethod).toBe('none');
+      expect(result.confidence).toBe('high');
+    });
+
+    it('should detect case-insensitive headers from multiple standards', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: jest.fn().mockResolvedValue({
@@ -83,61 +167,99 @@ describe('Rate Limit Discovery', () => {
               status: 200,
               statusText: 'OK',
               headers: {
-                'X-Rate-Limit-Limit': '50',
-                'X-RATE-LIMIT-REMAINING': '49'
-              }
-            }
-          }
-        } as ProviderResponse)
+                'X-Rate-Limit-Limit': '1000', // Twitter style with different casing
+                'X-RATE-LIMIT-REMAINING': '999',
+              },
+            },
+          },
+        } as ProviderResponse),
       };
 
       const result = await discoverRateLimit(mockProvider);
 
       expect(result.detected).toBe(true);
       expect(result.detectionMethod).toBe('headers');
-      expect(result.requestsPerMinute).toBe(50);
+      expect(result.requestsPerMinute).toBe(1000);
     });
 
-    it('should perform active probing when enabled', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn()
-          .mockResolvedValueOnce({
-            output: 'test response',
-            metadata: { http: { status: 200, statusText: 'OK', headers: {} } }
-          })
-          .mockResolvedValueOnce({
-            output: 'test response', 
-            metadata: { http: { status: 200, statusText: 'OK', headers: {} } }
-          })
-          .mockResolvedValueOnce({
-            output: 'test response',
-            metadata: { http: { status: 200, statusText: 'OK', headers: {} } }
-          })
-          .mockRejectedValue(new Error('Rate limited'))
-      };
-
-      const result = await discoverRateLimit(mockProvider, { activeProbing: true });
-
-      expect(mockProvider.callApi).toHaveBeenCalledTimes(4); // 1 for headers + 3 successful + 1 error
-      expect(result.detectionMethod).toBe('probing');
-      // Should detect rate limits based on errors
-    }, 15000); // Increase timeout for active probing test
-
-    it('should skip active probing when not enabled', async () => {
+    it('should validate rate limit values and warn about unusual values', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: jest.fn().mockResolvedValue({
           output: 'test response',
-          metadata: { http: { status: 200, statusText: 'OK', headers: {} } }
-        })
+          metadata: {
+            http: {
+              status: 200,
+              statusText: 'OK',
+              headers: {
+                'x-ratelimit-limit': '100000', // Very high limit
+                'x-ratelimit-window': '60',
+              },
+            },
+          },
+        } as ProviderResponse),
       };
 
-      const result = await discoverRateLimit(mockProvider, { activeProbing: false });
+      const result = await discoverRateLimit(mockProvider);
 
-      expect(mockProvider.callApi).toHaveBeenCalledTimes(1); // Only header check
-      expect(result.detected).toBe(false);
-      expect(result.detectionMethod).toBe('headers');
+      expect(result.detected).toBe(true);
+      expect(result.requestsPerMinute).toBe(100000);
+      expect(result.requestsPerSecond).toBe(1666); // 100000/60
+      expect(result.warnings).toContain('Unusually high rate limit detected: 1666 RPS');
+      expect(result.warnings).toContain('Unusually high rate limit detected: 100000 RPM');
+      expect(result.confidence).toBe('medium'); // Downgraded due to warnings
+    });
+
+    it('should handle invalid rate limit values', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'test response',
+          metadata: {
+            http: {
+              status: 200,
+              statusText: 'OK',
+              headers: {
+                'x-ratelimit-limit': 'invalid-number',
+                'x-ratelimit-remaining': '99',
+              },
+            },
+          },
+        } as ProviderResponse),
+      };
+
+      const result = await discoverRateLimit(mockProvider);
+
+      expect(result.detected).toBe(true);
+      expect(result.warnings).toContain('Invalid rate limit value: invalid-number');
+      expect(result.requestsPerMinute).toBeUndefined(); // No valid rate parsed
+      expect(result.confidence).toBe('medium'); // Downgraded due to parsing issues
+    });
+
+    it('should handle non-string header values safely', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'test response',
+          metadata: {
+            http: {
+              status: 200,
+              statusText: 'OK',
+              headers: {
+                'x-ratelimit-limit': 100, // Number instead of string
+                'x-ratelimit-remaining': '99',
+                'invalid-header': { object: 'value' }, // Object header - should be ignored
+              },
+            },
+          },
+        } as ProviderResponse),
+      };
+
+      const result = await discoverRateLimit(mockProvider);
+
+      expect(result.detected).toBe(true);
+      expect(result.requestsPerMinute).toBe(100); // Should handle number conversion
+      expect(result.headers).toHaveProperty('limit', '100'); // Converted to string
     });
   });
 });

@@ -1,210 +1,242 @@
 import { z } from 'zod';
 import logger from '../../logger';
-import { sleep } from '../../util/time';
 
 import type { ApiProvider } from '../../types';
 
-// Rate limit information schema and types
+// Rate limit information schema and types with proper validation
 export const RateLimitInfoSchema = z.object({
   detected: z.boolean(),
-  detectionMethod: z.enum(['headers', 'probing', 'none']),
-  requestsPerSecond: z.number().optional(),
-  requestsPerMinute: z.number().optional(), 
-  burstCapacity: z.number().optional(),
+  detectionMethod: z.enum(['headers', 'none']), // Removed 'probing' - feature removed
+  requestsPerSecond: z.number().min(0).max(10000).optional(), // Reasonable bounds
+  requestsPerMinute: z.number().min(0).max(600000).optional(), // Reasonable bounds
+  requestsPerHour: z.number().min(0).max(36000000).optional(), // Support hourly limits
+  timeWindow: z.string().optional(), // e.g., "1m", "1h", "15m"
   headers: z.record(z.string()).optional(),
   confidence: z.enum(['high', 'medium', 'low']),
+  warnings: z.array(z.string()).optional(), // Any parsing warnings
 });
 
 export type RateLimitInfo = z.infer<typeof RateLimitInfoSchema>;
 
 /**
- * Discovers rate limiting information for an API provider
+ * Discovers rate limiting information for an API provider via passive header detection only.
+ * This is a safe, non-intrusive method that checks for standard rate limit headers.
+ *
  * @param provider - The API provider to test
- * @param options - Discovery options
- * @returns Rate limit information
+ * @returns Rate limit information detected from headers
  */
-export async function discoverRateLimit(
-  provider: ApiProvider,
-  options?: { activeProbing?: boolean }
-): Promise<RateLimitInfo> {
-  logger.debug('[RateLimit] Starting rate limit discovery');
-  
-  // Step 1: Passive detection (always run - it's free)
-  const headerInfo = await checkRateLimitHeaders(provider);
-  if (headerInfo.detected) {
-    logger.debug('[RateLimit] Rate limits detected via headers');
-    return headerInfo;
-  }
-  
-  // Step 2: Active probing (optional)
-  if (options?.activeProbing) {
-    logger.debug('[RateLimit] Starting active probing');
-    return await probeRateLimit(provider);
-  }
-  
-  logger.debug('[RateLimit] No rate limits detected');
-  return headerInfo; // Return header check result (which has detected: false, detectionMethod: 'headers')
+export async function discoverRateLimit(provider: ApiProvider): Promise<RateLimitInfo> {
+  logger.debug('[RateLimit] Starting passive rate limit discovery');
+
+  // Only passive detection - removed active probing due to safety and reliability concerns
+  return await checkRateLimitHeaders(provider);
 }
 
 /**
- * Checks for rate limit information in response headers
+ * Checks for rate limit information in response headers using standard patterns.
+ * Supports multiple rate limiting header standards used by major APIs.
+ *
  * @param provider - The API provider to test
  * @returns Rate limit information from headers
  */
 async function checkRateLimitHeaders(provider: ApiProvider): Promise<RateLimitInfo> {
   try {
-    logger.debug('[RateLimit] Checking headers during test request');
+    logger.debug('[RateLimit] Checking headers during discovery request');
     const response = await provider.callApi('test');
-    const headers = response.metadata?.http?.headers || {};
-    
-    // Convert headers to lowercase for case-insensitive matching
+    const headers = response.metadata?.http?.headers;
+
+    if (!headers || typeof headers !== 'object') {
+      logger.debug('[RateLimit] No headers available from provider');
+      return { detected: false, detectionMethod: 'none', confidence: 'high' };
+    }
+
+    // Safely convert headers to lowercase for case-insensitive matching
     const lowerHeaders: Record<string, string> = {};
     Object.entries(headers).forEach(([key, value]) => {
-      lowerHeaders[key.toLowerCase()] = String(value);
+      if (typeof key === 'string' && (typeof value === 'string' || typeof value === 'number')) {
+        lowerHeaders[key.toLowerCase()] = String(value);
+      }
     });
-    
-    // Check common rate limit headers
-    const rateLimitHeaders = {
-      limit: lowerHeaders['x-ratelimit-limit'] || 
-             lowerHeaders['x-rate-limit-limit'] || 
-             lowerHeaders['ratelimit-limit'],
-      remaining: lowerHeaders['x-ratelimit-remaining'] || 
-                lowerHeaders['x-rate-limit-remaining'] ||
-                lowerHeaders['ratelimit-remaining'],
-      reset: lowerHeaders['x-ratelimit-reset'] || 
-             lowerHeaders['x-rate-limit-reset'] ||
-             lowerHeaders['ratelimit-reset'],
-      retryAfter: lowerHeaders['retry-after']
-    };
-    
-    // Filter out undefined values
-    const foundHeaders: Record<string, string> = {};
-    Object.entries(rateLimitHeaders).forEach(([key, value]) => {
+
+    // Detect rate limit headers using multiple standards
+    const rateLimitDetection = detectRateLimitHeaders(lowerHeaders);
+
+    if (rateLimitDetection.detected) {
+      logger.debug(
+        `[RateLimit] Rate limits detected: ${JSON.stringify(rateLimitDetection, null, 2)}`,
+      );
+      return rateLimitDetection;
+    }
+
+    return { detected: false, detectionMethod: 'headers', confidence: 'high' };
+  } catch (error) {
+    logger.warn(`[RateLimit] Error during header check: ${error}`);
+    return { detected: false, detectionMethod: 'none', confidence: 'low' };
+  }
+}
+
+/**
+ * Detects and parses rate limit information from headers using multiple standards.
+ * Supports RFC 6585, GitHub, Twitter, Cloudflare, and other common patterns.
+ *
+ * @param lowerHeaders - Lowercase header keys with original values
+ * @returns Parsed rate limit information with warnings for ambiguous cases
+ */
+function detectRateLimitHeaders(lowerHeaders: Record<string, string>): RateLimitInfo {
+  const warnings: string[] = [];
+  const foundHeaders: Record<string, string> = {};
+
+  // Standard 1: RFC 6585 and X-RateLimit-* (most common)
+  const standardHeaders = {
+    limit: lowerHeaders['x-ratelimit-limit'] || lowerHeaders['x-rate-limit-limit'],
+    remaining: lowerHeaders['x-ratelimit-remaining'] || lowerHeaders['x-rate-limit-remaining'],
+    reset: lowerHeaders['x-ratelimit-reset'] || lowerHeaders['x-rate-limit-reset'],
+    window: lowerHeaders['x-ratelimit-window'] || lowerHeaders['x-rate-limit-window'],
+  };
+
+  // Standard 2: GitHub API style
+  const githubHeaders = {
+    limit: lowerHeaders['x-ratelimit-limit'],
+    remaining: lowerHeaders['x-ratelimit-remaining'],
+    reset: lowerHeaders['x-ratelimit-reset'],
+    used: lowerHeaders['x-ratelimit-used'],
+  };
+
+  // Standard 3: Twitter API style
+  const twitterHeaders = {
+    limit: lowerHeaders['x-rate-limit-limit'],
+    remaining: lowerHeaders['x-rate-limit-remaining'],
+    reset: lowerHeaders['x-rate-limit-reset'],
+  };
+
+  // Standard 4: Generic rate limit headers
+  const genericHeaders = {
+    limit: lowerHeaders['ratelimit-limit'],
+    remaining: lowerHeaders['ratelimit-remaining'],
+    reset: lowerHeaders['ratelimit-reset'],
+  };
+
+  // Standard 5: Retry-After (HTTP standard)
+  const retryAfter = lowerHeaders['retry-after'];
+
+  // Collect all found rate limit headers
+  [standardHeaders, githubHeaders, twitterHeaders, genericHeaders].forEach((headerSet) => {
+    Object.entries(headerSet).forEach(([key, value]) => {
       if (value) {
         foundHeaders[key] = value;
       }
     });
-    
-    if (Object.keys(foundHeaders).length > 0) {
-      logger.debug(`[RateLimit] Found rate limit headers: ${JSON.stringify(foundHeaders)}`);
-      return parseRateLimitHeaders(foundHeaders);
-    }
-    
-    return { detected: false, detectionMethod: 'headers', confidence: 'high' };
-  } catch (error) {
-    logger.debug(`[RateLimit] Error checking headers: ${error}`);
-    return { detected: false, detectionMethod: 'headers', confidence: 'low' };
+  });
+
+  if (retryAfter) {
+    foundHeaders['retry-after'] = retryAfter;
   }
+
+  // If no rate limit headers found
+  if (Object.keys(foundHeaders).length === 0) {
+    return {
+      detected: false,
+      detectionMethod: 'headers',
+      confidence: 'high', // High confidence that we checked properly
+    };
+  }
+
+  // Parse the found headers
+  return parseRateLimitHeaders(foundHeaders, warnings);
 }
 
 /**
- * Parses rate limit information from headers
- * @param headers - Rate limit headers found in response
- * @returns Parsed rate limit information
+ * Parses rate limit values with proper validation and multiple time window support
  */
-function parseRateLimitHeaders(headers: Record<string, string>): RateLimitInfo {
+function parseRateLimitHeaders(headers: Record<string, string>, warnings: string[]): RateLimitInfo {
   const result: RateLimitInfo = {
     detected: true,
     detectionMethod: 'headers',
-    confidence: 'high',
-    headers
+    confidence: 'medium', // Start with medium, increase based on quality of data
+    headers,
+    warnings: warnings.length > 0 ? warnings : undefined,
   };
-  
-  // Parse limit values
-  if (headers.limit) {
-    const limit = parseInt(headers.limit, 10);
-    if (!isNaN(limit)) {
-      // Most rate limit headers specify per-minute limits
-      result.requestsPerMinute = limit;
-      result.requestsPerSecond = Math.floor(limit / 60);
+
+  // Parse limit values with validation
+  const limitValue = headers.limit;
+  if (limitValue) {
+    const parsedLimit = parsePositiveInteger(limitValue);
+    if (parsedLimit !== null) {
+      // Determine time window - default to per-minute if not specified
+      const timeWindow = headers.window || headers.reset || 'unknown';
+
+      if (timeWindow.includes('3600') || timeWindow.includes('hour') || timeWindow.includes('h')) {
+        result.requestsPerHour = parsedLimit;
+        result.requestsPerMinute = Math.floor(parsedLimit / 60);
+        result.requestsPerSecond = Math.floor(parsedLimit / 3600);
+        result.timeWindow = '1h';
+        result.confidence = 'high';
+      } else if (timeWindow.includes('900') || timeWindow.includes('15m')) {
+        // Twitter-style 15-minute windows
+        result.requestsPerMinute = Math.floor(parsedLimit / 15);
+        result.requestsPerSecond = Math.floor(parsedLimit / 900);
+        result.timeWindow = '15m';
+        result.confidence = 'high';
+      } else if (
+        timeWindow.includes('60') ||
+        timeWindow.includes('minute') ||
+        timeWindow.includes('m')
+      ) {
+        result.requestsPerMinute = parsedLimit;
+        result.requestsPerSecond = Math.floor(parsedLimit / 60);
+        result.timeWindow = '1m';
+        result.confidence = 'high';
+      } else {
+        // Unknown time window - assume per-minute but warn
+        result.requestsPerMinute = parsedLimit;
+        result.requestsPerSecond = Math.floor(parsedLimit / 60);
+        result.timeWindow = 'unknown';
+        warnings.push(
+          `Unable to determine time window for rate limit ${parsedLimit}, assuming per-minute`,
+        );
+        result.confidence = 'medium';
+      }
+    } else {
+      warnings.push(`Invalid rate limit value: ${limitValue}`);
     }
   }
-  
-  // Parse remaining requests (indicates current usage)
-  if (headers.remaining) {
-    const remaining = parseInt(headers.remaining, 10);
-    if (!isNaN(remaining)) {
-      // Could use this to calculate current usage, but not needed for basic discovery
-      logger.debug(`[RateLimit] Remaining requests: ${remaining}`);
+
+  // Validate parsed values make sense
+  if (result.requestsPerSecond && result.requestsPerSecond > 1000) {
+    warnings.push(`Unusually high rate limit detected: ${result.requestsPerSecond} RPS`);
+  }
+
+  if (result.requestsPerMinute && result.requestsPerMinute > 60000) {
+    warnings.push(`Unusually high rate limit detected: ${result.requestsPerMinute} RPM`);
+  }
+
+  // Sanity check: per-second should be <= per-minute/60
+  if (result.requestsPerSecond && result.requestsPerMinute) {
+    const expectedPerSecond = Math.floor(result.requestsPerMinute / 60);
+    if (Math.abs(result.requestsPerSecond - expectedPerSecond) > 1) {
+      warnings.push('Inconsistent rate limit calculations detected');
     }
   }
-  
+
+  // Update warnings if any were added
+  if (warnings.length > 0) {
+    result.warnings = warnings;
+    if (result.confidence === 'high') {
+      result.confidence = 'medium';
+    }
+  }
+
   return result;
 }
 
 /**
- * Actively probes the API to discover rate limits (minimal implementation)
- * @param provider - The API provider to test
- * @returns Rate limit information from probing
+ * Safely parses a positive integer from a string
  */
-async function probeRateLimit(provider: ApiProvider): Promise<RateLimitInfo> {
-  const requests = 5;
-  const timeWindow = 10; // seconds
-  
-  // Safety check - warn user about active probing
-  logger.warn('[RateLimit] Active rate limit probing enabled - this will send additional test requests');
-  
-  // Check if this looks like a production environment
-  const providerId = provider.id();
-  if (providerId.toLowerCase().includes('prod') || providerId.toLowerCase().includes('production')) {
-    logger.warn('[RateLimit] WARNING: This appears to be a production API. Consider using --skip-rate-limits');
+function parsePositiveInteger(value: string): number | null {
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed) || parsed < 0 || parsed > 1000000000) {
+    // Reasonable upper bound
+    return null;
   }
-  
-  try {
-    const startTime = Date.now();
-    const results = [];
-    
-    for (let i = 0; i < requests; i++) {
-      const requestStart = Date.now();
-      const response = await provider.callApi('test');
-      const requestEnd = Date.now();
-      
-      results.push({
-        statusCode: response.error ? 429 : 200, // Assume 429 on error for simplicity
-        responseTime: requestEnd - requestStart,
-        hasError: !!response.error,
-        errorMessage: response.error || ''
-      });
-      
-      // Small delay to avoid immediate blocking
-      await sleep(100);
-    }
-    
-    const endTime = Date.now();
-    const totalTime = (endTime - startTime) / 1000; // Convert to seconds
-    
-    // Simple analysis
-    const errorCount = results.filter(r => r.hasError).length;
-    const avgResponseTime = results.reduce((sum, r) => sum + r.responseTime, 0) / results.length;
-    
-    logger.debug(`[RateLimit] Probing results: ${errorCount}/${requests} errors, avg response time: ${avgResponseTime.toFixed(2)}ms`);
-    
-    if (errorCount > 0) {
-      // Check if errors look like rate limiting
-      const rateLimitErrors = results.filter(r => 
-        r.hasError && (
-          r.errorMessage.toLowerCase().includes('rate') ||
-          r.errorMessage.toLowerCase().includes('limit') ||
-          r.errorMessage.toLowerCase().includes('429') ||
-          r.errorMessage.toLowerCase().includes('too many')
-        )
-      ).length;
-      
-      const confidence = rateLimitErrors > 2 ? 'high' : 
-                        rateLimitErrors > 0 ? 'medium' : 'low';
-      
-      return {
-        detected: rateLimitErrors > 0,
-        detectionMethod: 'probing',
-        confidence,
-        // Rough estimate based on successful requests
-        requestsPerSecond: Math.max(1, Math.floor((requests - errorCount) / totalTime))
-      };
-    }
-    
-    return { detected: false, detectionMethod: 'probing', confidence: 'medium' };
-  } catch (error) {
-    logger.error(`[RateLimit] Error during probing: ${error}`);
-    return { detected: false, detectionMethod: 'probing', confidence: 'low' };
-  }
+  return parsed;
 }

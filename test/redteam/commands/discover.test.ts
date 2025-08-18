@@ -23,17 +23,14 @@ describe('ArgsSchema', () => {
     expect(error?.issues[0].message).toBe('Cannot specify both config and target!');
   });
 
-  it('should accept rate limit options', () => {
+  it('should parse args without rate limit options (removed active probing)', () => {
     const args = {
       config: 'test',
-      rateLimitProbing: true,
-      skipRateLimits: false,
     };
 
     const { success, data } = ArgsSchema.safeParse(args);
     expect(success).toBe(true);
-    expect(data?.rateLimitProbing).toBe(true);
-    expect(data?.skipRateLimits).toBe(false);
+    expect(data?.config).toBe('test');
   });
 });
 
@@ -184,7 +181,7 @@ describe('doTargetPurposeDiscovery', () => {
       user: 'Test user',
       rateLimit: {
         detected: false,
-        detectionMethod: 'headers',
+        detectionMethod: 'none',
         confidence: 'high',
       },
     });
@@ -261,7 +258,7 @@ describe('doTargetPurposeDiscovery', () => {
       user: 'Test user',
       rateLimit: {
         detected: false,
-        detectionMethod: 'headers',
+        detectionMethod: 'none',
         confidence: 'high',
       },
     });
@@ -315,7 +312,7 @@ describe('doTargetPurposeDiscovery', () => {
       user: null,
       rateLimit: {
         detected: false,
-        detectionMethod: 'headers',
+        detectionMethod: 'none',
         confidence: 'high',
       },
     });
@@ -377,7 +374,7 @@ describe('doTargetPurposeDiscovery', () => {
       user: 'Test user',
       rateLimit: {
         detected: false,
-        detectionMethod: 'headers',
+        detectionMethod: 'none',
         confidence: 'high',
       },
     });
@@ -436,18 +433,20 @@ describe('doTargetPurposeDiscovery', () => {
       rateLimit: {
         detected: true,
         detectionMethod: 'headers',
-        confidence: 'high',
+        confidence: 'medium',
         requestsPerMinute: 100,
         requestsPerSecond: 1,
+        timeWindow: 'unknown',
         headers: {
           limit: '100',
           remaining: '99',
         },
+        warnings: ['Unable to determine time window for rate limit 100, assuming per-minute'],
       },
     });
   });
 
-  it('should skip rate limit discovery when disabled', async () => {
+  it('should handle rate limit discovery errors gracefully', async () => {
     const mockResponses = [
       {
         done: true,
@@ -475,30 +474,21 @@ describe('doTargetPurposeDiscovery', () => {
 
     const target = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
-        output: 'I am a test assistant',
-        metadata: {
-          http: {
-            status: 200,
-            statusText: 'OK',
-            headers: {
-              'x-ratelimit-limit': '100',
-            },
-          },
-        },
-      }),
+      callApi: jest.fn().mockRejectedValue(new Error('Network error')),
     };
 
-    const discoveredPurpose = await doTargetPurposeDiscovery(target, undefined, false, {
-      includeRateLimitDiscovery: false,
-    });
+    const discoveredPurpose = await doTargetPurposeDiscovery(target, undefined, false);
 
     expect(discoveredPurpose).toEqual({
       purpose: 'Test purpose',
       limitations: null,
       tools: [],
       user: null,
-      // No rateLimit field when disabled
+      rateLimit: {
+        detected: false,
+        detectionMethod: 'none',
+        confidence: 'low',
+      },
     });
   });
 });

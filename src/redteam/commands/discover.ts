@@ -60,12 +60,14 @@ const TargetPurposeDiscoveryResultSchema = z.object({
   rateLimit: z
     .object({
       detected: z.boolean(),
-      detectionMethod: z.enum(['headers', 'probing', 'none']),
-      requestsPerSecond: z.number().optional(),
-      requestsPerMinute: z.number().optional(),
-      burstCapacity: z.number().optional(),
+      detectionMethod: z.enum(['headers', 'none']),
+      requestsPerSecond: z.number().min(0).max(10000).optional(),
+      requestsPerMinute: z.number().min(0).max(600000).optional(),
+      requestsPerHour: z.number().min(0).max(36000000).optional(),
+      timeWindow: z.string().optional(),
       headers: z.record(z.string()).optional(),
       confidence: z.enum(['high', 'medium', 'low']),
+      warnings: z.array(z.string()).optional(),
     })
     .optional(),
 });
@@ -82,8 +84,6 @@ export const ArgsSchema = z
   .object({
     config: z.string().optional(),
     target: z.string().optional(),
-    rateLimitProbing: z.boolean().optional(),
-    skipRateLimits: z.boolean().optional(),
   })
   // Config and target are mutually exclusive:
   .refine((data) => !(data.config && data.target), {
@@ -147,14 +147,12 @@ export function normalizeTargetPurposeDiscoveryResult(
  * @param target - The target API provider.
  * @param prompt - The prompt to use for the discovery.
  * @param showProgress - Whether to show the progress bar.
- * @param options - Discovery options including rate limit discovery settings.
- * @returns The discovery result.
+ * @returns The discovery result with rate limit information.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   prompt?: Prompt,
   showProgress: boolean = true,
-  options?: { includeRateLimitDiscovery?: boolean; activeProbing?: boolean },
 ): Promise<TargetPurposeDiscoveryResult | undefined> {
   // Generate a unique session id to pass to the target across all turns.
   const sessionId = randomUUID();
@@ -271,22 +269,18 @@ export async function doTargetPurposeDiscovery(
     pbar?.stop();
   }
 
-  // Rate limit discovery
+  // Rate limit discovery (always enabled for passive detection)
   let rateLimitInfo: RateLimitInfo | undefined;
 
-  if (options?.includeRateLimitDiscovery !== false) {
-    if (showProgress) {
-      console.log('Discovering rate limits...');
-    }
-    try {
-      rateLimitInfo = await discoverRateLimit(target, {
-        activeProbing: options?.activeProbing,
-      });
-    } catch (error) {
-      logger.error(`${LOG_PREFIX} Error during rate limit discovery: ${error}`);
-      // Continue without rate limit info if discovery fails
-      rateLimitInfo = { detected: false, detectionMethod: 'none', confidence: 'low' };
-    }
+  if (showProgress) {
+    logger.info('Discovering rate limits...');
+  }
+  try {
+    rateLimitInfo = await discoverRateLimit(target);
+  } catch (error) {
+    logger.error(`${LOG_PREFIX} Error during rate limit discovery: ${error}`);
+    // Continue without rate limit info if discovery fails
+    rateLimitInfo = { detected: false, detectionMethod: 'none', confidence: 'low' };
   }
 
   if (discoveryResult) {
@@ -336,11 +330,6 @@ export function discoverCommand(
     )
     .option('-c, --config <path>', 'Path to `promptfooconfig.yaml` configuration file.')
     .option('-t, --target <id>', 'UUID of a target defined in Promptfoo Cloud to scan.')
-    .option(
-      '--rate-limit-probing',
-      'Enable active rate limit probing (may send additional requests)',
-    )
-    .option('--skip-rate-limits', 'Skip rate limit discovery entirely')
     .action(async (rawArgs: Args) => {
       // Check that remote generation is enabled:
       if (neverGenerateRemote()) {
@@ -425,10 +414,7 @@ export function discoverCommand(
       }
 
       try {
-        const discoveryResult = await doTargetPurposeDiscovery(target, undefined, true, {
-          includeRateLimitDiscovery: !args.skipRateLimits,
-          activeProbing: args.rateLimitProbing,
-        });
+        const discoveryResult = await doTargetPurposeDiscovery(target, undefined, true);
 
         if (discoveryResult) {
           if (discoveryResult.purpose) {
@@ -459,9 +445,10 @@ export function discoverCommand(
             if (discoveryResult.rateLimit.detected) {
               logger.info(chalk.bold(chalk.green('\n5. Rate limiting information:\n')));
 
-              if (discoveryResult.rateLimit.requestsPerSecond) {
+              // Display rate limits in order of specificity
+              if (discoveryResult.rateLimit.requestsPerHour) {
                 logger.info(
-                  `  • Limit: ${discoveryResult.rateLimit.requestsPerSecond} requests/second`,
+                  `  • Limit: ${discoveryResult.rateLimit.requestsPerHour} requests/hour`,
                 );
               }
               if (discoveryResult.rateLimit.requestsPerMinute) {
@@ -469,28 +456,45 @@ export function discoverCommand(
                   `  • Limit: ${discoveryResult.rateLimit.requestsPerMinute} requests/minute`,
                 );
               }
-              if (discoveryResult.rateLimit.burstCapacity) {
+              if (discoveryResult.rateLimit.requestsPerSecond) {
                 logger.info(
-                  `  • Burst capacity: ${discoveryResult.rateLimit.burstCapacity} requests`,
+                  `  • Limit: ${discoveryResult.rateLimit.requestsPerSecond} requests/second`,
                 );
+              }
+
+              if (discoveryResult.rateLimit.timeWindow) {
+                logger.info(`  • Time window: ${discoveryResult.rateLimit.timeWindow}`);
               }
 
               logger.info(`  • Detection method: ${discoveryResult.rateLimit.detectionMethod}`);
               logger.info(`  • Confidence: ${discoveryResult.rateLimit.confidence}`);
 
+              // Display warnings if any
+              if (
+                discoveryResult.rateLimit.warnings &&
+                discoveryResult.rateLimit.warnings.length > 0
+              ) {
+                logger.info(chalk.yellow('  • Warnings:'));
+                discoveryResult.rateLimit.warnings.forEach((warning) => {
+                  logger.info(chalk.yellow(`    - ${warning}`));
+                });
+              }
+
+              // Show original headers for debugging (only in debug mode)
               if (
                 discoveryResult.rateLimit.headers &&
-                Object.keys(discoveryResult.rateLimit.headers).length > 0
+                Object.keys(discoveryResult.rateLimit.headers).length > 0 &&
+                logger.level === 'debug'
               ) {
-                logger.info('  • Headers found:');
+                logger.debug('  • Raw headers:');
                 Object.entries(discoveryResult.rateLimit.headers).forEach(([key, value]) => {
-                  logger.info(`    - ${key}: ${value}`);
+                  logger.debug(`    - ${key}: ${value}`);
                 });
               }
             } else {
-              logger.info(chalk.bold(chalk.yellow('\n5. Rate limiting information:\n')));
-              logger.info('  • No rate limits detected');
-              logger.info('  • Consider enabling active probing with --rate-limit-probing');
+              logger.info(chalk.bold(chalk.green('\n5. Rate limiting information:\n')));
+              logger.info('  • No rate limits detected from headers');
+              logger.info('  • This API may not implement standard rate limiting headers');
             }
           }
 
