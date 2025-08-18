@@ -319,6 +319,16 @@ export async function tryUnblocking({
   tokenUsage?: TokenUsage;
 }> {
   try {
+    // Allow disabling unblocking via environment variable
+    if (process.env.PROMPTFOO_DISABLE_UNBLOCKING === 'true') {
+      logger.debug('[Unblocking] Disabled via PROMPTFOO_DISABLE_UNBLOCKING');
+      // Return a response that will not increment numRequests
+      return {
+        success: false,
+        tokenUsage: { numRequests: 0 } as Partial<TokenUsage> as TokenUsage,
+      };
+    }
+
     // Check if the server supports unblocking feature
     const { checkServerFeatureSupport } = await import('../../util/server');
     const supportsUnblocking = await checkServerFeatureSupport(
@@ -328,7 +338,10 @@ export async function tryUnblocking({
 
     if (!supportsUnblocking) {
       logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');
-      return { success: false };
+      return {
+        success: false,
+        tokenUsage: { numRequests: 0 } as Partial<TokenUsage> as TokenUsage,
+      };
     }
 
     logger.debug('[Unblocking] Attempting to unblock with blocking-question-analysis task');
@@ -383,7 +396,7 @@ export async function tryUnblocking({
       };
     }
   } catch (error) {
-    logger.error(`[Unblocking] Error in unblocking: ${error}`);
+    logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
     return { success: false };
   }
 }
