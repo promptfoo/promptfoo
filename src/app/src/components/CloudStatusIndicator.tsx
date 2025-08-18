@@ -156,7 +156,6 @@ export default function CloudStatusIndicator() {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Close</Button>
           <Button 
             onClick={() => {
               recordEvent('webui_action', {
@@ -165,10 +164,15 @@ export default function CloudStatusIndicator() {
               });
               window.open('https://www.promptfoo.dev/docs/usage/sharing/', '_blank');
             }}
+          >
+            Learn More
+          </Button>
+          <Button 
+            onClick={handleCloseDialog}
             variant="contained"
             color="primary"
           >
-            Learn More
+            Close
           </Button>
         </DialogActions>
       </Dialog>
