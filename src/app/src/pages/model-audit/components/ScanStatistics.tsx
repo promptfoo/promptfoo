@@ -53,6 +53,47 @@ export default function ScanStatistics({
 
   return (
     <Grid container spacing={3} sx={{ mb: 4 }}>
+      {/* Check Statistics */}
+      {scanResults.total_checks && scanResults.total_checks > 0 && (
+        <>
+          <Grid item xs={12} sm={6} md={3}>
+            <StatCard
+              elevation={0}
+              sx={{
+                bgcolor: alpha(theme.palette.success.main, 0.05),
+                transition: 'all 0.2s',
+              }}
+            >
+              <CheckCircleIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
+              <Typography variant="h3" fontWeight={700} color="success.main">
+                {scanResults.passed_checks || 0}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Passed Checks
+              </Typography>
+            </StatCard>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <StatCard
+              elevation={0}
+              sx={{
+                bgcolor: alpha(theme.palette.error.main, 0.05),
+                transition: 'all 0.2s',
+              }}
+            >
+              <ErrorIcon sx={{ fontSize: 40, color: 'error.main', mb: 1 }} />
+              <Typography variant="h3" fontWeight={700} color="error.main">
+                {scanResults.failed_checks || 0}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Failed Checks
+              </Typography>
+            </StatCard>
+          </Grid>
+        </>
+      )}
+
+      {/* Issue Statistics */}
       {severityStats.map(({ severity, icon: Icon, label, color, count }) => (
         <Grid item xs={12} sm={6} md={3} key={severity}>
           <Tooltip
@@ -89,12 +130,14 @@ export default function ScanStatistics({
           </Tooltip>
         </Grid>
       ))}
+
+      {/* Files Scanned */}
       <Grid item xs={12} sm={6} md={3}>
         <Tooltip title="Click to see which files were scanned" placement="top">
           <StatCard
             elevation={0}
             sx={{
-              bgcolor: alpha(theme.palette.success.main, 0.05),
+              bgcolor: alpha(theme.palette.info.main, 0.05),
               cursor: 'pointer',
               transition: 'all 0.2s',
               '&:hover': {
@@ -104,8 +147,8 @@ export default function ScanStatistics({
             }}
             onClick={onFilesClick}
           >
-            <CheckCircleIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
-            <Typography variant="h3" fontWeight={700} color="success.main">
+            <CheckCircleIcon sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
+            <Typography variant="h3" fontWeight={700} color="info.main">
               {scanResults.scannedFiles || 0}
             </Typography>
             <Typography variant="body2" color="text.secondary">

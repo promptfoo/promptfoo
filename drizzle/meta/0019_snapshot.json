@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "54292972-9881-49e5-9455-412dbcf85df0",
-  "prevId": "7741e9f1-ac0b-4284-97c6-92431d5db364",
+  "id": "c4659f87-65a5-4198-b9d3-a4e36ac0e0a5",
+  "prevId": "54292972-9881-49e5-9455-412dbcf85df0",
   "tables": {
     "configs": {
       "name": "configs",
@@ -708,6 +708,391 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "model_audit_assets": {
+      "name": "model_audit_assets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(lower(hex(randomblob(16))))"
+        },
+        "scan_id": {
+          "name": "scan_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "path": {
+          "name": "path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "size": {
+          "name": "size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_metadata": {
+          "name": "file_metadata",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "model_audit_assets_scan_id_idx": {
+          "name": "model_audit_assets_scan_id_idx",
+          "columns": [
+            "scan_id"
+          ],
+          "isUnique": false
+        },
+        "model_audit_assets_path_idx": {
+          "name": "model_audit_assets_path_idx",
+          "columns": [
+            "path"
+          ],
+          "isUnique": false
+        },
+        "model_audit_assets_type_idx": {
+          "name": "model_audit_assets_type_idx",
+          "columns": [
+            "type"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "model_audit_assets_scan_id_model_audit_scans_id_fk": {
+          "name": "model_audit_assets_scan_id_model_audit_scans_id_fk",
+          "tableFrom": "model_audit_assets",
+          "tableTo": "model_audit_scans",
+          "columnsFrom": [
+            "scan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "model_audit_checks": {
+      "name": "model_audit_checks",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(lower(hex(randomblob(16))))"
+        },
+        "scan_id": {
+          "name": "scan_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "severity": {
+          "name": "severity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "timestamp": {
+          "name": "timestamp",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "details": {
+          "name": "details",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "why": {
+          "name": "why",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "model_audit_checks_scan_id_idx": {
+          "name": "model_audit_checks_scan_id_idx",
+          "columns": [
+            "scan_id"
+          ],
+          "isUnique": false
+        },
+        "model_audit_checks_status_idx": {
+          "name": "model_audit_checks_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "model_audit_checks_name_idx": {
+          "name": "model_audit_checks_name_idx",
+          "columns": [
+            "name"
+          ],
+          "isUnique": false
+        },
+        "model_audit_checks_severity_idx": {
+          "name": "model_audit_checks_severity_idx",
+          "columns": [
+            "severity"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "model_audit_checks_scan_id_model_audit_scans_id_fk": {
+          "name": "model_audit_checks_scan_id_model_audit_scans_id_fk",
+          "tableFrom": "model_audit_checks",
+          "tableTo": "model_audit_scans",
+          "columnsFrom": [
+            "scan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "model_audit_issues": {
+      "name": "model_audit_issues",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(lower(hex(randomblob(16))))"
+        },
+        "scan_id": {
+          "name": "scan_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "severity": {
+          "name": "severity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "timestamp": {
+          "name": "timestamp",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "details": {
+          "name": "details",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "why": {
+          "name": "why",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "model_audit_issues_scan_id_idx": {
+          "name": "model_audit_issues_scan_id_idx",
+          "columns": [
+            "scan_id"
+          ],
+          "isUnique": false
+        },
+        "model_audit_issues_severity_idx": {
+          "name": "model_audit_issues_severity_idx",
+          "columns": [
+            "severity"
+          ],
+          "isUnique": false
+        },
+        "model_audit_issues_location_idx": {
+          "name": "model_audit_issues_location_idx",
+          "columns": [
+            "location"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "model_audit_issues_scan_id_model_audit_scans_id_fk": {
+          "name": "model_audit_issues_scan_id_model_audit_scans_id_fk",
+          "tableFrom": "model_audit_issues",
+          "tableTo": "model_audit_scans",
+          "columnsFrom": [
+            "scan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "model_audit_scan_paths": {
+      "name": "model_audit_scan_paths",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(lower(hex(randomblob(16))))"
+        },
+        "scan_id": {
+          "name": "scan_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "path": {
+          "name": "path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_primary": {
+          "name": "is_primary",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {
+        "model_audit_scan_paths_scan_id_idx": {
+          "name": "model_audit_scan_paths_scan_id_idx",
+          "columns": [
+            "scan_id"
+          ],
+          "isUnique": false
+        },
+        "model_audit_scan_paths_path_idx": {
+          "name": "model_audit_scan_paths_path_idx",
+          "columns": [
+            "path"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "model_audit_scan_paths_scan_id_model_audit_scans_id_fk": {
+          "name": "model_audit_scan_paths_scan_id_model_audit_scans_id_fk",
+          "tableFrom": "model_audit_scan_paths",
+          "tableTo": "model_audit_scans",
+          "columnsFrom": [
+            "scan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "model_audit_scans": {
       "name": "model_audit_scans",
       "columns": {
@@ -747,19 +1132,99 @@
           "notNull": true,
           "autoincrement": false
         },
-        "results": {
-          "name": "results",
-          "type": "text",
+        "bytes_scanned": {
+          "name": "bytes_scanned",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "files_scanned": {
+          "name": "files_scanned",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "start_time": {
+          "name": "start_time",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
-        "config": {
-          "name": "config",
-          "type": "text",
+        "duration": {
+          "name": "duration",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "has_errors": {
+          "name": "has_errors",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": false
+        },
+        "total_checks": {
+          "name": "total_checks",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "passed_checks": {
+          "name": "passed_checks",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "failed_checks": {
+          "name": "failed_checks",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "total_issues": {
+          "name": "total_issues",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "critical_issues": {
+          "name": "critical_issues",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "warning_issues": {
+          "name": "warning_issues",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "info_issues": {
+          "name": "info_issues",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "model_audit_version": {
           "name": "model_audit_version",
@@ -770,6 +1235,20 @@
         },
         "promptfoo_version": {
           "name": "promptfoo_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "results": {
+          "name": "results",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "config": {
+          "name": "config",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -795,6 +1274,13 @@
           "name": "model_audit_scans_primary_path_idx",
           "columns": [
             "primary_path"
+          ],
+          "isUnique": false
+        },
+        "model_audit_scans_has_errors_idx": {
+          "name": "model_audit_scans_has_errors_idx",
+          "columns": [
+            "has_errors"
           ],
           "isUnique": false
         }

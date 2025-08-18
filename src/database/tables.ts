@@ -337,19 +337,126 @@ export const modelAuditScansTable = sqliteTable(
     author: text('author'),
     description: text('description'),
     primaryPath: text('primary_path').notNull(),
-    results: text('results', { mode: 'json' })
-      .$type<import('../types/modelAudit').ModelAuditScanResults>()
-      .notNull(),
-    config: text('config', { mode: 'json' })
-      .$type<import('../types/modelAudit').ModelAuditScanConfig>()
-      .notNull(),
+
+    // Core metrics
+    bytesScanned: integer('bytes_scanned').notNull().default(0),
+    filesScanned: integer('files_scanned').notNull().default(0),
+    startTime: real('start_time'),
+    duration: real('duration'),
+    hasErrors: integer('has_errors', { mode: 'boolean' }).notNull().default(false),
+
+    // Summary counts (denormalized for performance)
+    totalChecks: integer('total_checks').notNull().default(0),
+    passedChecks: integer('passed_checks').notNull().default(0),
+    failedChecks: integer('failed_checks').notNull().default(0),
+    totalIssues: integer('total_issues').notNull().default(0),
+    criticalIssues: integer('critical_issues').notNull().default(0),
+    warningIssues: integer('warning_issues').notNull().default(0),
+    infoIssues: integer('info_issues').notNull().default(0),
+
+    // Version tracking
     modelAuditVersion: text('model_audit_version'),
     promptfooVersion: text('promptfoo_version'),
+
+    // Legacy support - will be removed in future
+    results: text('results', { mode: 'json' }).$type<
+      import('../types/modelAudit').ModelAuditScanResults
+    >(),
+    config: text('config', { mode: 'json' }).$type<
+      import('../types/modelAudit').ModelAuditScanConfig
+    >(),
   },
   (table) => ({
     createdAtIdx: index('model_audit_scans_created_at_idx').on(table.createdAt),
     authorIdx: index('model_audit_scans_author_idx').on(table.author),
     primaryPathIdx: index('model_audit_scans_primary_path_idx').on(table.primaryPath),
+    hasErrorsIdx: index('model_audit_scans_has_errors_idx').on(table.hasErrors),
+  }),
+);
+
+// Scan checks - individual security checks performed
+export const modelAuditChecksTable = sqliteTable(
+  'model_audit_checks',
+  {
+    id: text('id').primaryKey().default(sql`(lower(hex(randomblob(16))))`),
+    scanId: text('scan_id')
+      .notNull()
+      .references(() => modelAuditScansTable.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    status: text('status', { enum: ['passed', 'failed'] }).notNull(),
+    message: text('message').notNull(),
+    location: text('location'),
+    severity: text('severity', { enum: ['error', 'warning', 'info', 'debug', 'critical'] }),
+    timestamp: real('timestamp'),
+    details: text('details', { mode: 'json' }).$type<Record<string, any>>(),
+    why: text('why'),
+  },
+  (table) => ({
+    scanIdIdx: index('model_audit_checks_scan_id_idx').on(table.scanId),
+    statusIdx: index('model_audit_checks_status_idx').on(table.status),
+    nameIdx: index('model_audit_checks_name_idx').on(table.name),
+    severityIdx: index('model_audit_checks_severity_idx').on(table.severity),
+  }),
+);
+
+// Scan issues - problems found during scanning
+export const modelAuditIssuesTable = sqliteTable(
+  'model_audit_issues',
+  {
+    id: text('id').primaryKey().default(sql`(lower(hex(randomblob(16))))`),
+    scanId: text('scan_id')
+      .notNull()
+      .references(() => modelAuditScansTable.id, { onDelete: 'cascade' }),
+    severity: text('severity', {
+      enum: ['error', 'warning', 'info', 'debug', 'critical'],
+    }).notNull(),
+    message: text('message').notNull(),
+    location: text('location'),
+    timestamp: real('timestamp'),
+    details: text('details', { mode: 'json' }).$type<Record<string, any>>(),
+    why: text('why'),
+  },
+  (table) => ({
+    scanIdIdx: index('model_audit_issues_scan_id_idx').on(table.scanId),
+    severityIdx: index('model_audit_issues_severity_idx').on(table.severity),
+    locationIdx: index('model_audit_issues_location_idx').on(table.location),
+  }),
+);
+
+// Scanned assets - files that were scanned
+export const modelAuditAssetsTable = sqliteTable(
+  'model_audit_assets',
+  {
+    id: text('id').primaryKey().default(sql`(lower(hex(randomblob(16))))`),
+    scanId: text('scan_id')
+      .notNull()
+      .references(() => modelAuditScansTable.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    type: text('type').notNull(),
+    size: integer('size').notNull(),
+    fileMetadata: text('file_metadata', { mode: 'json' }).$type<Record<string, any>>(),
+  },
+  (table) => ({
+    scanIdIdx: index('model_audit_assets_scan_id_idx').on(table.scanId),
+    pathIdx: index('model_audit_assets_path_idx').on(table.path),
+    typeIdx: index('model_audit_assets_type_idx').on(table.type),
+  }),
+);
+
+// Scan paths - paths that were scanned
+export const modelAuditScanPathsTable = sqliteTable(
+  'model_audit_scan_paths',
+  {
+    id: text('id').primaryKey().default(sql`(lower(hex(randomblob(16))))`),
+    scanId: text('scan_id')
+      .notNull()
+      .references(() => modelAuditScansTable.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    isPrimary: integer('is_primary', { mode: 'boolean' }).notNull().default(false),
+  },
+  (table) => ({
+    scanIdIdx: index('model_audit_scan_paths_scan_id_idx').on(table.scanId),
+    pathIdx: index('model_audit_scan_paths_path_idx').on(table.path),
   }),
 );
 

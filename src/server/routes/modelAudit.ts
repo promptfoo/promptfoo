@@ -7,7 +7,13 @@ import { promisify } from 'util';
 import { Router } from 'express';
 import { desc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../../database';
-import { modelAuditScansTable } from '../../database/tables';
+import {
+  modelAuditScansTable,
+  modelAuditChecksTable,
+  modelAuditIssuesTable,
+  modelAuditAssetsTable,
+  modelAuditScanPathsTable,
+} from '../../database/tables';
 import { getAuthor } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
@@ -24,63 +30,150 @@ const PROMPTFOO_VERSION = promptfooPackage.version;
 const execAsync = promisify(exec);
 export const modelAuditRouter = Router();
 
-// Helper function to save scan results to database
+// Helper function to save scan results to database using normalized schema
 async function saveScanToDatabase(
   scanId: string,
   resolvedPaths: string[],
   options: any,
-  transformedResults: ModelAuditScanResults,
+  scanResults: ModelAuditScanResults,
   description?: string,
   modelAuditVersion?: string,
 ): Promise<void> {
   const db = getDb();
-  await db
-    .insert(modelAuditScansTable)
-    .values({
+
+  // Start a transaction for consistency
+  await db.transaction(async (tx) => {
+    // Calculate summary counts
+    const criticalCount = scanResults.issues.filter(
+      (i) => i.severity === 'critical' || i.severity === 'error',
+    ).length;
+    const warningCount = scanResults.issues.filter((i) => i.severity === 'warning').length;
+    const infoCount = scanResults.issues.filter((i) => i.severity === 'info').length;
+
+    // Insert main scan record
+    await tx.insert(modelAuditScansTable).values({
       id: scanId,
       createdAt: Date.now(),
       author: getAuthor(),
       description: description || null,
       primaryPath: resolvedPaths[0],
-      results: transformedResults,
+
+      // Core metrics
+      bytesScanned: scanResults.bytes_scanned || 0,
+      filesScanned: scanResults.files_scanned || 0,
+      startTime: scanResults.start_time,
+      duration: scanResults.duration,
+      hasErrors: scanResults.has_errors || false,
+
+      // Summary counts
+      totalChecks: scanResults.total_checks || 0,
+      passedChecks: scanResults.passed_checks || 0,
+      failedChecks: scanResults.failed_checks || 0,
+      totalIssues: scanResults.issues.length,
+      criticalIssues: criticalCount,
+      warningIssues: warningCount,
+      infoIssues: infoCount,
+
+      // Version tracking
+      modelAuditVersion: modelAuditVersion || null,
+      promptfooVersion: PROMPTFOO_VERSION,
+
+      // Legacy support (for backward compatibility)
+      results: scanResults,
       config: {
         paths: resolvedPaths,
         options: options,
       },
-      modelAuditVersion: modelAuditVersion || null,
-      promptfooVersion: PROMPTFOO_VERSION,
-    })
-    .run();
+    });
+
+    // Insert scan paths
+    for (let i = 0; i < resolvedPaths.length; i++) {
+      await tx.insert(modelAuditScanPathsTable).values({
+        scanId,
+        path: resolvedPaths[i],
+        isPrimary: i === 0,
+      });
+    }
+
+    // Insert checks
+    if (scanResults.checks && scanResults.checks.length > 0) {
+      for (const check of scanResults.checks) {
+        await tx.insert(modelAuditChecksTable).values({
+          scanId,
+          name: check.name,
+          status: check.status,
+          message: check.message,
+          location: check.location,
+          severity: check.severity,
+          timestamp: check.timestamp,
+          details: check.details,
+          why: check.why,
+        });
+      }
+    }
+
+    // Insert issues
+    if (scanResults.issues && scanResults.issues.length > 0) {
+      for (const issue of scanResults.issues) {
+        await tx.insert(modelAuditIssuesTable).values({
+          scanId,
+          severity: issue.severity === 'critical' ? 'error' : issue.severity,
+          message: issue.message,
+          location: issue.location,
+          timestamp: issue.timestamp,
+          details: issue.details,
+          why: issue.why,
+        });
+      }
+    }
+
+    // Insert assets
+    if (scanResults.assets && scanResults.assets.length > 0) {
+      for (const asset of scanResults.assets) {
+        await tx.insert(modelAuditAssetsTable).values({
+          scanId,
+          path: asset.path,
+          type: asset.type,
+          size: asset.size,
+          fileMetadata: scanResults.file_metadata?.[asset.path],
+        });
+      }
+    }
+  });
 }
 
 // Check if modelaudit is installed
 modelAuditRouter.get('/check-installed', async (req: Request, res: Response): Promise<void> => {
   try {
-    // First try to check if the modelaudit CLI is available
-    try {
-      await execAsync('modelaudit --version');
-      res.json({ installed: true, cwd: process.cwd() });
-      return;
-    } catch {
-      // If CLI check fails, fall back to Python import check
-      await execAsync('python -c "import modelaudit"');
-      res.json({ installed: true, cwd: process.cwd() });
-    }
-  } catch {
-    res.json({ installed: false, cwd: process.cwd() });
+    // Check if modelaudit is installed
+    await execAsync('python -c "import modelaudit"');
+
+    // Get current working directory
+    const cwd = process.cwd();
+
+    res.json({
+      installed: true,
+      cwd,
+    });
+  } catch (_error) {
+    res.json({
+      installed: false,
+      error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',
+      cwd: process.cwd(),
+    });
   }
 });
 
-// Check path type
+// Check path validity
 modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promise<void> => {
+  const { path: inputPath } = req.body;
+
+  if (!inputPath) {
+    res.status(400).json({ error: 'Path is required' });
+    return;
+  }
+
   try {
-    const { path: inputPath } = req.body;
-
-    if (!inputPath) {
-      res.status(400).json({ error: 'No path provided' });
-      return;
-    }
-
     // Handle home directory expansion
     let expandedPath = inputPath;
     if (expandedPath.startsWith('~/')) {
@@ -91,29 +184,34 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
       ? expandedPath
       : path.resolve(process.cwd(), expandedPath);
 
-    // Check if path exists
-    if (!fs.existsSync(absolutePath)) {
-      res.json({ exists: false, type: null });
+    const exists = fs.existsSync(absolutePath);
+    if (!exists) {
+      res.json({
+        exists: false,
+        error: `Path does not exist: ${absolutePath}`,
+      });
       return;
     }
 
-    // Get path stats
     const stats = fs.statSync(absolutePath);
-    const type = stats.isDirectory() ? 'directory' : 'file';
+    const isDirectory = stats.isDirectory();
+    const isFile = stats.isFile();
 
     res.json({
       exists: true,
-      type,
       absolutePath,
-      name: path.basename(absolutePath),
+      isDirectory,
+      isFile,
+      size: stats.size,
     });
   } catch (error) {
-    logger.error(`Error checking path: ${error}`);
-    res.status(500).json({ error: String(error) });
+    res.status(500).json({
+      error: `Failed to check path: ${error}`,
+    });
   }
 });
 
-// List model audit scans
+// List model audit scans with normalized data
 modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
   try {
     // Validate and sanitize pagination parameters
@@ -126,6 +224,7 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
 
     const db = getDb();
 
+    // Use denormalized counts for performance
     const scans = await db
       .select({
         id: modelAuditScansTable.id,
@@ -133,18 +232,14 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
         author: modelAuditScansTable.author,
         description: modelAuditScansTable.description,
         primaryPath: modelAuditScansTable.primaryPath,
-        // Extract issue counts from JSON for the list view
-        issueCount: sql`json_array_length(json_extract(results, '$.issues'))`,
-        criticalCount: sql`(
-          SELECT COUNT(*) 
-          FROM json_each(json_extract(results, '$.issues')) 
-          WHERE json_extract(value, '$.severity') = 'error'
-        )`,
-        warningCount: sql`(
-          SELECT COUNT(*) 
-          FROM json_each(json_extract(results, '$.issues')) 
-          WHERE json_extract(value, '$.severity') = 'warning'
-        )`,
+
+        // Use pre-computed counts from main table
+        issueCount: modelAuditScansTable.totalIssues,
+        criticalCount: modelAuditScansTable.criticalIssues,
+        warningCount: modelAuditScansTable.warningIssues,
+        passedChecks: modelAuditScansTable.passedChecks,
+        failedChecks: modelAuditScansTable.failedChecks,
+        totalChecks: modelAuditScansTable.totalChecks,
       })
       .from(modelAuditScansTable)
       .orderBy(desc(modelAuditScansTable.createdAt))
@@ -167,19 +262,14 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
   }
 });
 
-// Get specific model audit scan
+// Get specific model audit scan with full normalized data
 modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
-    // Validate scan ID format
-    if (!id || typeof id !== 'string' || !id.startsWith('scan-')) {
-      res.status(400).json({ error: 'Invalid scan ID format' });
-      return;
-    }
-
     const db = getDb();
 
+    // Get main scan record
     const scan = await db
       .select()
       .from(modelAuditScansTable)
@@ -191,32 +281,103 @@ modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<
       return;
     }
 
-    res.json(scan);
+    // Get related data in parallel
+    const [checks, issues, assets, paths] = await Promise.all([
+      db.select().from(modelAuditChecksTable).where(eq(modelAuditChecksTable.scanId, id)).all(),
+      db.select().from(modelAuditIssuesTable).where(eq(modelAuditIssuesTable.scanId, id)).all(),
+      db.select().from(modelAuditAssetsTable).where(eq(modelAuditAssetsTable.scanId, id)).all(),
+      db
+        .select()
+        .from(modelAuditScanPathsTable)
+        .where(eq(modelAuditScanPathsTable.scanId, id))
+        .all(),
+    ]);
+
+    // Build file metadata map
+    const fileMetadata: Record<string, any> = {};
+    for (const asset of assets) {
+      if (asset.fileMetadata) {
+        fileMetadata[asset.path] = asset.fileMetadata;
+      }
+    }
+
+    // Reconstruct the results object for backward compatibility
+    const results: ModelAuditScanResults = {
+      // Core results
+      bytes_scanned: scan.bytesScanned,
+      issues: issues.map((issue) => ({
+        severity: issue.severity as any,
+        message: issue.message,
+        location: issue.location || undefined,
+        details: issue.details || undefined,
+        why: issue.why || undefined,
+        timestamp: issue.timestamp || Date.now() / 1000,
+      })),
+      checks: checks.map((check) => ({
+        name: check.name,
+        status: check.status as 'passed' | 'failed',
+        message: check.message,
+        location: check.location || '',
+        details: check.details || undefined,
+        timestamp: check.timestamp || Date.now() / 1000,
+        severity: check.severity as any,
+        why: check.why || undefined,
+      })),
+
+      // File information
+      files_scanned: scan.filesScanned,
+      assets: assets.map((asset) => ({
+        path: asset.path,
+        type: asset.type,
+        size: asset.size,
+      })),
+      file_metadata: fileMetadata,
+
+      // Summary stats
+      has_errors: scan.hasErrors,
+      scanner_names: [],
+      start_time: scan.startTime || Date.now() / 1000,
+      duration: scan.duration || 0,
+      total_checks: scan.totalChecks,
+      passed_checks: scan.passedChecks,
+      failed_checks: scan.failedChecks,
+
+      // Legacy fields
+      path: scan.primaryPath,
+      success: true,
+      scannedFiles: scan.filesScanned,
+    };
+
+    res.json({
+      id: scan.id,
+      createdAt: scan.createdAt,
+      author: scan.author,
+      description: scan.description,
+      primaryPath: scan.primaryPath,
+      results,
+      config: {
+        paths: paths.map((p) => p.path),
+        options: scan.config?.options || {},
+      },
+    });
   } catch (error) {
     logger.error(`Error getting model audit scan: ${error}`);
     res.status(500).json({ error: String(error) });
   }
 });
 
-// Delete model audit scan
+// Delete model audit scan (cascade will handle related records)
 modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
-    // Validate scan ID format
-    if (!id || typeof id !== 'string' || !id.startsWith('scan-')) {
-      res.status(400).json({ error: 'Invalid scan ID format' });
-      return;
-    }
-
     const db = getDb();
-
     const result = await db
       .delete(modelAuditScansTable)
       .where(eq(modelAuditScansTable.id, id))
-      .run();
+      .returning();
 
-    if (result.changes === 0) {
+    if (result.length === 0) {
       res.status(404).json({ error: 'Scan not found' });
       return;
     }
@@ -393,12 +554,26 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
 
           // Transform the results into our expected format
           const transformedResults: ModelAuditScanResults = {
-            path: resolvedPaths[0], // Primary resolved path
+            // New fields from updated modelaudit
+            bytes_scanned: scanResults.bytes_scanned || 0,
             issues: mappedIssues,
+            checks: scanResults.checks || [],
+            files_scanned: scanResults.files_scanned || resolvedPaths.length,
+            assets: scanResults.assets || [],
+            file_metadata: scanResults.file_metadata || {},
+            has_errors: scanResults.has_errors || false,
+            scanner_names: scanResults.scanner_names || [],
+            start_time: scanResults.start_time || Date.now() / 1000,
+            duration: scanResults.duration || 0,
+            total_checks: scanResults.total_checks || 0,
+            passed_checks: scanResults.passed_checks || 0,
+            failed_checks: scanResults.failed_checks || 0,
+
+            // Legacy fields for backwards compatibility
+            path: resolvedPaths[0], // Primary resolved path
             success: true,
             scannedFiles: scanResults.files_scanned || resolvedPaths.length,
             totalFiles: scanResults.files_total || resolvedPaths.length,
-            duration: scanResults.scan_duration || null,
             rawOutput: stdout, // Always include raw output for debugging
             scannedFilesList,
           };
@@ -444,12 +619,14 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 severity: 'warning' as const,
                 message: warningMatch[2],
                 location: warningMatch[1],
+                timestamp: Date.now() / 1000,
               });
             } else if (errorMatch) {
               issues.push({
                 severity: 'error' as const,
                 message: errorMatch[2],
                 location: errorMatch[1],
+                timestamp: Date.now() / 1000,
               });
             } else if (criticalMatch) {
               // Map critical to error for frontend compatibility
@@ -457,12 +634,14 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 severity: 'error' as const,
                 message: criticalMatch[2],
                 location: criticalMatch[1],
+                timestamp: Date.now() / 1000,
               });
             } else if (infoMatch) {
               issues.push({
                 severity: 'info' as const,
                 message: infoMatch[2],
                 location: infoMatch[1],
+                timestamp: Date.now() / 1000,
               });
             } else if (line.includes(' - WARNING - ')) {
               // Fallback for other warning formats
@@ -471,6 +650,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 issues.push({
                   severity: 'warning' as const,
                   message: parts[1],
+                  timestamp: Date.now() / 1000,
                 });
               }
             } else if (line.includes(' - ERROR - ')) {
@@ -480,6 +660,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 issues.push({
                   severity: 'error' as const,
                   message: parts[1],
+                  timestamp: Date.now() / 1000,
                 });
               }
             } else if (line.includes(' - CRITICAL - ')) {
@@ -489,6 +670,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 issues.push({
                   severity: 'error' as const,
                   message: parts[1],
+                  timestamp: Date.now() / 1000,
                 });
               }
             }
@@ -505,8 +687,23 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           });
 
           const fallbackResults: ModelAuditScanResults = {
-            path: resolvedPaths[0],
+            // New fields (with defaults for text parsing)
+            bytes_scanned: 0,
             issues,
+            checks: [],
+            files_scanned: scannedFilesList.length || resolvedPaths.length,
+            assets: [],
+            file_metadata: {},
+            has_errors: issues.some((i) => i.severity === 'error'),
+            scanner_names: [],
+            start_time: Date.now() / 1000,
+            duration: 0,
+            total_checks: 0,
+            passed_checks: 0,
+            failed_checks: issues.length,
+
+            // Legacy fields for backwards compatibility
+            path: resolvedPaths[0],
             success: true,
             scannedFiles: scannedFilesList.length || resolvedPaths.length,
             scannedFilesList: scannedFilesList.length > 0 ? scannedFilesList : undefined,
@@ -528,23 +725,23 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
             logger.info(`Saved model audit scan with ID: ${scanId}`);
           } catch (dbError) {
             logger.error(`Failed to save scan results to database: ${dbError}`);
-            scanId = undefined; // Clear scanId if save failed
-            // Don't fail the request if DB save fails - user still gets results
+            scanId = undefined;
           }
 
           res.json({ ...fallbackResults, scanId });
         }
       } else {
-        // Only treat codes other than 0 and 1 as actual errors
-        logger.error(`Model scan failed with code ${code}: ${stderr}`);
+        // Unexpected exit code
+        logger.error(`Model scan failed with exit code: ${code}`);
+        logger.error(`stderr: ${stderr}`);
         res.status(500).json({
-          error: `Model scan failed with exit code ${code}: ${stderr || stdout || 'Unknown error'}`,
-          code,
+          error: `Model scan failed with exit code: ${code}`,
+          stderr,
         });
       }
     });
   } catch (error) {
-    logger.error(`Error in model scan: ${error}`);
+    logger.error(`Error running model scan: ${error}`);
     res.status(500).json({ error: String(error) });
   }
 });
