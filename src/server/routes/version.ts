@@ -1,8 +1,9 @@
 import express from 'express';
 import { VERSION } from '../../constants';
-import { getEnvBool, getEnvString } from '../../envars';
+import { getEnvBool } from '../../envars';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
+import { isRunningUnderNpx } from '../../util';
 import logger from '../../logger';
 import type { Request, Response } from 'express';
 
@@ -18,18 +19,6 @@ let versionCache: {
 };
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
-
-// Check if running under npx (copied from util/index.ts)
-function isRunningUnderNpx(): boolean {
-  const npmExecPath = getEnvString('npm_execpath');
-  const npmLifecycleScript = getEnvString('npm_lifecycle_script');
-
-  return Boolean(
-    (npmExecPath && npmExecPath.includes('npx')) ||
-      process.execPath.includes('npx') ||
-      (npmLifecycleScript && npmLifecycleScript.includes('npx')),
-  );
-}
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -49,6 +38,11 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         logger.debug(`Failed to fetch latest version: ${error}`);
         // If we can't get the latest version, return current version
         latestVersion = VERSION;
+        // Update cache timestamp even on failure to avoid hammering upstream
+        versionCache = {
+          latestVersion,
+          timestamp: now,
+        };
       }
     }
 

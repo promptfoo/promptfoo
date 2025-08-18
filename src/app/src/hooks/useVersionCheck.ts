@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { callApi } from '@app/utils/api';
 
 interface VersionInfo {
@@ -28,8 +28,11 @@ export function useVersionCheck(): UseVersionCheckResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     const checkVersion = async () => {
       try {
         const response = await callApi('/version');
@@ -37,21 +40,36 @@ export function useVersionCheck(): UseVersionCheckResult {
           throw new Error('Failed to fetch version information');
         }
         const data: VersionInfo = await response.json();
-        setVersionInfo(data);
 
-        // Check if this version update was already dismissed
-        const dismissedVersion = localStorage.getItem(STORAGE_KEY);
-        if (dismissedVersion === data.latestVersion) {
-          setDismissed(true);
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setVersionInfo(data);
+
+          // Check if this version update was already dismissed
+          const dismissedVersion = localStorage.getItem(STORAGE_KEY);
+          if (dismissedVersion === data.latestVersion) {
+            setDismissed(true);
+          }
         }
       } catch (err) {
-        setError(err instanceof Error ? err : new Error('Unknown error'));
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setError(err instanceof Error ? err : new Error('Unknown error'));
+        }
       } finally {
-        setLoading(false);
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
       }
     };
 
     checkVersion();
+
+    // Cleanup function to mark component as unmounted
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const dismiss = () => {

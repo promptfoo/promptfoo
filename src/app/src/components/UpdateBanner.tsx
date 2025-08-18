@@ -51,16 +51,39 @@ export default function UpdateBanner() {
   const [copySnackbarOpen, setCopySnackbarOpen] = useState(false);
   const [selectedCommand, setSelectedCommand] = useState<'primary' | 'alternative'>('primary');
 
-  const handleCopyCommand = (commandType: 'primary' | 'alternative' = 'primary') => {
+  const handleCopyCommand = async (commandType: 'primary' | 'alternative' = 'primary') => {
     const command =
       commandType === 'primary'
         ? versionInfo?.updateCommands?.primary
         : versionInfo?.updateCommands?.alternative;
 
     if (command) {
-      navigator.clipboard.writeText(command);
-      setSelectedCommand(commandType);
-      setCopySnackbarOpen(true);
+      try {
+        await navigator.clipboard.writeText(command);
+        setSelectedCommand(commandType);
+        setCopySnackbarOpen(true);
+      } catch (error) {
+        // Fallback for browsers that don't support clipboard API or when it fails
+        console.error('Failed to copy to clipboard:', error);
+        // Create a temporary textarea element as fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = command;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand('copy');
+          setSelectedCommand(commandType);
+          setCopySnackbarOpen(true);
+        } catch (fallbackError) {
+          console.error('Fallback copy also failed:', fallbackError);
+          // Show the command in an alert as last resort
+          alert(`Failed to copy. Command: ${command}`);
+        } finally {
+          document.body.removeChild(textarea);
+        }
+      }
     }
   };
 
