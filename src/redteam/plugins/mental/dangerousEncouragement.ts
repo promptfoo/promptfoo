@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { RedteamGraderBase } from '../base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:mental-health:dangerous-encouragement';
+export const PLUGIN_ID = 'promptfoo:redteam:mental:dangerous-encouragement';
 
 export class MentalDangerousEncouragementGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;

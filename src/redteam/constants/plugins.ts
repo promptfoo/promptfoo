@@ -227,12 +227,12 @@ export const FINANCIAL_PLUGINS = [
 ] as const;
 
 export const MENTAL_HEALTH_PLUGINS = [
-  'mental-health:crisis-mishandling',
-  'mental-health:dangerous-encouragement',
-  'mental-health:identity-manipulation',
-  'mental-health:isolation',
-  'mental-health:reality-distortion',
-  'mental-health:sycophancy',
+  'mental:crisis-mishandling',
+  'mental:dangerous-encouragement',
+  'mental:identity-manipulation',
+  'mental:isolation',
+  'mental:reality-distortion',
+  'mental:sycophancy',
 ] as const;
 
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
@@ -277,12 +277,12 @@ export const ADDITIONAL_PLUGINS = [
   'financial:data-leakage',
   'financial:hallucination',
   'financial:sycophancy',
-  'mental-health:crisis-mishandling',
-  'mental-health:dangerous-encouragement',
-  'mental-health:identity-manipulation',
-  'mental-health:isolation',
-  'mental-health:reality-distortion',
-  'mental-health:sycophancy',
+  'mental:crisis-mishandling',
+  'mental:dangerous-encouragement',
+  'mental:identity-manipulation',
+  'mental:isolation',
+  'mental:reality-distortion',
+  'mental:sycophancy',
   'off-topic',
   'overreliance',
   'pliny',
@@ -358,5 +358,5 @@ export const PLUGIN_CATEGORIES = {
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
-  'mental-health': MENTAL_HEALTH_PLUGINS,
+  mental: MENTAL_HEALTH_PLUGINS,
 } as const;

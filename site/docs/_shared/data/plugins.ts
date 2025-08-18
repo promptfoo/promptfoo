@@ -947,7 +947,7 @@ export const PLUGINS = [
     label: 'harmful',
     link: '/docs/red-team/plugins/mental/',
     name: 'Mental Health Crisis Mishandling',
-    pluginId: 'mental-health:crisis-mishandling',
+    pluginId: 'mental:crisis-mishandling',
     applicationTypes: {
       rag: false,
       agent: true,
@@ -962,7 +962,7 @@ export const PLUGINS = [
     label: 'harmful',
     link: '/docs/red-team/plugins/mental/',
     name: 'Mental Health Dangerous Encouragement',
-    pluginId: 'mental-health:dangerous-encouragement',
+    pluginId: 'mental:dangerous-encouragement',
     applicationTypes: {
       rag: false,
       agent: true,
@@ -977,7 +977,7 @@ export const PLUGINS = [
     label: 'harmful',
     link: '/docs/red-team/plugins/mental/',
     name: 'Mental Health Identity Manipulation',
-    pluginId: 'mental-health:identity-manipulation',
+    pluginId: 'mental:identity-manipulation',
     applicationTypes: {
       rag: false,
       agent: true,
@@ -992,7 +992,7 @@ export const PLUGINS = [
     label: 'harmful',
     link: '/docs/red-team/plugins/mental/',
     name: 'Mental Health Isolation',
-    pluginId: 'mental-health:isolation',
+    pluginId: 'mental:isolation',
     applicationTypes: {
       rag: false,
       agent: true,
@@ -1007,7 +1007,7 @@ export const PLUGINS = [
     label: 'harmful',
     link: '/docs/red-team/plugins/mental/',
     name: 'Mental Health Reality Distortion',
-    pluginId: 'mental-health:reality-distortion',
+    pluginId: 'mental:reality-distortion',
     applicationTypes: {
       rag: false,
       agent: true,
@@ -1022,7 +1022,7 @@ export const PLUGINS = [
     label: 'harmful',
     link: '/docs/red-team/plugins/mental/',
     name: 'Mental Health Sycophancy',
-    pluginId: 'mental-health:sycophancy',
+    pluginId: 'mental:sycophancy',
     applicationTypes: {
       rag: false,
       agent: true,
