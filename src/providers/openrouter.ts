@@ -1,16 +1,16 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, getTokenUsage, formatOpenAiError } from './openai/util';
-import { REQUEST_TIMEOUT_MS } from './shared';
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { normalizeFinishReason } from '../util/finishReason';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
   ApiProvider,
-  ProviderOptions,
-  ProviderResponse,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderOptions,
+  ProviderResponse,
 } from '../types/providers';
 
 /**
@@ -68,89 +68,100 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // For Gemini models, we need special handling
-    if (this.modelName.includes('gemini')) {
-      // Get the request body and config
-      const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    // Get the request body and config
+    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
 
-      // Make the API call directly
-      logger.debug(`Calling OpenRouter API for Gemini model: ${JSON.stringify(body)}`);
+    // Make the API call directly
+    logger.debug(`Calling OpenRouter API: model=${this.modelName}`);
+    let data, status, statusText;
+    let cached = false;
 
-      let data, status, statusText;
-      let cached = false;
-
-      try {
-        ({ data, cached, status, statusText } = await fetchWithCache(
-          `${this.getApiUrl()}/chat/completions`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.getApiKey()}`,
-              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
+    try {
+      ({ data, cached, status, statusText } = await fetchWithCache(
+        `${this.getApiUrl()}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...config.headers,
           },
-          REQUEST_TIMEOUT_MS,
-          'json',
-          context?.bustCache ?? context?.debug,
-        ));
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
+      ));
 
-        if (status < 200 || status >= 300) {
-          return {
-            error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
-          };
-        }
-      } catch (err) {
-        logger.error(`API call error: ${String(err)}`);
+      if (status < 200 || status >= 300) {
         return {
-          error: `API call error: ${String(err)}`,
+          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
       }
-
-      if (data.error) {
-        return {
-          error: formatOpenAiError(data),
-        };
-      }
-
-      // Process the response with special handling for Gemini
-      const message = data.choices[0].message;
-      const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
-
-      // For Gemini, prioritize content over reasoning
-      let output = '';
-      if (message.content) {
-        output = message.content;
-
-        // Add reasoning as thinking content if present and showThinking is enabled
-        if (message.reasoning && (this.config.showThinking ?? true)) {
-          output = `Thinking: ${message.reasoning}\n\n${output}`;
-        }
-      } else if (message.reasoning) {
-        // Fallback to reasoning if no content (shouldn't happen with Gemini)
-        output = message.reasoning;
-      } else if (message.function_call || message.tool_calls) {
-        output = message.function_call || message.tool_calls;
-      }
-
+    } catch (err) {
+      logger.error(`API call error: ${String(err)}`);
       return {
-        output,
-        tokenUsage: getTokenUsage(data, cached),
-        cached,
-        cost: calculateOpenAICost(
-          this.modelName,
-          config,
-          data.usage?.prompt_tokens,
-          data.usage?.completion_tokens,
-        ),
-        ...(finishReason && { finishReason }),
+        error: `API call error: ${String(err)}`,
       };
     }
 
-    // For non-Gemini models, use the parent implementation
-    return super.callApi(prompt, context, callApiOptions);
+    if (data.error) {
+      return {
+        error: formatOpenAiError(data),
+      };
+    }
+
+    // Process the response with special handling for Gemini
+    const message = data.choices[0].message;
+    const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
+
+    // Prioritize content over reasoning
+    let output = '';
+    if (message.content) {
+      output = message.content;
+      // Add reasoning as thinking content if present and showThinking is enabled
+      if (message.reasoning && (this.config.showThinking ?? true)) {
+        output = `Thinking: ${message.reasoning}\n\n${output}`;
+      }
+    } else if (message.reasoning) {
+      // Fallback to reasoning if no content (shouldn't happen with Gemini)
+      output = message.reasoning;
+    } else if (message.function_call || message.tool_calls) {
+      output = message.function_call || message.tool_calls;
+    }
+
+    // Handle structured output
+    if (config.response_format?.type === 'json_schema') {
+      // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
+      const jsonCandidate =
+        typeof message?.content === 'string'
+          ? message.content
+          : typeof output === 'string'
+            ? output
+            : null;
+      if (jsonCandidate) {
+        try {
+          output = JSON.parse(jsonCandidate);
+        } catch (error) {
+          // Keep the original output (which may include "Thinking:" prefix) if parsing fails
+          logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
+        }
+      }
+    }
+
+    return {
+      output,
+      tokenUsage: getTokenUsage(data, cached),
+      cached,
+      cost: calculateOpenAICost(
+        this.modelName,
+        config,
+        data.usage?.prompt_tokens,
+        data.usage?.completion_tokens,
+      ),
+      ...(finishReason && { finishReason }),
+    };
   }
 }
 
