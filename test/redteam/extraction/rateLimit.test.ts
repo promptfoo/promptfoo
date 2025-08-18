@@ -147,7 +147,7 @@ describe('Rate Limit Discovery (Fixed Implementation)', () => {
               headers: null, // Malformed headers
             },
           },
-        } as ProviderResponse),
+        } as unknown as ProviderResponse),
       };
 
       const result = await discoverRateLimit(mockProvider);
@@ -246,13 +246,13 @@ describe('Rate Limit Discovery (Fixed Implementation)', () => {
               status: 200,
               statusText: 'OK',
               headers: {
-                'x-ratelimit-limit': 100, // Number instead of string
+                'x-ratelimit-limit': 100 as any, // Number instead of string
                 'x-ratelimit-remaining': '99',
-                'invalid-header': { object: 'value' }, // Object header - should be ignored
+                'invalid-header': { object: 'value' } as any, // Object header - should be ignored
               },
             },
           },
-        } as ProviderResponse),
+        } as unknown as ProviderResponse),
       };
 
       const result = await discoverRateLimit(mockProvider);
