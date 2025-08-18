@@ -201,16 +201,16 @@ export function modelScanCommand(program: Command): void {
               // Save to database using normalized schema
               const db = getDb();
               const scanId = createScanId();
-              
+
               // Calculate summary counts
               const criticalCount = transformedResults.issues.filter(
-                i => i.severity === 'critical' || i.severity === 'error'
+                (i) => i.severity === 'critical' || i.severity === 'error',
               ).length;
               const warningCount = transformedResults.issues.filter(
-                i => i.severity === 'warning'
+                (i) => i.severity === 'warning',
               ).length;
               const infoCount = transformedResults.issues.filter(
-                i => i.severity === 'info'
+                (i) => i.severity === 'info',
               ).length;
 
               // Use transaction for consistency
@@ -222,14 +222,14 @@ export function modelScanCommand(program: Command): void {
                   author: getAuthor(),
                   description: options.description || null,
                   primaryPath: path.resolve(paths[0]),
-                  
+
                   // Core metrics
                   bytesScanned: transformedResults.bytes_scanned || 0,
                   filesScanned: transformedResults.files_scanned || 0,
                   startTime: transformedResults.start_time,
                   duration: transformedResults.duration,
                   hasErrors: transformedResults.has_errors || false,
-                  
+
                   // Summary counts
                   totalChecks: transformedResults.total_checks || 0,
                   passedChecks: transformedResults.passed_checks || 0,
@@ -238,11 +238,11 @@ export function modelScanCommand(program: Command): void {
                   criticalIssues: criticalCount,
                   warningIssues: warningCount,
                   infoIssues: infoCount,
-                  
+
                   // Version tracking
                   modelAuditVersion: modelAuditVersion || null,
                   promptfooVersion: PROMPTFOO_VERSION,
-                  
+
                   // Legacy support
                   results: transformedResults,
                   config: {
@@ -260,7 +260,7 @@ export function modelScanCommand(program: Command): void {
                     },
                   },
                 });
-                
+
                 // Insert scan paths
                 for (let i = 0; i < paths.length; i++) {
                   await tx.insert(modelAuditScanPathsTable).values({
@@ -269,7 +269,7 @@ export function modelScanCommand(program: Command): void {
                     isPrimary: i === 0,
                   });
                 }
-                
+
                 // Insert checks
                 if (transformedResults.checks && transformedResults.checks.length > 0) {
                   for (const check of transformedResults.checks) {
@@ -286,7 +286,7 @@ export function modelScanCommand(program: Command): void {
                     });
                   }
                 }
-                
+
                 // Insert issues
                 if (transformedResults.issues && transformedResults.issues.length > 0) {
                   for (const issue of transformedResults.issues) {
@@ -301,7 +301,7 @@ export function modelScanCommand(program: Command): void {
                     });
                   }
                 }
-                
+
                 // Insert assets
                 if (transformedResults.assets && transformedResults.assets.length > 0) {
                   for (const asset of transformedResults.assets) {

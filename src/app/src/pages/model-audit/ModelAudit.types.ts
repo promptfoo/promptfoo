@@ -16,7 +16,7 @@ export interface ScanCheck {
   name: string;
   status: 'passed' | 'failed';
   message: string;
-  location: string;
+  location?: string;
   details?: Record<string, any>;
   timestamp: number;
   severity?: 'error' | 'warning' | 'info' | 'debug' | 'critical';

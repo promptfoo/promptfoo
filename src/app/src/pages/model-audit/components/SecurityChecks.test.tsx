@@ -97,7 +97,9 @@ describe('SecurityChecks', () => {
       // Check if details are shown
       expect(screen.getByText('Found potential hardcoded secret')).toBeInTheDocument();
       expect(screen.getByText('/path/to/risky/file.py')).toBeInTheDocument();
-      expect(screen.getByText('Hardcoded secrets can be exposed in version control')).toBeInTheDocument();
+      expect(
+        screen.getByText('Hardcoded secrets can be exposed in version control'),
+      ).toBeInTheDocument();
     });
 
     it('should display severity badges for failed checks', () => {
@@ -127,10 +129,16 @@ describe('SecurityChecks', () => {
       fireEvent.click(failedCheckAccordion);
 
       // Check for formatted details - look for the actual JSON content
-      expect(screen.getByText((content, element) => {
-        // Check if this is a pre element containing our JSON
-        return element?.tagName === 'PRE' && content.includes('"line": 42') && content.includes('"context": "api_key = \\"secret123\\""');
-      })).toBeInTheDocument();
+      expect(
+        screen.getByText((content, element) => {
+          // Check if this is a pre element containing our JSON
+          return (
+            element?.tagName === 'PRE' &&
+            content.includes('"line": 42') &&
+            content.includes('"context": "api_key = \\"secret123\\""')
+          );
+        }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -165,9 +173,11 @@ describe('SecurityChecks', () => {
       fireEvent.click(failedCheckAccordion);
 
       // Check that details are rendered in a pre element (dark mode styling)
-      expect(screen.getByText((content, element) => {
-        return element?.tagName === 'PRE' && content.includes('"line": 42');
-      })).toBeInTheDocument();
+      expect(
+        screen.getByText((content, element) => {
+          return element?.tagName === 'PRE' && content.includes('"line": 42');
+        }),
+      ).toBeInTheDocument();
     });
   });
 

@@ -77,9 +77,10 @@ function SecurityChecksContent({ scanResults }: SecurityChecksProps) {
   const passedChecks = scanResults.checks.filter((c) => c.status === 'passed');
   const failedChecks = scanResults.checks.filter((c) => c.status === 'failed');
 
-  const handleAccordionChange = (checkName: string) => (_: React.SyntheticEvent, isExpanded: boolean) => {
-    setExpandedCheck(isExpanded ? checkName : false);
-  };
+  const handleAccordionChange =
+    (checkName: string) => (_: React.SyntheticEvent, isExpanded: boolean) => {
+      setExpandedCheck(isExpanded ? checkName : false);
+    };
 
   return (
     <Paper sx={{ p: 3, mb: 3 }}>
