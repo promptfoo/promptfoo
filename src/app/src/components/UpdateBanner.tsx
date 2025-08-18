@@ -137,11 +137,11 @@ export default function UpdateBanner() {
                 sx={{ textTransform: 'none' }}
                 title={versionInfo.updateCommands.primary}
               >
-                {versionInfo.commandType === 'docker' 
+                {versionInfo.commandType === 'docker'
                   ? 'Copy Docker Command'
                   : versionInfo.commandType === 'npx'
-                  ? 'Copy npx Command' 
-                  : 'Copy Update Command'}
+                    ? 'Copy npx Command'
+                    : 'Copy Update Command'}
               </Button>
             )}
           </UpdateActions>
