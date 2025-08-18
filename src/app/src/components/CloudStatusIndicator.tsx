@@ -63,7 +63,7 @@ export default function CloudStatusIndicator() {
       return 'Checking cloud status...';
     }
     if (error) {
-      return 'Error checking cloud status';
+      return 'Unable to check cloud status';
     }
     if (isAuthenticated) {
       const serviceName = isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud';
@@ -154,7 +154,7 @@ export default function CloudStatusIndicator() {
 
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              Error checking cloud status: {error}
+              Unable to connect to cloud service. Please check your connection and try again.
             </Alert>
           )}
         </DialogContent>

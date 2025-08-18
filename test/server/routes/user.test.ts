@@ -78,6 +78,60 @@ describe('userRouter', () => {
       });
     });
 
+    it('should not detect enterprise for standard promptfoo domains', async () => {
+      const standardUrls = [
+        'https://promptfoo.app',
+        'https://www.promptfoo.app',
+        'https://app.promptfoo.app',
+      ];
+
+      for (const url of standardUrls) {
+        jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+        jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
+        jest.mocked(cloudConfig.getAppUrl).mockReturnValue(url);
+
+        const response = await request(app).get('/api/user/cloud/status').expect(200);
+
+        expect(response.body.isEnterprise).toBe(false);
+      }
+    });
+
+    it('should handle malicious URLs safely', async () => {
+      const testCases = [
+        {
+          url: 'https://evil.promptfoo.app.attacker.com',
+          expectedEnterprise: true,
+        },
+        {
+          url: 'https://promptfoo.app.evil.com',
+          expectedEnterprise: true,
+        },
+        {
+          url: 'not-a-url',
+          expectedEnterprise: false,
+        },
+        {
+          url: 'javascript:alert(1)',
+          expectedEnterprise: false,
+        },
+      ];
+
+      for (const testCase of testCases) {
+        jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+        jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+        jest.mocked(cloudConfig.getAppUrl).mockReturnValue(testCase.url);
+
+        const response = await request(app).get('/api/user/cloud/status').expect(200);
+
+        expect(response.body).toMatchObject({
+          isAuthenticated: false,
+          hasApiKey: false,
+          appUrl: null, // Should not expose URL when not authenticated
+          isEnterprise: testCase.expectedEnterprise,
+        });
+      }
+    });
+
     it('should detect enterprise deployment even for unauthenticated users', async () => {
       jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
@@ -103,6 +157,24 @@ describe('userRouter', () => {
       expect(response.body).toEqual({
         error: 'Failed to check cloud status',
       });
+    });
+
+    it('should validate response schema', async () => {
+      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-key');
+      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.promptfoo.app');
+
+      const response = await request(app).get('/api/user/cloud/status').expect(200);
+
+      // Verify response structure matches schema
+      expect(response.body).toHaveProperty('isAuthenticated');
+      expect(response.body).toHaveProperty('hasApiKey');
+      expect(response.body).toHaveProperty('appUrl');
+      expect(response.body).toHaveProperty('isEnterprise');
+      expect(typeof response.body.isAuthenticated).toBe('boolean');
+      expect(typeof response.body.hasApiKey).toBe('boolean');
+      expect(typeof response.body.isEnterprise).toBe('boolean');
+      expect(response.body.appUrl === null || typeof response.body.appUrl === 'string').toBe(true);
     });
   });
 

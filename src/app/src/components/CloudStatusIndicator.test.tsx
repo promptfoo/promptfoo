@@ -127,7 +127,7 @@ describe('CloudStatusIndicator', () => {
     const button = screen.getByRole('button');
     expect(button).toHaveAttribute(
       'aria-label',
-      expect.stringContaining('Error checking cloud status'),
+      expect.stringContaining('Unable to check cloud status'),
     );
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
@@ -253,7 +253,7 @@ describe('CloudStatusIndicator', () => {
     const button = screen.getByRole('button');
     fireEvent.click(button);
 
-    expect(screen.getByText(`Error checking cloud status: ${errorMessage}`)).toBeInTheDocument();
+    expect(screen.getByText('Unable to connect to cloud service. Please check your connection and try again.')).toBeInTheDocument();
   });
 
   it('should track telemetry when Learn More button is clicked', () => {
