@@ -138,18 +138,21 @@ export default function CloudStatusIndicator() {
 
           <Alert severity="info" sx={{ mb: 2 }}>
             Run{' '}
-            <code
-              style={{
-                backgroundColor: 'rgba(0, 0, 0, 0.1)',
+            <Box
+              component="code"
+              sx={{
+                backgroundColor: 'action.hover',
                 padding: '2px 6px',
                 borderRadius: '4px',
                 fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
                 fontSize: '0.875em',
                 fontWeight: 'bold',
+                border: 1,
+                borderColor: 'divider',
               }}
             >
               promptfoo auth login
-            </code>{' '}
+            </Box>{' '}
             or visit{' '}
             <Link
               href="https://www.promptfoo.app/welcome"
