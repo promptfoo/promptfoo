@@ -6,7 +6,6 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import CloudQueueIcon from '@mui/icons-material/CloudQueue';
 import ShareIcon from '@mui/icons-material/Share';
-import GroupWorkIcon from '@mui/icons-material/GroupWork';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -130,12 +129,6 @@ export default function CloudStatusIndicator() {
               </Typography>
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
-              <GroupWorkIcon fontSize="small" color="primary" />
-              <Typography variant="body2">
-                Collaborative red team testing and {isEnterprise ? 'enterprise' : 'team'} configurations
-              </Typography>
-            </Stack>
-            <Stack direction="row" spacing={1} alignItems="center">
               <DashboardIcon fontSize="small" color="primary" />
               <Typography variant="body2">
                 Centralized dashboard and reporting
@@ -163,6 +156,17 @@ export default function CloudStatusIndicator() {
           )}
         </DialogContent>
         <DialogActions>
+          <Button 
+            onClick={() => {
+              recordEvent('webui_action', {
+                action: 'cloud_learn_more_click',
+                source: 'cloud_status_dialog',
+              });
+              window.open('https://www.promptfoo.dev/docs/usage/sharing/', '_blank');
+            }}
+          >
+            Learn More
+          </Button>
           <Button onClick={handleCloseDialog}>Close</Button>
         </DialogActions>
       </Dialog>

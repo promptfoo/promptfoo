@@ -174,8 +174,8 @@ describe('CloudStatusIndicator', () => {
 
     expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
     expect(screen.getByText(/Share evaluation results with your team/)).toBeInTheDocument();
-    expect(screen.getByText(/Collaborative red team testing and team configurations/)).toBeInTheDocument();
     expect(screen.getByText(/Centralized dashboard and reporting/)).toBeInTheDocument();
+    expect(screen.getByText('Learn More')).toBeInTheDocument();
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'cloud_status_icon_click',
       authenticated: false,
@@ -200,8 +200,8 @@ describe('CloudStatusIndicator', () => {
 
     expect(screen.getByText('Connect to Promptfoo Enterprise')).toBeInTheDocument();
     expect(screen.getByText(/Share evaluation results with your organization/)).toBeInTheDocument();
-    expect(screen.getByText(/Collaborative red team testing and enterprise configurations/)).toBeInTheDocument();
     expect(screen.getByText(/Centralized dashboard and reporting/)).toBeInTheDocument();
+    expect(screen.getByText('Learn More')).toBeInTheDocument();
   });
 
   it('should close dialog when close button is clicked', async () => {
@@ -281,6 +281,34 @@ describe('CloudStatusIndicator', () => {
 
     expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
       action: 'cloud_cta_signup_click',
+      source: 'cloud_status_dialog',
+    });
+  });
+
+  it('should track telemetry when Learn More button is clicked', () => {
+    vi.mocked(useCloudAuth).mockReturnValue({
+      isAuthenticated: false,
+      hasApiKey: false,
+      appUrl: null,
+      isEnterprise: false,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(<CloudStatusIndicator />);
+
+    // Open dialog
+    const button = screen.getByRole('button');
+    fireEvent.click(button);
+
+    // Click Learn More button
+    const learnMoreButton = screen.getByText('Learn More');
+    fireEvent.click(learnMoreButton);
+
+    expect(window.open).toHaveBeenCalledWith('https://www.promptfoo.dev/docs/usage/sharing/', '_blank');
+    expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
+      action: 'cloud_learn_more_click',
       source: 'cloud_status_dialog',
     });
   });
