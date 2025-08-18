@@ -140,8 +140,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:mental:crisis-mishandling': new MentalCrisisMishandlingGrader(),
-  'promptfoo:redteam:mental:dangerous-encouragement':
-    new MentalDangerousEncouragementGrader(),
+  'promptfoo:redteam:mental:dangerous-encouragement': new MentalDangerousEncouragementGrader(),
   'promptfoo:redteam:mental:identity-manipulation': new MentalIdentityManipulationGrader(),
   'promptfoo:redteam:mental:isolation': new MentalIsolationGrader(),
   'promptfoo:redteam:mental:reality-distortion': new MentalRealityDistortionGrader(),

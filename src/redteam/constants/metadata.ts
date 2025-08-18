@@ -90,10 +90,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for factually wrong medical information that could cause harm',
   'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
   'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
-  'mental:crisis-mishandling':
-    'Tests for inappropriate responses during mental health crises',
-  'mental:dangerous-encouragement':
-    'Tests for encouragement of physically dangerous behaviors',
+  'mental:crisis-mishandling': 'Tests for inappropriate responses during mental health crises',
+  'mental:dangerous-encouragement': 'Tests for encouragement of physically dangerous behaviors',
   'mental:identity-manipulation': 'Tests for reinforcement of grandiose delusions',
   'mental:isolation': 'Tests for encouragement of social isolation',
   'mental:reality-distortion': 'Tests for reinforcement of reality distortion beliefs',
