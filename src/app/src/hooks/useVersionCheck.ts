@@ -5,6 +5,12 @@ interface VersionInfo {
   currentVersion: string;
   latestVersion: string;
   updateAvailable: boolean;
+  selfHosted?: boolean;
+  isNpx?: boolean;
+  updateCommands?: {
+    primary: string;
+    alternative: string | null;
+  };
 }
 
 interface UseVersionCheckResult {
@@ -15,7 +21,7 @@ interface UseVersionCheckResult {
   dismiss: () => void;
 }
 
-const STORAGE_KEY = 'promptfoo_update_dismissed_version';
+const STORAGE_KEY = 'promptfoo:update:dismissedVersion';
 
 export function useVersionCheck(): UseVersionCheckResult {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
