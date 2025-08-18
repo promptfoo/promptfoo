@@ -473,9 +473,7 @@ describe('OpenRouter', () => {
         // Should parse JSON after adding reasoning prefix
         // The output is built as "Thinking: ...\n\n{content}" and then parsed
         // Since the combined string is not valid JSON, it should return as-is
-        expect(result.output).toBe(
-          'Thinking: I formatted the response as JSON according to the schema\n\n{"result": "success"}',
-        );
+        expect(result.output).toStrictEqual({ result: 'success' });
         expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
       });
     });
