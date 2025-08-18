@@ -212,7 +212,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     })
     .catch((error) => {
-      logger.error(`Error running redteam: ${error}`);
+      logger.error(`Error running red team: ${error}`);
       const job = evalJobs.get(id);
       if (job && currentJobId === id) {
         job.status = 'error';
