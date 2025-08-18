@@ -1,5 +1,6 @@
 ---
 sidebar_label: Webhook Integration
+description: Integrate real-time issue notifications with external systems using Promptfoo's webhook API. Configure event types, manage endpoints, and verify signatures securely.
 ---
 
 # Webhook Integration

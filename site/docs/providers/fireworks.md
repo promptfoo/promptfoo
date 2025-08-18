@@ -1,5 +1,6 @@
 ---
 sidebar_label: Fireworks AI
+description: Configure Fireworks AI's Llama-v3-8b model through their OpenAI-compatible API for seamless integration and inference with enterprise-grade LLM testing
 ---
 
 # Fireworks AI

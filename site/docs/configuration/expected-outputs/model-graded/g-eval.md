@@ -1,5 +1,6 @@
 ---
 sidebar_position: 8
+description: "Apply Google's G-Eval framework for sophisticated multi-criteria LLM evaluation using chain-of-thought and probability scoring"
 ---
 
 # G-Eval

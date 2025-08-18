@@ -1,5 +1,6 @@
 ---
 sidebar_label: Perplexity
+description: "Integrate Perplexity's online LLMs with real-time web search for fact-checking, current events, and knowledge-grounded responses"
 ---
 
 # Perplexity

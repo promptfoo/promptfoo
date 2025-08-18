@@ -1,5 +1,6 @@
 ---
 sidebar_label: Cohere Command-R benchmarks
+description: Compare Cohere Command-R vs GPT-4 vs Claude performance with automated benchmarks to evaluate model accuracy on your specific use cases and datasets
 ---
 
 # Command R vs GPT vs Claude: create your own benchmark
