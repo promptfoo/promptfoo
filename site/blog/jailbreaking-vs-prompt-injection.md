@@ -1,7 +1,7 @@
 ---
 title: 'Prompt Injection vs Jailbreaking: What's the Difference?'
 description: 'Learn the critical difference between prompt injection and jailbreaking attacks, with real CVEs, production defenses, and test configurations.'
-image: https://promptfoo.dev/img/blog/jailbreaking-vs-prompt-injection.jpg
+image: /img/blog/jailbreaking-vs-prompt-injection.jpg
 keywords:
   [
     prompt injection,
