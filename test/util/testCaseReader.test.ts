@@ -89,7 +89,17 @@ jest.mock('../../src/esm', () => ({
 jest.mock('../../src/util/file', () => ({
   maybeLoadConfigFromExternalFile: jest.fn((config) => {
     // Mock implementation that handles file:// references
-    if (config && typeof config === 'object') {
+
+    // Handle arrays first to preserve their type
+    if (Array.isArray(config)) {
+      return config.map((item) => {
+        const mockFn = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+        return mockFn(item);
+      });
+    }
+
+    // Handle objects (but not arrays)
+    if (config && typeof config === 'object' && config !== null) {
       const result = { ...config };
       for (const [key, value] of Object.entries(config)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
@@ -109,6 +119,7 @@ jest.mock('../../src/util/file', () => ({
       }
       return result;
     }
+
     return config;
   }),
 }));

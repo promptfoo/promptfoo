@@ -12,7 +12,6 @@ import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
-import * as fileModule from '../src/util/file';
 
 import type { ProviderOptions } from '../src/types';
 
@@ -26,7 +25,13 @@ jest.mock('../src/providers/pythonCompletion');
 jest.mock('../src/providers/scriptCompletion');
 jest.mock('../src/providers/websocket');
 jest.mock('../src/util/cloud');
-jest.mock('../src/util/file');
+jest.mock('../src/util/file', () => {
+  const actual = jest.requireActual('../src/util/file');
+  return {
+    ...actual,
+    maybeLoadConfigFromExternalFile: jest.fn((input) => input),
+  };
+});
 
 describe('loadApiProvider', () => {
   beforeEach(() => {
@@ -41,8 +46,9 @@ describe('loadApiProvider', () => {
       .mocked(getCloudDatabaseId)
       .mockImplementation((path: string) => path.slice('promptfoo://provider/'.length));
 
-    // By default, maybeLoadConfigFromExternalFile returns its input unchanged
-    jest.mocked(fileModule.maybeLoadConfigFromExternalFile).mockImplementation((input) => input);
+    // Reset maybeLoadConfigFromExternalFile mock to default implementation
+    const { maybeLoadConfigFromExternalFile } = jest.requireMock('../src/util/file');
+    maybeLoadConfigFromExternalFile.mockImplementation((input: any) => input);
   });
 
   it('should load echo provider', async () => {
@@ -125,13 +131,14 @@ describe('loadApiProvider', () => {
 
     jest.mocked(fs.readFileSync).mockReturnValue('yaml content');
     jest.mocked(yaml.load).mockReturnValue(yamlContentWithRefs);
-    jest.mocked(fileModule.maybeLoadConfigFromExternalFile).mockReturnValue(resolvedContent);
+    const { maybeLoadConfigFromExternalFile } = jest.requireMock('../src/util/file');
+    maybeLoadConfigFromExternalFile.mockReturnValue(resolvedContent);
 
     const provider = await loadApiProvider('file://provider.yaml', {
       basePath: '/test',
     });
 
-    expect(fileModule.maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(yamlContentWithRefs);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(yamlContentWithRefs);
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', {
       config: expect.objectContaining({
         apiKey: 'sk-test-key-12345',
@@ -161,13 +168,14 @@ describe('loadApiProvider', () => {
 
     jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContentWithRefs));
     jest.mocked(yaml.load).mockReturnValue(jsonContentWithRefs);
-    jest.mocked(fileModule.maybeLoadConfigFromExternalFile).mockReturnValue(resolvedContent);
+    const { maybeLoadConfigFromExternalFile } = jest.requireMock('../src/util/file');
+    maybeLoadConfigFromExternalFile.mockReturnValue(resolvedContent);
 
     const provider = await loadApiProvider('file://provider.json', {
       basePath: '/test',
     });
 
-    expect(fileModule.maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(jsonContentWithRefs);
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(jsonContentWithRefs);
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-3.5-turbo', {
       config: expect.objectContaining({
         apiKey: 'sk-prod-key-67890',
@@ -561,6 +569,10 @@ describe('loadApiProviders', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     cliState.config = undefined;
+
+    // Reset maybeLoadConfigFromExternalFile mock to default implementation
+    const { maybeLoadConfigFromExternalFile } = jest.requireMock('../src/util/file');
+    maybeLoadConfigFromExternalFile.mockImplementation((input: any) => input);
   });
 
   it('should load single provider from string', async () => {
