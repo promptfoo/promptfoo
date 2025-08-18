@@ -45,13 +45,6 @@ export default function CloudStatusIndicator() {
     setShowDialog(false);
   };
 
-  const handleLearnMoreClick = () => {
-    recordEvent('webui_action', {
-      action: 'cloud_cta_learn_more_click',
-      source: 'cloud_status_dialog',
-    });
-  };
-
   const handlePromptfooAppClick = () => {
     recordEvent('webui_action', {
       action: 'cloud_cta_signup_click',
@@ -161,16 +154,6 @@ export default function CloudStatusIndicator() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Close</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            href="https://www.promptfoo.dev/docs/usage/sharing/"
-            target="_blank"
-            rel="noopener"
-            onClick={handleLearnMoreClick}
-          >
-            Learn More
-          </Button>
         </DialogActions>
       </Dialog>
     </>

@@ -260,32 +260,6 @@ describe('CloudStatusIndicator', () => {
     ).toBeInTheDocument();
   });
 
-  it('should track telemetry when Learn More button is clicked', () => {
-    vi.mocked(useCloudAuth).mockReturnValue({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
-      isEnterprise: false,
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(),
-    });
-
-    render(<CloudStatusIndicator />);
-
-    // Open dialog
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
-
-    // Click Learn More
-    const learnMoreButton = screen.getByText('Learn More');
-    fireEvent.click(learnMoreButton);
-
-    expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
-      action: 'cloud_cta_learn_more_click',
-      source: 'cloud_status_dialog',
-    });
-  });
 
   it('should track telemetry when promptfoo.app link is clicked', () => {
     vi.mocked(useCloudAuth).mockReturnValue({
