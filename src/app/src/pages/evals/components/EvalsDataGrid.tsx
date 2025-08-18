@@ -256,7 +256,7 @@ export default function EvalsDataGrid({
                 valueGetter: (value: Eval['isRedteam'], row: Eval) => value === 1,
                 renderCell: (params: GridRenderCellParams<Eval>) => {
                   const isRedteam = params.value as Eval['isRedteam'];
-                  const displayType = isRedteam ? 'Redteam' : 'Eval';
+                  const displayType = isRedteam ? 'Red Team' : 'Eval';
 
                   return (
                     <Chip
