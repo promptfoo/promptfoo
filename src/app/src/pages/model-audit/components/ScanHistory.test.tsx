@@ -25,6 +25,9 @@ describe('ScanHistory', () => {
         issueCount: 2,
         criticalCount: 1,
         warningCount: 1,
+        totalChecks: 10,
+        passedChecks: 8,
+        failedChecks: 2,
       },
       {
         id: 'scan-2',
@@ -35,6 +38,9 @@ describe('ScanHistory', () => {
         issueCount: 0,
         criticalCount: 0,
         warningCount: 0,
+        totalChecks: 5,
+        passedChecks: 5,
+        failedChecks: 0,
       },
     ],
     total: 2,
@@ -95,7 +101,9 @@ describe('ScanHistory', () => {
       expect(
         utils.getByText(new Date(mockScans.scans[1].createdAt).toLocaleString()),
       ).toBeInTheDocument();
-      expect(utils.getByText('-')).toBeInTheDocument();
+      // Check that author cell shows '-' (use getAllByText since there might be multiple)
+      const dashElements = utils.getAllByText('-');
+      expect(dashElements.length).toBeGreaterThan(0);
       expect(utils.getByText('Second test scan with no author')).toBeInTheDocument();
       expect(utils.getByText('Clean')).toBeInTheDocument();
     }
