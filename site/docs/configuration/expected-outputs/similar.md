@@ -1,5 +1,6 @@
 ---
 sidebar_position: 55
+description: Calculate semantic similarity scores between actual and expected outputs using advanced embedding models and cosine distance
 ---
 
 # Similarity (embeddings)

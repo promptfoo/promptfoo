@@ -1,5 +1,6 @@
 ---
 sidebar_label: Replicate
+description: "Deploy and run open-source AI models in the cloud using Replicate's scalable API for image, text, and audio generation"
 ---
 
 # Replicate

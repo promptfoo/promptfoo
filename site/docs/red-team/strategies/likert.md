@@ -1,7 +1,7 @@
 ---
 sidebar_label: Likert-based Jailbreaks
 title: Likert-based Jailbreaks Strategy
-description: Leverage academic evaluation frameworks and Likert scales to bypass AI safety mechanisms
+description: Exploit academic framing and Likert scale formats to circumvent AI safety by disguising harmful requests as research surveys
 ---
 
 # Likert-based Jailbreaks Strategy

@@ -1,7 +1,7 @@
 ---
 title: RAG Document Exfiltration
 sidebar_label: RAG Document Exfiltration
-description: Test whether retrieval-augmented generation may leak entire documents and sensitive content
+description: Detect RAG vulnerabilities that could expose complete documents, sensitive data, or proprietary information through prompts
 ---
 
 # RAG Document Exfiltration Plugin

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 1
+description: "Configure OpenAI's GPT models including GPT-4o, o1, GPT-3.5, embeddings, and assistants for comprehensive AI evaluations"
 ---
 
 # OpenAI

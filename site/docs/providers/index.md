@@ -1,5 +1,6 @@
 ---
 sidebar_label: LLM Providers
+description: Configure multiple LLM providers including Claude Sonnet, GPT-4, and Gemini models with standardized testing interfaces for comprehensive AI evaluation
 ---
 
 # LLM Providers
