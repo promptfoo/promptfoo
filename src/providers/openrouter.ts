@@ -131,6 +131,15 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       output = message.function_call || message.tool_calls;
     }
 
+    // Handle structured output
+    if (config.response_format?.type === 'json_schema' && typeof output === 'string') {
+      try {
+        output = JSON.parse(output);
+      } catch (error) {
+        logger.error(`Failed to parse JSON output: ${error}`);
+      }
+    }
+
     return {
       output,
       tokenUsage: getTokenUsage(data, cached),
