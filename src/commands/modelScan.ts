@@ -15,6 +15,7 @@ import {
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { createScanId } from '../models/modelAuditScan';
+import { checkModelAuditUpdates } from '../updates';
 import type { Command } from 'commander';
 import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
 
@@ -75,6 +76,9 @@ export function modelScanCommand(program: Command): void {
         logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
         process.exit(1);
       }
+
+      // Check for modelaudit updates
+      await checkModelAuditUpdates();
 
       const args = ['scan', ...paths];
 

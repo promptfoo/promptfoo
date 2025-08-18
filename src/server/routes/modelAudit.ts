@@ -173,6 +173,9 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
     return;
   }
 
+  // Define a safe root directory (project root)
+  const SAFE_ROOT = process.cwd();
+
   try {
     // Handle home directory expansion
     let expandedPath = inputPath;
@@ -180,9 +183,39 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
       expandedPath = path.join(os.homedir(), expandedPath.slice(2));
     }
 
-    const absolutePath = path.isAbsolute(expandedPath)
+    // Normalize and resolve the path
+    const resolvedPath = path.isAbsolute(expandedPath)
       ? expandedPath
-      : path.resolve(process.cwd(), expandedPath);
+      : path.resolve(SAFE_ROOT, expandedPath);
+    
+    let absolutePath: string;
+    try {
+      absolutePath = fs.realpathSync(resolvedPath);
+    } catch (err) {
+      // If realpath fails, the path doesn't exist - check if the resolved path is safe first
+      const normalizedPath = path.resolve(resolvedPath);
+      if (!normalizedPath.startsWith(SAFE_ROOT + path.sep) && normalizedPath !== SAFE_ROOT) {
+        res.status(403).json({
+          exists: false,
+          error: 'Access to paths outside the project root is forbidden.',
+        });
+        return;
+      }
+      res.json({
+        exists: false,
+        error: `Path does not exist: ${resolvedPath}`,
+      });
+      return;
+    }
+
+    // Ensure the resolved path is within the safe root directory
+    if (!absolutePath.startsWith(SAFE_ROOT + path.sep) && absolutePath !== SAFE_ROOT) {
+      res.status(403).json({
+        exists: false,
+        error: 'Access to paths outside the project root is forbidden.',
+      });
+      return;
+    }
 
     const exists = fs.existsSync(absolutePath);
     if (!exists) {
