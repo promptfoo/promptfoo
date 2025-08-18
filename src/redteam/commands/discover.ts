@@ -18,9 +18,9 @@ import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
-import { discoverRateLimit, type RateLimitInfo } from '../extraction/rateLimit';
+import { discoverRateLimit } from '../extraction/rateLimit';
 
-import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
+import type { ApiProvider, Prompt, RateLimitInfo, UnifiedConfig } from '../../types';
 
 // ========================================================
 // Schemas

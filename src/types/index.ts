@@ -15,7 +15,18 @@ import type {
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
-import type { RateLimitInfo } from '../redteam/extraction/rateLimit';
+// Rate limit information type (defined here to avoid circular dependency)
+export interface RateLimitInfo {
+  detected: boolean;
+  detectionMethod: 'headers' | 'none';
+  requestsPerSecond?: number; // 0-10000 range
+  requestsPerMinute?: number; // 0-600000 range
+  requestsPerHour?: number; // 0-36000000 range
+  timeWindow?: string; // e.g., "1m", "1h", "15m"
+  headers?: Record<string, string>;
+  confidence: 'high' | 'medium' | 'low';
+  warnings?: string[]; // Any parsing warnings
+}
 import type { EnvOverrides } from '../types/env';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';

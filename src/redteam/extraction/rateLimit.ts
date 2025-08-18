@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import logger from '../../logger';
 
-import type { ApiProvider } from '../../types';
+import type { ApiProvider, RateLimitInfo } from '../../types';
 
-// Rate limit information schema and types with proper validation
+// Rate limit information schema for validation (type defined in types/index.ts to avoid circular dependency)
 export const RateLimitInfoSchema = z.object({
   detected: z.boolean(),
   detectionMethod: z.enum(['headers', 'none']), // Removed 'probing' - feature removed
@@ -15,8 +15,6 @@ export const RateLimitInfoSchema = z.object({
   confidence: z.enum(['high', 'medium', 'low']),
   warnings: z.array(z.string()).optional(), // Any parsing warnings
 });
-
-export type RateLimitInfo = z.infer<typeof RateLimitInfoSchema>;
 
 /**
  * Discovers rate limiting information for an API provider via passive header detection only.
