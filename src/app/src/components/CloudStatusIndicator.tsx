@@ -137,7 +137,20 @@ export default function CloudStatusIndicator() {
           </Stack>
 
           <Alert severity="info" sx={{ mb: 2 }}>
-            Run <code>promptfoo auth login</code> or visit{' '}
+            Run{' '}
+            <code
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                fontSize: '0.875em',
+                fontWeight: 'bold',
+              }}
+            >
+              promptfoo auth login
+            </code>{' '}
+            or visit{' '}
             <Link
               href="https://www.promptfoo.app/welcome"
               target="_blank"
