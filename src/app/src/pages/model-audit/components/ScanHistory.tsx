@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import {
+  CheckCircle as CheckCircleIcon,
   Delete as DeleteIcon,
   Error as ErrorIcon,
   Visibility as VisibilityIcon,
@@ -24,6 +25,7 @@ import {
 } from '@mui/material';
 
 import { callApi } from '@app/utils/api';
+import ErrorBoundary from '../../../components/ErrorBoundary';
 
 import type { ScanHistoryItem, ScanListApiResponse, StoredScan } from '../ModelAudit.types';
 
@@ -31,7 +33,7 @@ interface ScanHistoryProps {
   onViewScan: (scan: StoredScan) => void;
 }
 
-export default function ScanHistory({ onViewScan }: ScanHistoryProps) {
+function ScanHistoryContent({ onViewScan }: ScanHistoryProps) {
   const [scans, setScans] = useState<ScanHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -147,6 +149,7 @@ export default function ScanHistory({ onViewScan }: ScanHistoryProps) {
               <TableCell>Path</TableCell>
               <TableCell>Author</TableCell>
               <TableCell>Description</TableCell>
+              <TableCell align="center">Checks</TableCell>
               <TableCell align="center">Issues</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
@@ -170,6 +173,34 @@ export default function ScanHistory({ onViewScan }: ScanHistoryProps) {
                 </TableCell>
                 <TableCell>{scan.author || '-'}</TableCell>
                 <TableCell>{scan.description || '-'}</TableCell>
+                <TableCell align="center">
+                  {scan.totalChecks ? (
+                    <Box display="flex" alignItems="center" justifyContent="center" gap={1}>
+                      <Tooltip title={`${scan.passedChecks} passed checks`}>
+                        <Box display="flex" alignItems="center" gap={0.5}>
+                          <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />
+                          <Typography variant="body2" color="success.main">
+                            {scan.passedChecks}
+                          </Typography>
+                        </Box>
+                      </Tooltip>
+                      {scan.failedChecks && scan.failedChecks > 0 && (
+                        <Tooltip title={`${scan.failedChecks} failed checks`}>
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            <ErrorIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                            <Typography variant="body2" color="error">
+                              {scan.failedChecks}
+                            </Typography>
+                          </Box>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" color="text.disabled">
+                      -
+                    </Typography>
+                  )}
+                </TableCell>
                 <TableCell align="center">
                   <Box display="flex" alignItems="center" justifyContent="center" gap={1}>
                     {scan.criticalCount > 0 && (
@@ -238,5 +269,13 @@ export default function ScanHistory({ onViewScan }: ScanHistoryProps) {
         onRowsPerPageChange={handleChangeRowsPerPage}
       />
     </>
+  );
+}
+
+export default function ScanHistory(props: ScanHistoryProps) {
+  return (
+    <ErrorBoundary name="Scan History">
+      <ScanHistoryContent {...props} />
+    </ErrorBoundary>
   );
 }
