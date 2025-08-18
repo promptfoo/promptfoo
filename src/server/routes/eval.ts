@@ -32,7 +32,9 @@ export const evalJobs = new Map<string, Job>();
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   if (!req.body) {
-    logger.error(`Request body is undefined in /api/eval/job endpoint. Headers: ${JSON.stringify(req.headers)}, Content-Type: ${req.get('content-type')}, Method: ${req.method}, URL: ${req.url}`);
+    logger.error(
+      `Request body is undefined in /api/eval/job endpoint. Headers: ${JSON.stringify(req.headers)}, Content-Type: ${req.get('content-type')}, Method: ${req.method}, URL: ${req.url}`,
+    );
     res.status(400).json({
       error:
         'Request body is missing. Please ensure Content-Type header is set to application/json',
