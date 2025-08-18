@@ -130,9 +130,7 @@ export default function CloudStatusIndicator() {
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
               <DashboardIcon fontSize="small" color="primary" />
-              <Typography variant="body2">
-                Centralized dashboard and reporting
-              </Typography>
+              <Typography variant="body2">Centralized dashboard and reporting</Typography>
             </Stack>
           </Stack>
 
@@ -172,7 +170,7 @@ export default function CloudStatusIndicator() {
           )}
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'space-between' }}>
-          <Button 
+          <Button
             onClick={() => {
               recordEvent('webui_action', {
                 action: 'cloud_learn_more_click',
@@ -183,11 +181,7 @@ export default function CloudStatusIndicator() {
           >
             Learn More
           </Button>
-          <Button 
-            onClick={handleCloseDialog}
-            variant="contained"
-            color="primary"
-          >
+          <Button onClick={handleCloseDialog} variant="contained" color="primary">
             Close
           </Button>
         </DialogActions>

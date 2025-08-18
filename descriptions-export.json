@@ -1,0 +1,62 @@
+[
+  {
+    "file": "site/docs/red-team/agents.md",
+    "description": "Red team LLM agent security by testing privilege escalation, context poisoning, and memory manipulation to protect AI systems from unauthorized access and data breaches",
+    "type": "red-team",
+    "length": 168
+  },
+  {
+    "file": "site/docs/red-team/architecture.md",
+    "description": "Red team AI systems with modular architecture using plugins and strategies to detect vulnerabilities, prevent jailbreaks, and secure LLM applications from adversarial attacks",
+    "type": "red-team",
+    "length": 174
+  },
+  {
+    "file": "site/docs/red-team/configuration.md",
+    "description": "Red team your LLM configuration settings using systematic vulnerability scanning to protect AI systems from prompt injection and malicious payload attacks",
+    "type": "red-team",
+    "length": 154
+  },
+  {
+    "file": "site/docs/red-team/discovery.md",
+    "description": "Red team AI systems through automated target discovery to detect vulnerabilities, extract system information, and improve attack efficacy in production environments",
+    "type": "red-team",
+    "length": 164
+  },
+  {
+    "file": "site/docs/red-team/guardrails.md",
+    "description": "Red team LLM guardrails by testing injection detection, content moderation, and PII filtering to protect AI systems from malicious inputs and data exposure risks",
+    "type": "red-team",
+    "length": 161
+  },
+  {
+    "file": "site/docs/red-team/index.md",
+    "description": "Red team LLM systems through systematic adversarial testing to detect content generation vulnerabilities, information leakage, and API misuse before production deployment",
+    "type": "red-team",
+    "length": 170
+  },
+  {
+    "file": "site/docs/red-team/llm-vulnerability-types.md",
+    "description": "Red team LLM systems for security, privacy, and criminal vulnerabilities using modular testing plugins to protect AI applications from exploitation and data breaches",
+    "type": "red-team",
+    "length": 165
+  },
+  {
+    "file": "site/docs/red-team/owasp-llm-top-10.md",
+    "description": "Red team LLM applications against OWASP Top 10 vulnerabilities using comprehensive security assessments to protect AI systems from prompt injection, data leakage and supply chain attacks",
+    "type": "red-team",
+    "length": 186
+  },
+  {
+    "file": "site/docs/red-team/plugins/aegis.md",
+    "description": "Red team LLM content safety using NVIDIA's Aegis dataset to detect harmful outputs across 13 risk categories including hate speech, violence, and exploitation",
+    "type": "red-team",
+    "length": 158
+  },
+  {
+    "file": "site/docs/red-team/plugins/age-bias.md",
+    "description": "Red team age discrimination vulnerabilities by testing LLM outputs for harmful stereotypes and biases to protect AI systems from producing ageist responses",
+    "type": "red-team",
+    "length": 155
+  }
+]

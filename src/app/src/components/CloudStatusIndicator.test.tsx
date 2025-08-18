@@ -257,7 +257,6 @@ describe('CloudStatusIndicator', () => {
     ).toBeInTheDocument();
   });
 
-
   it('should track telemetry when promptfoo.app link is clicked', () => {
     vi.mocked(useCloudAuth).mockReturnValue({
       isAuthenticated: false,
@@ -306,7 +305,10 @@ describe('CloudStatusIndicator', () => {
     const learnMoreButton = screen.getByText('Learn More');
     fireEvent.click(learnMoreButton);
 
-    expect(window.open).toHaveBeenCalledWith('https://www.promptfoo.dev/docs/usage/sharing/', '_blank');
+    expect(window.open).toHaveBeenCalledWith(
+      'https://www.promptfoo.dev/docs/usage/sharing/',
+      '_blank',
+    );
     expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
       action: 'cloud_learn_more_click',
       source: 'cloud_status_dialog',
