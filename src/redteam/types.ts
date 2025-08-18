@@ -6,6 +6,7 @@ import type { Plugin, Severity } from './constants';
 // and can be anything the user wants.
 export type Modifier = string | 'tone' | 'style' | 'context' | 'testGenerationInstructions';
 export type Intent = string | string[];
+export type Policy = string | { id: string }; // Policy Text or Policy ID
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
 export type PluginConfig = {
@@ -36,7 +37,7 @@ export type PluginConfig = {
 
   indirectInjectionVar?: string;
   intent?: Intent | Intent[];
-  policy?: string | { id: string }; // Policy Text or Policy ID
+  policy?: Policy;
   systemPrompt?: string;
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies?: string[];
