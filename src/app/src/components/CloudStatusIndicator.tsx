@@ -155,7 +155,7 @@ export default function CloudStatusIndicator() {
             </Alert>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ justifyContent: 'space-between' }}>
           <Button 
             onClick={() => {
               recordEvent('webui_action', {
