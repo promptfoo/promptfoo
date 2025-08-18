@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import styles from './CollapsibleCode.module.css';
 
 interface CollapsibleCodeProps {
@@ -8,11 +8,11 @@ interface CollapsibleCodeProps {
   defaultExpanded?: boolean;
 }
 
-export default function CollapsibleCode({ 
-  title, 
-  language = 'yaml', 
-  code, 
-  defaultExpanded = false 
+export default function CollapsibleCode({
+  title,
+  language = 'yaml',
+  code,
+  defaultExpanded = false,
 }: CollapsibleCodeProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [showCopied, setShowCopied] = useState(false);
@@ -30,31 +30,24 @@ export default function CollapsibleCode({
     <div className={styles.collapsibleCode}>
       <div className={styles.header} onClick={() => setIsExpanded(!isExpanded)}>
         <span className={styles.title}>
-          <span className={styles.icon}>
-            {isExpanded ? '▼' : '▶'}
-          </span>
+          <span className={styles.icon}>{isExpanded ? '▼' : '▶'}</span>
           {title}
         </span>
         <div className={styles.actions}>
           {!isExpanded && hasMoreLines && (
-            <span className={styles.lineCount}>
-              {code.split('\n').length} lines
-            </span>
+            <span className={styles.lineCount}>{code.split('\n').length} lines</span>
           )}
-          <span className={styles.expandText}>
-            {isExpanded ? 'Collapse' : 'Expand'}
-          </span>
+          <span className={styles.expandText}>{isExpanded ? 'Collapse' : 'Expand'}</span>
         </div>
       </div>
 
       <div className={`${styles.codeContainer} ${isExpanded ? styles.expanded : ''}`}>
         {!isExpanded && hasMoreLines ? (
           <div className={styles.preview}>
-            <pre><code className={`language-${language}`}>{previewLines}</code></pre>
-            <div 
-              className={styles.fade}
-              onClick={() => setIsExpanded(true)}
-            >
+            <pre>
+              <code className={`language-${language}`}>{previewLines}</code>
+            </pre>
+            <div className={styles.fade} onClick={() => setIsExpanded(true)}>
               <span className={styles.expandHint}>Click to expand full code...</span>
             </div>
           </div>
@@ -62,7 +55,7 @@ export default function CollapsibleCode({
           <div className={styles.fullCode}>
             <div className={styles.codeHeader}>
               <span className={styles.language}>{language.toUpperCase()}</span>
-              <button 
+              <button
                 className={styles.copyButton}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -72,7 +65,9 @@ export default function CollapsibleCode({
                 {showCopied ? '✅ Copied!' : '📋 Copy'}
               </button>
             </div>
-            <pre><code className={`language-${language}`}>{code}</code></pre>
+            <pre>
+              <code className={`language-${language}`}>{code}</code>
+            </pre>
           </div>
         )}
       </div>

@@ -184,29 +184,29 @@
   .header {
     padding: 0.875rem 1rem;
   }
-  
+
   .title {
     font-size: 0.9rem;
   }
-  
+
   .actions {
     gap: 0.5rem;
   }
-  
+
   .expandText {
     display: none;
   }
-  
+
   .preview pre,
   .fullCode pre {
     padding: 1rem;
     font-size: 0.8rem;
   }
-  
+
   .codeHeader {
     padding: 0.5rem 1rem;
   }
-  
+
   .copyButton {
     padding: 0.25rem 0.5rem;
     font-size: 0.7rem;
