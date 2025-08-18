@@ -36,7 +36,7 @@ export type PluginConfig = {
 
   indirectInjectionVar?: string;
   intent?: Intent | Intent[];
-  policy?: string;
+  policy?: string | { id: string }; // Policy Text or Policy ID
   systemPrompt?: string;
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies?: string[];
