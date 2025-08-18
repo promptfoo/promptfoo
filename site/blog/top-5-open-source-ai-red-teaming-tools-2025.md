@@ -1,6 +1,7 @@
 ---
 title: 'Top 5 Open Source AI Red Teaming Tools in 2025'
 description: 'Compare the top open source AI red teaming tools in 2025. See features, use cases, and real differences across Promptfoo, PyRIT, Garak, DeepTeam, and Viper.'
+image: /img/blog/top-5-open-source-ai-red-teaming-tools-2025.jpg
 authors: [promptfoo_team]
 tags: [red-teaming, security, open-source, ai-security, tools]
 keywords:
