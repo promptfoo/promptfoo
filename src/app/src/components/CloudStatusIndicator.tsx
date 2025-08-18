@@ -5,6 +5,9 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import CloudIcon from '@mui/icons-material/Cloud';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import CloudQueueIcon from '@mui/icons-material/CloudQueue';
+import ShareIcon from '@mui/icons-material/Share';
+import GroupWorkIcon from '@mui/icons-material/GroupWork';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -107,43 +110,153 @@ export default function CloudStatusIndicator() {
         </IconButton>
       </Tooltip>
 
-      <Dialog open={showDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CloudQueueIcon color="primary" />
-            Connect to {isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud'}
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="body1" gutterBottom>
-              Connect to unlock powerful {isEnterprise ? 'enterprise' : 'team'} features:
-            </Typography>
-            <Box component="ul" sx={{ mt: 2, pl: 2 }}>
-              <Typography component="li" variant="body2" sx={{ mb: 1 }}>
-                🔗 Share evaluation results with your {isEnterprise ? 'organization' : 'team'}
+      <Dialog 
+        open={showDialog} 
+        onClose={handleCloseDialog} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
+          }
+        }}
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+            <Box sx={{ 
+              p: 1, 
+              borderRadius: 2, 
+              backgroundColor: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <CloudQueueIcon sx={{ color: 'white', fontSize: '2rem' }} />
+            </Box>
+            <Box>
+              <Typography variant="h5" component="h2" fontWeight="bold">
+                Connect to {isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud'}
               </Typography>
-              <Typography component="li" variant="body2" sx={{ mb: 1 }}>
-                🎯 Collaborative red team testing and {isEnterprise ? 'enterprise' : 'team'}{' '}
-                configurations
-              </Typography>
-              <Typography component="li" variant="body2">
-                📊 Centralized dashboard and reporting
+              <Typography variant="subtitle2" color="text.secondary">
+                Unlock powerful {isEnterprise ? 'enterprise' : 'team'} collaboration features
               </Typography>
             </Box>
           </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                <Box sx={{ 
+                  p: 1.5, 
+                  borderRadius: 2, 
+                  backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: 48,
+                  minHeight: 48
+                }}>
+                  <ShareIcon sx={{ color: 'primary.main', fontSize: '1.5rem' }} />
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle1" fontWeight="semibold" gutterBottom>
+                    Share Results
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Share evaluation results and collaborate with your {isEnterprise ? 'organization' : 'team'}
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                <Box sx={{ 
+                  p: 1.5, 
+                  borderRadius: 2, 
+                  backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: 48,
+                  minHeight: 48
+                }}>
+                  <GroupWorkIcon sx={{ color: 'success.main', fontSize: '1.5rem' }} />
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle1" fontWeight="semibold" gutterBottom>
+                    Red Team Testing
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Collaborative red team testing with {isEnterprise ? 'enterprise' : 'team'} configurations
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                <Box sx={{ 
+                  p: 1.5, 
+                  borderRadius: 2, 
+                  backgroundColor: 'rgba(156, 39, 176, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: 48,
+                  minHeight: 48
+                }}>
+                  <DashboardIcon sx={{ color: 'secondary.main', fontSize: '1.5rem' }} />
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle1" fontWeight="semibold" gutterBottom>
+                    Centralized Dashboard
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Access powerful reporting and analytics from a unified dashboard
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
+          </Box>
 
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Run <code>promptfoo auth login</code> or visit{' '}
-            <Link
-              href="https://www.promptfoo.app/welcome"
-              target="_blank"
-              rel="noopener"
-              onClick={handlePromptfooAppClick}
-            >
-              promptfoo.app
-            </Link>{' '}
-            to get started
+          <Alert 
+            severity="info" 
+            sx={{ 
+              mb: 2,
+              borderRadius: 2,
+              '& .MuiAlert-message': {
+                width: '100%'
+              }
+            }}
+          >
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Typography variant="subtitle2" fontWeight="semibold">
+                Ready to get started?
+              </Typography>
+              <Typography variant="body2">
+                Run <code style={{ 
+                  backgroundColor: 'rgba(0,0,0,0.1)', 
+                  padding: '2px 6px', 
+                  borderRadius: '4px',
+                  fontFamily: 'monospace'
+                }}>promptfoo auth login</code> or visit{' '}
+                <Link
+                  href="https://www.promptfoo.app/welcome"
+                  target="_blank"
+                  rel="noopener"
+                  onClick={handlePromptfooAppClick}
+                  sx={{ 
+                    fontWeight: 'semibold',
+                    textDecoration: 'none',
+                    '&:hover': {
+                      textDecoration: 'underline'
+                    }
+                  }}
+                >
+                  promptfoo.app
+                </Link>{' '}
+                to connect your account
+              </Typography>
+            </Box>
           </Alert>
 
           {error && (
@@ -152,8 +265,20 @@ export default function CloudStatusIndicator() {
             </Alert>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Close</Button>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 1 }}>
+          <Button 
+            onClick={handleCloseDialog}
+            variant="outlined"
+            size="large"
+            sx={{ 
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 'semibold'
+            }}
+          >
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
     </>

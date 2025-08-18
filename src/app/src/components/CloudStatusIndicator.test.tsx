@@ -173,11 +173,9 @@ describe('CloudStatusIndicator', () => {
     fireEvent.click(button);
 
     expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
-    expect(screen.getByText(/Share evaluation results with your team/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Collaborative red team testing and team configurations/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Centralized dashboard and reporting/)).toBeInTheDocument();
+    expect(screen.getByText('Share Results')).toBeInTheDocument();
+    expect(screen.getByText('Red Team Testing')).toBeInTheDocument();
+    expect(screen.getByText('Centralized Dashboard')).toBeInTheDocument();
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'cloud_status_icon_click',
       authenticated: false,
@@ -201,10 +199,9 @@ describe('CloudStatusIndicator', () => {
     fireEvent.click(button);
 
     expect(screen.getByText('Connect to Promptfoo Enterprise')).toBeInTheDocument();
-    expect(screen.getByText(/Share evaluation results with your organization/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Collaborative red team testing and enterprise configurations/),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Share Results')).toBeInTheDocument();
+    expect(screen.getByText('Red Team Testing')).toBeInTheDocument();
+    expect(screen.getByText('Centralized Dashboard')).toBeInTheDocument();
   });
 
   it('should close dialog when close button is clicked', async () => {
