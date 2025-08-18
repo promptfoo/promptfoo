@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CloudStatusIndicator from './CloudStatusIndicator';
 
 // Mock the useCloudAuth hook
@@ -253,7 +253,11 @@ describe('CloudStatusIndicator', () => {
     const button = screen.getByRole('button');
     fireEvent.click(button);
 
-    expect(screen.getByText('Unable to connect to cloud service. Please check your connection and try again.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Unable to connect to cloud service. Please check your connection and try again.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('should track telemetry when Learn More button is clicked', () => {

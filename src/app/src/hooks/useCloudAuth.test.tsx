@@ -1,7 +1,6 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCloudAuth } from './useCloudAuth';
-import { act } from '@testing-library/react';
 
 // Mock the API module
 vi.mock('@app/utils/api', () => ({

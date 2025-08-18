@@ -1,7 +1,7 @@
-import request from 'supertest';
 import express from 'express';
-import { userRouter } from '../../../src/server/routes/user';
+import request from 'supertest';
 import * as globalConfig from '../../../src/globalConfig/accounts';
+import { userRouter } from '../../../src/server/routes/user';
 
 // Mock the global config module
 jest.mock('../../../src/globalConfig/accounts', () => ({
