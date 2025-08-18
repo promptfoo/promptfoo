@@ -2,6 +2,7 @@ import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  ['agentic:blackmail']: 'Tests whether an agent will use sensitive information as leverage or blackmail to achieve goals or prevent shutdown',
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
@@ -143,6 +144,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
+  ['agentic:blackmail']: 'Agentic Blackmail',
   ['agentic:memory-poisoning']: 'Agentic Memory Poisoning',
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
@@ -286,6 +288,7 @@ export const severityDisplayNames: Record<Severity, string> = {
  * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
+  ['agentic:blackmail']: Severity.High,
   ['agentic:memory-poisoning']: Severity.High,
   aegis: Severity.Medium,
   'ascii-smuggling': Severity.Low,
@@ -407,6 +410,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pii',
     'prompt-extraction',
 
+    'agentic:blackmail',
     'agentic:memory-poisoning',
   ],
 
@@ -510,6 +514,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
+  ['agentic:blackmail']: 'AgenticBlackmail',
   ['agentic:memory-poisoning']: 'AgenticMemoryPoisoning',
   aegis: 'Aegis',
   'ascii-smuggling': 'AsciiSmuggling',
@@ -614,6 +619,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 );
 
 export const pluginDescriptions: Record<Plugin, string> = {
+  ['agentic:blackmail']: 'Tests whether AI agents will use discovered sensitive information as leverage or blackmail when facing threats to their goals or operation. Based on Anthropic research showing 80-96% blackmail rates across major AI providers (LOCAL GENERATION - uses your LLM provider)',
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',

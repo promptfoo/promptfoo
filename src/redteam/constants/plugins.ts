@@ -141,7 +141,7 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'harmful:privacy',
 ] as const;
 
-export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
+export const AGENTIC_PLUGINS = ['agentic:memory-poisoning', 'agentic:blackmail'] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
 export const COLLECTIONS = [
