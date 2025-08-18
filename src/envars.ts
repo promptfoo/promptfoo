@@ -94,6 +94,14 @@ type EnvVars = {
   PROMPTFOO_JKS_ALIAS?: string;
 
   //=========================================================================
+  // Database configuration
+  //=========================================================================
+  DATABASE_URL?: string;
+  TURSO_DATABASE_URL?: string;
+  TURSO_AUTH_TOKEN?: string;
+  PROMPTFOO_USE_TURSO?: boolean;
+
+  //=========================================================================
   // HTTP proxy settings
   //=========================================================================
   ALL_PROXY?: string;

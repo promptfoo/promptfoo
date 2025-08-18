@@ -126,7 +126,7 @@ export class TraceStore {
 
       // Get spans for each trace
       const tracesWithSpans = await Promise.all(
-        traces.map(async (trace) => {
+        traces.map(async (trace: any) => {
           logger.debug(`[TraceStore] Fetching spans for trace ${trace.traceId}`);
           const spans = await db
             .select()

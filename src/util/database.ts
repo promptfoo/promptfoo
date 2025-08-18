@@ -502,7 +502,7 @@ export async function getStandaloneEvals({
   }
 
   const db = getDb();
-  const results = db
+  const results = await db
     .select({
       evalId: evalsTable.id,
       description: evalsTable.description,
@@ -532,7 +532,7 @@ export async function getStandaloneEvals({
   // TODO(Performance): Load all necessary data in one go rather than re-requesting each eval!
   const standaloneEvals = (
     await Promise.all(
-      results.map(async (result) => {
+      results.map(async (result: any) => {
         const {
           description,
           createdAt,

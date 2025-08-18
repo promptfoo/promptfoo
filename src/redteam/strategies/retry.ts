@@ -57,7 +57,7 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
       .limit(100);
 
     const testCases = results
-      .map((r) => {
+      .map((r: any) => {
         try {
           const testCase: TestCase =
             typeof r.testCase === 'string' ? JSON.parse(r.testCase) : r.testCase;
@@ -83,7 +83,7 @@ async function getFailedTestCases(pluginId: string, targetLabel: string): Promis
           return null;
         }
       })
-      .filter((tc): tc is NonNullable<typeof tc> => tc !== null);
+      .filter((tc: any): tc is NonNullable<typeof tc> => tc !== null);
 
     const unique = deduplicateTests(testCases);
     logger.debug(

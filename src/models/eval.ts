@@ -128,13 +128,13 @@ export default class Eval {
   static async findById(id: string) {
     const db = getDb();
 
-    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
+    const evalData = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
 
     if (evalData.length === 0) {
       return undefined;
     }
 
-    const datasetResults = db
+    const datasetResults = await db
       .select({
         datasetId: evalsToDatasetsTable.datasetId,
       })
@@ -179,7 +179,7 @@ export default class Eval {
       .orderBy(desc(evalsTable.createdAt))
       .all();
     return evals.map(
-      (e) =>
+      (e: any) =>
         new Eval(e.config, {
           id: e.id,
           createdAt: new Date(e.createdAt),
@@ -283,7 +283,7 @@ export default class Eval {
               value: tagValue,
             })
             .onConflictDoNothing()
-            .run();
+  ;
 
           db.insert(evalsToTagsTable)
             .values({
@@ -291,7 +291,7 @@ export default class Eval {
               tagId,
             })
             .onConflictDoNothing()
-            .run();
+  ;
 
           logger.debug(`Inserting tag ${tagId}`);
         }
@@ -410,7 +410,7 @@ export default class Eval {
 
   async getResultsCount(): Promise<number> {
     const db = getDb();
-    const result = db
+    const result = await db
       .select({ count: sql<number>`count(*)` })
       .from(evalResultsTable)
       .where(eq(evalResultsTable.evalId, this.id))
@@ -535,7 +535,7 @@ export default class Eval {
       `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
     );
     const countStart = Date.now();
-    const countResult = await db.get<FilteredCountRow>(filteredCountQuery);
+    const countResult = await db.get(filteredCountQuery);
     const countEnd = Date.now();
     logger.debug(`Count query took ${countEnd - countStart}ms`);
     const filteredCount = countResult?.count || 0;
@@ -545,12 +545,12 @@ export default class Eval {
       `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
     );
     const idxStart = Date.now();
-    const rows = await db.all<TestIndexRow>(idxQuery);
+    const rows = await db.all(idxQuery);
     const idxEnd = Date.now();
     logger.debug(`Index query took ${idxEnd - idxStart}ms`);
 
     // Get all test indices from the rows
-    const testIndices = rows.map((row) => row.test_idx);
+    const testIndices = rows.map((row: any) => row.test_idx);
 
     return { testIndices, filteredCount };
   }
@@ -768,7 +768,7 @@ export default class Eval {
 export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
   const db = getDb();
 
-  const results = db
+  const results = await db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
@@ -789,14 +789,14 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
    * - Test statistics are derived from the prompt metrics as this is the only reliable source of truth
    * that's written to the evals table.
    */
-  return results.map((result) => {
+  return results.map((result: any) => {
     const passCount =
-      result.prompts?.reduce((memo, prompt) => {
+      result.prompts?.reduce((memo: number, prompt: any) => {
         return memo + (prompt.metrics?.testPassCount ?? 0);
       }, 0) ?? 0;
 
     // All prompts should have the same number of test cases:
-    const testCounts = result.prompts?.map((p) => {
+    const testCounts = result.prompts?.map((p: any) => {
       return (
         (p.metrics?.testPassCount ?? 0) +
         (p.metrics?.testFailCount ?? 0) +

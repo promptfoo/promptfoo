@@ -5,21 +5,53 @@ import * as path from 'path';
 import Database from 'better-sqlite3';
 
 const ORIGINAL_ENV = { ...process.env };
+// Remove Turso-related variables from the original environment for this test
+delete ORIGINAL_ENV.PROMPTFOO_USE_TURSO;
+delete ORIGINAL_ENV.TURSO_DATABASE_URL;
+delete ORIGINAL_ENV.DATABASE_URL;
+delete ORIGINAL_ENV.TURSO_AUTH_TOKEN;
 
 describe('database WAL mode', () => {
   let tempDir: string;
+  let envFileBackup: string | null = null;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
+    
+    // Temporarily rename .env file to prevent dotenv from loading Turso config
+    const envPath = path.join(__dirname, '..', '.env');
+    const envBackupPath = path.join(__dirname, '..', '.env.test-backup');
+    if (fs.existsSync(envPath)) {
+      fs.renameSync(envPath, envBackupPath);
+      envFileBackup = envBackupPath;
+    }
+    
     process.env = { ...ORIGINAL_ENV };
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-dbtest-'));
     process.env.PROMPTFOO_CONFIG_DIR = tempDir;
     delete process.env.IS_TESTING;
     delete process.env.PROMPTFOO_DISABLE_WAL_MODE;
+    delete process.env.PROMPTFOO_USE_TURSO;
+    delete process.env.TURSO_DATABASE_URL;
+    delete process.env.DATABASE_URL;
+    delete process.env.TURSO_AUTH_TOKEN;
+    
+    // Clear CLI state that might contain cached Turso config
+    const cliState = (await import('../src/cliState')).default;
+    // Clear the entire config to ensure no Turso configuration persists
+    cliState.config = undefined;
   });
 
   afterEach(async () => {
     process.env = ORIGINAL_ENV;
+    
+    // Restore the .env file if we moved it
+    if (envFileBackup) {
+      const envPath = path.join(__dirname, '..', '.env');
+      fs.renameSync(envFileBackup, envPath);
+      envFileBackup = null;
+    }
+    
     // Close the database connection if it exists
     try {
       const database = await import('../src/database');

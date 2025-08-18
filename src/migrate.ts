@@ -1,7 +1,9 @@
 import * as path from 'path';
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { migrate as migrateLibsql } from 'drizzle-orm/libsql/migrator';
 import { getDb } from './database';
+import { getEnvBool, getEnvString } from './envars';
 import logger from './logger';
 
 /**
@@ -12,22 +14,41 @@ import logger from './logger';
  * operations to proceed while migrations run.
  */
 export async function runDbMigrations(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Run the synchronous migration in the next tick to avoid blocking
-    setImmediate(() => {
-      try {
-        const db = getDb();
-        const migrationsFolder = path.join(__dirname, '..', 'drizzle');
-        logger.debug(`Running database migrations...`);
-        migrate(db, { migrationsFolder });
-        logger.debug('Database migrations completed');
-        resolve();
-      } catch (error) {
-        logger.error(`Database migration failed: ${error}`);
-        reject(error);
-      }
+  const isTestEnvironment = getEnvBool('IS_TESTING');
+  const useTurso = getEnvBool('PROMPTFOO_USE_TURSO', false);
+  const tursoUrl = getEnvString('TURSO_DATABASE_URL') || getEnvString('DATABASE_URL');
+  
+  if (!isTestEnvironment && useTurso && tursoUrl) {
+    // Use async LibSQL migrations for Turso
+    try {
+      const db = getDb();
+      const migrationsFolder = path.join(__dirname, '..', 'drizzle');
+      logger.debug(`Running LibSQL database migrations...`);
+      await migrateLibsql(db as any, { migrationsFolder });
+      logger.debug('LibSQL database migrations completed');
+    } catch (error) {
+      logger.error(`LibSQL database migration failed: ${error}`);
+      throw error;
+    }
+  } else {
+    // Use sync SQLite migrations for better-sqlite3
+    return new Promise((resolve, reject) => {
+      // Run the synchronous migration in the next tick to avoid blocking
+      setImmediate(() => {
+        try {
+          const db = getDb();
+          const migrationsFolder = path.join(__dirname, '..', 'drizzle');
+          logger.debug(`Running SQLite database migrations...`);
+          migrate(db as any, { migrationsFolder });
+          logger.debug('SQLite database migrations completed');
+          resolve();
+        } catch (error) {
+          logger.error(`SQLite database migration failed: ${error}`);
+          reject(error);
+        }
+      });
     });
-  });
+  }
 }
 
 if (require.main === module) {

@@ -1403,10 +1403,10 @@ class Evaluator {
       }
 
       const compareAssertion = resultsToCompare[0].testCase.assert?.find(
-        (a) => a.type === 'select-best',
+        (a: any) => a.type === 'select-best',
       ) as Assertion;
       if (compareAssertion) {
-        const outputs = resultsToCompare.map((r) => r.response?.output || '');
+        const outputs = resultsToCompare.map((r: any) => r.response?.output || '');
         const gradingResults = await runCompareAssertion(
           resultsToCompare[0].testCase,
           compareAssertion,
@@ -1494,11 +1494,11 @@ class Evaluator {
         }
 
         const maxScoreAssertion = resultsToCompare[0].testCase.assert?.find(
-          (a) => a.type === 'max-score',
+          (a: any) => a.type === 'max-score',
         ) as Assertion;
 
         if (maxScoreAssertion) {
-          const outputs = resultsToCompare.map((r) => r.response?.output || '');
+          const outputs = resultsToCompare.map((r: any) => r.response?.output || '');
 
           // Pass the results with their grading results to selectMaxScore
           const maxScoreGradingResults = await selectMaxScore(

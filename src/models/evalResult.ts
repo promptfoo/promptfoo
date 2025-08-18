@@ -116,7 +116,7 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    await db.transaction(async (tx) => {
+    await db.transaction(async (tx: any) => {
       for (const result of results) {
         const dbResult = await tx
           .insert(evalResultsTable)
@@ -145,7 +145,7 @@ export default class EvalResult {
           opts?.testIdx == null ? undefined : eq(evalResultsTable.testIdx, opts.testIdx),
         ),
       );
-    return results.map((result) => new EvalResult({ ...result, persisted: true }));
+    return results.map((result: any) => new EvalResult({ ...result, persisted: true }));
   }
 
   static async findManyByEvalIdAndTestIndices(evalId: string, testIndices: number[]) {
@@ -166,7 +166,7 @@ export default class EvalResult {
         ),
       );
 
-    return results.map((result) => new EvalResult({ ...result, persisted: true }));
+    return results.map((result: any) => new EvalResult({ ...result, persisted: true }));
   }
 
   // This is a generator that yields batches of results from the database
@@ -198,7 +198,7 @@ export default class EvalResult {
         break;
       }
 
-      yield results.map((result) => new EvalResult({ ...result, persisted: true }));
+      yield results.map((result: any) => new EvalResult({ ...result, persisted: true }));
       offset += batchSize;
     }
   }
