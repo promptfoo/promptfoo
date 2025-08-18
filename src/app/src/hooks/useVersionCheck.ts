@@ -1,0 +1,65 @@
+import { useState, useEffect } from 'react';
+import { callApi } from '@app/utils/api';
+
+interface VersionInfo {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+}
+
+interface UseVersionCheckResult {
+  versionInfo: VersionInfo | null;
+  loading: boolean;
+  error: Error | null;
+  dismissed: boolean;
+  dismiss: () => void;
+}
+
+const STORAGE_KEY = 'promptfoo_update_dismissed_version';
+
+export function useVersionCheck(): UseVersionCheckResult {
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const response = await callApi('/version');
+        if (!response.ok) {
+          throw new Error('Failed to fetch version information');
+        }
+        const data: VersionInfo = await response.json();
+        setVersionInfo(data);
+
+        // Check if this version update was already dismissed
+        const dismissedVersion = localStorage.getItem(STORAGE_KEY);
+        if (dismissedVersion === data.latestVersion) {
+          setDismissed(true);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Unknown error'));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkVersion();
+  }, []);
+
+  const dismiss = () => {
+    if (versionInfo?.latestVersion) {
+      localStorage.setItem(STORAGE_KEY, versionInfo.latestVersion);
+      setDismissed(true);
+    }
+  };
+
+  return {
+    versionInfo,
+    loading,
+    error,
+    dismissed,
+    dismiss,
+  };
+}
