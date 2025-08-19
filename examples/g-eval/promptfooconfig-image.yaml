@@ -23,7 +23,7 @@ prompts:
     ]
 
 providers:
-  - openai:gpt-4o-mini  # Using gpt-4o-mini which supports vision
+  - openai:gpt-4o-mini # Using gpt-4o-mini which supports vision
 
 tests:
   # Test with a sample image - we'll create a simple test image
@@ -37,20 +37,20 @@ tests:
           including key objects, colors, and spatial relationships. The description should not
           include made-up details or hallucinations.
         threshold: 0.7
-      
+
       - type: g-eval
         value: >-
           Completeness - the description should cover all important visual elements in the image.
           It should mention the main subjects, background elements, and any notable features
           without being overly verbose.
         threshold: 0.7
-      
+
       - type: g-eval
         value: >-
           Clarity - the description should be clear, well-organized, and easy to understand.
           It should flow logically and use appropriate vocabulary to describe visual elements.
         threshold: 0.7
-  
+
   # Test with multiple criteria at once
   - vars:
       image: file://test-image.png
@@ -72,4 +72,4 @@ tests:
           Chart Analysis - If the image contains a chart or graph, the description should
           accurately identify the type of chart, describe the data being presented, note
           any trends or patterns, and mention key values or labels if visible.
-        threshold: 0.8 
+        threshold: 0.8

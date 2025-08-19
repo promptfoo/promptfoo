@@ -462,11 +462,11 @@ function sanitizeInputForGEval(input: string): string {
   // Check if input looks like base64 image data
   const base64ImagePattern = /^(data:image\/[a-zA-Z]+;base64,)?[A-Za-z0-9+/]{100,}={0,2}$/;
   const truncatedInput = input.substring(0, 1000); // Check first 1000 chars for performance
-  
+
   if (base64ImagePattern.test(truncatedInput.replace(/\s/g, ''))) {
     return '[Image input provided to the model]';
   }
-  
+
   // Check if input contains Nunjucks template with image variable
   if (input.includes('{{') && input.includes('}}')) {
     // If it contains what looks like an image variable reference
@@ -477,7 +477,7 @@ function sanitizeInputForGEval(input: string): string {
       return cleanedInput;
     }
   }
-  
+
   return input;
 }
 

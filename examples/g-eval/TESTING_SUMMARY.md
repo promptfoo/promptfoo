@@ -1,11 +1,13 @@
 # G-Eval Image Support Testing Summary
 
 ## Overview
+
 Successfully implemented and tested G-Eval support for image inputs across multiple vision-capable models from different providers.
 
 ## Test Configuration
+
 - **Grading Provider**: OpenAI GPT-4.1-mini
-- **Test Images**: 
+- **Test Images**:
   - `test-image.png`: Geometric shapes (square, circle, triangle, star)
   - `test-chart.png`: Bar chart showing sales data
 
@@ -41,52 +43,65 @@ Successfully implemented and tested G-Eval support for image inputs across multi
 ## Message Format Examples
 
 ### OpenAI Format
+
 ```json
-[{
-  "role": "user",
-  "content": [
-    {"type": "text", "text": "Describe this image:"},
-    {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
-  ]
-}]
+[
+  {
+    "role": "user",
+    "content": [
+      { "type": "text", "text": "Describe this image:" },
+      { "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }
+    ]
+  }
+]
 ```
 
 ### Anthropic Format
+
 ```json
-[{
-  "role": "user",
-  "content": [
-    {"type": "text", "text": "Describe this image:"},
-    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "..."}}
-  ]
-}]
+[
+  {
+    "role": "user",
+    "content": [
+      { "type": "text", "text": "Describe this image:" },
+      { "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": "..." } }
+    ]
+  }
+]
 ```
 
 ### Gemini Format
+
 ```json
-[{
-  "role": "user",
-  "parts": [
-    {"text": "Describe this image:"},
-    {"inline_data": {"mime_type": "image/png", "data": "..."}}
-  ]
-}]
+[
+  {
+    "role": "user",
+    "parts": [
+      { "text": "Describe this image:" },
+      { "inline_data": { "mime_type": "image/png", "data": "..." } }
+    ]
+  }
+]
 ```
 
 ### Nova Format
+
 ```json
-[{
-  "role": "user",
-  "content": [
-    {"text": "Describe this image:"},
-    {"image": {"format": "png", "source": {"bytes": "..."}}}
-  ]
-}]
+[
+  {
+    "role": "user",
+    "content": [
+      { "text": "Describe this image:" },
+      { "image": { "format": "png", "source": { "bytes": "..." } } }
+    ]
+  }
+]
 ```
 
 ## Implementation Details
 
 The `sanitizeInputForGEval()` function in `src/matchers.ts` was updated to:
+
 1. Detect JSON message formats from various providers
 2. Extract text content while replacing image references with `[Image provided]` placeholders
 3. Support OpenAI, Anthropic, Gemini, and Amazon Bedrock Nova formats
@@ -110,11 +125,13 @@ The `sanitizeInputForGEval()` function in `src/matchers.ts` was updated to:
 ## Usage
 
 To run the multi-provider test:
+
 ```bash
 npm run local -- eval -c examples/g-eval/promptfooconfig-image-multi-provider.yaml
 ```
 
 To run with a specific provider:
+
 ```bash
 npm run local -- eval -c examples/g-eval/promptfooconfig-image-multi-provider.yaml --filter-providers "GPT-4o-mini"
-``` 
+```

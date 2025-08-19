@@ -33,6 +33,7 @@ promptfoo eval -c promptfooconfig-image.yaml
 ### What it does
 
 The image evaluation example:
+
 - Tests models' ability to describe visual content
 - Evaluates descriptions based on multiple criteria:
   - **Accuracy**: Whether descriptions are factual and free from hallucinations
@@ -55,6 +56,7 @@ The image evaluation example:
 ### Using Your Own Images
 
 You can replace the test images with your own by:
+
 1. Adding your image files to the `examples/g-eval/` directory
 2. Updating the `vars` section in `promptfooconfig-image.yaml` to reference your images:
 
