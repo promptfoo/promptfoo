@@ -53,6 +53,7 @@ type EnvVars = {
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_DISABLE_UNBLOCKING?: boolean;
+  PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER?: boolean;
 
   //=========================================================================
   // promptfoo configuration options
