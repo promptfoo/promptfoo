@@ -47,8 +47,10 @@ async function processImageForBedrock(imageBuffer: Buffer): Promise<string | nul
     // Use Sharp for image processing
     const image = sharp(imageBuffer);
     const metadata = await image.metadata();
-    
-    logger.debug(`[unsafebench] Original image: ${metadata.format}, ${metadata.width}x${metadata.height}`);
+
+    logger.debug(
+      `[unsafebench] Original image: ${metadata.format}, ${metadata.width}x${metadata.height}`,
+    );
 
     // Ensure dimensions don't exceed AWS limits (8000x8000)
     let processedImage = image;
@@ -56,28 +58,32 @@ async function processImageForBedrock(imageBuffer: Buffer): Promise<string | nul
       const scaleFactor = Math.min(8000 / metadata.width, 8000 / metadata.height);
       const newWidth = Math.floor(metadata.width * scaleFactor);
       const newHeight = Math.floor(metadata.height * scaleFactor);
-      
+
       logger.debug(`[unsafebench] Resizing image to ${newWidth}x${newHeight}`);
       processedImage = image.resize(newWidth, newHeight, { fit: 'inside' });
     }
 
     // Convert to JPEG format (AWS preferred format)
     const jpegBuffer = await processedImage
-      .jpeg({ 
+      .jpeg({
         quality: 90,
         progressive: false,
-        mozjpeg: false
+        mozjpeg: false,
       })
       .toBuffer();
 
     const base64 = jpegBuffer.toString('base64');
-    logger.debug(`[unsafebench] Successfully processed image to JPEG format (${jpegBuffer.length} bytes)`);
-    
+    logger.debug(
+      `[unsafebench] Successfully processed image to JPEG format (${jpegBuffer.length} bytes)`,
+    );
+
     return `data:image/jpeg;base64,${base64}`;
   } catch (error) {
     logger.error(`[unsafebench] Error processing image with Sharp: ${String(error)}`);
     if (String(error).includes('Cannot find module')) {
-      logger.error(`[unsafebench] Sharp is required for UnsafeBench image processing. Install with: npm install sharp`);
+      logger.error(
+        `[unsafebench] Sharp is required for UnsafeBench image processing. Install with: npm install sharp`,
+      );
     }
     return null;
   }
@@ -105,7 +111,7 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
 
     // Process the image to ensure AWS Bedrock compatibility
     const processedImage = await processImageForBedrock(buffer);
-    
+
     if (!processedImage) {
       const errorMsg = `Failed to process image from ${url} into AWS Bedrock compatible format`;
       logger.error(`[unsafebench] ${errorMsg}`);
@@ -325,7 +331,9 @@ class UnsafeBenchDatasetManager {
           const base64Image = await fetchImageAsBase64(imageUrl);
 
           if (!base64Image) {
-            logger.warn(`[unsafebench] Failed to convert image URL to base64: ${imageUrl}. This may be due to image format incompatibility with AWS Bedrock Guardrails.`);
+            logger.warn(
+              `[unsafebench] Failed to convert image URL to base64: ${imageUrl}. This may be due to image format incompatibility with AWS Bedrock Guardrails.`,
+            );
             return null;
           }
 
