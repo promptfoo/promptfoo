@@ -2,10 +2,11 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
   DataGrid,
@@ -197,6 +198,10 @@ export default function EvalsDataGrid({
     return rows_;
   }, [evals, filterByDatasetId, focusedEvalId]);
 
+  const hasRedteamEvals = useMemo(() => {
+    return evals.some(({ isRedteam }) => isRedteam === 1);
+  }, [evals]);
+
   const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
 
   const columns: GridColDef<Eval>[] = useMemo(
@@ -236,6 +241,56 @@ export default function EvalsDataGrid({
           },
           valueFormatter: (value: Eval['createdAt']) => new Date(value).toLocaleString(),
         },
+        // Only show the redteam column if there are redteam evals.
+        ...(hasRedteamEvals
+          ? [
+              {
+                field: 'isRedteam',
+                headerName: 'Type',
+                flex: 0.5,
+                type: 'singleSelect',
+                valueOptions: [
+                  { value: true, label: 'Redteam' },
+                  { value: false, label: 'Eval' },
+                ],
+                valueGetter: (value: Eval['isRedteam'], row: Eval) => value === 1,
+                renderCell: (params: GridRenderCellParams<Eval>) => {
+                  const isRedteam = params.value as Eval['isRedteam'];
+                  const displayType = isRedteam ? 'Red Team' : 'Eval';
+
+                  return (
+                    <Chip
+                      label={displayType}
+                      size="small"
+                      variant="outlined"
+                      sx={(theme) => ({
+                        borderColor: isRedteam
+                          ? theme.palette.error.light
+                          : theme.palette.mode === 'dark'
+                            ? theme.palette.grey[600]
+                            : theme.palette.text.disabled,
+                        color: isRedteam
+                          ? theme.palette.error.main
+                          : theme.palette.mode === 'dark'
+                            ? theme.palette.grey[300]
+                            : theme.palette.text.secondary,
+                        bgcolor: isRedteam
+                          ? alpha(theme.palette.error.main, 0.1)
+                          : theme.palette.mode === 'dark'
+                            ? theme.palette.grey[800]
+                            : theme.palette.grey[50],
+                        fontWeight: 500,
+                        '& .MuiChip-label': {
+                          px: 1.5,
+                        },
+                      })}
+                    />
+                  );
+                },
+                cellClassName: 'dg-cursor-pointer',
+              },
+            ]
+          : []),
         {
           field: 'description',
           headerName: 'Description',
@@ -278,7 +333,7 @@ export default function EvalsDataGrid({
           flex: 0.5,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
-    [focusedEvalId, onEvalSelected],
+    [focusedEvalId, onEvalSelected, hasRedteamEvals],
   );
 
   return (

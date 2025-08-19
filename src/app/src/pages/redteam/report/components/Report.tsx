@@ -118,6 +118,11 @@ const App: React.FC = () => {
         return;
       }
 
+      // Exclude results with errors from being counted as failures
+      if (result.error) {
+        return;
+      }
+
       if (!result.success || !result.gradingResult?.pass) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
@@ -153,6 +158,11 @@ const App: React.FC = () => {
         return;
       }
 
+      // Exclude results with errors from being counted
+      if (result.error) {
+        return;
+      }
+
       if (result.success && result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
@@ -178,6 +188,11 @@ const App: React.FC = () => {
       (acc, row) => {
         const pluginId = getPluginIdFromResult(row);
         if (!pluginId) {
+          return acc;
+        }
+
+        // Exclude results with errors from statistics
+        if (row.error) {
           return acc;
         }
 

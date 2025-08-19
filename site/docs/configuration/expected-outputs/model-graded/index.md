@@ -1,5 +1,6 @@
 ---
 sidebar_position: 7
+description: 'Comprehensive overview of model-graded evaluation techniques leveraging AI models to assess quality, safety, and accuracy'
 ---
 
 # Model-graded metrics
@@ -465,6 +466,70 @@ tests:
         contextTransform: 'output.context'
         threshold: 0.9
 ```
+
+## Transforming outputs for context assertions
+
+### Transform: Extract answer before context grading
+
+```yaml
+providers:
+  - echo
+
+tests:
+  - vars:
+      prompt: '{"answer": "Paris is the capital of France", "confidence": 0.95}'
+      context: 'France is a country in Europe. Its capital city is Paris, which has over 2 million residents.'
+    assert:
+      - type: context-faithfulness
+        transform: 'JSON.parse(output).answer' # Grade only the answer field
+        threshold: 0.9
+
+      - type: context-recall
+        transform: 'JSON.parse(output).answer' # Check if answer appears in context
+        value: 'Paris is the capital of France'
+        threshold: 0.8
+```
+
+### Context transform: Extract context from provider response
+
+```yaml
+providers:
+  - echo
+
+tests:
+  - vars:
+      prompt: '{"answer": "Returns accepted within 30 days", "sources": ["Returns are accepted for 30 days from purchase", "30-day money-back guarantee"]}'
+      query: 'What is the return policy?'
+    assert:
+      - type: context-faithfulness
+        transform: 'JSON.parse(output).answer'
+        contextTransform: 'JSON.parse(output).sources.join(". ")' # Extract sources as context
+        threshold: 0.9
+
+      - type: context-relevance
+        contextTransform: 'JSON.parse(output).sources.join(". ")' # Check if context is relevant to query
+        threshold: 0.8
+```
+
+### Transform response: Normalize RAG system output
+
+```yaml
+providers:
+  - id: http://rag-api.example.com/search
+    config:
+      transformResponse: 'json.data' # Extract data field from API response
+
+tests:
+  - vars:
+      query: 'What are the office hours?'
+    assert:
+      - type: context-faithfulness
+        transform: 'output.answer' # After transformResponse, extract answer
+        contextTransform: 'output.documents.map(d => d.text).join(" ")' # Extract documents as context
+        threshold: 0.85
+```
+
+**Processing order:** API call → `transformResponse` → `transform` → `contextTransform` → context assertion
 
 ## Other assertion types
 

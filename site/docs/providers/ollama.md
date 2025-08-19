@@ -1,5 +1,6 @@
 ---
 sidebar_label: Ollama
+description: "Run open-source LLMs locally using Ollama's streamlined interface for rapid prototyping and offline model evaluation"
 ---
 
 # Ollama

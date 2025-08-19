@@ -1,6 +1,6 @@
 ---
 title: 'Join Promptfoo at Hacker Summer Camp 2025'
-description: 'Promptfoo will be attending the AI Summit, Black Hat, and DEF CON. We would love to meet you.'
+description: 'Join Promptfoo at AI Summit, Black Hat, and DEF CON for demos, workshops, and discussions on LLM security and red teaming'
 image: /img/blog/hacker-summer-camp-hero.webp
 keywords:
   [

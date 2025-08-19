@@ -1,5 +1,6 @@
 ---
 sidebar_label: Google Vertex
+description: 'Deploy enterprise AI models with Google Cloud Vertex AI for production-scale machine learning and generative AI workloads'
 ---
 
 # Google Vertex

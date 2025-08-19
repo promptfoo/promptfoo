@@ -1,5 +1,6 @@
 ---
 sidebar_label: Deepseek benchmark
+description: Compare Deepseek MoE (671B params) vs GPT-4.1 vs Llama-3 performance with custom benchmarks to evaluate code tasks and choose the optimal model for your needs
 ---
 
 # Deepseek vs GPT vs O3 vs Llama: Run a Custom Benchmark

@@ -1,7 +1,7 @@
 ---
 sidebar_label: Overview
 title: Red Team Strategies
-description: Attack techniques that systematically probe LLM applications for vulnerabilities and maximize success rates
+description: Comprehensive catalog of red team attack strategies for systematically identifying and exploiting LLM application vulnerabilities
 ---
 
 import StrategyTable from '@site/docs/\_shared/StrategyTable';
