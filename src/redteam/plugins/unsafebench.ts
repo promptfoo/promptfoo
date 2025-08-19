@@ -37,77 +37,7 @@ interface UnsafeBenchPluginConfig extends PluginConfig {
 }
 
 /**
- * Processes an image to ensure it's compatible with multimodal providers
- * Only processes when necessary (size/format conversion needed)
- */
-async function processImageForProviders(imageBuffer: Buffer): Promise<string | null> {
-  try {
-    // Import Sharp for image processing
-    const sharp = (await import('sharp')).default;
-
-    // Get image metadata first to determine if processing is needed
-    const image = sharp(imageBuffer);
-    const metadata = await image.metadata();
-
-    logger.debug(
-      `[unsafebench] Original image: ${metadata.format}, ${metadata.width}x${metadata.height}`,
-    );
-
-    // Check if processing is needed
-    const needsResize = metadata.width && metadata.height && (metadata.width > 8000 || metadata.height > 8000);
-    const needsFormatConversion = metadata.format && !['jpeg', 'jpg', 'png', 'webp'].includes(metadata.format.toLowerCase());
-    
-    // If no processing needed and format is acceptable, return as-is
-    if (!needsResize && !needsFormatConversion) {
-      logger.debug(`[unsafebench] Image already in compatible format, no processing needed`);
-      const base64 = imageBuffer.toString('base64');
-      const mimeType = metadata.format === 'png' ? 'image/png' : 'image/jpeg';
-      return `data:${mimeType};base64,${base64}`;
-    }
-
-    logger.debug(`[unsafebench] Processing needed - resize: ${needsResize}, format: ${needsFormatConversion}`);
-
-    // Process image only when necessary
-    let processedImage = image;
-    
-    // Resize if needed (AWS Bedrock limit is 8000x8000)
-    if (needsResize) {
-      const scaleFactor = Math.min(8000 / metadata.width!, 8000 / metadata.height!);
-      const newWidth = Math.floor(metadata.width! * scaleFactor);
-      const newHeight = Math.floor(metadata.height! * scaleFactor);
-
-      logger.debug(`[unsafebench] Resizing image to ${newWidth}x${newHeight}`);
-      processedImage = processedImage.resize(newWidth, newHeight, { fit: 'inside' });
-    }
-
-    // Convert to JPEG format for maximum compatibility
-    const jpegBuffer = await processedImage
-      .jpeg({
-        quality: 90,
-        progressive: false,
-        mozjpeg: false,
-      })
-      .toBuffer();
-
-    const base64 = jpegBuffer.toString('base64');
-    logger.debug(
-      `[unsafebench] Successfully processed image to JPEG format (${jpegBuffer.length} bytes)`,
-    );
-
-    return `data:image/jpeg;base64,${base64}`;
-  } catch (error) {
-    logger.error(`[unsafebench] Error processing image with Sharp: ${String(error)}`);
-    if (String(error).includes('Cannot find module')) {
-      logger.error(
-        `[unsafebench] Sharp is required for UnsafeBench image processing. Install with: npm install sharp`,
-      );
-    }
-    return null;
-  }
-}
-
-/**
- * Fetches an image from a URL and converts it to provider-compatible format
+ * Fetches an image from a URL and converts it to base64
  */
 async function fetchImageAsBase64(url: string): Promise<string | null> {
   try {
@@ -126,16 +56,13 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
 
     logger.debug(`[unsafebench] Downloaded image: ${buffer.length} bytes`);
 
-    // Process the image to ensure provider compatibility (only when needed)
-    const processedImage = await processImageForProviders(buffer);
+    // Convert to base64
+    const base64 = buffer.toString('base64');
 
-    if (!processedImage) {
-      const errorMsg = `Failed to process image from ${url} into provider-compatible format`;
-      logger.error(`[unsafebench] ${errorMsg}`);
-      return null;
-    }
+    // Determine MIME type from response headers or default to jpeg
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
 
-    return processedImage;
+    return `data:${contentType};base64,${base64}`;
   } catch (error) {
     const errorMsg = `Error fetching and processing image from ${url}: ${error instanceof Error ? error.message : String(error)}`;
     logger.error(`[unsafebench] ${errorMsg}`);
@@ -349,7 +276,7 @@ class UnsafeBenchDatasetManager {
 
           if (!base64Image) {
             logger.warn(
-              `[unsafebench] Failed to convert image URL to base64: ${imageUrl}. This may be due to image format incompatibility with the provider.`,
+              `[unsafebench] Failed to convert image URL to base64: ${imageUrl}. This may be due to network issues or image format incompatibility.`,
             );
             return null;
           }
