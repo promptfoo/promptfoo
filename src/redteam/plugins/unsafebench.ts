@@ -43,7 +43,7 @@ interface UnsafeBenchPluginConfig extends PluginConfig {
  */
 async function processImageToJpeg(
   imageBuffer: Buffer,
-  maxLongestEdge: number = 8000
+  maxLongestEdge: number = 8000,
 ): Promise<string | null> {
   try {
     // Validate inputs
@@ -51,9 +51,11 @@ async function processImageToJpeg(
       logger.error(`[unsafebench] Invalid image buffer provided`);
       return null;
     }
-    
+
     if (maxLongestEdge <= 0 || maxLongestEdge > 50000) {
-      logger.error(`[unsafebench] Invalid maxLongestEdge: ${maxLongestEdge}. Must be between 1 and 50000`);
+      logger.error(
+        `[unsafebench] Invalid maxLongestEdge: ${maxLongestEdge}. Must be between 1 and 50000`,
+      );
       return null;
     }
 
@@ -71,11 +73,13 @@ async function processImageToJpeg(
     // Check what processing is needed
     const isJpeg = metadata.format === 'jpeg' || metadata.format === 'jpg';
     const needsFormatConversion = !isJpeg;
-    
+
     // Check if image exceeds size limits (only check if we have dimensions)
-    const needsResizing = metadata.width && metadata.height && 
+    const needsResizing =
+      metadata.width &&
+      metadata.height &&
       (metadata.width > maxLongestEdge || metadata.height > maxLongestEdge);
-    
+
     // If no processing needed and already JPEG, return original
     if (!needsFormatConversion && !needsResizing) {
       logger.debug(`[unsafebench] Image already JPEG and within size limits, no processing needed`);
@@ -83,11 +87,13 @@ async function processImageToJpeg(
       return `data:image/jpeg;base64,${base64}`;
     }
 
-    logger.debug(`[unsafebench] Processing needed - format conversion: ${needsFormatConversion}, resizing: ${needsResizing}`);
+    logger.debug(
+      `[unsafebench] Processing needed - format conversion: ${needsFormatConversion}, resizing: ${needsResizing}`,
+    );
 
     // Process image only when necessary
     let processedImage = image;
-    
+
     // Resize if needed (only downscale, never upscale)
     if (needsResizing && metadata.width && metadata.height) {
       const longestEdge = Math.max(metadata.width, metadata.height);
@@ -97,8 +103,13 @@ async function processImageToJpeg(
         const newWidth = Math.floor(metadata.width * scaleFactor);
         const newHeight = Math.floor(metadata.height * scaleFactor);
 
-        logger.debug(`[unsafebench] Resizing image from ${metadata.width}x${metadata.height} to ${newWidth}x${newHeight}`);
-        processedImage = processedImage.resize(newWidth, newHeight, { fit: 'inside', withoutEnlargement: true });
+        logger.debug(
+          `[unsafebench] Resizing image from ${metadata.width}x${metadata.height} to ${newWidth}x${newHeight}`,
+        );
+        processedImage = processedImage.resize(newWidth, newHeight, {
+          fit: 'inside',
+          withoutEnlargement: true,
+        });
       }
     }
 
@@ -132,8 +143,8 @@ async function processImageToJpeg(
  * Fetches an image from a URL and converts it to JPEG format
  */
 async function fetchImageAsBase64(
-  url: string, 
-  maxLongestEdge: number = 8000
+  url: string,
+  maxLongestEdge: number = 8000,
 ): Promise<string | null> {
   try {
     logger.debug(`[unsafebench] Fetching image from URL: ${url}`);
@@ -419,9 +430,11 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
     // Validate and log configuration
     const maxLongestEdge = config?.longest_edge ?? 8000;
     if (config?.longest_edge && (config.longest_edge <= 0 || config.longest_edge > 50000)) {
-      throw new Error(`Invalid longest_edge configuration: ${config.longest_edge}. Must be between 1 and 50000 pixels.`);
+      throw new Error(
+        `Invalid longest_edge configuration: ${config.longest_edge}. Must be between 1 and 50000 pixels.`,
+      );
     }
-    
+
     logger.debug(
       `[unsafebench] Configuration: longest_edge=${maxLongestEdge}px, jpeg_quality=85% (fixed)`,
     );

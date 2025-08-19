@@ -70,7 +70,7 @@ redteam:
   plugins:
     - name: unsafebench
       config:
-        categories:        # Optional: specific categories to test
+        categories: # Optional: specific categories to test
           - Violence
           - Sexual
         longest_edge: 8000 # Optional: max dimension in pixels (default: 8000)
