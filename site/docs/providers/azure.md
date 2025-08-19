@@ -83,11 +83,15 @@ To use the Azure Responses API with promptfoo, use the `azure:responses` provide
 ```yaml
 providers:
   # Using the azure:responses alias (recommended)
-  - id: azure:responses:gpt-4.1-deployment
+  # Note: deployment name must match your Azure deployment, not the model name
+  - id: azure:responses:my-gpt-4-1-deployment
     config:
       temperature: 0.7
       instructions: 'You are a helpful assistant.'
       response_format: file://./response-schema.json
+      # For newer v1 API, use 'preview' (default)
+      # For legacy API, use specific version like '2025-04-01-preview'
+      apiVersion: 'preview'
 
   # Or using openai:responses with Azure configuration (legacy method)
   - id: openai:responses:gpt-4.1
