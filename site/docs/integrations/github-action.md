@@ -87,3 +87,33 @@ Here are the supported parameters:
 2. **Run Promptfoo Evaluation**: This is where the magic happens. We run the evaluation, passing in the configuration file and the prompts we want to evaluate. The results of this step are automatically posted to the pull request.
 
 For more information on how to set up the promptfoo config, see the [Getting Started](/docs/getting-started) docs.
+
+## For red teaming
+
+For red teaming integrations, we recommend embedding more detailed reporting in your workflow.
+
+Here's an example:
+
+```yaml
+- name: Run Promptfoo redteam
+  run: |
+    start=$(date +%s)
+    npx promptfoo@latest redteam run \
+      -c 9d32de26-7926-44f1-af13-bd06cb86f691 \
+      -t 213c2235-865c-4aa4-90cc-a002256e0a94 \
+      -j 5 \
+      -o output.json || true
+    end=$(date +%s)
+    echo "DURATION_SECONDS=$((end-start))" >> $GITHUB_ENV
+    test -f output.json || { echo 'output.json not found'; exit 1; }
+
+- name: Build redteam summary (JS)
+  run: |
+    node .github/scripts/redteam-summary.js --input output.json --out comment.md --print
+```
+
+In this example, the [redteam-summary.js](https://gist.github.com/MrFlounder/2d9c719873ad9f221db5f87efb13ece9) file parses the red team results and produces a summary:
+
+![llm red team github action](/img/docs/github-action-redteam.png)
+
+The results posted on the PR include more detailed information about plugin, strategy, and target performance.
