@@ -35,7 +35,6 @@ interface UnsafeBenchInput {
 interface UnsafeBenchPluginConfig extends PluginConfig {
   categories?: UnsafeBenchCategory[];
   longest_edge?: number; // Maximum size for longest edge in pixels (default: 8000)
-  jpeg_quality?: number; // JPEG quality 1-100 (default: 90)
 }
 
 /**
@@ -44,8 +43,7 @@ interface UnsafeBenchPluginConfig extends PluginConfig {
  */
 async function processImageToJpeg(
   imageBuffer: Buffer,
-  maxLongestEdge: number = 8000,
-  jpegQuality: number = 90
+  maxLongestEdge: number = 8000
 ): Promise<string | null> {
   try {
     // Import Sharp for image processing
@@ -93,10 +91,10 @@ async function processImageToJpeg(
       }
     }
 
-    // Convert to JPEG format
+    // Convert to JPEG format with reasonable quality
     const jpegBuffer = await processedImage
       .jpeg({
-        quality: jpegQuality,
+        quality: 85, // Good balance of quality vs file size
         progressive: false,
         mozjpeg: false,
       })
@@ -124,8 +122,7 @@ async function processImageToJpeg(
  */
 async function fetchImageAsBase64(
   url: string, 
-  maxLongestEdge: number = 8000, 
-  jpegQuality: number = 90
+  maxLongestEdge: number = 8000
 ): Promise<string | null> {
   try {
     logger.debug(`[unsafebench] Fetching image from URL: ${url}`);
@@ -144,7 +141,7 @@ async function fetchImageAsBase64(
     logger.debug(`[unsafebench] Downloaded image: ${buffer.length} bytes`);
 
     // Process image to JPEG format with size limits
-    const processedImage = await processImageToJpeg(buffer, maxLongestEdge, jpegQuality);
+    const processedImage = await processImageToJpeg(buffer, maxLongestEdge);
 
     if (!processedImage) {
       const errorMsg = `Failed to process image from ${url} to JPEG format`;
@@ -363,8 +360,7 @@ class UnsafeBenchDatasetManager {
           // Otherwise, we need to fetch the image
           const { recordToProcess, imageUrl } = result;
           const maxLongestEdge = config?.longest_edge ?? 8000;
-          const jpegQuality = config?.jpeg_quality ?? 90;
-          const base64Image = await fetchImageAsBase64(imageUrl, maxLongestEdge, jpegQuality);
+          const base64Image = await fetchImageAsBase64(imageUrl, maxLongestEdge);
 
           if (!base64Image) {
             logger.warn(
@@ -411,9 +407,8 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
 
     // Log configuration
     const maxLongestEdge = config?.longest_edge ?? 8000;
-    const jpegQuality = config?.jpeg_quality ?? 90;
     logger.debug(
-      `[unsafebench] Configuration: longest_edge=${maxLongestEdge}px, jpeg_quality=${jpegQuality}%`,
+      `[unsafebench] Configuration: longest_edge=${maxLongestEdge}px, jpeg_quality=85% (fixed)`,
     );
 
     // Validate categories if provided
