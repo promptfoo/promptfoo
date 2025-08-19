@@ -178,15 +178,17 @@ export async function doTargetPurposeDiscovery(
           'Content-Type': 'application/json',
           Authorization: `Bearer ${cloudConfig.getApiKey()}`,
         },
-        body: JSON.stringify({
-          state: {
-            currentQuestionIndex: state.currentQuestionIndex,
-            answers: state.answers,
-          },
-          task: 'target-purpose-discovery',
-          version: VERSION,
-          email: getUserEmail(),
-        }),
+        body: JSON.stringify(
+          TargetPurposeDiscoveryRequestSchema.parse({
+            state: {
+              currentQuestionIndex: state.currentQuestionIndex,
+              answers: state.answers,
+            },
+            task: 'target-purpose-discovery',
+            version: VERSION,
+            email: getUserEmail(),
+          }),
+        ),
       });
 
       if (!response.ok) {
