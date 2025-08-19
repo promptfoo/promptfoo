@@ -1597,30 +1597,8 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         body: JSON.stringify(params),
       });
     } catch (err) {
-      // Enhanced error message for better debugging
-      const errorString = String(err);
-      let detailedError = `Bedrock API invoke model error: ${errorString}`;
-      
-      // Check for specific error patterns to provide more helpful messages
-      if (errorString.includes('not supported by Guardrails')) {
-        detailedError += ' - This is likely due to image format compatibility issues with AWS Bedrock Guardrails. Ensure images are properly formatted as JPEG and within size limits.';
-      } else if (errorString.includes('ValidationException')) {
-        detailedError += ' - Check that your request parameters are valid for this model.';
-      } else if (errorString.includes('AccessDeniedException')) {
-        detailedError += ' - Check your AWS credentials and permissions.';
-      } else if (errorString.includes('ThrottlingException')) {
-        detailedError += ' - API rate limit exceeded. Consider reducing request frequency.';
-      } else if (errorString.includes('ModelNotReadyException')) {
-        detailedError += ' - The model is not ready. Try again later.';
-      } else if (errorString.includes('ServiceQuotaExceededException')) {
-        detailedError += ' - Service quota exceeded. Check your AWS service limits.';
-      }
-      
-      logger.error(`[Bedrock] ${detailedError}`);
-      
       return {
-        error: detailedError,
-        output: null, // Explicitly set output to null instead of undefined
+        error: `Bedrock API invoke model error: ${String(err)}`,
       };
     }
 
@@ -1690,40 +1668,8 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
-      // Extract output, handling potential null/undefined values
-      const modelOutput = model.output(this.config, output);
-      
-      // If model output is null or undefined, provide a descriptive error message
-      if (modelOutput === null || modelOutput === undefined) {
-        const errorDetails = `Model ${this.modelName} returned null/undefined output. Response structure: ${JSON.stringify(output, null, 2)}`;
-        logger.error(`[Bedrock] ${errorDetails}`);
-        
-        // Check for specific error conditions in the response
-        let specificError = 'Unknown error - model returned no output';
-        if (output.error) {
-          specificError = `Model error: ${output.error}`;
-        } else if (output['amazon-bedrock-guardrailAction'] === 'INTERVENED') {
-          specificError = 'Request blocked by AWS Bedrock Guardrails';
-        } else if (output.message && output.message.includes('not supported')) {
-          specificError = 'Content format not supported by AWS Bedrock Guardrails - ensure images are JPEG format and within size limits';
-        }
-        
-        return {
-          error: specificError,
-          output: null,
-          tokenUsage,
-          ...(output['amazon-bedrock-guardrailAction']
-            ? {
-                guardrails: {
-                  flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
-                },
-              }
-            : {}),
-        };
-      }
-
       return {
-        output: modelOutput,
+        output: model.output(this.config, output),
         tokenUsage,
         ...(output['amazon-bedrock-guardrailAction']
           ? {
@@ -1734,12 +1680,9 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
           : {}),
       };
     } catch (err) {
-      const detailedError = `Bedrock API response parsing error: ${String(err)}`;
-      logger.error(`[Bedrock] ${detailedError}. Raw response: ${JSON.stringify(response)}`);
-      
+      logger.error(`Bedrock API response error: ${String(err)}: ${JSON.stringify(response)}`);
       return {
-        error: detailedError,
-        output: null, // Explicitly set output to null instead of undefined
+        error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
       };
     }
   }
