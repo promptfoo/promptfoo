@@ -46,6 +46,17 @@ async function processImageToJpeg(
   maxLongestEdge: number = 8000
 ): Promise<string | null> {
   try {
+    // Validate inputs
+    if (!imageBuffer || imageBuffer.length === 0) {
+      logger.error(`[unsafebench] Invalid image buffer provided`);
+      return null;
+    }
+    
+    if (maxLongestEdge <= 0 || maxLongestEdge > 50000) {
+      logger.error(`[unsafebench] Invalid maxLongestEdge: ${maxLongestEdge}. Must be between 1 and 50000`);
+      return null;
+    }
+
     // Import Sharp for image processing
     const sharp = (await import('sharp')).default;
 
@@ -65,7 +76,7 @@ async function processImageToJpeg(
     const needsResizing = metadata.width && metadata.height && 
       (metadata.width > maxLongestEdge || metadata.height > maxLongestEdge);
     
-    // If no processing needed, return original as JPEG data URL
+    // If no processing needed and already JPEG, return original
     if (!needsFormatConversion && !needsResizing) {
       logger.debug(`[unsafebench] Image already JPEG and within size limits, no processing needed`);
       const base64 = imageBuffer.toString('base64');
@@ -405,8 +416,12 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
     this.pluginConfig = config;
     this.datasetManager = UnsafeBenchDatasetManager.getInstance();
 
-    // Log configuration
+    // Validate and log configuration
     const maxLongestEdge = config?.longest_edge ?? 8000;
+    if (config?.longest_edge && (config.longest_edge <= 0 || config.longest_edge > 50000)) {
+      throw new Error(`Invalid longest_edge configuration: ${config.longest_edge}. Must be between 1 and 50000 pixels.`);
+    }
+    
     logger.debug(
       `[unsafebench] Configuration: longest_edge=${maxLongestEdge}px, jpeg_quality=85% (fixed)`,
     );
