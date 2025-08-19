@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   CheckCircle as CheckCircleIcon,
@@ -19,6 +19,7 @@ import {
   Tabs,
   Tooltip,
   Typography,
+  Snackbar,
 } from '@mui/material';
 
 import { callApi } from '@app/utils/api';
@@ -26,11 +27,15 @@ import { callApi } from '@app/utils/api';
 import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
 import ConfigurationTab from './components/ConfigurationTab';
 import ResultsTab from './components/ResultsTab';
+import ScanHistory from './components/ScanHistory';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
-import type { ScanResult } from './ModelAudit.types';
+import type { ScanApiResponse, StoredScan } from './ModelAudit.types';
 import { useModelAuditStore } from './store';
 
 export default function ModelAudit() {
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+
   const {
     // State
     paths,
@@ -63,7 +68,7 @@ export default function ModelAudit() {
     checkInstallation();
   }, []); // Remove checkInstallation dependency to avoid potential issues
 
-  const handleScan = async () => {
+  const handleScan = async (description?: string) => {
     setIsScanning(true);
     setError(null);
 
@@ -76,19 +81,31 @@ export default function ModelAudit() {
         body: JSON.stringify({
           paths: paths.map((p) => p.path),
           options: scanOptions,
+          description,
         }),
       });
 
-      const data: ScanResult = await response.json();
+      const data: ScanApiResponse = await response.json();
 
       if (!response.ok) {
-        const errorData = data as unknown as { error: string };
-        throw new Error(errorData.error || 'Failed to run security scan');
+        const error =
+          data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+            ? data.error
+            : 'Failed to run security scan';
+        throw new Error(error);
       }
 
-      setScanResults(data);
+      // Extract scanId from response safely
+      const { scanId, ...scanResult } = data;
+      setScanResults(scanResult, scanId);
       setActiveTab(1); // Switch to Results tab
       addRecentScan(paths); // Add to recent scans
+
+      // Show success notification if scan was saved
+      if (scanId) {
+        setSnackbarMessage(`Scan saved with ID: ${scanId}`);
+        setSnackbarOpen(true);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
       setError(errorMessage);
@@ -165,6 +182,7 @@ export default function ModelAudit() {
           <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
             <Tab label="Configuration" />
             <Tab label="Results" disabled={!scanResults} />
+            <Tab label="History" />
           </Tabs>
 
           {error && (
@@ -203,6 +221,18 @@ export default function ModelAudit() {
                 )}
               </Box>
             </Fade>
+
+            <Fade in={activeTab === 2} unmountOnExit>
+              <Box>
+                <ScanHistory
+                  onViewScan={(scan: StoredScan) => {
+                    // Load the scan results and switch to Results tab
+                    setScanResults(scan.results, scan.id);
+                    setActiveTab(1);
+                  }}
+                />
+              </Box>
+            </Fade>
           </Box>
         </Paper>
 
@@ -221,6 +251,13 @@ export default function ModelAudit() {
             paths={paths}
           />
         )}
+
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={6000}
+          onClose={() => setSnackbarOpen(false)}
+          message={snackbarMessage}
+        />
       </Container>
     </Box>
   );

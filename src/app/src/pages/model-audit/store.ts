@@ -29,6 +29,7 @@ interface ModelAuditState {
   // Scan state
   isScanning: boolean;
   scanResults: ScanResult | null;
+  currentScanId: string | null;
   error: string | null;
 
   // Installation status
@@ -52,7 +53,8 @@ interface ModelAuditState {
 
   // Actions - Scan state
   setIsScanning: (isScanning: boolean) => void;
-  setScanResults: (results: ScanResult | null) => void;
+  setScanResults: (results: ScanResult | null, scanId?: string | null) => void;
+  setCurrentScanId: (scanId: string | null) => void;
   setError: (error: string | null) => void;
 
   // Actions - Installation status
@@ -88,6 +90,7 @@ export const useModelAuditStore = create<ModelAuditState>()(
       scanOptions: DEFAULT_SCAN_OPTIONS,
       isScanning: false,
       scanResults: null,
+      currentScanId: null,
       error: null,
       installationStatus: {
         checking: false,
@@ -139,7 +142,13 @@ export const useModelAuditStore = create<ModelAuditState>()(
 
       // Actions - Scan state
       setIsScanning: (isScanning) => set({ isScanning }),
-      setScanResults: (scanResults) => set({ scanResults, error: null }),
+      setScanResults: (scanResults, scanId) =>
+        set({
+          scanResults,
+          currentScanId: scanId || null,
+          error: null,
+        }),
+      setCurrentScanId: (currentScanId) => set({ currentScanId }),
       setError: (error) => set({ error }),
 
       // Actions - Installation status

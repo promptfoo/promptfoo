@@ -463,4 +463,94 @@ describe('ModelAudit', () => {
     });
     expect(pathElement).toBeInTheDocument();
   });
+
+  it('should display a success Snackbar notification with the scan ID when a scan is completed and a scanId is returned in the response', async () => {
+    const mockScanId = 'scan123';
+    const mockSetScanResults = vi.fn();
+    const mockSetActiveTab = vi.fn();
+    const mockSetIsScanning = vi.fn();
+    const mockSetError = vi.fn();
+
+    mockCallApi.mockImplementation(async (path: string) => {
+      if (path.includes('/model-audit/scan')) {
+        return {
+          ok: true,
+          json: () => Promise.resolve({ ...mockScanResults, scanId: mockScanId }),
+        } as Response;
+      }
+      if (path.includes('/model-audit/check-path')) {
+        return {
+          ok: true,
+          json: () => Promise.resolve({ exists: true, type: 'file', name: 'model.safetensors' }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: () => Promise.resolve({}),
+      } as Response;
+    });
+
+    mockUseModelAuditStore.mockReturnValue({
+      ...getDefaultStoreState(),
+      setScanResults: mockSetScanResults,
+      setActiveTab: mockSetActiveTab,
+      setIsScanning: mockSetIsScanning,
+      setError: mockSetError,
+      paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
+    });
+
+    render(
+      <MemoryRouter>
+        <ThemeProvider theme={theme}>
+          <ModelAudit />
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const pathInput = screen.getByPlaceholderText('Type a path or drag & drop above');
+    fireEvent.change(pathInput, { target: { value: '/test/model.safetensors' } });
+    fireEvent.click(screen.getByText('Add'));
+
+    const scanButton = screen.getByText('Start Security Scan');
+    fireEvent.click(scanButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(`Scan saved with ID: ${mockScanId}`)).toBeVisible();
+    });
+  });
+
+  it('should display an empty state in ScanHistory when there are no scans', async () => {
+    mockCallApi.mockImplementation(async (path: string) => {
+      if (path.startsWith('/model-audit/scans')) {
+        return {
+          ok: true,
+          json: () => Promise.resolve({ scans: [], total: 0 }),
+        } as Response;
+      }
+      return {
+        ok: true,
+        json: () => Promise.resolve({}),
+      } as Response;
+    });
+
+    mockUseModelAuditStore.mockReturnValue({
+      ...getDefaultStoreState(),
+      activeTab: 2,
+    });
+
+    render(
+      <MemoryRouter>
+        <ThemeProvider theme={theme}>
+          <ModelAudit />
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByText('History'));
+
+    await waitFor(() => {
+      expect(screen.getByText('No scan history found')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Run a scan to see it appear here')).toBeInTheDocument();
+  });
 });

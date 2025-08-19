@@ -11,7 +11,9 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import ErrorBoundary from '../../../components/ErrorBoundary';
 import ScanStatistics from './ScanStatistics';
+import SecurityChecks from './SecurityChecks';
 import SecurityFindings from './SecurityFindings';
 import { getIssueFilePath } from '../utils';
 
@@ -22,7 +24,7 @@ interface ResultsTabProps {
   onShowFilesDialog: () => void;
 }
 
-export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTabProps) {
+function ResultsTabContent({ scanResults, onShowFilesDialog }: ResultsTabProps) {
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
   const [showRawOutput, setShowRawOutput] = useState(false);
 
@@ -34,6 +36,9 @@ export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTa
         onSeverityClick={setSelectedSeverity}
         onFilesClick={onShowFilesDialog}
       />
+
+      {/* Security Checks Section */}
+      <SecurityChecks scanResults={scanResults} />
 
       {/* Scanned Files Section */}
       {scanResults.scannedFilesList && scanResults.scannedFilesList.length > 0 && (
@@ -126,5 +131,13 @@ export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTa
         onToggleRawOutput={() => setShowRawOutput(!showRawOutput)}
       />
     </Box>
+  );
+}
+
+export default function ResultsTab(props: ResultsTabProps) {
+  return (
+    <ErrorBoundary name="Results Tab">
+      <ResultsTabContent {...props} />
+    </ErrorBoundary>
   );
 }
