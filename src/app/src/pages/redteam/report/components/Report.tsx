@@ -8,6 +8,7 @@ import ListAltIcon from '@mui/icons-material/ListAlt';
 import PrintIcon from '@mui/icons-material/Print';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
@@ -307,25 +308,37 @@ const App: React.FC = () => {
         {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
           <Box
-            sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}
+            sx={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 1 }}
             className="print-hide"
           >
-            <Tooltip title="View all logs" placement="top">
-              <IconButton
-                sx={{ position: 'relative' }}
-                aria-label="view all logs"
-                onClick={(event) => {
-                  const url = `/eval/${evalId}`;
-                  if (event.ctrlKey || event.metaKey) {
-                    window.open(url, '_blank');
-                  } else {
-                    navigate(url);
-                  }
-                }}
-              >
-                <ListAltIcon />
-              </IconButton>
-            </Tooltip>
+            {evalId && (
+              <Tooltip title="View eval details and logs" placement="top">
+                <Button
+                  color="primary"
+                  variant="contained"
+                  size="small"
+                  startIcon={<ListAltIcon fontSize="small" />}
+                  sx={{
+                    height: 40,
+                    minHeight: 40,
+                    py: 0,
+                    px: 1.5,
+                    fontSize: '0.8125rem',
+                    alignSelf: 'center',
+                  }}
+                  onClick={(event) => {
+                    const url = `/eval/${evalId}`;
+                    if (event.ctrlKey || event.metaKey) {
+                      window.open(url, '_blank');
+                    } else {
+                      navigate(url);
+                    }
+                  }}
+                >
+                  View Eval
+                </Button>
+              </Tooltip>
+            )}
             <ReportDownloadButton
               evalDescription={evalData.config.description || evalId}
               evalData={evalData}
