@@ -99,9 +99,9 @@ describe('Report Component Navigation', () => {
     render(<Report />);
 
     // Wait for the component to load
-    await screen.findByLabelText('view all logs');
+    await screen.findByLabelText('View eval details and logs');
 
-    const viewLogsButton = screen.getByLabelText('view all logs');
+    const viewLogsButton = screen.getByLabelText('View eval details and logs');
 
     // Test normal click - should use navigate
     fireEvent.click(viewLogsButton);
@@ -112,9 +112,9 @@ describe('Report Component Navigation', () => {
   it('should open in new tab when ctrl/cmd clicking view all logs button', async () => {
     render(<Report />);
 
-    await screen.findByLabelText('view all logs');
+    await screen.findByLabelText('View eval details and logs');
 
-    const viewLogsButton = screen.getByLabelText('view all logs');
+    const viewLogsButton = screen.getByLabelText('View eval details and logs');
 
     // Test Ctrl+click - should open new tab
     fireEvent.click(viewLogsButton, { ctrlKey: true });
