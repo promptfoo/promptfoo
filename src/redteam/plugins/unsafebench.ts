@@ -37,7 +37,158 @@ interface UnsafeBenchPluginConfig extends PluginConfig {
 }
 
 /**
- * Fetches an image from a URL and converts it to base64
+ * Processes an image to ensure it's in AWS Bedrock Guardrails compatible format
+ */
+async function processImageForBedrock(imageBuffer: Buffer): Promise<string | null> {
+  try {
+    // Dynamic import of sharp for image processing
+    let sharp;
+    try {
+      sharp = (await import('sharp')).default;
+    } catch (importError) {
+      logger.warn(`[unsafebench] Sharp not available, falling back to PIL processing: ${String(importError)}`);
+      return processImageWithPIL(imageBuffer);
+    }
+
+    // Use Sharp for image processing if available
+    const image = sharp(imageBuffer);
+    const metadata = await image.metadata();
+    
+    logger.debug(`[unsafebench] Original image: ${metadata.format}, ${metadata.width}x${metadata.height}`);
+
+    // Ensure dimensions don't exceed AWS limits (8000x8000)
+    let processedImage = image;
+    if (metadata.width && metadata.height && (metadata.width > 8000 || metadata.height > 8000)) {
+      const scaleFactor = Math.min(8000 / metadata.width, 8000 / metadata.height);
+      const newWidth = Math.floor(metadata.width * scaleFactor);
+      const newHeight = Math.floor(metadata.height * scaleFactor);
+      
+      logger.debug(`[unsafebench] Resizing image to ${newWidth}x${newHeight}`);
+      processedImage = image.resize(newWidth, newHeight, { fit: 'inside' });
+    }
+
+    // Convert to JPEG format (AWS preferred format)
+    const jpegBuffer = await processedImage
+      .jpeg({ 
+        quality: 90,
+        progressive: false,
+        mozjpeg: false
+      })
+      .toBuffer();
+
+    const base64 = jpegBuffer.toString('base64');
+    logger.debug(`[unsafebench] Successfully processed image to JPEG format (${jpegBuffer.length} bytes)`);
+    
+    return `data:image/jpeg;base64,${base64}`;
+  } catch (error) {
+    logger.error(`[unsafebench] Error processing image with Sharp: ${String(error)}`);
+    return processImageWithPIL(imageBuffer);
+  }
+}
+
+/**
+ * Fallback image processing using PIL (Python Imaging Library) via subprocess
+ */
+async function processImageWithPIL(imageBuffer: Buffer): Promise<string | null> {
+  try {
+    const { spawn } = await import('child_process');
+    
+    // Create a Python script for image processing
+    const pythonScript = `
+import sys
+import base64
+from io import BytesIO
+try:
+    from PIL import Image
+except ImportError:
+    print("PIL_NOT_AVAILABLE", file=sys.stderr)
+    sys.exit(1)
+
+# Read image data from stdin
+image_data = sys.stdin.buffer.read()
+try:
+    # Open image
+    img = Image.open(BytesIO(image_data))
+    
+    # Convert to RGB if necessary (handles transparency, CMYK, etc.)
+    if img.mode in ('RGBA', 'LA', 'P'):
+        # Create white background for transparency
+        background = Image.new('RGB', img.size, (255, 255, 255))
+        if img.mode == 'P':
+            img = img.convert('RGBA')
+        background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+        img = background
+    elif img.mode not in ('RGB', 'L'):
+        img = img.convert('RGB')
+    
+    # Resize if needed (max 8000x8000 for AWS Bedrock)
+    max_size = 8000
+    if img.width > max_size or img.height > max_size:
+        ratio = min(max_size / img.width, max_size / img.height)
+        new_size = (int(img.width * ratio), int(img.height * ratio))
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
+    
+    # Save as JPEG
+    output_buffer = BytesIO()
+    img.save(output_buffer, format='JPEG', quality=90, optimize=True)
+    
+    # Output base64
+    jpeg_bytes = output_buffer.getvalue()
+    b64_string = base64.b64encode(jpeg_bytes).decode('ascii')
+    print(f"data:image/jpeg;base64,{b64_string}")
+    
+except Exception as e:
+    print(f"PROCESSING_ERROR: {e}", file=sys.stderr)
+    sys.exit(1)
+`;
+
+    return new Promise((resolve) => {
+      const python = spawn('python3', ['-c', pythonScript], {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      python.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      python.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      python.on('close', (code) => {
+        if (code === 0 && stdout.trim()) {
+          logger.debug(`[unsafebench] Successfully processed image with PIL`);
+          resolve(stdout.trim());
+        } else {
+          if (stderr.includes('PIL_NOT_AVAILABLE')) {
+            logger.error(`[unsafebench] PIL (Pillow) is not installed. Please install with: pip install pillow`);
+          } else {
+            logger.error(`[unsafebench] PIL processing failed: ${stderr}`);
+          }
+          resolve(null);
+        }
+      });
+
+      python.on('error', (error) => {
+        logger.error(`[unsafebench] Failed to spawn Python process: ${String(error)}`);
+        resolve(null);
+      });
+
+      // Send image data to Python process
+      python.stdin.write(imageBuffer);
+      python.stdin.end();
+    });
+  } catch (error) {
+    logger.error(`[unsafebench] PIL fallback processing failed: ${String(error)}`);
+    return null;
+  }
+}
+
+/**
+ * Fetches an image from a URL and converts it to AWS Bedrock compatible format
  */
 async function fetchImageAsBase64(url: string): Promise<string | null> {
   try {
@@ -45,7 +196,8 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
     const response = await fetchWithProxy(url);
 
     if (!response.ok) {
-      logger.warn(`[unsafebench] Failed to fetch image: ${response.statusText}`);
+      const errorMsg = `Failed to fetch image from ${url}: HTTP ${response.status} ${response.statusText}`;
+      logger.warn(`[unsafebench] ${errorMsg}`);
       return null;
     }
 
@@ -53,17 +205,21 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Convert to base64
-    const base64 = buffer.toString('base64');
+    logger.debug(`[unsafebench] Downloaded image: ${buffer.length} bytes`);
 
-    // Determine MIME type from response headers or default to jpeg
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    // Process the image to ensure AWS Bedrock compatibility
+    const processedImage = await processImageForBedrock(buffer);
+    
+    if (!processedImage) {
+      const errorMsg = `Failed to process image from ${url} into AWS Bedrock compatible format`;
+      logger.error(`[unsafebench] ${errorMsg}`);
+      return null;
+    }
 
-    return `data:${contentType};base64,${base64}`;
+    return processedImage;
   } catch (error) {
-    logger.error(
-      `[unsafebench] Error fetching image: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    const errorMsg = `Error fetching and processing image from ${url}: ${error instanceof Error ? error.message : String(error)}`;
+    logger.error(`[unsafebench] ${errorMsg}`);
     return null;
   }
 }
@@ -273,7 +429,7 @@ class UnsafeBenchDatasetManager {
           const base64Image = await fetchImageAsBase64(imageUrl);
 
           if (!base64Image) {
-            logger.warn(`[unsafebench] Failed to convert image URL to base64: ${imageUrl}`);
+            logger.warn(`[unsafebench] Failed to convert image URL to base64: ${imageUrl}. This may be due to image format incompatibility with AWS Bedrock Guardrails.`);
             return null;
           }
 
