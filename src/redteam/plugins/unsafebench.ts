@@ -34,12 +34,99 @@ interface UnsafeBenchInput {
 
 interface UnsafeBenchPluginConfig extends PluginConfig {
   categories?: UnsafeBenchCategory[];
+  longest_edge?: number; // Maximum size for longest edge in pixels (default: 8000)
+  jpeg_quality?: number; // JPEG quality 1-100 (default: 90)
 }
 
 /**
- * Fetches an image from a URL and converts it to base64
+ * Processes an image to ensure JPEG format and size limits
+ * Only processes when conversion or resizing is needed
  */
-async function fetchImageAsBase64(url: string): Promise<string | null> {
+async function processImageToJpeg(
+  imageBuffer: Buffer,
+  maxLongestEdge: number = 8000,
+  jpegQuality: number = 90
+): Promise<string | null> {
+  try {
+    // Import Sharp for image processing
+    const sharp = (await import('sharp')).default;
+
+    // Get image metadata to determine if processing is needed
+    const image = sharp(imageBuffer);
+    const metadata = await image.metadata();
+
+    logger.debug(
+      `[unsafebench] Original image: ${metadata.format}, ${metadata.width}x${metadata.height}`,
+    );
+
+    // Check what processing is needed
+    const isJpeg = metadata.format === 'jpeg' || metadata.format === 'jpg';
+    const needsFormatConversion = !isJpeg;
+    
+    // Check if image exceeds size limits (only check if we have dimensions)
+    const needsResizing = metadata.width && metadata.height && 
+      (metadata.width > maxLongestEdge || metadata.height > maxLongestEdge);
+    
+    // If no processing needed, return original as JPEG data URL
+    if (!needsFormatConversion && !needsResizing) {
+      logger.debug(`[unsafebench] Image already JPEG and within size limits, no processing needed`);
+      const base64 = imageBuffer.toString('base64');
+      return `data:image/jpeg;base64,${base64}`;
+    }
+
+    logger.debug(`[unsafebench] Processing needed - format conversion: ${needsFormatConversion}, resizing: ${needsResizing}`);
+
+    // Process image only when necessary
+    let processedImage = image;
+    
+    // Resize if needed (only downscale, never upscale)
+    if (needsResizing && metadata.width && metadata.height) {
+      const longestEdge = Math.max(metadata.width, metadata.height);
+      if (longestEdge > maxLongestEdge) {
+        // Calculate new dimensions maintaining aspect ratio
+        const scaleFactor = maxLongestEdge / longestEdge;
+        const newWidth = Math.floor(metadata.width * scaleFactor);
+        const newHeight = Math.floor(metadata.height * scaleFactor);
+
+        logger.debug(`[unsafebench] Resizing image from ${metadata.width}x${metadata.height} to ${newWidth}x${newHeight}`);
+        processedImage = processedImage.resize(newWidth, newHeight, { fit: 'inside', withoutEnlargement: true });
+      }
+    }
+
+    // Convert to JPEG format
+    const jpegBuffer = await processedImage
+      .jpeg({
+        quality: jpegQuality,
+        progressive: false,
+        mozjpeg: false,
+      })
+      .toBuffer();
+
+    const base64 = jpegBuffer.toString('base64');
+    logger.debug(
+      `[unsafebench] Successfully processed image to JPEG format (${jpegBuffer.length} bytes)`,
+    );
+
+    return `data:image/jpeg;base64,${base64}`;
+  } catch (error) {
+    logger.error(`[unsafebench] Error processing image with Sharp: ${String(error)}`);
+    if (String(error).includes('Cannot find module')) {
+      logger.error(
+        `[unsafebench] Sharp is required for UnsafeBench image processing. Install with: npm install sharp`,
+      );
+    }
+    return null;
+  }
+}
+
+/**
+ * Fetches an image from a URL and converts it to JPEG format
+ */
+async function fetchImageAsBase64(
+  url: string, 
+  maxLongestEdge: number = 8000, 
+  jpegQuality: number = 90
+): Promise<string | null> {
   try {
     logger.debug(`[unsafebench] Fetching image from URL: ${url}`);
     const response = await fetchWithProxy(url);
@@ -56,13 +143,16 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
 
     logger.debug(`[unsafebench] Downloaded image: ${buffer.length} bytes`);
 
-    // Convert to base64
-    const base64 = buffer.toString('base64');
+    // Process image to JPEG format with size limits
+    const processedImage = await processImageToJpeg(buffer, maxLongestEdge, jpegQuality);
 
-    // Determine MIME type from response headers or default to jpeg
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    if (!processedImage) {
+      const errorMsg = `Failed to process image from ${url} to JPEG format`;
+      logger.error(`[unsafebench] ${errorMsg}`);
+      return null;
+    }
 
-    return `data:${contentType};base64,${base64}`;
+    return processedImage;
   } catch (error) {
     const errorMsg = `Error fetching and processing image from ${url}: ${error instanceof Error ? error.message : String(error)}`;
     logger.error(`[unsafebench] ${errorMsg}`);
@@ -96,7 +186,7 @@ class UnsafeBenchDatasetManager {
     limit: number,
     config?: UnsafeBenchPluginConfig,
   ): Promise<UnsafeBenchInput[]> {
-    await this.ensureDatasetLoaded();
+    await this.ensureDatasetLoaded(config);
 
     if (!this.datasetCache || this.datasetCache.length === 0) {
       throw new Error('Failed to load UnsafeBench dataset.');
@@ -180,7 +270,7 @@ class UnsafeBenchDatasetManager {
   /**
    * Ensure the dataset is loaded into cache
    */
-  private async ensureDatasetLoaded(): Promise<void> {
+  private async ensureDatasetLoaded(config?: UnsafeBenchPluginConfig): Promise<void> {
     if (this.datasetCache !== null) {
       logger.debug(`[unsafebench] Using cached dataset with ${this.datasetCache.length} records`);
       return;
@@ -272,7 +362,9 @@ class UnsafeBenchDatasetManager {
 
           // Otherwise, we need to fetch the image
           const { recordToProcess, imageUrl } = result;
-          const base64Image = await fetchImageAsBase64(imageUrl);
+          const maxLongestEdge = config?.longest_edge ?? 8000;
+          const jpegQuality = config?.jpeg_quality ?? 90;
+          const base64Image = await fetchImageAsBase64(imageUrl, maxLongestEdge, jpegQuality);
 
           if (!base64Image) {
             logger.warn(
@@ -316,6 +408,13 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
     super(provider, purpose, injectVar, config);
     this.pluginConfig = config;
     this.datasetManager = UnsafeBenchDatasetManager.getInstance();
+
+    // Log configuration
+    const maxLongestEdge = config?.longest_edge ?? 8000;
+    const jpegQuality = config?.jpeg_quality ?? 90;
+    logger.debug(
+      `[unsafebench] Configuration: longest_edge=${maxLongestEdge}px, jpeg_quality=${jpegQuality}%`,
+    );
 
     // Validate categories if provided
     if (config?.categories) {
