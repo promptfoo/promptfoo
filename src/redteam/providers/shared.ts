@@ -320,7 +320,7 @@ export async function tryUnblocking({
   tokenUsage?: TokenUsage;
 }> {
   try {
-    // Move supportsUnblocking definition up
+    // Check if the server supports unblocking feature
     const { checkServerFeatureSupport } = await import('../../util/server');
     const supportsUnblocking = await checkServerFeatureSupport(
       'blocking-question-analysis',
@@ -337,7 +337,6 @@ export async function tryUnblocking({
       };
     }
 
-    // Check if the server supports unblocking feature
     if (!supportsUnblocking) {
       logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');
       return {
