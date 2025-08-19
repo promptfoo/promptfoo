@@ -1,0 +1,176 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: G-Eval image evaluation with multiple providers
+
+# Default test options including the grading provider
+defaultTest:
+  options:
+    provider: openai:gpt-4.1-mini  # Use GPT-4.1 as the grading provider for G-Eval
+
+prompts:
+  - label: "OpenAI Format"
+    raw: |
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe this image in detail:"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,{{image}}"
+              }
+            }
+          ]
+        }
+      ]
+  
+  - label: "Anthropic Format"
+    raw: |
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe this image in detail:"
+            },
+            {
+              "type": "image",
+              "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "{{image}}"
+              }
+            }
+          ]
+        }
+      ]
+  
+  - label: "Gemini Format"
+    raw: |
+      [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "text": "Describe this image in detail:"
+            },
+            {
+              "inline_data": {
+                "mime_type": "image/png",
+                "data": "{{image}}"
+              }
+            }
+          ]
+        }
+      ]
+  
+  - label: "Nova Format"
+    raw: |
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "text": "Describe this image in detail:"
+            },
+            {
+              "image": {
+                "format": "png",
+                "source": {
+                  "bytes": "{{image}}"
+                }
+              }
+            }
+          ]
+        }
+      ]
+
+providers:
+  # OpenAI GPT-4o-mini (supports vision)
+  - id: openai:gpt-4o-mini
+    label: "GPT-4o-mini"
+    prompts:
+      - "OpenAI Format"
+  
+  # Anthropic Claude 3.5 Sonnet (supports vision)
+  - id: anthropic:claude-3-5-sonnet-20241022
+    label: "Claude 3.5 Sonnet"
+    prompts:
+      - "Anthropic Format"
+  
+  # Google Gemini 1.5 Pro (supports vision)
+  - id: google:gemini-1.5-pro-002
+    label: "Gemini 1.5 Pro"
+    prompts:
+      - "Gemini Format"
+  
+  # Amazon Bedrock Nova Pro (supports vision)
+  - id: bedrock:amazon.nova-pro-v1:0
+    label: "Nova Pro"
+    prompts:
+      - "Nova Format"
+  
+  # Amazon Bedrock Claude via Bedrock (supports vision)
+  - id: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+    label: "Claude 3 Sonnet via Bedrock"
+    prompts:
+      - "Anthropic Format"
+
+tests:
+  # Test with geometric shapes image
+  - vars:
+      image: file://test-image.png
+    assert:
+      # Evaluate image description quality
+      - type: g-eval
+        value: >-
+          Accuracy - the description should accurately describe what is visible in the image,
+          including key objects, colors, and spatial relationships. The description should not
+          include made-up details or hallucinations.
+        threshold: 0.7
+      
+      - type: g-eval
+        value: >-
+          Completeness - the description should cover all important visual elements in the image.
+          It should mention the main subjects, background elements, and any notable features
+          without being overly verbose.
+        threshold: 0.7
+      
+      - type: g-eval
+        value: >-
+          Clarity - the description should be clear, well-organized, and easy to understand.
+          It should flow logically and use appropriate vocabulary to describe visual elements.
+        threshold: 0.7
+  
+  # Test with bar chart image
+  - vars:
+      image: file://test-chart.png
+    assert:
+      - type: g-eval
+        value: >-
+          Chart Analysis - If the image contains a chart or graph, the description should
+          accurately identify the type of chart, describe the data being presented, note
+          any trends or patterns, and mention key values or labels if visible.
+        threshold: 0.75
+      
+      - type: g-eval
+        value: >-
+          Data Accuracy - The description should correctly identify numerical values,
+          labels, and relationships shown in the chart without hallucinating data points.
+        threshold: 0.8
+  
+  # Test with multiple criteria at once
+  - vars:
+      image: file://test-image.png
+    assert:
+      - type: g-eval
+        value:
+          - 'Accurately describes visual elements without hallucinations'
+          - 'Identifies all major shapes and their colors correctly'
+          - 'Describes spatial relationships between objects'
+          - 'Uses clear and descriptive language'
+        threshold: 0.75 

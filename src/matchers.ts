@@ -405,6 +405,82 @@ function tryParse(content: string) {
   return content;
 }
 
+/**
+ * Sanitizes input for G-Eval by handling image data appropriately.
+ * If the input contains base64 image data, it returns a placeholder description.
+ * Otherwise, it returns the original input.
+ */
+function sanitizeInputForGEval(input: string): string {
+  // Check if this is a JSON message format (for vision models)
+  try {
+    const parsed = JSON.parse(input);
+    if (Array.isArray(parsed)) {
+      // Extract text content from message array
+      const textParts: string[] = [];
+      for (const message of parsed) {
+        // Handle OpenAI/standard format
+        if (message.content) {
+          if (Array.isArray(message.content)) {
+            // Vision model format with content array
+            for (const part of message.content) {
+              if (part.type === 'text' && part.text) {
+                textParts.push(part.text);
+              } else if (part.type === 'image_url') {
+                textParts.push('[Image provided]');
+              } else if (part.type === 'image') {
+                // Anthropic format
+                textParts.push('[Image provided]');
+              } else if (part.image) {
+                // Amazon Bedrock Nova format
+                textParts.push('[Image provided]');
+              }
+            }
+          } else if (typeof message.content === 'string') {
+            // Regular text message
+            textParts.push(message.content);
+          }
+        }
+        // Handle Gemini format
+        else if (message.parts) {
+          for (const part of message.parts) {
+            if (part.text) {
+              textParts.push(part.text);
+            } else if (part.inline_data || part.inlineData) {
+              textParts.push('[Image provided]');
+            }
+          }
+        }
+      }
+      if (textParts.length > 0) {
+        return textParts.join(' ');
+      }
+    }
+  } catch {
+    // Not JSON, continue with other checks
+  }
+
+  // Check if input looks like base64 image data
+  const base64ImagePattern = /^(data:image\/[a-zA-Z]+;base64,)?[A-Za-z0-9+/]{100,}={0,2}$/;
+  const truncatedInput = input.substring(0, 1000); // Check first 1000 chars for performance
+  
+  if (base64ImagePattern.test(truncatedInput.replace(/\s/g, ''))) {
+    return '[Image input provided to the model]';
+  }
+  
+  // Check if input contains Nunjucks template with image variable
+  if (input.includes('{{') && input.includes('}}')) {
+    // If it contains what looks like an image variable reference
+    const imageVarPattern = /{{.*?(image|img|photo|picture|visual).*?}}/i;
+    if (imageVarPattern.test(input)) {
+      // Extract the non-image parts of the prompt
+      const cleanedInput = input.replace(/{{.*?}}/g, '[Image]');
+      return cleanedInput;
+    }
+  }
+  
+  return input;
+}
+
 function splitIntoSentences(text: string) {
   return text.split('\n').filter((sentence) => sentence.trim() !== '');
 }
@@ -892,11 +968,15 @@ export async function matchesGEval(
       ? grading?.rubricPrompt?.['evaluate']
       : undefined;
   const evalPrompt = await loadRubricPrompt(evalRubricPrompt, GEVAL_PROMPT_EVALUATE);
+
+  // Sanitize input if it contains image data
+  const sanitizedInput = sanitizeInputForGEval(input);
+
   const promptText = await renderLlmRubricPrompt(evalPrompt, {
     criteria,
     steps: steps.join('\n- '),
     maxScore: maxScore.toString(),
-    input: tryParse(input),
+    input: tryParse(sanitizedInput),
     output: tryParse(output),
   });
 

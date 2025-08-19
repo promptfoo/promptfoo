@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: G-Eval evaluation with image inputs
+
+prompts:
+  # Format prompt as JSON to properly handle image inputs
+  - |
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe this image in detail:"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,{{image}}"
+            }
+          }
+        ]
+      }
+    ]
+
+providers:
+  - openai:gpt-4o-mini  # Using gpt-4o-mini which supports vision
+
+tests:
+  # Test with a sample image - we'll create a simple test image
+  - vars:
+      image: file://test-image.png
+    assert:
+      # Evaluate image description quality
+      - type: g-eval
+        value: >-
+          Accuracy - the description should accurately describe what is visible in the image,
+          including key objects, colors, and spatial relationships. The description should not
+          include made-up details or hallucinations.
+        threshold: 0.7
+      
+      - type: g-eval
+        value: >-
+          Completeness - the description should cover all important visual elements in the image.
+          It should mention the main subjects, background elements, and any notable features
+          without being overly verbose.
+        threshold: 0.7
+      
+      - type: g-eval
+        value: >-
+          Clarity - the description should be clear, well-organized, and easy to understand.
+          It should flow logically and use appropriate vocabulary to describe visual elements.
+        threshold: 0.7
+  
+  # Test with multiple criteria at once
+  - vars:
+      image: file://test-image.png
+    assert:
+      - type: g-eval
+        value:
+          - Accuracy - the description accurately represents visual content without hallucinations
+          - Completeness - all major visual elements are described
+          - Clarity - the description is well-structured and easy to understand
+          - Relevance - focuses on important visual elements without unnecessary detail
+        threshold: 0.75
+
+  # Test for specific visual analysis tasks
+  - vars:
+      image: file://test-chart.png
+    assert:
+      - type: g-eval
+        value: >-
+          Chart Analysis - If the image contains a chart or graph, the description should
+          accurately identify the type of chart, describe the data being presented, note
+          any trends or patterns, and mention key values or labels if visible.
+        threshold: 0.8 
