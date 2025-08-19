@@ -412,10 +412,6 @@ const sidebars = {
       type: 'doc',
       id: 'releases',
     },
-    {
-      type: 'doc',
-      id: 'write-for-promptfoo',
-    },
   ],
   // Within enterprise docs, show only the following sidebar
   enterprise: [
