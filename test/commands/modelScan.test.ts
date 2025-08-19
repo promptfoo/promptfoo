@@ -131,7 +131,13 @@ describe('modelScanCommand', () => {
         '--max-total-size',
         '5000000',
       ],
-      { stdio: 'inherit' },
+      {
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          PROMPTFOO_DELEGATED: 'true',
+        },
+      },
     );
   });
 
