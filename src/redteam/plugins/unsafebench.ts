@@ -41,16 +41,16 @@ interface UnsafeBenchPluginConfig extends PluginConfig {
  */
 async function processImageForBedrock(imageBuffer: Buffer): Promise<string | null> {
   try {
-    // Dynamic import of sharp for image processing
+    // Try Sharp first (optimal performance and features)
     let sharp;
     try {
       sharp = (await import('sharp')).default;
     } catch (importError) {
-      logger.warn(`[unsafebench] Sharp not available, falling back to PIL processing: ${String(importError)}`);
-      return processImageWithPIL(imageBuffer);
+      logger.warn(`[unsafebench] Sharp not available, falling back to Canvas processing: ${String(importError)}`);
+      return processImageWithCanvas(imageBuffer);
     }
 
-    // Use Sharp for image processing if available
+    // Use Sharp for image processing
     const image = sharp(imageBuffer);
     const metadata = await image.metadata();
     
@@ -82,107 +82,126 @@ async function processImageForBedrock(imageBuffer: Buffer): Promise<string | nul
     return `data:image/jpeg;base64,${base64}`;
   } catch (error) {
     logger.error(`[unsafebench] Error processing image with Sharp: ${String(error)}`);
-    return processImageWithPIL(imageBuffer);
+    return processImageWithCanvas(imageBuffer);
   }
 }
 
 /**
- * Fallback image processing using PIL (Python Imaging Library) via subprocess
+ * Fallback image processing using Node.js Canvas API
  */
-async function processImageWithPIL(imageBuffer: Buffer): Promise<string | null> {
+async function processImageWithCanvas(imageBuffer: Buffer): Promise<string | null> {
   try {
-    const { spawn } = await import('child_process');
-    
-    // Create a Python script for image processing
-    const pythonScript = `
-import sys
-import base64
-from io import BytesIO
-try:
-    from PIL import Image
-except ImportError:
-    print("PIL_NOT_AVAILABLE", file=sys.stderr)
-    sys.exit(1)
+    // Try to import canvas - it's an optional dependency
+    let canvas, Image;
+    try {
+      const canvasLib = await import('canvas');
+      canvas = canvasLib.createCanvas;
+      Image = canvasLib.Image;
+    } catch (_importError) {
+      logger.error(`[unsafebench] Canvas library not available. Install with: npm install canvas`);
+      return processImageWithBuiltins(imageBuffer);
+    }
 
-# Read image data from stdin
-image_data = sys.stdin.buffer.read()
-try:
-    # Open image
-    img = Image.open(BytesIO(image_data))
-    
-    # Convert to RGB if necessary (handles transparency, CMYK, etc.)
-    if img.mode in ('RGBA', 'LA', 'P'):
-        # Create white background for transparency
-        background = Image.new('RGB', img.size, (255, 255, 255))
-        if img.mode == 'P':
-            img = img.convert('RGBA')
-        background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
-        img = background
-    elif img.mode not in ('RGB', 'L'):
-        img = img.convert('RGB')
-    
-    # Resize if needed (max 8000x8000 for AWS Bedrock)
-    max_size = 8000
-    if img.width > max_size or img.height > max_size:
-        ratio = min(max_size / img.width, max_size / img.height)
-        new_size = (int(img.width * ratio), int(img.height * ratio))
-        img = img.resize(new_size, Image.Resampling.LANCZOS)
-    
-    # Save as JPEG
-    output_buffer = BytesIO()
-    img.save(output_buffer, format='JPEG', quality=90, optimize=True)
-    
-    # Output base64
-    jpeg_bytes = output_buffer.getvalue()
-    b64_string = base64.b64encode(jpeg_bytes).decode('ascii')
-    print(f"data:image/jpeg;base64,{b64_string}")
-    
-except Exception as e:
-    print(f"PROCESSING_ERROR: {e}", file=sys.stderr)
-    sys.exit(1)
-`;
+    return new Promise((resolve, reject) => {
+      try {
+        const img = new Image();
+        
+        img.onload = () => {
+          try {
+            let { width, height } = img;
+            
+            // Resize if needed (max 8000x8000 for AWS Bedrock)
+            const maxSize = 8000;
+            if (width > maxSize || height > maxSize) {
+              const ratio = Math.min(maxSize / width, maxSize / height);
+              width = Math.floor(width * ratio);
+              height = Math.floor(height * ratio);
+              logger.debug(`[unsafebench] Resizing image to ${width}x${height}`);
+            }
 
-    return new Promise((resolve) => {
-      const python = spawn('python3', ['-c', pythonScript], {
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
+            // Create canvas and draw image
+            const canvasElement = canvas(width, height);
+            const ctx = canvasElement.getContext('2d');
+            
+            // Fill with white background (handles transparency)
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw the image
+            ctx.drawImage(img, 0, 0, width, height);
 
-      let stdout = '';
-      let stderr = '';
-
-      python.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      python.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      python.on('close', (code) => {
-        if (code === 0 && stdout.trim()) {
-          logger.debug(`[unsafebench] Successfully processed image with PIL`);
-          resolve(stdout.trim());
-        } else {
-          if (stderr.includes('PIL_NOT_AVAILABLE')) {
-            logger.error(`[unsafebench] PIL (Pillow) is not installed. Please install with: pip install pillow`);
-          } else {
-            logger.error(`[unsafebench] PIL processing failed: ${stderr}`);
+            // Convert to JPEG and get base64
+            const jpegDataUrl = canvasElement.toDataURL('image/jpeg', 0.9);
+            logger.debug(`[unsafebench] Successfully processed image with Canvas`);
+            resolve(jpegDataUrl);
+          } catch (error) {
+            logger.error(`[unsafebench] Canvas processing error: ${String(error)}`);
+            resolve(null);
           }
+        };
+
+        img.onerror = (error) => {
+          logger.error(`[unsafebench] Canvas image load error: ${String(error)}`);
           resolve(null);
-        }
-      });
+        };
 
-      python.on('error', (error) => {
-        logger.error(`[unsafebench] Failed to spawn Python process: ${String(error)}`);
+        // Load the image from buffer
+        img.src = imageBuffer;
+      } catch (error) {
+        logger.error(`[unsafebench] Canvas setup error: ${String(error)}`);
         resolve(null);
-      });
-
-      // Send image data to Python process
-      python.stdin.write(imageBuffer);
-      python.stdin.end();
+      }
     });
   } catch (error) {
-    logger.error(`[unsafebench] PIL fallback processing failed: ${String(error)}`);
+    logger.error(`[unsafebench] Canvas fallback processing failed: ${String(error)}`);
+    return processImageWithBuiltins(imageBuffer);
+  }
+}
+
+/**
+ * Final fallback using basic Node.js built-ins (no image processing, just format validation)
+ */
+async function processImageWithBuiltins(imageBuffer: Buffer): Promise<string | null> {
+  try {
+    // Check if the buffer looks like a valid image by examining headers
+    const isJPEG = imageBuffer.length > 2 && imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8;
+    const isPNG = imageBuffer.length > 8 && imageBuffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
+    const isGIF = imageBuffer.length > 6 && (
+      imageBuffer.subarray(0, 6).equals(Buffer.from('GIF87a')) ||
+      imageBuffer.subarray(0, 6).equals(Buffer.from('GIF89a'))
+    );
+    const isWebP = imageBuffer.length > 12 && 
+      imageBuffer.subarray(0, 4).equals(Buffer.from('RIFF')) &&
+      imageBuffer.subarray(8, 12).equals(Buffer.from('WEBP'));
+
+    if (!isJPEG && !isPNG && !isGIF && !isWebP) {
+      logger.error(`[unsafebench] Unrecognized image format in buffer`);
+      return null;
+    }
+
+    // If it's already JPEG, return as-is (best effort)
+    if (isJPEG) {
+      const base64 = imageBuffer.toString('base64');
+      logger.debug(`[unsafebench] Image is already JPEG format, using as-is`);
+      return `data:image/jpeg;base64,${base64}`;
+    }
+
+    // For non-JPEG formats, we can't safely convert without image processing libraries
+    // Return the original with appropriate MIME type and hope AWS can handle it
+    let mimeType = 'image/jpeg'; // Default fallback
+    if (isPNG) {
+      mimeType = 'image/png';
+    } else if (isGIF) {
+      mimeType = 'image/gif';
+    } else if (isWebP) {
+      mimeType = 'image/webp';
+    }
+
+    const base64 = imageBuffer.toString('base64');
+    logger.warn(`[unsafebench] No image processing available, returning ${mimeType} format as-is`);
+    return `data:${mimeType};base64,${base64}`;
+  } catch (error) {
+    logger.error(`[unsafebench] Built-in fallback processing failed: ${String(error)}`);
     return null;
   }
 }
