@@ -78,7 +78,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
-        },
+        } as any,
       };
 
       const result = outputFromMessage(message, false);
@@ -101,7 +101,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
-        },
+        } as any,
       };
 
       const result = outputFromMessage(message, false);
@@ -127,7 +127,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
-        },
+        } as any,
       };
 
       const result = outputFromMessage(message, false);
@@ -163,7 +163,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
-        },
+        } as any,
       };
 
       const result = outputFromMessage(message, false);
@@ -197,7 +197,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
-        },
+        } as any,
       };
 
       const result = outputFromMessage(message, false);
@@ -238,7 +238,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
-        },
+        } as any,
       };
 
       const result = outputFromMessage(message, false);
@@ -269,7 +269,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
-        },
+        } as any,
       };
 
       const result = outputFromMessage(message, true);
@@ -302,7 +302,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
-        },
+        } as any,
       };
 
       const result = outputFromMessage(message, false);
@@ -332,7 +332,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
-        },
+        } as any,
       };
 
       const result = outputFromMessage(message, true);
@@ -362,7 +362,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
-        },
+        } as any,
       };
 
       const result = outputFromMessage(message, false);

@@ -37,14 +37,15 @@ interface UnsafeBenchPluginConfig extends PluginConfig {
 }
 
 /**
- * Processes an image to ensure it's in AWS Bedrock Guardrails compatible format
+ * Processes an image to ensure it's compatible with multimodal providers
+ * Only processes when necessary (size/format conversion needed)
  */
-async function processImageForBedrock(imageBuffer: Buffer): Promise<string | null> {
+async function processImageForProviders(imageBuffer: Buffer): Promise<string | null> {
   try {
     // Import Sharp for image processing
     const sharp = (await import('sharp')).default;
 
-    // Use Sharp for image processing
+    // Get image metadata first to determine if processing is needed
     const image = sharp(imageBuffer);
     const metadata = await image.metadata();
 
@@ -52,18 +53,34 @@ async function processImageForBedrock(imageBuffer: Buffer): Promise<string | nul
       `[unsafebench] Original image: ${metadata.format}, ${metadata.width}x${metadata.height}`,
     );
 
-    // Ensure dimensions don't exceed AWS limits (8000x8000)
-    let processedImage = image;
-    if (metadata.width && metadata.height && (metadata.width > 8000 || metadata.height > 8000)) {
-      const scaleFactor = Math.min(8000 / metadata.width, 8000 / metadata.height);
-      const newWidth = Math.floor(metadata.width * scaleFactor);
-      const newHeight = Math.floor(metadata.height * scaleFactor);
-
-      logger.debug(`[unsafebench] Resizing image to ${newWidth}x${newHeight}`);
-      processedImage = image.resize(newWidth, newHeight, { fit: 'inside' });
+    // Check if processing is needed
+    const needsResize = metadata.width && metadata.height && (metadata.width > 8000 || metadata.height > 8000);
+    const needsFormatConversion = metadata.format && !['jpeg', 'jpg', 'png', 'webp'].includes(metadata.format.toLowerCase());
+    
+    // If no processing needed and format is acceptable, return as-is
+    if (!needsResize && !needsFormatConversion) {
+      logger.debug(`[unsafebench] Image already in compatible format, no processing needed`);
+      const base64 = imageBuffer.toString('base64');
+      const mimeType = metadata.format === 'png' ? 'image/png' : 'image/jpeg';
+      return `data:${mimeType};base64,${base64}`;
     }
 
-    // Convert to JPEG format (AWS preferred format)
+    logger.debug(`[unsafebench] Processing needed - resize: ${needsResize}, format: ${needsFormatConversion}`);
+
+    // Process image only when necessary
+    let processedImage = image;
+    
+    // Resize if needed (AWS Bedrock limit is 8000x8000)
+    if (needsResize) {
+      const scaleFactor = Math.min(8000 / metadata.width!, 8000 / metadata.height!);
+      const newWidth = Math.floor(metadata.width! * scaleFactor);
+      const newHeight = Math.floor(metadata.height! * scaleFactor);
+
+      logger.debug(`[unsafebench] Resizing image to ${newWidth}x${newHeight}`);
+      processedImage = processedImage.resize(newWidth, newHeight, { fit: 'inside' });
+    }
+
+    // Convert to JPEG format for maximum compatibility
     const jpegBuffer = await processedImage
       .jpeg({
         quality: 90,
@@ -90,7 +107,7 @@ async function processImageForBedrock(imageBuffer: Buffer): Promise<string | nul
 }
 
 /**
- * Fetches an image from a URL and converts it to AWS Bedrock compatible format
+ * Fetches an image from a URL and converts it to provider-compatible format
  */
 async function fetchImageAsBase64(url: string): Promise<string | null> {
   try {
@@ -109,11 +126,11 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
 
     logger.debug(`[unsafebench] Downloaded image: ${buffer.length} bytes`);
 
-    // Process the image to ensure AWS Bedrock compatibility
-    const processedImage = await processImageForBedrock(buffer);
+    // Process the image to ensure provider compatibility (only when needed)
+    const processedImage = await processImageForProviders(buffer);
 
     if (!processedImage) {
-      const errorMsg = `Failed to process image from ${url} into AWS Bedrock compatible format`;
+      const errorMsg = `Failed to process image from ${url} into provider-compatible format`;
       logger.error(`[unsafebench] ${errorMsg}`);
       return null;
     }
@@ -332,7 +349,7 @@ class UnsafeBenchDatasetManager {
 
           if (!base64Image) {
             logger.warn(
-              `[unsafebench] Failed to convert image URL to base64: ${imageUrl}. This may be due to image format incompatibility with AWS Bedrock Guardrails.`,
+              `[unsafebench] Failed to convert image URL to base64: ${imageUrl}. This may be due to image format incompatibility with the provider.`,
             );
             return null;
           }
