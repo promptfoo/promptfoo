@@ -41,14 +41,8 @@ interface UnsafeBenchPluginConfig extends PluginConfig {
  */
 async function processImageForBedrock(imageBuffer: Buffer): Promise<string | null> {
   try {
-    // Try Sharp first (optimal performance and features)
-    let sharp;
-    try {
-      sharp = (await import('sharp')).default;
-    } catch (importError) {
-      logger.warn(`[unsafebench] Sharp not available, falling back to Canvas processing: ${String(importError)}`);
-      return processImageWithCanvas(imageBuffer);
-    }
+    // Import Sharp for image processing
+    const sharp = (await import('sharp')).default;
 
     // Use Sharp for image processing
     const image = sharp(imageBuffer);
@@ -82,126 +76,9 @@ async function processImageForBedrock(imageBuffer: Buffer): Promise<string | nul
     return `data:image/jpeg;base64,${base64}`;
   } catch (error) {
     logger.error(`[unsafebench] Error processing image with Sharp: ${String(error)}`);
-    return processImageWithCanvas(imageBuffer);
-  }
-}
-
-/**
- * Fallback image processing using Node.js Canvas API
- */
-async function processImageWithCanvas(imageBuffer: Buffer): Promise<string | null> {
-  try {
-    // Try to import canvas - it's an optional dependency
-    let canvas, Image;
-    try {
-      const canvasLib = await import('canvas');
-      canvas = canvasLib.createCanvas;
-      Image = canvasLib.Image;
-    } catch (_importError) {
-      logger.error(`[unsafebench] Canvas library not available. Install with: npm install canvas`);
-      return processImageWithBuiltins(imageBuffer);
+    if (String(error).includes('Cannot find module')) {
+      logger.error(`[unsafebench] Sharp is required for UnsafeBench image processing. Install with: npm install sharp`);
     }
-
-    return new Promise((resolve, reject) => {
-      try {
-        const img = new Image();
-        
-        img.onload = () => {
-          try {
-            let { width, height } = img;
-            
-            // Resize if needed (max 8000x8000 for AWS Bedrock)
-            const maxSize = 8000;
-            if (width > maxSize || height > maxSize) {
-              const ratio = Math.min(maxSize / width, maxSize / height);
-              width = Math.floor(width * ratio);
-              height = Math.floor(height * ratio);
-              logger.debug(`[unsafebench] Resizing image to ${width}x${height}`);
-            }
-
-            // Create canvas and draw image
-            const canvasElement = canvas(width, height);
-            const ctx = canvasElement.getContext('2d');
-            
-            // Fill with white background (handles transparency)
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, width, height);
-            
-            // Draw the image
-            ctx.drawImage(img, 0, 0, width, height);
-
-            // Convert to JPEG and get base64
-            const jpegDataUrl = canvasElement.toDataURL('image/jpeg', 0.9);
-            logger.debug(`[unsafebench] Successfully processed image with Canvas`);
-            resolve(jpegDataUrl);
-          } catch (error) {
-            logger.error(`[unsafebench] Canvas processing error: ${String(error)}`);
-            resolve(null);
-          }
-        };
-
-        img.onerror = (error) => {
-          logger.error(`[unsafebench] Canvas image load error: ${String(error)}`);
-          resolve(null);
-        };
-
-        // Load the image from buffer
-        img.src = imageBuffer;
-      } catch (error) {
-        logger.error(`[unsafebench] Canvas setup error: ${String(error)}`);
-        resolve(null);
-      }
-    });
-  } catch (error) {
-    logger.error(`[unsafebench] Canvas fallback processing failed: ${String(error)}`);
-    return processImageWithBuiltins(imageBuffer);
-  }
-}
-
-/**
- * Final fallback using basic Node.js built-ins (no image processing, just format validation)
- */
-async function processImageWithBuiltins(imageBuffer: Buffer): Promise<string | null> {
-  try {
-    // Check if the buffer looks like a valid image by examining headers
-    const isJPEG = imageBuffer.length > 2 && imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8;
-    const isPNG = imageBuffer.length > 8 && imageBuffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
-    const isGIF = imageBuffer.length > 6 && (
-      imageBuffer.subarray(0, 6).equals(Buffer.from('GIF87a')) ||
-      imageBuffer.subarray(0, 6).equals(Buffer.from('GIF89a'))
-    );
-    const isWebP = imageBuffer.length > 12 && 
-      imageBuffer.subarray(0, 4).equals(Buffer.from('RIFF')) &&
-      imageBuffer.subarray(8, 12).equals(Buffer.from('WEBP'));
-
-    if (!isJPEG && !isPNG && !isGIF && !isWebP) {
-      logger.error(`[unsafebench] Unrecognized image format in buffer`);
-      return null;
-    }
-
-    // If it's already JPEG, return as-is (best effort)
-    if (isJPEG) {
-      const base64 = imageBuffer.toString('base64');
-      logger.debug(`[unsafebench] Image is already JPEG format, using as-is`);
-      return `data:image/jpeg;base64,${base64}`;
-    }
-
-    // For non-JPEG formats, we can't safely convert without image processing libraries
-    // Return the original with appropriate MIME type and hope AWS can handle it
-    let mimeType = 'image/jpeg'; // Default fallback
-    if (isPNG) {
-      mimeType = 'image/png';
-    } else if (isGIF) {
-      mimeType = 'image/gif';
-    } else if (isWebP) {
-      mimeType = 'image/webp';
-    }
-
-    const base64 = imageBuffer.toString('base64');
-    logger.warn(`[unsafebench] No image processing available, returning ${mimeType} format as-is`);
-    return `data:${mimeType};base64,${base64}`;
-  } catch (error) {
-    logger.error(`[unsafebench] Built-in fallback processing failed: ${String(error)}`);
     return null;
   }
 }
