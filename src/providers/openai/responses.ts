@@ -20,6 +20,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-4o-2024-08-06',
     'gpt-4o-2024-11-20',
     'gpt-4o-2024-05-13',
+    'gpt-4o-2024-07-18',
+    'gpt-4o-mini',
+    'gpt-4o-mini-2024-07-18',
     'gpt-4.1',
     'gpt-4.1-2025-04-14',
     'gpt-4.1-mini',
@@ -29,11 +32,18 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5 models
     'gpt-5',
     'gpt-5-2025-08-07',
+    'gpt-5-chat',
     'gpt-5-chat-latest',
     'gpt-5-nano',
     'gpt-5-nano-2025-08-07',
     'gpt-5-mini',
     'gpt-5-mini-2025-08-07',
+    // Computer use model
+    'computer-use-preview',
+    // Image generation model
+    'gpt-image-1',
+    'gpt-image-1-2025-04-15',
+    // Reasoning models
     'o1',
     'o1-2024-12-17',
     'o1-preview',
