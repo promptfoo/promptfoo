@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 
 import cliState from '../../cliState';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -319,8 +320,15 @@ export async function tryUnblocking({
   tokenUsage?: TokenUsage;
 }> {
   try {
+    // Move supportsUnblocking definition up
+    const { checkServerFeatureSupport } = await import('../../util/server');
+    const supportsUnblocking = await checkServerFeatureSupport(
+      'blocking-question-analysis',
+      '2025-06-16T14:49:11-07:00',
+    );
+
     // Allow disabling unblocking via environment variable
-    if (process.env.PROMPTFOO_DISABLE_UNBLOCKING === 'true') {
+    if (getEnvBool('PROMPTFOO_DISABLE_UNBLOCKING')) {
       logger.debug('[Unblocking] Disabled via PROMPTFOO_DISABLE_UNBLOCKING');
       // Return a response that will not increment numRequests
       return {
@@ -330,12 +338,6 @@ export async function tryUnblocking({
     }
 
     // Check if the server supports unblocking feature
-    const { checkServerFeatureSupport } = await import('../../util/server');
-    const supportsUnblocking = await checkServerFeatureSupport(
-      'blocking-question-analysis',
-      '2025-06-16T14:49:11-07:00',
-    );
-
     if (!supportsUnblocking) {
       logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');
       return {
