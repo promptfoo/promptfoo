@@ -5,6 +5,7 @@ import path from 'path';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
+import { validate as uuidValidate } from 'uuid';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../../cache';
@@ -20,6 +21,7 @@ import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
   getCloudDatabaseId,
   getPluginSeverityOverridesFromCloud,
+  getPoliciesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
@@ -42,8 +44,10 @@ import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import type {
+  PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
+  RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
@@ -189,7 +193,7 @@ export async function doGenerateRedteam(
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
 
-  let plugins;
+  let plugins: RedteamPluginObject[] = [];
 
   // If plugins are defined in the config file
   if (redteamConfig?.plugins && redteamConfig.plugins.length > 0) {
@@ -258,6 +262,26 @@ export async function doGenerateRedteam(
     });
 
     logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
+  }
+
+  // Resolve policy references
+  const policyPluginsWithRefs = plugins.filter(
+    (plugin) =>
+      plugin.id === 'policy' &&
+      typeof plugin.config?.policy === 'object' &&
+      plugin.config.policy.id &&
+      uuidValidate(plugin!.config!.policy!.id),
+  );
+  if (policyPluginsWithRefs.length > 0) {
+    logger.debug(`Resolving policy references for ${policyPluginsWithRefs.length} plugins`);
+    const ids = policyPluginsWithRefs.map((p) => (p.config!.policy! as PolicyObject).id);
+    // Load the policy texts
+    const policies = await getPoliciesFromCloud(ids);
+    // Overwrite the policy texts to the plugins
+    for (const policyPlugin of policyPluginsWithRefs) {
+      policyPlugin.config!.policy = policies[(policyPlugin.config!.policy! as PolicyObject).id];
+      // TODO(Will): adds the policy id as metadata.
+    }
   }
 
   let strategies: (string | { id: string })[] =
