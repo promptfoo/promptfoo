@@ -95,29 +95,29 @@ describe('Report Component Navigation', () => {
     global.window.open = vi.fn();
   });
 
-  it('should navigate to eval page when clicking view all logs button', async () => {
+  it('should navigate to eval page when clicking View Eval button', async () => {
     render(<Report />);
 
     // Wait for the component to load
     await screen.findByLabelText('View eval details and logs');
 
-    const viewLogsButton = screen.getByLabelText('View eval details and logs');
+    const viewEvalButton = screen.getByLabelText('View eval details and logs');
 
     // Test normal click - should use navigate
-    fireEvent.click(viewLogsButton);
+    fireEvent.click(viewEvalButton);
     expect(mockNavigate).toHaveBeenCalledWith('/eval/test-123');
     expect(window.open).not.toHaveBeenCalled();
   });
 
-  it('should open in new tab when ctrl/cmd clicking view all logs button', async () => {
+  it('should open in new tab when ctrl/cmd clicking View Eval button', async () => {
     render(<Report />);
 
     await screen.findByLabelText('View eval details and logs');
 
-    const viewLogsButton = screen.getByLabelText('View eval details and logs');
+    const viewEvalButton = screen.getByLabelText('View eval details and logs');
 
     // Test Ctrl+click - should open new tab
-    fireEvent.click(viewLogsButton, { ctrlKey: true });
+    fireEvent.click(viewEvalButton, { ctrlKey: true });
     expect(window.open).toHaveBeenCalledWith('/eval/test-123', '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
 
@@ -125,7 +125,7 @@ describe('Report Component Navigation', () => {
     vi.clearAllMocks();
 
     // Test Cmd+click (Mac) - should also open new tab
-    fireEvent.click(viewLogsButton, { metaKey: true });
+    fireEvent.click(viewEvalButton, { metaKey: true });
     expect(window.open).toHaveBeenCalledWith('/eval/test-123', '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
   });
