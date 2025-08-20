@@ -1,5 +1,5 @@
 import { GridLogicOperator } from '@mui/x-data-grid';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TestSuites from './TestSuites';
@@ -264,9 +264,6 @@ describe('TestSuites Component Filtering', () => {
 
   it('should filter out subcategories with zero total tests', () => {
     render(<TestSuites {...defaultProps} />);
-
-    // Check that only one row is rendered (plus header)
-    const rows = screen.getAllByRole('row');
     // DataGrid has header row + data rows
     // With filtering, we should only have test-plugin row
     expect(screen.getByText('Test Plugin')).toBeInTheDocument();
