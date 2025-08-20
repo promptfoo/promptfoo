@@ -7,7 +7,6 @@ import {
 import { useParams } from 'react-router-dom';
 
 import { callApi } from '@app/utils/api';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -17,16 +16,20 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Grid from '@mui/material/Grid2';
-import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
 import Slider from '@mui/material/Slider';
 import Tab from '@mui/material/Tab';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 interface RepoScanRecord {
@@ -56,13 +59,21 @@ interface RepoScanRecord {
       byProvider: Record<string, number>;
       byCapability: Record<string, number>;
     };
+    meta?: {
+      remote?: string;
+      ref?: string;
+      host?: 'github' | 'gitlab' | 'bitbucket' | 'other';
+      owner?: string;
+      repo?: string;
+      description?: string;
+      license?: string;
+      owners?: string[];
+    };
   };
-  profiles?: any[];
-  riskSummary?: any;
 }
 
 function detectModelToken(line: string): string | undefined {
-  const re = /(gpt-[\w\-.]+|claude-[\w\-.]+|gemini-[\w\-.]+|mistral-[\w\-.]+|mixtral-[\w\-.]+|llama[\w\-.]*)/i;
+  const re = /(gpt-[\w\-.]+|claude-[\w\-.]+|gemini-[\w\-.]+|mistral-[\w\-.]+|mixtral-[\w\-.]+|llama[\w\-.]*|deepseek[\w\-.]*|qwen[\w\-.]*|grok[\w\-.]*|phi[\w\-.]*|gemma[\w\-.]*)/i;
   const m = line?.match(re);
   return m ? m[1] : undefined;
 }
@@ -75,13 +86,69 @@ function detectCallPattern(detectorId: string): string {
   return 'other';
 }
 
+function extractPromptSnippet(f: RepoScanRecord['result']['findings'][number]): string | undefined {
+  const lines = [
+    ...(f.contextBefore || []),
+    f.lineText || '',
+    ...(f.contextAfter || []),
+  ];
+  const joined = lines.join('\n');
+  const patterns: RegExp[] = [
+    /prompt\s*[:=]\s*([`\"'])([\s\S]{0,500}?)\1/,
+    /system\s*[:=]\s*([`\"'])([\s\S]{0,500}?)\1/,
+    /user\s*[:=]\s*([`\"'])([\s\S]{0,500}?)\1/,
+    /messages\s*:\s*\[([\s\S]{0,800}?)\]/,
+    /inputs?\s*[:=]\s*([`\"'])([\s\S]{0,500}?)\1/,
+  ];
+  for (const re of patterns) {
+    const m = joined.match(re);
+    if (m) {
+      const body = (m[2] || m[1] || '').toString();
+      return body.trim().slice(0, 500);
+    }
+  }
+  return undefined;
+}
+
+function normalizeForReport(model: string): { exists: boolean; label: string } {
+  const s = model.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const candidates: Array<{ key: string; label: string }> = [
+    { key: 'gpt5', label: 'GPT-5' },
+    { key: 'gpt5mini', label: 'GPT-5 Mini' },
+    { key: 'gpt41', label: 'GPT-4.1' },
+    { key: 'gpt4o', label: 'GPT-4o' },
+    { key: 'o3', label: 'o3' },
+    { key: 'o3mini', label: 'o3-mini' },
+    { key: 'o1mini', label: 'o1-mini' },
+    { key: 'gpt45', label: 'GPT 4.5' },
+    { key: 'claude41opus', label: 'Claude Opus 4.1' },
+    { key: 'claude4sonnet', label: 'Claude 4 Sonnet' },
+    { key: 'claude37sonnet', label: 'Claude 3.7 Sonnet' },
+    { key: 'gemini25flash', label: 'Gemini 2.5 Flash' },
+    { key: 'gemini25pro', label: 'Gemini 2.5 Pro' },
+    { key: 'gemini20flash', label: 'Gemini 2.0 Flash' },
+    { key: 'gemma3', label: 'Gemma 3' },
+    { key: 'llama4maverick', label: 'Llama 4 Maverick' },
+    { key: 'llama4scout', label: 'Llama 4 Scout' },
+    { key: 'llama33', label: 'Llama 3.3' },
+    { key: 'phi4', label: 'Phi 4 Multimodal Instruct' },
+    { key: 'qwen25', label: 'Qwen 2.5 72B' },
+    { key: 'deepseekr1', label: 'DeepSeek R1' },
+    { key: 'deepseekv30324', label: 'DeepSeek V3 0324' },
+    { key: 'grok4', label: 'Grok 4' },
+    { key: 'gptoss120b', label: 'GPT OSS 120B' },
+  ];
+  for (const c of candidates) {
+    if (s.includes(c.key)) return { exists: true, label: c.label };
+  }
+  return { exists: false, label: '' };
+}
+
 export default function RepoScanDetailPage() {
   const { id } = useParams();
   const [row, setRow] = useState<RepoScanRecord | null>(null);
   const [tab, setTab] = useState(0); // 0=Overview, 1=Explore
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [riskSummary, setRiskSummary] = useState<any | null>(null);
-  const [openRisk, setOpenRisk] = useState<any | null>(null);
+  const [openModel, setOpenModel] = useState<string | null>(null);
 
   // Explore filters
   const [search, setSearch] = useState('');
@@ -96,8 +163,6 @@ export default function RepoScanDetailPage() {
       const res = await callApi(`/repo-scans/${id}`);
       const json = await res.json();
       setRow(json.data as RepoScanRecord);
-      if (json.data?.profiles) setProfiles(json.data.profiles);
-      if (json.data?.riskSummary) setRiskSummary(json.data.riskSummary);
     })();
   }, [id]);
 
@@ -115,6 +180,32 @@ export default function RepoScanDetailPage() {
     }
     return Array.from(map.entries()).map(([k, v]) => ({ key: k, count: v.count, sample: v.sample }));
   }, [row]);
+
+  const modelsAgg = useMemo(() => {
+    if (!row) return {} as Record<string, { count: number; files: Set<string>; providers: Set<string>; sample?: any; prompt?: string }>;
+    const map = new Map<string, { count: number; files: Set<string>; providers: Set<string>; sample?: any; prompt?: string }>();
+    for (const f of row.result.findings) {
+      const m = detectModelToken(f.lineText);
+      if (!m) continue;
+      if (!map.has(m)) map.set(m, { count: 0, files: new Set(), providers: new Set() });
+      const agg = map.get(m)!;
+      agg.count += 1;
+      if (f.filePath) agg.files.add(f.filePath);
+      if (f.provider) agg.providers.add(f.provider);
+      if (!agg.prompt) {
+        const p = extractPromptSnippet(f);
+        if (p) {
+          agg.prompt = p;
+          agg.sample = f;
+        }
+      }
+    }
+    return Object.fromEntries(Array.from(map.entries()).sort((a, b) => b[1].count - a[1].count));
+  }, [row]);
+
+  const modelList = useMemo(() => {
+    return Object.entries(modelsAgg).map(([model, agg]) => ({ model, count: agg.count }));
+  }, [modelsAgg]);
 
   const providerOptions = useMemo(() => {
     if (!row) return [] as string[];
@@ -178,7 +269,15 @@ export default function RepoScanDetailPage() {
     return Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length);
   }, [filteredFindings, groupBy]);
 
+  const selectedFindings = useMemo(() => {
+    if (!row || !openModel) return [] as RepoScanRecord['result']['findings'];
+    return row.result.findings.filter((f) => detectModelToken(f.lineText) === openModel);
+  }, [row, openModel]);
+
   if (!row) return null;
+
+  const selected = openModel ? (modelsAgg as any)[openModel] : null;
+  const report = openModel ? normalizeForReport(openModel) : { exists: false, label: '' };
 
   return (
     <Container maxWidth="lg">
@@ -196,144 +295,40 @@ export default function RepoScanDetailPage() {
 
       {tab === 0 && (
         <>
-          {riskSummary && (
-            <Grid container spacing={2} sx={{ mb: 2 }}>
-              <Grid size={{ xs: 12, md: 4 }}>
-                <Paper sx={{ p: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Typography variant="subtitle2" color="text.secondary">Overall exposure</Typography>
-                    <Tooltip
-                      title={
-                        'Sum of the top 5 risk profile scores. Each profile score = pattern weight (http>sdk>other) + capability weight (chat>image/audio>embeddings) + governance/network/guardrail bonuses, scaled by log of hit count. Higher = more risky.'
-                      }
-                    >
-                      <IconButton size="small" aria-label="overall exposure info">
-                        <InfoOutlinedIcon fontSize="inherit" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                  <Typography variant="h4">{riskSummary.overall}</Typography>
-                  <Typography variant="caption" color="text.secondary">Higher = more risky</Typography>
-                </Paper>
-              </Grid>
-              <Grid size={{ xs: 12, md: 4 }}>
-                <Paper sx={{ p: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Typography variant="subtitle2" color="text.secondary">CI integration</Typography>
-                    <Tooltip
-                      title={
-                        'Signals whether promptfoo evals/red-team/scans appear integrated in CI (detected via promptfoo-related GitHub workflows or config files). Intended to encourage gating risky changes in PRs. Not a guarantee; configure your CI to enforce policy.'
-                      }
-                    >
-                      <IconButton size="small" aria-label="ci integration info">
-                        <InfoOutlinedIcon fontSize="inherit" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                  <Typography variant="h5">{riskSummary.ciIntegrated ? 'Detected' : 'Not detected'}</Typography>
-                </Paper>
-              </Grid>
-            </Grid>
-          )}
-
-          {riskSummary && riskSummary.topRisks?.length > 0 && (
-            <>
-              <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Top risks</Typography>
-              <Grid container spacing={2} sx={{ mb: 2 }}>
-                {riskSummary.topRisks.map((r: any) => {
-                  const provider = r.provider, capability = r.capability, model = r.model, pattern = r.pattern;
-                  return (
-                    <Grid key={r.key} size={{ xs: 12 }}>
-                      <Paper sx={{ p: 2 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                            <Chip label={provider} color="primary" variant="outlined" />
-                            <Chip label={capability} variant="outlined" />
-                            <Chip label={model} variant="outlined" />
-                            <Chip label={pattern} variant="outlined" />
-                          </Box>
-                          <Typography variant="body2" color="text.secondary">Score: {r.score} • {r.count} hits • {r.files?.length || 0} files</Typography>
-                        </Box>
-                        <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                          {r.risks.map((text: string, idx: number) => (
-                            <Chip key={idx} size="small" label={text} />
-                          ))}
-                        </Box>
-                        <Box sx={{ mt: 1 }}>
-                          <Button size="small" variant="outlined" onClick={() => setOpenRisk(r)}>View details</Button>
-                        </Box>
-                      </Paper>
-                    </Grid>
-                  );
-                })}
-              </Grid>
-            </>
-          )}
-
-          <Dialog open={!!openRisk} onClose={() => setOpenRisk(null)} maxWidth="md" fullWidth>
-            <DialogTitle>Risk details</DialogTitle>
-            <DialogContent dividers>
-              {openRisk && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    <Chip label={openRisk.provider} color="primary" variant="outlined" />
-                    <Chip label={openRisk.capability} variant="outlined" />
-                    <Chip label={openRisk.model} variant="outlined" />
-                    <Chip label={openRisk.pattern} variant="outlined" />
-                    <Chip label={`Score: ${openRisk.score}`} variant="outlined" />
-                  </Box>
-                  <Typography variant="subtitle2">Why this is risky</Typography>
-                  <ul>
-                    {openRisk.risks.map((r: string, i: number) => (
-                      <li key={i}><Typography variant="body2">{r}</Typography></li>
-                    ))}
-                  </ul>
-                  <Typography variant="subtitle2">Where it appears</Typography>
-                  <ul>
-                    {(openRisk.files || []).slice(0, 50).map((f: string, i: number) => (
-                      <li key={i}><Typography variant="body2">{f}</Typography></li>
-                    ))}
-                  </ul>
-                  {openRisk.sample && (openRisk.sample.webUrl || openRisk.sample.editorUrl) && (
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      {openRisk.sample.webUrl && (
-                        <Button size="small" variant="outlined" component="a" href={openRisk.sample.webUrl} target="_blank" rel="noreferrer">
-                          Open sample on GitHub
-                        </Button>
-                      )}
-                      {openRisk.sample.editorUrl && (
-                        <Button size="small" variant="outlined" component="a" href={openRisk.sample.editorUrl}>
-                          Open sample in editor
-                        </Button>
+          {row.result.meta && (
+            <Paper sx={{ p: 2, mb: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">Repository</Typography>
+                  <Typography variant="h6">
+                    {row.result.meta.owner ? `${row.result.meta.owner}/` : ''}{row.result.meta.repo || (row.result.meta.remote || '').split('/').pop()}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {row.result.meta.host ? row.result.meta.host.toUpperCase() : 'REPO'}{row.result.meta.ref ? ` • ${row.result.meta.ref.slice(0, 7)}` : ''}
+                    {row.result.meta.license ? ` • ${row.result.meta.license}` : ''}
+                  </Typography>
+                  {row.result.meta.owners && row.result.meta.owners.length > 0 && (
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+                      {row.result.meta.owners.slice(0, 6).map((o) => (
+                        <Chip key={o} size="small" label={o} variant="outlined" />
+                      ))}
+                      {row.result.meta.owners.length > 6 && (
+                        <Chip size="small" label={`+${row.result.meta.owners.length - 6}`} variant="outlined" />
                       )}
                     </Box>
                   )}
-                  <Typography variant="subtitle2">Recommendations</Typography>
-                  <ul>
-                    <li><Typography variant="body2">Enforce model governance: allowlisted providers/models only.</Typography></li>
-                    {openRisk.pattern === 'http' && (
-                      <li><Typography variant="body2">Wrap direct HTTP with org-standard client including timeouts, retries/backoff, and egress allowlist.</Typography></li>
-                    )}
-                    {openRisk.capability === 'chat' && (
-                      <li><Typography variant="body2">Add moderation/guardrails: safety filters and prompt redaction before send.</Typography></li>
-                    )}
-                    <li><Typography variant="body2">Add CI check: fail builds when new high-risk usage appears.</Typography></li>
-                  </ul>
                 </Box>
+                {row.result.meta.remote && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Button variant="outlined" size="small" href={row.result.meta.remote} target="_blank" rel="noreferrer">Open repository</Button>
+                  </Box>
+                )}
+              </Box>
+              {row.result.meta.description && (
+                <Typography variant="body2" sx={{ mt: 1 }}>{row.result.meta.description}</Typography>
               )}
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setOpenRisk(null)}>Close</Button>
-              {openRisk && (
-                <Button onClick={async () => {
-                  const pattern = `${openRisk.provider}:${openRisk.capability}:${openRisk.model}`;
-                  await callApi(`/repo-scans/${row.id}/suppress`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern }) });
-                  alert('Suppression added to .promptfoo-scanignore');
-                }}>Suppress pattern</Button>
-              )}
-            </DialogActions>
-          </Dialog>
-
+            </Paper>
+          )}
           <Grid container spacing={2} sx={{ mb: 2 }}>
             <Grid size={{ xs: 12, md: 3 }}>
               <Paper sx={{ p: 2 }}>
@@ -369,40 +364,126 @@ export default function RepoScanDetailPage() {
             </Grid>
           </Grid>
 
-          <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
-            Top unique usages
-          </Typography>
-          <Grid container spacing={2}>
-            {uniques
-              .sort((a, b) => b.count - a.count)
-              .slice(0, 12)
-              .map((u) => {
-                const [provider, capability, model, pattern] = u.key.split('|||');
-                const sample = u.sample;
-                return (
-                  <Grid size={{ xs: 12 }} key={u.key}>
-                    <Paper sx={{ p: 2 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                          <Chip label={provider} color="primary" variant="outlined" />
-                          <Chip label={capability} variant="outlined" />
-                          <Chip label={model} variant="outlined" />
-                          <Chip label={pattern} variant="outlined" />
+          <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Models</Typography>
+          <Paper>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Model</TableCell>
+                    <TableCell align="right">Count</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {modelList.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={2}>No models detected</TableCell>
+                    </TableRow>
+                  ) : (
+                    modelList.map(({ model, count }) => (
+                      <TableRow key={model} hover onClick={() => setOpenModel(model)} style={{ cursor: 'pointer' }}>
+                        <TableCell>{model}</TableCell>
+                        <TableCell align="right">{count}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+
+          <Dialog open={!!openModel} onClose={() => setOpenModel(null)} maxWidth="md" fullWidth>
+            <DialogTitle>{openModel}</DialogTitle>
+            <DialogContent dividers>
+              {selected && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    {(Array.from(selected.providers) as string[]).map((p) => (
+                      <Chip key={p} label={p} color="primary" variant="outlined" />
+                    ))}
+                    <Chip label={`${selected.files.size} files`} variant="outlined" />
+                    <Chip label={`${selected.count} findings`} variant="outlined" />
+                  </Box>
+                  {selected.prompt && (
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Associated prompt snippet</Typography>
+                      <Box component="pre" sx={{ m: 0, p: 1, bgcolor: 'background.default', borderRadius: 1, whiteSpace: 'pre-wrap' }}>
+                        {selected.prompt}
+                      </Box>
+                    </Box>
+                  )}
+                  {selectedFindings.length > 0 && (
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Examples</Typography>
+                      {selectedFindings.slice(0, 8).map((f, idx) => (
+                        <Box key={idx} sx={{ borderTop: '1px solid', borderColor: 'divider', py: 1 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            {f.filePath}
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', my: 0.5 }}>
+                            {f.provider && <Chip size="small" label={f.provider} color="primary" variant="outlined" />}
+                            {f.capability && <Chip size="small" label={String(f.capability)} variant="outlined" />}
+                            {(f.tags || []).map((t) => (
+                              <Chip key={t} size="small" label={t} variant="outlined" />
+                            ))}
+                          </Box>
+                          <Box component="pre" sx={{ m: 0, p: 1, bgcolor: 'background.default', borderRadius: 1, overflow: 'auto' }}>
+                            {(f.contextBefore || []).map((l: string) => `  ${l}`).join('\n')}
+                            {'\n'}&gt; {f.lineText}
+                            {'\n'}{(f.contextAfter || []).map((l: string) => `  ${l}`).join('\n')}
+                          </Box>
+                          {(f.webUrl || f.editorUrl) && (
+                            <Box sx={{ mt: 0.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                              {f.webUrl && (
+                                <Button size="small" variant="text" component="a" href={f.webUrl} target="_blank" rel="noreferrer">
+                                  Open on GitHub
+                                </Button>
+                              )}
+                              {f.editorUrl && (
+                                <Button size="small" variant="text" component="a" href={f.editorUrl}>
+                                  Open in editor
+                                </Button>
+                              )}
+                            </Box>
+                          )}
                         </Box>
-                        <Typography variant="body2" color="text.secondary">
-                          {u.count} findings
-                        </Typography>
-                      </Box>
-                      <Box component="pre" sx={{ mt: 1, p: 1, bgcolor: 'background.default', borderRadius: 1, overflow: 'auto' }}>
-                        {(sample.contextBefore || []).map((l: string) => `  ${l}`).join('\n')}
-                        {'\n'}&gt; {sample.lineText}
-                        {'\n'}{(sample.contextAfter || []).map((l: string) => `  ${l}`).join('\n')}
-                      </Box>
-                    </Paper>
-                  </Grid>
-                );
-              })}
-          </Grid>
+                      ))}
+                    </Box>
+                  )}
+                  {selected.sample && (selected.sample.webUrl || selected.sample.editorUrl) && (
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      {selected.sample.webUrl && (
+                        <Button size="small" variant="outlined" component="a" href={selected.sample.webUrl} target="_blank" rel="noreferrer">
+                          Open sample on GitHub
+                        </Button>
+                      )}
+                      {selected.sample.editorUrl && (
+                        <Button size="small" variant="outlined" component="a" href={selected.sample.editorUrl}>
+                          Open sample in editor
+                        </Button>
+                      )}
+                    </Box>
+                  )}
+                  {report.exists && (
+                    <Box>
+                      <Typography variant="body2">
+                        Security analysis available for {report.label}. See report at {' '}
+                        <a href="https://promptfoo.dev/models/reports" target="_blank" rel="noreferrer">promptfoo.dev/models/reports</a>.
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </DialogContent>
+            <DialogActions>
+              {openModel && (
+                <Button onClick={() => { setSearch(openModel); setTab(1); setOpenModel(null); }}>
+                  See all findings in Explore
+                </Button>
+              )}
+              <Button onClick={() => setOpenModel(null)}>Close</Button>
+            </DialogActions>
+          </Dialog>
         </>
       )}
 

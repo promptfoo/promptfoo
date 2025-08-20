@@ -18,6 +18,7 @@ export const DEFAULT_EXCLUDES: string[] = [
   '.cache',
   '.turbo',
   '.parcel-cache',
+  'examples',
 ];
 
 export function isPathExcluded(pathname: string, excludes: string[] = DEFAULT_EXCLUDES): boolean {
@@ -47,6 +48,9 @@ export function isBinaryByExtension(pathname: string): boolean {
     lower.endsWith('.md') ||
     lower.endsWith('.mdx') ||
     lower.endsWith('.markdown') ||
-    lower.endsWith('.log')
+    lower.endsWith('.log') ||
+    // Treat YAML as non-code to avoid noisy configs by default
+    lower.endsWith('.yaml') ||
+    lower.endsWith('.yml')
   );
 } 

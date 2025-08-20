@@ -29,9 +29,9 @@ export interface RepoScanFinding {
   detectorId: string;
   description: string;
   provider?: string;
-  capability?: GenAiCapability;
+  capability?: GenAiCapability | 'unknown';
   confidence: number;
-  tags: string[];
+  tags?: string[];
   // small snippet
   contextBefore?: string[];
   contextAfter?: string[];
@@ -64,7 +64,19 @@ export interface RepoScanOptions {
   editor?: 'vscode' | 'idea' | 'none';
 }
 
+export interface RepoScanMeta {
+  remote?: string;
+  ref?: string;
+  host?: 'github' | 'gitlab' | 'bitbucket' | 'other';
+  owner?: string;
+  repo?: string;
+  description?: string;
+  owners?: string[]; // derived from CODEOWNERS, catalog-info.yaml, package.json, OWNERS, etc.
+  license?: string; // SPDX id or detected license name when available
+}
+
 export interface RepoScanResult {
   findings: RepoScanFinding[];
   summary: RepoScanSummary;
+  meta?: RepoScanMeta;
 } 
