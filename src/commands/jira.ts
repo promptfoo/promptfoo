@@ -81,7 +81,12 @@ async function jiraPost(host: string, email: string, token: string, path: string
   }
 }
 
-async function createParentIssue(jira: JiraEnv, summary: string, description: string, projectKey: string) {
+async function createParentIssue(
+  jira: JiraEnv,
+  summary: string,
+  description: string,
+  projectKey: string,
+) {
   const payload = {
     fields: {
       project: { key: projectKey },
@@ -95,7 +100,13 @@ async function createParentIssue(jira: JiraEnv, summary: string, description: st
   return created.key as string;
 }
 
-async function createSubtask(jira: JiraEnv, parentKey: string, summary: string, description: string, projectKey: string) {
+async function createSubtask(
+  jira: JiraEnv,
+  parentKey: string,
+  summary: string,
+  description: string,
+  projectKey: string,
+) {
   const payload = {
     fields: {
       project: { key: projectKey },
@@ -169,7 +180,10 @@ export function jiraCommand(program: Command) {
         for (const p of data.plugins || []) {
           const examples = p.examples || [];
           const body = examples
-            .map((ex: any, idx: number) => `Example ${idx + 1}:\nReason: ${ex.reason || ''}\nProvider: ${ex.provider || ''}\nPrompt: ${ex.prompt || ''}\nOutput: ${ex.output || ''}`)
+            .map(
+              (ex: any, idx: number) =>
+                `Example ${idx + 1}:\nReason: ${ex.reason || ''}\nProvider: ${ex.provider || ''}\nPrompt: ${ex.prompt || ''}\nOutput: ${ex.output || ''}`,
+            )
             .join('\n\n');
           const summary = `[${p.id}] ${p.failCount} failures`;
           const key = await createSubtask(jira, parentKey, summary, body, jira.projectKey);
@@ -180,4 +194,4 @@ export function jiraCommand(program: Command) {
         process.exitCode = 1;
       }
     });
-} 
+}
