@@ -137,6 +137,16 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     return selectedTarget.label && !providerError;
   };
 
+  const getNextButtonTooltip = () => {
+    if (!selectedTarget.label) {
+      return 'Please enter a target label';
+    }
+    if (providerError) {
+      return providerError;
+    }
+    return undefined;
+  };
+
   return (
     <PageWrapper
       title="Target Configuration"
@@ -159,6 +169,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       onNext={onNext}
       onBack={onBack}
       nextDisabled={!selectedTarget.label}
+      warningMessage={selectedTarget.label ? undefined : getNextButtonTooltip()}
     >
       <Stack direction="column" spacing={3}>
         <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

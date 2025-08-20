@@ -101,6 +101,22 @@ export default function TargetTypeSelection({
     return showTargetTypeSection;
   };
 
+  const getNextButtonTooltip = () => {
+    if (!showTargetTypeSection) {
+      return 'Please select a target type first';
+    }
+    if (!isValidSelection()) {
+      if (!selectedTarget.id && !selectedTarget.label?.trim()) {
+        return 'Please select a target provider';
+      }
+      if (selectedTarget.id === '' && !selectedTarget.label?.trim()) {
+        return 'Please enter a label for your custom provider';
+      }
+      return 'Please complete the target selection';
+    }
+    return undefined;
+  };
+
   return (
     <PageWrapper
       title="Target Setup"
@@ -118,6 +134,9 @@ export default function TargetTypeSelection({
       onBack={onBack}
       nextLabel={shouldShowFooterButton() ? getNextButtonText() : undefined}
       nextDisabled={shouldShowFooterButton() ? isNextButtonDisabled() : true}
+      warningMessage={
+        shouldShowFooterButton() && isNextButtonDisabled() ? getNextButtonTooltip() : undefined
+      }
     >
       <Stack direction="column" spacing={4}>
         {/* Quick Start Section */}
