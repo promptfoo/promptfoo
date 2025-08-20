@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Vision grading without code modifications
+
+# The key insight: use a vision-capable grading model
+defaultTest:
+  options:
+    provider: openai:gpt-4o-mini  # Vision-capable grading model
+
+prompts:
+  # Prompt that includes the image
+  - label: "Describe Image"
+    raw: |
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe this image in detail:"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,{{image}}"
+              }
+            }
+          ]
+        }
+      ]
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  - vars:
+      image: file://../g-eval/test-image.png
+    assert:
+      # Standard llm-rubric - the grading model will receive the image via vars
+      - type: llm-rubric
+        value: |
+          Evaluate if the description accurately identifies:
+          1. Four geometric shapes (square, circle, triangle, star)
+          2. Their colors (blue, red, green, yellow)
+          3. The "Test Shapes" title
+          4. Their spatial arrangement (2x2 grid)
+          
+          The image being described is provided in the vars.image field.
+        threshold: 0.7
+
+  - vars:
+      image: file://../g-eval/test-chart.png
+    assert:
+      # Standard g-eval - the grading model will receive the image via vars
+      - type: g-eval
+        value: >-
+          Chart Analysis - The description should accurately identify the chart type
+          (bar chart), title ("Sales Performance by Product"), the four products (A, B, C, D),
+          their values, and any visible trends. The chart image is provided in vars.image.
+        threshold: 0.7

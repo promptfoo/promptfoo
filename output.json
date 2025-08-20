@@ -1,0 +1,613 @@
+{
+  "evalId": "eval-imV-2025-08-20T04:59:04",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-08-20T04:59:04.893Z",
+    "prompts": [
+      {
+        "raw": "The image shows four geometric shapes arranged in a 2x2 grid. Top left is a blue square, top right is a red circle, bottom left is a green triangle, and bottom right is a yellow star. The title 'Test Shapes' appears above.",
+        "label": "Good Description",
+        "id": "11bc92e2424cee716360c686656cf62527fb29a7451feb858feeda4ecc35c6ca",
+        "provider": "openai:gpt-3.5-turbo",
+        "metrics": {
+          "score": 0.6,
+          "testPassCount": 0,
+          "testFailCount": 1,
+          "testErrorCount": 0,
+          "assertPassCount": 1,
+          "assertFailCount": 1,
+          "totalLatencyMs": 1544,
+          "tokenUsage": {
+            "prompt": 60,
+            "completion": 40,
+            "cached": 0,
+            "total": 100,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 18037,
+              "prompt": 17872,
+              "completion": 165,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0.00008999999999999999
+        }
+      },
+      {
+        "raw": "I see some shapes and colors.",
+        "label": "Bad Description",
+        "id": "b7d2659e347bbc77f531b2e5964a274d4eb92090a6e5766a789baa1fb6d1c875",
+        "provider": "openai:gpt-3.5-turbo",
+        "metrics": {
+          "score": 0.15,
+          "testPassCount": 0,
+          "testFailCount": 1,
+          "testErrorCount": 0,
+          "assertPassCount": 0,
+          "assertFailCount": 2,
+          "totalLatencyMs": 2387,
+          "tokenUsage": {
+            "prompt": 14,
+            "completion": 52,
+            "cached": 0,
+            "total": 66,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 18002,
+              "prompt": 17855,
+              "completion": 147,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0.00008499999999999999
+        }
+      },
+      {
+        "raw": "The image shows a photograph of a cat playing with a ball of yarn in a sunny garden.",
+        "label": "Wrong Description",
+        "id": "ab689245309ef866f9587a89ca3726e0c9a05c6f577e8aaad9e15b9786750202",
+        "provider": "openai:gpt-3.5-turbo",
+        "metrics": {
+          "score": 0.4,
+          "testPassCount": 0,
+          "testFailCount": 1,
+          "testErrorCount": 0,
+          "assertPassCount": 1,
+          "assertFailCount": 1,
+          "totalLatencyMs": 3575,
+          "tokenUsage": {
+            "prompt": 26,
+            "completion": 116,
+            "cached": 0,
+            "total": 142,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 18122,
+              "prompt": 17981,
+              "completion": 141,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0.000187
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0.00008999999999999999,
+        "error": "The reply fails to provide any specific details or validation of the shapes, colors, and positions as outlined in the source text, and merely states that the description is accurate without addressing the visual elements.",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.6,
+          "reason": "The reply fails to provide any specific details or validation of the shapes, colors, and positions as outlined in the source text, and merely states that the description is accurate without addressing the visual elements.",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 18037,
+            "prompt": 17872,
+            "completion": 165,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "Evaluate if the output accurately describes the image provided in vars.image.\nThe image shows:\n- Four geometric shapes in a 2x2 grid\n- Blue square (top left)\n- Red circle (top right)  \n- Green triangle (bottom left)\n- Yellow star (bottom right)\n- Title \"Test Shapes\" at the top\n\nScore based on accuracy compared to the actual image you can see.\n",
+                "threshold": 0.8
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "The output accurately describes the image by mentioning the four geometric shapes and their colors in a 2x2 grid layout, as well as the title 'Test Shapes' at the top.",
+              "tokensUsed": {
+                "total": 17398,
+                "prompt": 17339,
+                "completion": 59,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            },
+            {
+              "assertion": {
+                "type": "g-eval",
+                "value": "Visual accuracy - Compare the description to the actual image in vars.image. The description should correctly identify all shapes, colors, and positions visible in the image.",
+                "threshold": 0.8
+              },
+              "pass": false,
+              "score": 0.2,
+              "reason": "The reply fails to provide any specific details or validation of the shapes, colors, and positions as outlined in the source text, and merely states that the description is accurate without addressing the visual elements.",
+              "tokensUsed": {
+                "total": 639,
+                "prompt": 533,
+                "completion": 106,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "6a8c16a6-5f85-4cf4-8706-fe12c36b0005",
+        "latencyMs": 1544,
+        "namedScores": {},
+        "prompt": {
+          "raw": "The image shows four geometric shapes arranged in a 2x2 grid. Top left is a blue square, top right is a red circle, bottom left is a green triangle, and bottom right is a yellow star. The title 'Test Shapes' appears above.",
+          "label": "Good Description"
+        },
+        "promptId": "11bc92e2424cee716360c686656cf62527fb29a7451feb858feeda4ecc35c6ca",
+        "promptIdx": 0,
+        "provider": {
+          "id": "openai:gpt-3.5-turbo",
+          "label": ""
+        },
+        "response": {
+          "output": "Great! It seems like you have described the image of the four geometric shapes accurately. If you would like to know more about these shapes or need help with anything else, please feel free to ask!",
+          "tokenUsage": {
+            "total": 100,
+            "prompt": 60,
+            "completion": 40,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          },
+          "cached": false,
+          "finishReason": "stop",
+          "cost": 0.00008999999999999999
+        },
+        "score": 0.6,
+        "success": false,
+        "testCase": {
+          "description": "Test with actual image - grading model can see it",
+          "vars": {
+            "image": "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAARiUlEQVR4nO3dfUxV9R/A8e8R8AqI+DAUYUM2bBCtkT+3Skcl/YFLXZa6dGsxza3NVtm0Ld2q/Wprzj8y7XGula7nrKZZbi420ExdNaLWXJE5whIljAQlkKf7Wxw83R94Lxe455zv53zfrz9aXu7DOffhfT/fe49ohcNhBQASjPN7AwAgXgQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQr4FasWGHFNGHCBC+359ixY8uWLcvOzk5JSZk2bVp5efkHH3wQeYYlS5ZYlnXp0iUvtwpSECwkwNtvv21Z1ksvvRT7bLt3777lllv27t3b1NTU09PT0tJSWVm5atWqu+++u7u726uNhWAEK+A++uijcITCwkKlVH19vXNKZ2enN1ty9uzZBx98MCUlZdu2bQ0NDZcvX25sbNy5c2dmZua+ffuGjR3wj8hnMwJvaLAcXV1dW7duLSoqCoVCeXl5GzduvHDhQuQZPv300/nz52dmZk6cOPHGG29888037dNvuummyGfU2bNnr3rTr776qlLqqaeeGnT6J598opSaO3eu/cfFixcrpdra2rZs2TJr1qwJEybMmTNn//79kReprq6+6667Zs6cmZqaWlRUtHnz5shNLSwsLCgo6Ozs3LRpU05OTnp6+uLFi3/88ceE7Cz8RbDMEi1YPT09ixYtGvRmVlBQ0NzcbJ9h586dQ9/tXnnllfiDtXnzZqXUrl27Bp3e29s7qV9ksB555JHI60xKSqqpqbHP8MUXX1iWNWhLiouL29vbnX0sKChYtmxZ5BmmTp1aV1c39p2FvwiWWaIF6/nnn1dKXXfddYcPH25vb6+rq1uyZIlSau3atfYZcnJyMjIyKisrOzo6Lly4cPDgwalTpxYVFdk/feutt5RSL774Yoyb3r59u1Lqmmuu+frrr2OczQ5WKBTaunXrH3/8UV9fv3TpUqXUQw89ZJ9h3bp1Sqnt27efP3++u7u7sbHxscceU0q99tprzj5aljVlypT9+/e3t7efPHnSvoby8vKE7Cx8RLDMEi1YeXl5qampv/76q3PK33//PX369IyMjJ6envb2dqXUnDlzol1tPME6e/bs5MmT7WklNzd31apV27Zt+/LLL7u6uoYG6+mnn3ZOqa+vV0qVlZVFu+bXX39dKbV58+bIfdy9e3fkvsycOdOyrHPnzo19Z+EjPnSHOnXq1OnTp+fNmzdr1iznxNTU1PLy8osXL546dSotLS0/P7+2tnblypVVVVWXL18exa1kZ2dXV1cvWLAgKSnpzJkz77///oYNG0pLS7OystavX9/W1hZ55sgFXV5enmVZra2tzil9fX3Hjh179tlnV6xYMXv27LVr19onOmdISkqKvIbU1NQ777wzHA5///333uwsXJLs1hVDjoaGBqVUVVXV0M+GlFItLS1KqXffffeee+7Z0y81NfX222+/9957V65cOW7cCN7zbrjhhurqansV1tDQcPr06bq6uqNHj77wwgu1tbWHDx92NiA3N9e51Lh+vb29ztYuX768pqbG/uOkSZPuv//+N954I/KGZsyYkZGREXlKfn6+Uuqvv/7ybGfhBoIF1dPTE+OnXV1dSql58+b98ssvn/WrrKw80G/Pnj179+4d6c2lp6f/p5/9x76+vttuu+3IkSNHjx4tLS21T0xJSYl28dWrV9fU1MyePbuioqK0tHT+/Pm1tbWDghXtaNjU1FSPdxaJxTsG1PTp0+1V2FU/Nbj11lvts4VCoeXLl+/atev3338/fvx4YWHhvn37Tpw4Ec9NhMPhpKSkvLy8oT8aN26c3amTJ08Oez0tLS2HDh3Kz8//9ttvn3zyybKyslAodP78+UFna2pqciYy288//2wvSz3YWbiHYOGf78syMjKOHDkS+Rdiuru7r7322rS0tK6ursrKSsuynnvuOeenN9988/Lly5VSzc3N8dyEZVmFhYW//fZbVVXV0J9+9dVXSqlp06YNez1NTU1Kqeuvvz5yxffOO+8MOlt7e/vBgwedP7a2tu7fvz8UCpWUlHiws3CRyx/qQ8a3hOvXr1dKLVy48Icffmhvb//uu+8WLlyolFq3bl04HP7zzz/Hjx+flZW1Z8+e5ubmS5cuHThwIDs7Ozk5uampKRwOv/fee/bBU729vdFueseOHUqpzMzMHTt21NfXd3V1tba2Hjp0yD7mIDMzs62tzfmW8OLFi5GXTUpKKikpCYfDHR0dycnJaWlpBw4c6OjoOHHixJo1a+z145o1a7q7u519zMnJ+fzzzzs6On766acFCxbYa8mE7Cx8RLDMEi1YbW1tJSUlg97MiouLW1pa7DNs2rRp6Lvd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"
+          },
+          "assert": [
+            {
+              "type": "llm-rubric",
+              "value": "Evaluate if the output accurately describes the image provided in vars.image.\nThe image shows:\n- Four geometric shapes in a 2x2 grid\n- Blue square (top left)\n- Red circle (top right)  \n- Green triangle (bottom left)\n- Yellow star (bottom right)\n- Title \"Test Shapes\" at the top\n\nScore based on accuracy compared to the actual image you can see.\n",
+              "threshold": 0.8
+            },
+            {
+              "type": "g-eval",
+              "value": "Visual accuracy - Compare the description to the actual image in vars.image. The description should correctly identify all shapes, colors, and positions visible in the image.",
+              "threshold": 0.8
+            }
+          ],
+          "options": {
+            "provider": "openai:gpt-4o-mini"
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "image": "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAARiUlEQVR4nO3dfUxV9R/A8e8R8AqI+DAUYUM2bBCtkT+3Skcl/YFLXZa6dGsxza3NVtm0Ld2q/Wprzj8y7XGula7nrKZZbi420ExdNaLWXJE5whIljAQlkKf7Wxw83R94Lxe455zv53zfrz9aXu7DOffhfT/fe49ohcNhBQASjPN7AwAgXgQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQr4FasWGHFNGHCBC+359ixY8uWLcvOzk5JSZk2bVp5efkHH3wQeYYlS5ZYlnXp0iUvtwpSECwkwNtvv21Z1ksvvRT7bLt3777lllv27t3b1NTU09PT0tJSWVm5atWqu+++u7u726uNhWAEK+A++uijcITCwkKlVH19vXNKZ2enN1ty9uzZBx98MCUlZdu2bQ0NDZcvX25sbNy5c2dmZua+ffuGjR3wj8hnMwJvaLAcXV1dW7duLSoqCoVCeXl5GzduvHDhQuQZPv300/nz52dmZk6cOPHGG29888037dNvuummyGfU2bNnr3rTr776qlLqqaeeGnT6J598opSaO3eu/cfFixcrpdra2rZs2TJr1qwJEybMmTNn//79kReprq6+6667Zs6cmZqaWlRUtHnz5shNLSwsLCgo6Ozs3LRpU05OTnp6+uLFi3/88ceE7Cz8RbDMEi1YPT09ixYtGvRmVlBQ0NzcbJ9h586dQ9/tXnnllfiDtXnzZqXUrl27Bp3e29s7qV9ksB555JHI60xKSqqpqbHP8MUXX1iWNWhLiouL29vbnX0sKChYtmxZ5BmmTp1aV1c39p2FvwiWWaIF6/nnn1dKXXfddYcPH25vb6+rq1uyZIlSau3atfYZcnJyMjIyKisrOzo6Lly4cPDgwalTpxYVFdk/feutt5RSL774Yoyb3r59u1Lqmmuu+frrr2OczQ5WKBTaunXrH3/8UV9fv3TpUqXUQw89ZJ9h3bp1Sqnt27efP3++u7u7sbHxscceU0q99tprzj5aljVlypT9+/e3t7efPHnSvoby8vKE7Cx8RLDMEi1YeXl5qampv/76q3PK33//PX369IyMjJ6envb2dqXUnDlzol1tPME6e/bs5MmT7WklNzd31apV27Zt+/LLL7u6uoYG6+mnn3ZOqa+vV0qVlZVFu+bXX39dKbV58+bIfdy9e3fkvsycOdOyrHPnzo19Z+EjPnSHOnXq1OnTp+fNmzdr1iznxNTU1PLy8osXL546dSotLS0/P7+2tnblypVVVVWXL18exa1kZ2dXV1cvWLAgKSnpzJkz77///oYNG0pLS7OystavX9/W1hZ55sgFXV5enmVZra2tzil9fX3Hjh179tlnV6xYMXv27LVr19onOmdISkqKvIbU1NQ777wzHA5///333uwsXJLs1hVDjoaGBqVUVVXV0M+GlFItLS1KqXffffeee+7Z0y81NfX222+/9957V65cOW7cCN7zbrjhhurqansV1tDQcPr06bq6uqNHj77wwgu1tbWHDx92NiA3N9e51Lh+vb29ztYuX768pqbG/uOkSZPuv//+N954I/KGZsyYkZGREXlKfn6+Uuqvv/7ybGfhBoIF1dPTE+OnXV1dSql58+b98ssvn/WrrKw80G/Pnj179+4d6c2lp6f/p5/9x76+vttuu+3IkSNHjx4tLS21T0xJSYl28dWrV9fU1MyePbuioqK0tHT+/Pm1tbWDghXtaNjU1FSPdxaJxTsG1PTp0+1V2FU/Nbj11lvts4VCoeXLl+/atev3338/fvx4YWHhvn37Tpw4Ec9NhMPhpKSkvLy8oT8aN26c3amTJ08Oez0tLS2HDh3Kz8//9ttvn3zyybKyslAodP78+UFna2pqciYy288//2wvSz3YWbiHYOGf78syMjKOHDkS+Rdiuru7r7322rS0tK6ursrKSsuynnvuOeenN9988/Lly5VSzc3N8dyEZVmFhYW//fZbVVXV0J9+9dVXSqlp06YNez1NTU1Kqeuvvz5yxffOO+8MOlt7e/vBgwedP7a2tu7fvz8UCpWUlHiws3CRyx/qQ8a3hOvXr1dKLVy48Icffmhvb//uu+8WLlyolFq3bl04HP7zzz/Hjx+flZW1Z8+e5ubmS5cuHThwIDs7Ozk5uampKRwOv/fee/bBU729vdFueseOHUqpzMzMHTt21NfXd3V1tba2Hjp0yD7mIDMzs62tzfmW8OLFi5GXTUpKKikpCYfDHR0dycnJaWlpBw4c6OjoOHHixJo1a+z145o1a7q7u519zMnJ+fzzzzs6On766acFCxbYa8mE7Cx8RLDMEi1YbW1tJSUlg97MiouLW1pa7DNs2rRp6Lvd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"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {
+            "image": {
+              "path": "file:///Users/mdangelo/projects/promptfoo/examples/g-eval/test-image.png",
+              "type": "image",
+              "format": "png"
+            }
+          }
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0.00008499999999999999,
+        "error": "The reply does not accurately respond to the source text, as it fails to describe any specific shapes or colors from the image.",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.15,
+          "reason": "The reply does not accurately respond to the source text, as it fails to describe any specific shapes or colors from the image.",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 18002,
+            "prompt": 17855,
+            "completion": 147,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "Evaluate if the output accurately describes the image provided in vars.image.\nThe image shows:\n- Four geometric shapes in a 2x2 grid\n- Blue square (top left)\n- Red circle (top right)  \n- Green triangle (bottom left)\n- Yellow star (bottom right)\n- Title \"Test Shapes\" at the top\n\nScore based on accuracy compared to the actual image you can see.\n",
+                "threshold": 0.8
+              },
+              "pass": false,
+              "score": 0.3,
+              "reason": "The output describes shapes and colors but does not specifically identify the four geometric shapes or their colors as depicted in the image.",
+              "tokensUsed": {
+                "total": 17401,
+                "prompt": 17351,
+                "completion": 50,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            },
+            {
+              "assertion": {
+                "type": "g-eval",
+                "value": "Visual accuracy - Compare the description to the actual image in vars.image. The description should correctly identify all shapes, colors, and positions visible in the image.",
+                "threshold": 0.8
+              },
+              "pass": false,
+              "score": 0,
+              "reason": "The reply does not accurately respond to the source text, as it fails to describe any specific shapes or colors from the image.",
+              "tokensUsed": {
+                "total": 601,
+                "prompt": 504,
+                "completion": 97,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "a2700283-8e63-4c19-a564-141bc39c2188",
+        "latencyMs": 2387,
+        "namedScores": {},
+        "prompt": {
+          "raw": "I see some shapes and colors.",
+          "label": "Bad Description"
+        },
+        "promptId": "b7d2659e347bbc77f531b2e5964a274d4eb92090a6e5766a789baa1fb6d1c875",
+        "promptIdx": 1,
+        "provider": {
+          "id": "openai:gpt-3.5-turbo",
+          "label": ""
+        },
+        "response": {
+          "output": "Shapes and colors can be found all around us in everyday life. Shapes can be geometric, organic, abstract, or recognizable objects. Colors can vary in hue, saturation, and brightness, creating a visual appeal. What shapes and colors are you seeing right now?",
+          "tokenUsage": {
+            "total": 66,
+            "prompt": 14,
+            "completion": 52,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          },
+          "cached": false,
+          "finishReason": "stop",
+          "cost": 0.00008499999999999999
+        },
+        "score": 0.15,
+        "success": false,
+        "testCase": {
+          "description": "Test with actual image - grading model can see it",
+          "vars": {
+            "image": "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAARiUlEQVR4nO3dfUxV9R/A8e8R8AqI+DAUYUM2bBCtkT+3Skcl/YFLXZa6dGsxza3NVtm0Ld2q/Wprzj8y7XGula7nrKZZbi420ExdNaLWXJE5whIljAQlkKf7Wxw83R94Lxe455zv53zfrz9aXu7DOffhfT/fe49ohcNhBQASjPN7AwAgXgQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQr4FasWGHFNGHCBC+359ixY8uWLcvOzk5JSZk2bVp5efkHH3wQeYYlS5ZYlnXp0iUvtwpSECwkwNtvv21Z1ksvvRT7bLt3777lllv27t3b1NTU09PT0tJSWVm5atWqu+++u7u726uNhWAEK+A++uijcITCwkKlVH19vXNKZ2enN1ty9uzZBx98MCUlZdu2bQ0NDZcvX25sbNy5c2dmZua+ffuGjR3wj8hnMwJvaLAcXV1dW7duLSoqCoVCeXl5GzduvHDhQuQZPv300/nz52dmZk6cOPHGG29888037dNvuummyGfU2bNnr3rTr776qlLqqaeeGnT6J598opSaO3eu/cfFixcrpdra2rZs2TJr1qwJEybMmTNn//79kReprq6+6667Zs6cmZqaWlRUtHnz5shNLSwsLCgo6Ozs3LRpU05OTnp6+uLFi3/88ceE7Cz8RbDMEi1YPT09ixYtGvRmVlBQ0NzcbJ9h586dQ9/tXnnllfiDtXnzZqXUrl27Bp3e29s7qV9ksB555JHI60xKSqqpqbHP8MUXX1iWNWhLiouL29vbnX0sKChYtmxZ5BmmTp1aV1c39p2FvwiWWaIF6/nnn1dKXXfddYcPH25vb6+rq1uyZIlSau3atfYZcnJyMjIyKisrOzo6Lly4cPDgwalTpxYVFdk/feutt5RSL774Yoyb3r59u1Lqmmuu+frrr2OczQ5WKBTaunXrH3/8UV9fv3TpUqXUQw89ZJ9h3bp1Sqnt27efP3++u7u7sbHxscceU0q99tprzj5aljVlypT9+/e3t7efPHnSvoby8vKE7Cx8RLDMEi1YeXl5qampv/76q3PK33//PX369IyMjJ6envb2dqXUnDlzol1tPME6e/bs5MmT7WklNzd31apV27Zt+/LLL7u6uoYG6+mnn3ZOqa+vV0qVlZVFu+bXX39dKbV58+bIfdy9e3fkvsycOdOyrHPnzo19Z+EjPnSHOnXq1OnTp+fNmzdr1iznxNTU1PLy8osXL546dSotLS0/P7+2tnblypVVVVWXL18exa1kZ2dXV1cvWLAgKSnpzJkz77///oYNG0pLS7OystavX9/W1hZ55sgFXV5enmVZra2tzil9fX3Hjh179tlnV6xYMXv27LVr19onOmdISkqKvIbU1NQ777wzHA5///333uwsXJLs1hVDjoaGBqVUVVXV0M+GlFItLS1KqXffffeee+7Z0y81NfX222+/9957V65cOW7cCN7zbrjhhurqansV1tDQcPr06bq6uqNHj77wwgu1tbWHDx92NiA3N9e51Lh+vb29ztYuX768pqbG/uOkSZPuv//+N954I/KGZsyYkZGREXlKfn6+Uuqvv/7ybGfhBoIF1dPTE+OnXV1dSql58+b98ssvn/WrrKw80G/Pnj179+4d6c2lp6f/p5/9x76+vttuu+3IkSNHjx4tLS21T0xJSYl28dWrV9fU1MyePbuioqK0tHT+/Pm1tbWDghXtaNjU1FSPdxaJxTsG1PTp0+1V2FU/Nbj11lvts4VCoeXLl+/atev3338/fvx4YWHhvn37Tpw4Ec9NhMPhpKSkvLy8oT8aN26c3amTJ08Oez0tLS2HDh3Kz8//9ttvn3zyybKyslAodP78+UFna2pqciYy288//2wvSz3YWbiHYOGf78syMjKOHDkS+Rdiuru7r7322rS0tK6ursrKSsuynnvuOeenN9988/Lly5VSzc3N8dyEZVmFhYW//fZbVVXV0J9+9dVXSqlp06YNez1NTU1Kqeuvvz5yxffOO+8MOlt7e/vBgwedP7a2tu7fvz8UCpWUlHiws3CRyx/qQ8a3hOvXr1dKLVy48Icffmhvb//uu+8WLlyolFq3bl04HP7zzz/Hjx+flZW1Z8+e5ubmS5cuHThwIDs7Ozk5uampKRwOv/fee/bBU729vdFueseOHUqpzMzMHTt21NfXd3V1tba2Hjp0yD7mIDMzs62tzfmW8OLFi5GXTUpKKikpCYfDHR0dycnJaWlpBw4c6OjoOHHixJo1a+z145o1a7q7u519zMnJ+fzzzzs6On766acFCxbYa8mE7Cx8RLDMEi1YbW1tJSUlg97MiouLW1pa7DNs2rRp6Lvd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"
+          },
+          "assert": [
+            {
+              "type": "llm-rubric",
+              "value": "Evaluate if the output accurately describes the image provided in vars.image.\nThe image shows:\n- Four geometric shapes in a 2x2 grid\n- Blue square (top left)\n- Red circle (top right)  \n- Green triangle (bottom left)\n- Yellow star (bottom right)\n- Title \"Test Shapes\" at the top\n\nScore based on accuracy compared to the actual image you can see.\n",
+              "threshold": 0.8
+            },
+            {
+              "type": "g-eval",
+              "value": "Visual accuracy - Compare the description to the actual image in vars.image. The description should correctly identify all shapes, colors, and positions visible in the image.",
+              "threshold": 0.8
+            }
+          ],
+          "options": {
+            "provider": "openai:gpt-4o-mini"
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "image": "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAARiUlEQVR4nO3dfUxV9R/A8e8R8AqI+DAUYUM2bBCtkT+3Skcl/YFLXZa6dGsxza3NVtm0Ld2q/Wprzj8y7XGula7nrKZZbi420ExdNaLWXJE5whIljAQlkKf7Wxw83R94Lxe455zv53zfrz9aXu7DOffhfT/fe49ohcNhBQASjPN7AwAgXgQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQr4FasWGHFNGHCBC+359ixY8uWLcvOzk5JSZk2bVp5efkHH3wQeYYlS5ZYlnXp0iUvtwpSECwkwNtvv21Z1ksvvRT7bLt3777lllv27t3b1NTU09PT0tJSWVm5atWqu+++u7u726uNhWAEK+A++uijcITCwkKlVH19vXNKZ2enN1ty9uzZBx98MCUlZdu2bQ0NDZcvX25sbNy5c2dmZua+ffuGjR3wj8hnMwJvaLAcXV1dW7duLSoqCoVCeXl5GzduvHDhQuQZPv300/nz52dmZk6cOPHGG29888037dNvuummyGfU2bNnr3rTr776qlLqqaeeGnT6J598opSaO3eu/cfFixcrpdra2rZs2TJr1qwJEybMmTNn//79kReprq6+6667Zs6cmZqaWlRUtHnz5shNLSwsLCgo6Ozs3LRpU05OTnp6+uLFi3/88ceE7Cz8RbDMEi1YPT09ixYtGvRmVlBQ0NzcbJ9h586dQ9/tXnnllfiDtXnzZqXUrl27Bp3e29s7qV9ksB555JHI60xKSqqpqbHP8MUXX1iWNWhLiouL29vbnX0sKChYtmxZ5BmmTp1aV1c39p2FvwiWWaIF6/nnn1dKXXfddYcPH25vb6+rq1uyZIlSau3atfYZcnJyMjIyKisrOzo6Lly4cPDgwalTpxYVFdk/feutt5RSL774Yoyb3r59u1Lqmmuu+frrr2OczQ5WKBTaunXrH3/8UV9fv3TpUqXUQw89ZJ9h3bp1Sqnt27efP3++u7u7sbHxscceU0q99tprzj5aljVlypT9+/e3t7efPHnSvoby8vKE7Cx8RLDMEi1YeXl5qampv/76q3PK33//PX369IyMjJ6envb2dqXUnDlzol1tPME6e/bs5MmT7WklNzd31apV27Zt+/LLL7u6uoYG6+mnn3ZOqa+vV0qVlZVFu+bXX39dKbV58+bIfdy9e3fkvsycOdOyrHPnzo19Z+EjPnSHOnXq1OnTp+fNmzdr1iznxNTU1PLy8osXL546dSotLS0/P7+2tnblypVVVVWXL18exa1kZ2dXV1cvWLAgKSnpzJkz77///oYNG0pLS7OystavX9/W1hZ55sgFXV5enmVZra2tzil9fX3Hjh179tlnV6xYMXv27LVr19onOmdISkqKvIbU1NQ777wzHA5///333uwsXJLs1hVDjoaGBqVUVVXV0M+GlFItLS1KqXffffeee+7Z0y81NfX222+/9957V65cOW7cCN7zbrjhhurqansV1tDQcPr06bq6uqNHj77wwgu1tbWHDx92NiA3N9e51Lh+vb29ztYuX768pqbG/uOkSZPuv//+N954I/KGZsyYkZGREXlKfn6+Uuqvv/7ybGfhBoIF1dPTE+OnXV1dSql58+b98ssvn/WrrKw80G/Pnj179+4d6c2lp6f/p5/9x76+vttuu+3IkSNHjx4tLS21T0xJSYl28dWrV9fU1MyePbuioqK0tHT+/Pm1tbWDghXtaNjU1FSPdxaJxTsG1PTp0+1V2FU/Nbj11lvts4VCoeXLl+/atev3338/fvx4YWHhvn37Tpw4Ec9NhMPhpKSkvLy8oT8aN26c3amTJ08Oez0tLS2HDh3Kz8//9ttvn3zyybKyslAodP78+UFna2pqciYy288//2wvSz3YWbiHYOGf78syMjKOHDkS+Rdiuru7r7322rS0tK6ursrKSsuynnvuOeenN9988/Lly5VSzc3N8dyEZVmFhYW//fZbVVXV0J9+9dVXSqlp06YNez1NTU1Kqeuvvz5yxffOO+8MOlt7e/vBgwedP7a2tu7fvz8UCpWUlHiws3CRyx/qQ8a3hOvXr1dKLVy48Icffmhvb//uu+8WLlyolFq3bl04HP7zzz/Hjx+flZW1Z8+e5ubmS5cuHThwIDs7Ozk5uampKRwOv/fee/bBU729vdFueseOHUqpzMzMHTt21NfXd3V1tba2Hjp0yD7mIDMzs62tzfmW8OLFi5GXTUpKKikpCYfDHR0dycnJaWlpBw4c6OjoOHHixJo1a+z145o1a7q7u519zMnJ+fzzzzs6On766acFCxbYa8mE7Cx8RLDMEi1YbW1tJSUlg97MiouLW1pa7DNs2rRp6Lvd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"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0.000187,
+        "error": "The content describes a cat and its environment, which is not relevant to the image showing geometric shapes.",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.4,
+          "reason": "The content describes a cat and its environment, which is not relevant to the image showing geometric shapes.",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 18122,
+            "prompt": 17981,
+            "completion": 141,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "Evaluate if the output accurately describes the image provided in vars.image.\nThe image shows:\n- Four geometric shapes in a 2x2 grid\n- Blue square (top left)\n- Red circle (top right)  \n- Green triangle (bottom left)\n- Yellow star (bottom right)\n- Title \"Test Shapes\" at the top\n\nScore based on accuracy compared to the actual image you can see.\n",
+                "threshold": 0.8
+              },
+              "pass": false,
+              "score": 0,
+              "reason": "The content describes a cat and its environment, which is not relevant to the image showing geometric shapes.",
+              "tokensUsed": {
+                "total": 17451,
+                "prompt": 17414,
+                "completion": 37,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            },
+            {
+              "assertion": {
+                "type": "g-eval",
+                "value": "Visual accuracy - Compare the description to the actual image in vars.image. The description should correctly identify all shapes, colors, and positions visible in the image.",
+                "threshold": 0.8
+              },
+              "pass": true,
+              "score": 0.8,
+              "reason": "The reply accurately describes the cat as a fluffy orange tabby and mentions its playful interaction with the yarn. However, it lacks specific details about the shapes and colors of the garden elements, which affects the overall visual accuracy.",
+              "tokensUsed": {
+                "total": 671,
+                "prompt": 567,
+                "completion": 104,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "d014aaee-f74f-447a-b6a8-220b430846b3",
+        "latencyMs": 3575,
+        "namedScores": {},
+        "prompt": {
+          "raw": "The image shows a photograph of a cat playing with a ball of yarn in a sunny garden.",
+          "label": "Wrong Description"
+        },
+        "promptId": "ab689245309ef866f9587a89ca3726e0c9a05c6f577e8aaad9e15b9786750202",
+        "promptIdx": 2,
+        "provider": {
+          "id": "openai:gpt-3.5-turbo",
+          "label": ""
+        },
+        "response": {
+          "output": "The cat, a fluffy orange tabby, is batting at the ball of yarn with its paw, looking playful and content in the warm sunlight. The greenery of the garden and the colorful flowers in the background add to the peaceful and joyful atmosphere of the scene. The cat's eyes are bright and focused on the yarn, showing its full attention and enjoyment of the simple activity. The soft fur of the cat contrasts with the textures of the yarn, creating a visually pleasing composition. Overall, the image captures a moment of relaxation and fun for the cat in a beautiful outdoor setting.",
+          "tokenUsage": {
+            "total": 142,
+            "prompt": 26,
+            "completion": 116,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          },
+          "cached": false,
+          "finishReason": "stop",
+          "cost": 0.000187
+        },
+        "score": 0.4,
+        "success": false,
+        "testCase": {
+          "description": "Test with actual image - grading model can see it",
+          "vars": {
+            "image": "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAARiUlEQVR4nO3dfUxV9R/A8e8R8AqI+DAUYUM2bBCtkT+3Skcl/YFLXZa6dGsxza3NVtm0Ld2q/Wprzj8y7XGula7nrKZZbi420ExdNaLWXJE5whIljAQlkKf7Wxw83R94Lxe455zv53zfrz9aXu7DOffhfT/fe49ohcNhBQASjPN7AwAgXgQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQr4FasWGHFNGHCBC+359ixY8uWLcvOzk5JSZk2bVp5efkHH3wQeYYlS5ZYlnXp0iUvtwpSECwkwNtvv21Z1ksvvRT7bLt3777lllv27t3b1NTU09PT0tJSWVm5atWqu+++u7u726uNhWAEK+A++uijcITCwkKlVH19vXNKZ2enN1ty9uzZBx98MCUlZdu2bQ0NDZcvX25sbNy5c2dmZua+ffuGjR3wj8hnMwJvaLAcXV1dW7duLSoqCoVCeXl5GzduvHDhQuQZPv300/nz52dmZk6cOPHGG29888037dNvuummyGfU2bNnr3rTr776qlLqqaeeGnT6J598opSaO3eu/cfFixcrpdra2rZs2TJr1qwJEybMmTNn//79kReprq6+6667Zs6cmZqaWlRUtHnz5shNLSwsLCgo6Ozs3LRpU05OTnp6+uLFi3/88ceE7Cz8RbDMEi1YPT09ixYtGvRmVlBQ0NzcbJ9h586dQ9/tXnnllfiDtXnzZqXUrl27Bp3e29s7qV9ksB555JHI60xKSqqpqbHP8MUXX1iWNWhLiouL29vbnX0sKChYtmxZ5BmmTp1aV1c39p2FvwiWWaIF6/nnn1dKXXfddYcPH25vb6+rq1uyZIlSau3atfYZcnJyMjIyKisrOzo6Lly4cPDgwalTpxYVFdk/feutt5RSL774Yoyb3r59u1Lqmmuu+frrr2OczQ5WKBTaunXrH3/8UV9fv3TpUqXUQw89ZJ9h3bp1Sqnt27efP3++u7u7sbHxscceU0q99tprzj5aljVlypT9+/e3t7efPHnSvoby8vKE7Cx8RLDMEi1YeXl5qampv/76q3PK33//PX369IyMjJ6envb2dqXUnDlzol1tPME6e/bs5MmT7WklNzd31apV27Zt+/LLL7u6uoYG6+mnn3ZOqa+vV0qVlZVFu+bXX39dKbV58+bIfdy9e3fkvsycOdOyrHPnzo19Z+EjPnSHOnXq1OnTp+fNmzdr1iznxNTU1PLy8osXL546dSotLS0/P7+2tnblypVVVVWXL18exa1kZ2dXV1cvWLAgKSnpzJkz77///oYNG0pLS7OystavX9/W1hZ55sgFXV5enmVZra2tzil9fX3Hjh179tlnV6xYMXv27LVr19onOmdISkqKvIbU1NQ777wzHA5///333uwsXJLs1hVDjoaGBqVUVVXV0M+GlFItLS1KqXffffeee+7Z0y81NfX222+/9957V65cOW7cCN7zbrjhhurqansV1tDQcPr06bq6uqNHj77wwgu1tbWHDx92NiA3N9e51Lh+vb29ztYuX768pqbG/uOkSZPuv//+N954I/KGZsyYkZGREXlKfn6+Uuqvv/7ybGfhBoIF1dPTE+OnXV1dSql58+b98ssvn/WrrKw80G/Pnj179+4d6c2lp6f/p5/9x76+vttuu+3IkSNHjx4tLS21T0xJSYl28dWrV9fU1MyePbuioqK0tHT+/Pm1tbWDghXtaNjU1FSPdxaJxTsG1PTp0+1V2FU/Nbj11lvts4VCoeXLl+/atev3338/fvx4YWHhvn37Tpw4Ec9NhMPhpKSkvLy8oT8aN26c3amTJ08Oez0tLS2HDh3Kz8//9ttvn3zyybKyslAodP78+UFna2pqciYy288//2wvSz3YWbiHYOGf78syMjKOHDkS+Rdiuru7r7322rS0tK6ursrKSsuynnvuOeenN9988/Lly5VSzc3N8dyEZVmFhYW//fZbVVXV0J9+9dVXSqlp06YNez1NTU1Kqeuvvz5yxffOO+8MOlt7e/vBgwedP7a2tu7fvz8UCpWUlHiws3CRyx/qQ8a3hOvXr1dKLVy48Icffmhvb//uu+8WLlyolFq3bl04HP7zzz/Hjx+flZW1Z8+e5ubmS5cuHThwIDs7Ozk5uampKRwOv/fee/bBU729vdFueseOHUqpzMzMHTt21NfXd3V1tba2Hjp0yD7mIDMzs62tzfmW8OLFi5GXTUpKKikpCYfDHR0dycnJaWlpBw4c6OjoOHHixJo1a+z145o1a7q7u519zMnJ+fzzzzs6On766acFCxbYa8mE7Cx8RLDMEi1YbW1tJSUlg97MiouLW1pa7DNs2rRp6Lvd448/bv/0+PHjwx442tvbe9999131XXPixImfffaZfbbYwQqHw48++mjkZUOh0Icffjh+/Hil1NKlS+19zMrKKisrizxbTk7OmTNnErKz8BHBMkuMv5rT2tq6YcOG3NzcUChUUFCwcePG1tZW56c9PT1btmwpLi4O9SspKXn55Zf7+vqcM6xevTo9PT1GsGwff/zxokWLsrKykpOTMzIy5s6d+8QTTzQ2NjpnGDZYnZ2dDz/88JQpUyZNmnTHHXd888034XD4mWeeSUtLe+CBB+x9nDFjRktLS0VFxeTJk7OzsysqKpxaJWRn4ReLf/kZAVNUVHThwoVz5875vSFIPD50ByAGwQIgBsECIAafYQEQgwkLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBjJSkuWZfm9CZLwi/nH+BTiDpRC02ABXr7JDbos/dKW5sHieTMs00fRGJ2K89ljRb9OyqUbzYMFxNupUadl6AWdq6ZcuiFYEGbw8s2FmwhHKRfZ8h3BgshUeVOOQeUiW74jWBDA+1QNYt8o2fIdwYLWfE9VJLLlOw4chb7+/cxbg1o5IjeGAwY9xoQF3VOlJ2faYtTyEhMWtKN/rRyMWh4jWNCLoFrZaJaXWBJCF+JS5WB56BkmLGhBbq0cjFoeIFjwXwBqZaNZbiNY8FlgamWjWa4iWPBTwGplo1nuIVjwTSBrZaNZLiFY8FnwahXs/fIXwYI/Bo4AUEE2cLgDQ1biECz4wIRa2WhWYhEseM3MV6+Ze51wBAv+MGG8Mm1PPUCw4ClzFoORWBgmCsGCd8yslY1mJQTBAiAGwYJHTB6vbAxZY0ewAIhBsOAFxisbQ9YYESwAYhAsuI7xKhJD1lgQLABiECy4i/FqKIasUSNYAMQgWADEIFhwEevBaFgVjg7BAiAGwQIgBsGCW1gPxsaqcBQIFgAxCBYAMQgWADEIFgAxCBZcwWfJ8eO+ih/Bgov4ijA27p+RIlgAxCBYAMQgWADEIFgAxCBYAMQgWADEIFgAxCBYAMQgWADEIFgAxCBYAMQgWADEIFhwEb+FIDbun5EiWHBFOMxvIogX91X8CBYAMQgWADEIFgAxCBYAMQgW3P0smS/CorHvGT5xHxGCBUAMggVADIIFF7EqjIb14OgQLABiECwAYhAsuItV4VCsB0eNYAEQg2DBdQxZkRivxoJgARCDYMELDFk2xqsxIlgAxCBY8AhDFuPV2BEsAGIQLHjH5CGL8SohCBY8ZWazqFWiECz4w5xmmbOnHiBY8JqZg4aZe51wBAs+MGdhyGIwsQgW/GFCs6hVwhEs+CyozQrqfvmLYME3zugRvNe2s0eMV4lFsOCnQDaLWrmHYMFnAWsWtXIVwYL/AtMsauU2ggUtBKBZ1MoDyV7cCBD/gQ6WNXA0gBKDVHmGCQt6ETdqUSsvESxoR1CzqJXHWBJCR/ovD0mVL5iwIGPU0mfaitwYauUxJizIGLX+/at5/m1MZDRJlS8IFgTwPVukShMEC4Kz5Xa5Bq1DSZXvCBYEZ8ulcg39vIxUaYJgQfjn8UPK9e954ruqGB/n0yndaB4sfb4agphyjf3ZQ6e0pXmwgFFWZmi/4r8stGXxUAGQggNHAYhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwRsCyLL83AWPCIygdwRrZc51nvFw8dgFAsGAWsiUawRrxs5xnvEQ8asFAsEbiv35vAMYmHP7nv8RLLoI1vIHnt12r/v/yjJfFfrzsWkE0gjWMaG2iWUIxZIlGsEa+GGRhKArjVZAQrFhivw/zLi0UQ5ZcBCuqf5/QQ0eqK6fwpNcc41XAEKzhRFsAsjCUjCFLKIJ1dfE/lXnSa4vxKngIVkyxxyiGLMkYsiQiWMMdeBUbh2XpivEqkAjWYKOrD82SiCFLHII15uUeC0P9MF4FFcH6P2N5s+WNWiKGLFkIVnwHXsXGYVk6YbwKMIKVoCUeC0OxGLIEIVgDEvV85XnvL8arYCNYiRuUGLLEYsiSgmCN8MCr2Dgsy1eMV4FHsFzpC80ShyFLBIKV6AUdC0OfMF6ZIFmZzb13VMuywrx6vH3Uxnh/h8PKsq5+5TyUmjD6RTX6A6+GdeUKTb57EyVKQbzcgKucyCPrC4Ll2iKu/2pNvnsltil+VMwX5i4Jvfl4lYWhx8s6zwzdTpaTHjD35eTueGVjyIrJeXkH7x5ywsWjn1iGfkvoRa04LGs4zos5YPcQtXKPicHyviA0y5xmUStXmRgsTw+Y4rAsk5pFrdxmXLD8GnYYsgLfLGrlAbOC5eKBVzHw27IMaBa18oZZwfJtmcbCMNDNolaeMShYOgw4OmyDziQ2i1p5yaBg+TzsMGQFsVnUymOmBMujA69i47CsYDWLWnnPiGDp1gjdtkdD+jeLWvnCiGBptCjTYRuE0LlZ1MovwQ+WnuOMnlulGz2bRa18FPBg+XPgVWwcliW5WdTKXwEPlna10nN79KZPs6iV74IcLP1HGP23UBM6NIta6SDIwdJ6nNFzqzTmb7OolSYCGywtDryKjcOyhDSLWukjmMGSVQFZW+svH5NBrXQQzGAN0Hm8krKFgE4CGCyJA4vEbQa8F7Rg6XjgVWwclgUYGyxhtZK4teb9e/T2zfGOooNABUv6U0r69gNuC1SwBA8sErcZ8FxwgiXgwKvYOCwLMCRYQXqdB2lfgMQKSLAGyB2vgrH9gMuCEKzgjSTB2yO5XxHa+KJQE+KDJe/Aq9g4LAsIcLACVavg7QuQULKDFewxJNh75wvuUelkByuwI0nw9shvljVQK+d/IJHgYIk/8Co2DstKEKdQ4SvIllzJSiZzXsmWZfGbmBL7i/euNGvgScS9K4jUF0PAxytH/w4KfYx8PKYh/t8R6rzzxXPNzqQW10bABSInLHPGKxtDlnu/zphpSxZ5n2EF7cCr2Dgsa7SfVY3ospGfbUFn8oJlUK1M21M/UhXJvjifx+tMWLBMHjRM3ne3UxWJrxF1JixYhg4dpu2vT6lycPSDtiR9mmvKN4PRGPyNYeRXhB7/K4GDvkbki0J/ifmWkAWRzeRvDH35B00HfY0If0lbEho7Xhm+71e4sQDU+XYhMli8u0Uy897QIRk6bIPhBKwvzDrwalhX7gT9HzjA0AnrH9TKxv0Ag+keLDOXP/HgnoGBdA/WAMaKSNwbMJXWwTL9wKsY+G1ZMJK+weLVGA/uJRhF328JeSnGSdtHEDBlwqJW8eO+gjn0nbAAQMaEBQBDESwAYhAsAGIQLABiECwAYhAsAGIQLABiECwAYhAsAGIQLABiECwAYhAsAGIQLABiECwAYhAsAGIQLABiECwAYhAsAEqK/wEgUpkmj6ycAgAAAABJRU5ErkJggg=="
+          },
+          "assert": [
+            {
+              "type": "llm-rubric",
+              "value": "Evaluate if the output accurately describes the image provided in vars.image.\nThe image shows:\n- Four geometric shapes in a 2x2 grid\n- Blue square (top left)\n- Red circle (top right)  \n- Green triangle (bottom left)\n- Yellow star (bottom right)\n- Title \"Test Shapes\" at the top\n\nScore based on accuracy compared to the actual image you can see.\n",
+              "threshold": 0.8
+            },
+            {
+              "type": "g-eval",
+              "value": "Visual accuracy - Compare the description to the actual image in vars.image. The description should correctly identify all shapes, colors, and positions visible in the image.",
+              "threshold": 0.8
+            }
+          ],
+          "options": {
+            "provider": "openai:gpt-4o-mini"
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "image": "iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAIAAABi1XKVAAARiUlEQVR4nO3dfUxV9R/A8e8R8AqI+DAUYUM2bBCtkT+3Skcl/YFLXZa6dGsxza3NVtm0Ld2q/Wprzj8y7XGula7nrKZZbi420ExdNaLWXJE5whIljAQlkKf7Wxw83R94Lxe455zv53zfrz9aXu7DOffhfT/fe49ohcNhBQASjPN7AwAgXgQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQr4FasWGHFNGHCBC+359ixY8uWLcvOzk5JSZk2bVp5efkHH3wQeYYlS5ZYlnXp0iUvtwpSECwkwNtvv21Z1ksvvRT7bLt3777lllv27t3b1NTU09PT0tJSWVm5atWqu+++u7u726uNhWAEK+A++uijcITCwkKlVH19vXNKZ2enN1ty9uzZBx98MCUlZdu2bQ0NDZcvX25sbNy5c2dmZua+ffuGjR3wj8hnMwJvaLAcXV1dW7duLSoqCoVCeXl5GzduvHDhQuQZPv300/nz52dmZk6cOPHGG29888037dNvuummyGfU2bNnr3rTr776qlLqqaeeGnT6J598opSaO3eu/cfFixcrpdra2rZs2TJr1qwJEybMmTNn//79kReprq6+6667Zs6cmZqaWlRUtHnz5shNLSwsLCgo6Ozs3LRpU05OTnp6+uLFi3/88ceE7Cz8RbDMEi1YPT09ixYtGvRmVlBQ0NzcbJ9h586dQ9/tXnnllfiDtXnzZqXUrl27Bp3e29s7qV9ksB555JHI60xKSqqpqbHP8MUXX1iWNWhLiouL29vbnX0sKChYtmxZ5BmmTp1aV1c39p2FvwiWWaIF6/nnn1dKXXfddYcPH25vb6+rq1uyZIlSau3atfYZcnJyMjIyKisrOzo6Lly4cPDgwalTpxYVFdk/feutt5RSL774Yoyb3r59u1Lqmmuu+frrr2OczQ5WKBTaunXrH3/8UV9fv3TpUqXUQw89ZJ9h3bp1Sqnt27efP3++u7u7sbHxscceU0q99tprzj5aljVlypT9+/e3t7efPHnSvoby8vKE7Cx8RLDMEi1YeXl5qampv/76q3PK33//PX369IyMjJ6envb2dqXUnDlzol1tPME6e/bs5MmT7WklNzd31apV27Zt+/LLL7u6uoYG6+mnn3ZOqa+vV0qVlZVFu+bXX39dKbV58+bIfdy9e3fkvsycOdOyrHPnzo19Z+EjPnSHOnXq1OnTp+fNmzdr1iznxNTU1PLy8osXL546dSotLS0/P7+2tnblypVVVVWXL18exa1kZ2dXV1cvWLAgKSnpzJkz77///oYNG0pLS7OystavX9/W1hZ55sgFXV5enmVZra2tzil9fX3Hjh179tlnV6xYMXv27LVr19onOmdISkqKvIbU1NQ777wzHA5///333uwsXJLs1hVDjoaGBqVUVVXV0M+GlFItLS1KqXffffeee+7Z0y81NfX222+/9957V65cOW7cCN7zbrjhhurqansV1tDQcPr06bq6uqNHj77wwgu1tbWHDx92NiA3N9e51Lh+vb29ztYuX768pqbG/uOkSZPuv//+N954I/KGZsyYkZGREXlKfn6+Uuqvv/7ybGfhBoIF1dPTE+OnXV1dSql58+b98ssvn/WrrKw80G/Pnj179+4d6c2lp6f/p5/9x76+vttuu+3IkSNHjx4tLS21T0xJSYl28dWrV9fU1MyePbuioqK0tHT+/Pm1tbWDghXtaNjU1FSPdxaJxTsG1PTp0+1V2FU/Nbj11lvts4VCoeXLl+/atev3338/fvx4YWHhvn37Tpw4Ec9NhMPhpKSkvLy8oT8aN26c3amTJ08Oez0tLS2HDh3Kz8//9ttvn3zyybKyslAodP78+UFna2pqciYy288//2wvSz3YWbiHYOGf78syMjKOHDkS+Rdiuru7r7322rS0tK6ursrKSsuynnvuOeenN9988/Lly5VSzc3N8dyEZVmFhYW//fZbVVXV0J9+9dVXSqlp06YNez1NTU1Kqeuvvz5yxffOO+8MOlt7e/vBgwedP7a2tu7fvz8UCpWUlHiws3CRyx/qQ8a3hOvXr1dKLVy48Icffmhvb//uu+8WLlyolFq3bl04HP7zzz/Hjx+flZW1Z8+e5ubmS5cuHThwIDs7Ozk5uampKRwOv/fee/bBU729vdFueseOHUqpzMzMHTt21NfXd3V1tba2Hjp0yD7mIDMzs62tzfmW8OLFi5GXTUpKKikpCYfDHR0dycnJaWlpBw4c6OjoOHHixJo1a+z145o1a7q7u519zMnJ+fzzzzs6On766acFCxbYa8mE7Cx8RLDMEi1YbW1tJSUlg97MiouLW1pa7DNs2rRp6Lvd448/bv/0+PHjwx442tvbe9999131XXPixImfffaZfbbYwQqHw48++mjkZUOh0Icffjh+/Hil1NKlS+19zMrKKisrizxbTk7OmTNnErKz8BHBMkuMv5rT2tq6YcOG3NzcUChUUFCwcePG1tZW56c9PT1btmwpLi4O9SspKXn55Zf7+vqcM6xevTo9PT1GsGwff/zxokWLsrKykpOTMzIy5s6d+8QTTzQ2NjpnGDZYnZ2dDz/88JQpUyZNmnTHHXd888034XD4mWeeSUtLe+CBB+x9nDFjRktLS0VFxeTJk7OzsysqKpxaJWRn4ReLf/kZAVNUVHThwoVz5875vSFIPD50ByAGwQIgBsECIAafYQEQgwkLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBgEC4AYBAuAGAQLgBjJSkuWZfm9CZLwi/nH+BTiDpRC02ABXr7JDbos/dKW5sHieTMs00fRGJ2K89ljRb9OyqUbzYMFxNupUadl6AWdq6ZcuiFYEGbw8s2FmwhHKRfZ8h3BgshUeVOOQeUiW74jWBDA+1QNYt8o2fIdwYLWfE9VJLLlOw4chb7+/cxbg1o5IjeGAwY9xoQF3VOlJ2faYtTyEhMWtKN/rRyMWh4jWNCLoFrZaJaXWBJCF+JS5WB56BkmLGhBbq0cjFoeIFjwXwBqZaNZbiNY8FlgamWjWa4iWPBTwGplo1nuIVjwTSBrZaNZLiFY8FnwahXs/fIXwYI/Bo4AUEE2cLgDQ1biECz4wIRa2WhWYhEseM3MV6+Ze51wBAv+MGG8Mm1PPUCw4ClzFoORWBgmCsGCd8yslY1mJQTBAiAGwYJHTB6vbAxZY0ewAIhBsOAFxisbQ9YYESwAYhAsuI7xKhJD1lgQLABiECy4i/FqKIasUSNYAMQgWADEIFhwEevBaFgVjg7BAiAGwQIgBsGCW1gPxsaqcBQIFgAxCBYAMQgWADEIFgAxCBZcwWfJ8eO+ih/Bgov4ijA27p+RIlgAxCBYAMQgWADEIFgAxCBYAMQgWADEIFgAxCBYAMQgWADEIFgAxCBYAMQgWADEIFhwEb+FIDbun5EiWHBFOMxvIogX91X8CBYAMQgWADEIFgAxCBYAMQgW3P0smS/CorHvGT5xHxGCBUAMggVADIIFF7EqjIb14OgQLABiECwAYhAsuItV4VCsB0eNYAEQg2DBdQxZkRivxoJgARCDYMELDFk2xqsxIlgAxCBY8AhDFuPV2BEsAGIQLHjH5CGL8SohCBY8ZWazqFWiECz4w5xmmbOnHiBY8JqZg4aZe51wBAs+MGdhyGIwsQgW/GFCs6hVwhEs+CyozQrqfvmLYME3zugRvNe2s0eMV4lFsOCnQDaLWrmHYMFnAWsWtXIVwYL/AtMsauU2ggUtBKBZ1MoDyV7cCBD/gQ6WNXA0gBKDVHmGCQt6ETdqUSsvESxoR1CzqJXHWBJCR/ovD0mVL5iwIGPU0mfaitwYauUxJizIGLX+/at5/m1MZDRJlS8IFgTwPVukShMEC4Kz5Xa5Bq1DSZXvCBYEZ8ulcg39vIxUaYJgQfjn8UPK9e954ruqGB/n0yndaB4sfb4agphyjf3ZQ6e0pXmwgFFWZmi/4r8stGXxUAGQggNHAYhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwAIhBsACIQbAAiEGwRsCyLL83AWPCIygdwRrZc51nvFw8dgFAsGAWsiUawRrxs5xnvEQ8asFAsEbiv35vAMYmHP7nv8RLLoI1vIHnt12r/v/yjJfFfrzsWkE0gjWMaG2iWUIxZIlGsEa+GGRhKArjVZAQrFhivw/zLi0UQ5ZcBCuqf5/QQ0eqK6fwpNcc41XAEKzhRFsAsjCUjCFLKIJ1dfE/lXnSa4vxKngIVkyxxyiGLMkYsiQiWMMdeBUbh2XpivEqkAjWYKOrD82SiCFLHII15uUeC0P9MF4FFcH6P2N5s+WNWiKGLFkIVnwHXsXGYVk6YbwKMIKVoCUeC0OxGLIEIVgDEvV85XnvL8arYCNYiRuUGLLEYsiSgmCN8MCr2Dgsy1eMV4FHsFzpC80ShyFLBIKV6AUdC0OfMF6ZIFmZzb13VMuywrx6vH3Uxnh/h8PKsq5+5TyUmjD6RTX6A6+GdeUKTb57EyVKQbzcgKucyCPrC4Ll2iKu/2pNvnsltil+VMwX5i4Jvfl4lYWhx8s6zwzdTpaTHjD35eTueGVjyIrJeXkH7x5ywsWjn1iGfkvoRa04LGs4zos5YPcQtXKPicHyviA0y5xmUStXmRgsTw+Y4rAsk5pFrdxmXLD8GnYYsgLfLGrlAbOC5eKBVzHw27IMaBa18oZZwfJtmcbCMNDNolaeMShYOgw4OmyDziQ2i1p5yaBg+TzsMGQFsVnUymOmBMujA69i47CsYDWLWnnPiGDp1gjdtkdD+jeLWvnCiGBptCjTYRuE0LlZ1MovwQ+WnuOMnlulGz2bRa18FPBg+XPgVWwcliW5WdTKXwEPlna10nN79KZPs6iV74IcLP1HGP23UBM6NIta6SDIwdJ6nNFzqzTmb7OolSYCGywtDryKjcOyhDSLWukjmMGSVQFZW+svH5NBrXQQzGAN0Hm8krKFgE4CGCyJA4vEbQa8F7Rg6XjgVWwclgUYGyxhtZK4teb9e/T2zfGOooNABUv6U0r69gNuC1SwBA8sErcZ8FxwgiXgwKvYOCwLMCRYQXqdB2lfgMQKSLAGyB2vgrH9gMuCEKzgjSTB2yO5XxHa+KJQE+KDJe/Aq9g4LAsIcLACVavg7QuQULKDFewxJNh75wvuUelkByuwI0nw9shvljVQK+d/IJHgYIk/8Co2DstKEKdQ4SvIllzJSiZzXsmWZfGbmBL7i/euNGvgScS9K4jUF0PAxytH/w4KfYx8PKYh/t8R6rzzxXPNzqQW10bABSInLHPGKxtDlnu/zphpSxZ5n2EF7cCr2Dgsa7SfVY3ospGfbUFn8oJlUK1M21M/UhXJvjifx+tMWLBMHjRM3ne3UxWJrxF1JixYhg4dpu2vT6lycPSDtiR9mmvKN4PRGPyNYeRXhB7/K4GDvkbki0J/ifmWkAWRzeRvDH35B00HfY0If0lbEho7Xhm+71e4sQDU+XYhMli8u0Uy897QIRk6bIPhBKwvzDrwalhX7gT9HzjA0AnrH9TKxv0Ag+keLDOXP/HgnoGBdA/WAMaKSNwbMJXWwTL9wKsY+G1ZMJK+weLVGA/uJRhF328JeSnGSdtHEDBlwqJW8eO+gjn0nbAAQMaEBQBDESwAYhAsAGIQLABiECwAYhAsAGIQLABiECwAYhAsAGIQLABiECwAYhAsAGIQLABiECwAYhAsAGIQLABiECwAYhAsAEqK/wEgUpkmj6ycAgAAAABJRU5ErkJggg=="
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      }
+    ],
+    "stats": {
+      "successes": 0,
+      "failures": 3,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 100,
+        "completion": 208,
+        "cached": 0,
+        "total": 308,
+        "numRequests": 3,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 54161,
+          "prompt": 53708,
+          "completion": 453,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "Vision-based grading demonstration",
+    "prompts": [
+      {
+        "label": "Good Description",
+        "raw": "The image shows four geometric shapes arranged in a 2x2 grid. Top left is a blue square, top right is a red circle, bottom left is a green triangle, and bottom right is a yellow star. The title 'Test Shapes' appears above."
+      },
+      {
+        "label": "Bad Description",
+        "raw": "I see some shapes and colors."
+      },
+      {
+        "label": "Wrong Description",
+        "raw": "The image shows a photograph of a cat playing with a ball of yarn in a sunny garden."
+      }
+    ],
+    "providers": [
+      "openai:gpt-3.5-turbo"
+    ],
+    "tests": [
+      {
+        "description": "Test with actual image - grading model can see it",
+        "vars": {
+          "image": "file://../g-eval/test-image.png"
+        },
+        "assert": [
+          {
+            "type": "llm-rubric",
+            "value": "Evaluate if the output accurately describes the image provided in vars.image.\nThe image shows:\n- Four geometric shapes in a 2x2 grid\n- Blue square (top left)\n- Red circle (top right)  \n- Green triangle (bottom left)\n- Yellow star (bottom right)\n- Title \"Test Shapes\" at the top\n\nScore based on accuracy compared to the actual image you can see.\n",
+            "threshold": 0.8
+          },
+          {
+            "type": "g-eval",
+            "value": "Visual accuracy - Compare the description to the actual image in vars.image. The description should correctly identify all shapes, colors, and positions visible in the image.",
+            "threshold": 0.8
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": true,
+    "defaultTest": {
+      "options": {
+        "provider": "openai:gpt-4o-mini"
+      },
+      "vars": {},
+      "assert": [],
+      "metadata": {}
+    },
+    "outputPath": [
+      "output.json"
+    ],
+    "extensions": [],
+    "metadata": {}
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.117.6",
+    "nodeVersion": "v22.14.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-08-20T04:59:24.976Z",
+    "evaluationCreatedAt": "2025-08-20T04:59:04.893Z"
+  }
+}
