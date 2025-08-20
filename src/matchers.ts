@@ -418,6 +418,11 @@ function sanitizeInputForGEval(input: string): string {
       // Extract text content from message array
       const textParts: string[] = [];
       for (const message of parsed) {
+        // Skip system messages as they're not part of the user input being evaluated
+        if (message.role === 'system') {
+          continue;
+        }
+        
         // Handle OpenAI/standard format
         if (message.content) {
           if (Array.isArray(message.content)) {
@@ -430,8 +435,11 @@ function sanitizeInputForGEval(input: string): string {
               } else if (part.type === 'image') {
                 // Anthropic format
                 textParts.push('[Image provided]');
+              } else if (part.text) {
+                // Nova format - text part
+                textParts.push(part.text);
               } else if (part.image) {
-                // Amazon Bedrock Nova format
+                // Amazon Bedrock Nova format - image part
                 textParts.push('[Image provided]');
               }
             }
