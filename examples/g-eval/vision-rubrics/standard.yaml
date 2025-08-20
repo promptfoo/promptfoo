@@ -1,0 +1,31 @@
+# Standard G-Eval rubric for vision grading (YAML format)
+# Works for all providers - images from vars are automatically included
+
+- role: system
+  content: |
+    You are evaluating an AI model's response based on specific criteria and evaluation steps.
+    Images provided in the context should be considered in your evaluation.
+
+- role: user
+  content: |
+    Evaluation Criteria:
+    {{ criteria }}
+
+    Evaluation Steps:
+    {{ steps }}
+
+    Input Prompt:
+    {{ input }}
+
+    AI Model's Response:
+    {{ output }}
+
+    Please evaluate the AI model's response based on the given criteria and steps.
+    
+    Assign a score from 1 to {{ maxScore }} (1=lowest, {{ maxScore }}=highest).
+
+    Respond with JSON:
+    {
+      "score": <integer>,
+      "reason": "<detailed explanation>"
+    }

@@ -1,0 +1,28 @@
+# External YAML rubric for vision grading
+# Images from vars are automatically included by promptfoo
+
+- role: system
+  content: |
+    You are evaluating visual descriptions for accuracy.
+    An image has been provided in the context for reference.
+    Be precise and thorough in your evaluation.
+
+- role: user
+  content: |
+    AI Output: {{ output }}
+    
+    Evaluation Criteria: {{ rubric }}
+    
+    Compare the output against the actual image provided.
+    Check for accuracy of:
+    - Object identification
+    - Color descriptions
+    - Spatial relationships
+    - Any text or labels
+    
+    Provide your evaluation as JSON:
+    {
+      "pass": true/false,
+      "score": 0.0-1.0,
+      "reason": "detailed explanation"
+    }

@@ -33,8 +33,8 @@ providers:
   - bedrock:amazon.nova-pro-v1:0
 
 tests:
-  # Shapes image test with provider-specific rubrics
-  - description: "Geometric shapes - OpenAI grading"
+  # Test 1: Standard approach - images automatically included
+  - description: "Geometric shapes - automatic image inclusion"
     vars:
       image: file://shapes.png
     assert:
@@ -45,45 +45,47 @@ tests:
           2. Their colors: blue square, red circle, green triangle, yellow star
           3. The "Test Shapes" title at the top
           4. The 2x2 grid arrangement
-          
-          Award full points only if all elements are correctly identified.
+        threshold: 0.8
+        provider: openai:gpt-4o-mini  # Vision model - that's all you need!
+
+  # Test 2: With custom YAML rubric
+  - description: "Geometric shapes - custom YAML rubric"
+    vars:
+      image: file://shapes.png
+    assert:
+      - type: llm-rubric
+        value: "Accurate shape and color identification"
         threshold: 0.8
         provider: openai:gpt-4o-mini
-        rubricPrompt: file://rubrics/openai-template.js
+        rubricPrompt: file://rubrics/standard.yaml  # YAML format
 
-  - description: "Geometric shapes - Anthropic grading"
+  # Test 3: Multiple providers - all work automatically
+  - description: "Shapes - Anthropic"
     vars:
       image: file://shapes.png
     assert:
       - type: llm-rubric
-        value: |
-          Evaluate if the description correctly identifies the four shapes
-          (square, circle, triangle, star) and their respective colors.
+        value: "Identify all shapes and colors"
         threshold: 0.8
         provider: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
-        rubricPrompt: file://rubrics/anthropic.js
 
-  - description: "Geometric shapes - Gemini grading"
+  - description: "Shapes - Gemini"
     vars:
       image: file://shapes.png
     assert:
       - type: llm-rubric
-        value: |
-          Check if the output mentions all four shapes and their colors correctly.
+        value: "Identify all shapes and colors"
         threshold: 0.8
         provider: vertex:gemini-1.5-flash
-        rubricPrompt: file://rubrics/gemini.js
 
-  - description: "Geometric shapes - Nova grading"
+  - description: "Shapes - Nova"
     vars:
       image: file://shapes.png
     assert:
       - type: llm-rubric
-        value: |
-          Verify the description includes shapes, colors, and spatial arrangement.
+        value: "Identify all shapes and colors"
         threshold: 0.8
         provider: bedrock:amazon.nova-pro-v1:0
-        rubricPrompt: file://rubrics/bedrock-nova.js
 
   # Chart image test
   - description: "Bar chart analysis"

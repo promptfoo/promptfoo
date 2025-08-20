@@ -106,51 +106,56 @@ providers:
       apiProvider: bedrock:amazon.nova-pro-v1:0
 
 tests:
-  # Test with shapes image
-  - description: "Geometric shapes test"
+  # Test 1: Standard G-Eval with automatic image inclusion
+  - description: "Geometric shapes - automatic"
     vars:
       image: file://test-image.png
     assert:
-      # OpenAI grading
       - type: g-eval
         value: >-
           Visual Accuracy - The description should correctly identify four geometric shapes
           (square, circle, triangle, star), their colors (blue, red, green, yellow),
           the "Test Shapes" title, and their 2x2 grid arrangement.
+        threshold: 0.7
+        provider: openai:gpt-4o-mini  # Vision model handles it automatically
+
+  # Test 2: With custom YAML rubric
+  - description: "Geometric shapes - YAML rubric"
+    vars:
+      image: file://test-image.png
+    assert:
+      - type: g-eval
+        value: "Accurate identification of shapes, colors, and layout"
         threshold: 0.7
         provider: openai:gpt-4o-mini
-        rubricPrompt: file://vision-rubrics/openai.js
+        rubricPrompt: file://vision-rubrics/standard.yaml
 
-      # Anthropic grading
+  # Test 3: Multiple providers - all automatic
+  - description: "Shapes - Anthropic"
+    vars:
+      image: file://test-image.png
+    assert:
       - type: g-eval
-        value: >-
-          Visual Accuracy - The description should correctly identify four geometric shapes
-          (square, circle, triangle, star), their colors (blue, red, green, yellow),
-          the "Test Shapes" title, and their 2x2 grid arrangement.
+        value: "Visual accuracy - shapes and colors"
         threshold: 0.7
         provider: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
-        rubricPrompt: file://vision-rubrics/anthropic.js
 
-      # Gemini grading
+  - description: "Shapes - Gemini"
+    vars:
+      image: file://test-image.png
+    assert:
       - type: g-eval
-        value: >-
-          Visual Accuracy - The description should correctly identify four geometric shapes
-          (square, circle, triangle, star), their colors (blue, red, green, yellow),
-          the "Test Shapes" title, and their 2x2 grid arrangement.
+        value: "Visual accuracy - shapes and colors"
         threshold: 0.7
         provider: vertex:gemini-1.5-flash
-        rubricPrompt: file://vision-rubrics/gemini.js
 
-  # Test with chart image
+  # Test 4: Chart analysis
   - description: "Bar chart test"
     vars:
       image: file://test-chart.png
     assert:
       - type: g-eval
         value: >-
-          Chart Analysis - The description should identify the chart type (bar chart),
-          title ("Sales Performance by Product"), four products (A, B, C, D),
-          their approximate values, and any visible trends.
+          Chart Analysis - Identify chart type, title, products, and values
         threshold: 0.7
         provider: openai:gpt-4o-mini
-        rubricPrompt: file://vision-rubrics/openai.js

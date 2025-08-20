@@ -1,0 +1,26 @@
+# Standard multi-modal rubric prompt (YAML format)
+# Images from vars are automatically included by promptfoo's core implementation
+# This works for all providers (OpenAI, Anthropic, Gemini, Nova)
+
+- role: system
+  content: |
+    You are evaluating an AI model's output based on a specific rubric.
+    If images are provided in the context, consider them in your evaluation.
+    Be thorough and fair in your assessment.
+
+- role: user
+  content: |
+    Output to evaluate:
+    {{ output }}
+
+    Evaluation Rubric:
+    {{ rubric }}
+
+    Please evaluate the output against the rubric.
+    
+    Respond with a JSON object:
+    {
+      "pass": <boolean>,
+      "score": <number between 0 and 1>,
+      "reason": "<detailed explanation of your evaluation>"
+    }

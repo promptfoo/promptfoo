@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Simplified vision grading - the right way
+
+# Key insight: Just use a vision-capable grading model
+# Images in vars are automatically included!
+
+prompts:
+  # Standard OpenAI vision format
+  - label: "Describe Image"
+    raw: |
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe this image in detail, including all shapes, colors, and text."
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,{{image}}"
+              }
+            }
+          ]
+        }
+      ]
+
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
+
+tests:
+  # Test 1: Basic vision grading (automatic image inclusion)
+  - description: "Shapes test - default rubric"
+    vars:
+      image: file://../g-eval/test-image.png
+    assert:
+      - type: llm-rubric
+        value: |
+          The output should accurately describe:
+          1. Four geometric shapes: square, circle, triangle, star
+          2. Their colors: blue, red, green, yellow
+          3. The "Test Shapes" title
+          4. The 2x2 grid arrangement
+        threshold: 0.8
+        provider: openai:gpt-4o-mini  # Vision-capable grading model
+
+  # Test 2: Custom YAML rubric prompt
+  - description: "Shapes test - custom YAML rubric"
+    vars:
+      image: file://../g-eval/test-image.png
+    assert:
+      - type: llm-rubric
+        value: "Must identify all shapes and colors correctly"
+        threshold: 0.8
+        provider: openai:gpt-4o-mini
+        rubricPrompt:
+          - role: system
+            content: |
+              You are a strict evaluator for visual descriptions.
+              The image shows geometric shapes with specific colors.
+          - role: user
+            content: |
+              Output: {{ output }}
+              
+              Requirement: {{ rubric }}
+              
+              Check if the output correctly identifies:
+              - Blue square (top left)
+              - Red circle (top right)
+              - Green triangle (bottom left)
+              - Yellow star (bottom right)
+              - "Test Shapes" title
+              
+              Grade strictly. Respond with JSON:
+              {"pass": boolean, "score": 0-1, "reason": "explanation"}
+
+  # Test 3: G-Eval with vision
+  - description: "Chart test - G-Eval"
+    vars:
+      image: file://../g-eval/test-chart.png
+    assert:
+      - type: g-eval
+        value: |
+          Chart Analysis - The description should identify:
+          - Chart type (bar chart)
+          - Title ("Sales Performance by Product")
+          - Four products (A, B, C, D)
+          - Their relative values
+        threshold: 0.7
+        provider: openai:gpt-4o-mini
+
+  # Test 4: External YAML rubric file
+  - description: "Shapes test - external YAML rubric"
+    vars:
+      image: file://../g-eval/test-image.png
+    assert:
+      - type: llm-rubric
+        value: "Accurate shape and color identification"
+        threshold: 0.8
+        provider: openai:gpt-4o-mini
+        rubricPrompt: file://rubrics/vision.yaml
