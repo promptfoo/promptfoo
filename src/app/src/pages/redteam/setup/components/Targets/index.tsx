@@ -134,13 +134,10 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   };
 
   const isProviderValid = () => {
-    return selectedTarget.label && !providerError;
+    return !providerError;
   };
 
   const getNextButtonTooltip = () => {
-    if (!selectedTarget.label) {
-      return 'Please enter a target label';
-    }
     if (providerError) {
       return providerError;
     }
@@ -168,8 +165,8 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       }
       onNext={onNext}
       onBack={onBack}
-      nextDisabled={!selectedTarget.label}
-      warningMessage={selectedTarget.label ? undefined : getNextButtonTooltip()}
+      nextDisabled={!isProviderValid()}
+      warningMessage={getNextButtonTooltip()}
     >
       <Stack direction="column" spacing={3}>
         <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
