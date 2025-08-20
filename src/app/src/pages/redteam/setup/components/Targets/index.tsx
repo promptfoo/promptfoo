@@ -134,16 +134,53 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   };
 
   const isProviderValid = () => {
-    return selectedTarget.label && !providerError;
+    // Check for explicit errors
+    if (providerError) {
+      return false;
+    }
+
+    // Additional validation for HTTP and WebSocket providers
+    if (selectedTarget.id === 'http') {
+      // Check if we're in raw mode (using request field) or structured mode (using url field)
+      if (selectedTarget.config.request !== undefined) {
+        return selectedTarget.config.request?.trim() !== '';
+      } else {
+        return !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
+      }
+    }
+
+    if (selectedTarget.id === 'websocket') {
+      return !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
+    }
+
+    // For other provider types, rely on providerError
+    return true;
   };
 
   const getNextButtonTooltip = () => {
-    if (!selectedTarget.label) {
-      return 'Please enter a target label';
-    }
     if (providerError) {
       return providerError;
     }
+
+    // Additional validation messages for HTTP and WebSocket providers
+    if (selectedTarget.id === 'http') {
+      if (selectedTarget.config.request !== undefined) {
+        if (!selectedTarget.config.request?.trim()) {
+          return 'HTTP request content is required';
+        }
+      } else {
+        if (!selectedTarget.config.url || !selectedTarget.config.url.trim()) {
+          return 'Valid URL is required';
+        }
+      }
+    }
+
+    if (selectedTarget.id === 'websocket') {
+      if (!selectedTarget.config.url || !selectedTarget.config.url.trim()) {
+        return 'Valid WebSocket URL is required';
+      }
+    }
+
     return undefined;
   };
 
@@ -168,8 +205,8 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       }
       onNext={onNext}
       onBack={onBack}
-      nextDisabled={!selectedTarget.label}
-      warningMessage={selectedTarget.label ? undefined : getNextButtonTooltip()}
+      nextDisabled={!isProviderValid()}
+      warningMessage={getNextButtonTooltip()}
     >
       <Stack direction="column" spacing={3}>
         <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

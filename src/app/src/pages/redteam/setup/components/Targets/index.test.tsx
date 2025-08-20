@@ -208,7 +208,10 @@ describe('Targets Component', () => {
   it('should allow http target selection, and enable the Next button when all required fields are filled', async () => {
     (useRedTeamConfig as any).mockReturnValue({
       config: {
-        target: DEFAULT_HTTP_TARGET,
+        target: {
+          ...DEFAULT_HTTP_TARGET,
+          label: 'My Test API',
+        },
         plugins: [],
         strategies: [],
       },
@@ -219,9 +222,6 @@ describe('Targets Component', () => {
 
     const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
     expect(nextButton).toBeDisabled();
-
-    const targetNameInput = screen.getByLabelText(/Provider Name/i);
-    fireEvent.change(targetNameInput, { target: { value: 'My Test API' } });
 
     const urlInput = screen.getByPlaceholderText('https://example.com/api/chat');
     fireEvent.change(urlInput, { target: { value: 'https://my.api.com/chat' } });
