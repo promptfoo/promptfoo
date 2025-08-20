@@ -119,11 +119,11 @@ examples/
 
 ## 📈 Metrics
 
-| Approach | Complexity | Maintainability | Works? |
-|----------|------------|-----------------|--------|
-| JS Rubrics | High | Low | Sometimes |
-| YAML Rubrics | Low | High | Always |
-| No Custom Rubric | None | Perfect | Always |
+| Approach         | Complexity | Maintainability | Works?    |
+| ---------------- | ---------- | --------------- | --------- |
+| JS Rubrics       | High       | Low             | Sometimes |
+| YAML Rubrics     | Low        | High            | Always    |
+| No Custom Rubric | None       | Perfect         | Always    |
 
 ## 🎓 Lessons Learned
 
