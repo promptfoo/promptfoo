@@ -138,6 +138,10 @@ jobs:
           # shellcheck disable=SC2046
           npx madge $(git ls-files '*.ts') --circular
 
+      - name: Check for missing dependencies
+        run: |
+          npm run depcheck
+
   shell-format:
     name: Shell Format Check
     timeout-minutes: 5
