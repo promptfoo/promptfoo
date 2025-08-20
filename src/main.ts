@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
@@ -15,6 +16,7 @@ import { generateAssertionsCommand } from './commands/generate/assertions';
 import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
+import { jiraCommand } from './commands/jira';
 import { listCommand } from './commands/list';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
@@ -111,6 +113,7 @@ async function main() {
   modelScanCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
+  jiraCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
