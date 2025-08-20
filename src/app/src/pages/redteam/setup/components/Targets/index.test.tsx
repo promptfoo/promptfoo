@@ -223,7 +223,7 @@ describe('Targets Component', () => {
     const targetNameInput = screen.getByLabelText(/Provider Name/i);
     fireEvent.change(targetNameInput, { target: { value: 'My Test API' } });
 
-    const urlInput = screen.getByLabelText(/URL/i);
+    const urlInput = screen.getByPlaceholderText('https://example.com/api/chat');
     fireEvent.change(urlInput, { target: { value: 'https://my.api.com/chat' } });
 
     await waitFor(() => {
@@ -386,7 +386,7 @@ describe('Targets Component', () => {
     renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} setupModalOpen={false} />);
 
     const targetNameInput = screen.getByLabelText(/Provider Name/i);
-    const urlInput = screen.getByLabelText(/URL/i);
+    const urlInput = screen.getByPlaceholderText('https://example.com/api/chat');
     const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
     const backButton = screen.getAllByRole('button', { name: /Back/i })[0];
 
