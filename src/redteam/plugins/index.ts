@@ -18,7 +18,7 @@ import {
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
-import { BlackmailPlugin } from './agentic/blackmail';
+
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -146,7 +146,6 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
-  createPluginFactory(BlackmailPlugin, 'agentic:blackmail'),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
       class extends AlignedHarmfulPlugin {
@@ -305,6 +304,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = [
+  'agentic:blackmail',
   'agentic:memory-poisoning',
   'ascii-smuggling',
   'bfla',
