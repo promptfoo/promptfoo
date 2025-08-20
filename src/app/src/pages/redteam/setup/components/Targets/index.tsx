@@ -134,13 +134,53 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   };
 
   const isProviderValid = () => {
-    return !providerError;
+    // Check for explicit errors
+    if (providerError) {
+      return false;
+    }
+
+    // Additional validation for HTTP and WebSocket providers
+    if (selectedTarget.id === 'http') {
+      // Check if we're in raw mode (using request field) or structured mode (using url field)
+      if (selectedTarget.config.request !== undefined) {
+        return selectedTarget.config.request?.trim() !== '';
+      } else {
+        return !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
+      }
+    }
+
+    if (selectedTarget.id === 'websocket') {
+      return !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
+    }
+
+    // For other provider types, rely on providerError
+    return true;
   };
 
   const getNextButtonTooltip = () => {
     if (providerError) {
       return providerError;
     }
+
+    // Additional validation messages for HTTP and WebSocket providers
+    if (selectedTarget.id === 'http') {
+      if (selectedTarget.config.request !== undefined) {
+        if (!selectedTarget.config.request?.trim()) {
+          return 'HTTP request content is required';
+        }
+      } else {
+        if (!selectedTarget.config.url || !selectedTarget.config.url.trim()) {
+          return 'Valid URL is required';
+        }
+      }
+    }
+
+    if (selectedTarget.id === 'websocket') {
+      if (!selectedTarget.config.url || !selectedTarget.config.url.trim()) {
+        return 'Valid WebSocket URL is required';
+      }
+    }
+
     return undefined;
   };
 
