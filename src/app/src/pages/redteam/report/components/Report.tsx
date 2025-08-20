@@ -329,17 +329,30 @@ const App: React.FC = () => {
             {evalId && (
               <Tooltip title="View eval details and logs" placement="top">
                 <Button
-                  color="primary"
-                  variant="contained"
+                  variant="outlined"
                   size="small"
                   startIcon={<ListAltIcon fontSize="small" />}
                   sx={{
-                    height: 40,
-                    minHeight: 40,
-                    py: 0,
+                    minHeight: 36,
+                    py: 0.5,
                     px: 1.5,
                     fontSize: '0.8125rem',
                     alignSelf: 'center',
+                    color: 'inherit',
+                    borderColor: (theme) =>
+                      theme.palette.mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.23)'
+                        : 'rgba(0, 0, 0, 0.23)',
+                    '&:hover': {
+                      borderColor: (theme) =>
+                        theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.23)'
+                          : 'rgba(0, 0, 0, 0.23)',
+                      backgroundColor: (theme) =>
+                        theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.08)'
+                          : 'rgba(0, 0, 0, 0.04)',
+                    },
                   }}
                   onClick={(event) => {
                     const url = `/eval/${evalId}`;
