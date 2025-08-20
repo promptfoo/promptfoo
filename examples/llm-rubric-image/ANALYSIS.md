@@ -23,12 +23,12 @@ The image variable (containing base64 data) is available in the grading context 
 
 ## Comparison with G-Eval (UPDATED)
 
-| Aspect                   | G-Eval                                            | llm-rubric                              |
-| ------------------------ | ------------------------------------------------- | --------------------------------------- |
+| Aspect                   | G-Eval                                            | llm-rubric                                   |
+| ------------------------ | ------------------------------------------------- | -------------------------------------------- |
 | Image handling           | Sanitizes input, replaces with `[Image provided]` | NOW SAME: Sanitizes vars with `[Image data]` |
-| Token usage              | Lower (no image data sent)                        | NOW SAME: Lower (no image data sent)   |
-| Grading focus            | Text description only                             | Text description only                   |
-| Vision model requirement | No                                                | No                                      |
+| Token usage              | Lower (no image data sent)                        | NOW SAME: Lower (no image data sent)         |
+| Grading focus            | Text description only                             | Text description only                        |
+| Vision model requirement | No                                                | No                                           |
 
 ## ~~Potential Issues with Current llm-rubric Behavior~~ ✅ RESOLVED
 
@@ -61,6 +61,7 @@ The image variable (containing base64 data) is available in the grading context 
 ~~3. **Document the behavior** clearly so users understand the token implications~~
 
 **UPDATE**: We have implemented automatic image sanitization for llm-rubric to match G-Eval's behavior. This provides:
+
 - **Efficiency**: Reduced token usage by not sending unnecessary base64 data
 - **Consistency**: Same behavior as G-Eval for image handling
 - **Clarity**: Grading focuses on the text output, not the input image

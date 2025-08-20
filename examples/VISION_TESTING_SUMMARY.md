@@ -24,7 +24,7 @@ Successfully tested and enhanced both G-Eval and llm-rubric assertions with imag
 
 | Feature                               | G-Eval                                   | LLM-Rubric                                |
 | ------------------------------------- | ---------------------------------------- | ----------------------------------------- |
-| **Image Sanitization**                | ✅ Yes - removes image data               | ✅ Yes - removes image data                |
+| **Image Sanitization**                | ✅ Yes - removes image data              | ✅ Yes - removes image data               |
 | **Token Usage**                       | Lower (~3-4K for grading)                | Lower (~3-4K for grading)                 |
 | **Grading Focus**                     | Text output only                         | Text output only                          |
 | **Vision Model Required for Grading** | No                                       | No                                        |
@@ -36,7 +36,9 @@ Successfully tested and enhanced both G-Eval and llm-rubric assertions with imag
 
 ```typescript
 // Used by llm-rubric and other matchers to sanitize vars
-function sanitizeVarsForGrading(vars: Record<string, string | object>): Record<string, string | object> {
+function sanitizeVarsForGrading(
+  vars: Record<string, string | object>,
+): Record<string, string | object> {
   // Replaces base64 image data in vars with '[Image data]' placeholder
 }
 
@@ -146,6 +148,7 @@ assert:
 Both G-Eval and llm-rubric now successfully work with image inputs across major vision models with optimal efficiency. Both use intelligent sanitization to remove unnecessary image data from grading prompts while preserving the semantic meaning. The implementations are robust, consistent, and production-ready.
 
 **Key achievements:**
+
 - ✅ 100% pass rate across all tested providers
 - ✅ Significantly reduced token usage for grading
 - ✅ Consistent behavior between G-Eval and llm-rubric

@@ -411,28 +411,110 @@ function tryParse(content: string) {
  * Otherwise, it returns the original input.
  */
 /**
- * Sanitizes variables to replace image data with placeholders for grading.
- * Used by both G-Eval and llm-rubric to avoid sending unnecessary image data to grading models.
+ * Formats image data for different provider types to enable vision-based grading.
+ * Converts image data to the appropriate format for the target provider.
  */
-function sanitizeVarsForGrading(
-  vars: Record<string, string | object>,
-): Record<string, string | object> {
-  const sanitized: Record<string, string | object> = {};
+function formatImageForProvider(imageData: string, providerType: string): any {
+  // Remove data URL prefix if present
+  const base64Data = imageData.replace(/^data:image\/[a-zA-Z]+;base64,/, '');
 
-  for (const [key, value] of Object.entries(vars)) {
-    if (typeof value === 'string') {
-      // Check if this looks like base64 image data
-      if (value.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/)) {
-        sanitized[key] = '[Image data]';
-      } else {
-        sanitized[key] = value;
+  if (providerType.includes('openai') || providerType.includes('azure')) {
+    // OpenAI format
+    return {
+      type: 'image_url',
+      image_url: {
+        url: `data:image/png;base64,${base64Data}`,
+      },
+    };
+  } else if (providerType.includes('anthropic') || providerType.includes('claude')) {
+    // Anthropic format
+    return {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: 'image/png',
+        data: base64Data,
+      },
+    };
+  } else if (providerType.includes('gemini') || providerType.includes('google')) {
+    // Gemini format
+    return {
+      inline_data: {
+        mime_type: 'image/png',
+        data: base64Data,
+      },
+    };
+  } else if (providerType.includes('nova') || providerType.includes('bedrock')) {
+    // Amazon Bedrock Nova format
+    return {
+      image: {
+        format: 'png',
+        source: {
+          bytes: base64Data,
+        },
+      },
+    };
+  }
+
+  // Default to OpenAI format
+  return {
+    type: 'image_url',
+    image_url: {
+      url: `data:image/png;base64,${base64Data}`,
+    },
+  };
+}
+
+/**
+ * Extracts image data from various input formats.
+ * Returns an array of base64 image strings found in the input.
+ */
+function extractImagesFromInput(input: string | object): string[] {
+  const images: string[] = [];
+
+  if (typeof input === 'string') {
+    // Try to parse as JSON
+    try {
+      const parsed = JSON.parse(input);
+      if (Array.isArray(parsed)) {
+        for (const message of parsed) {
+          if (message.content && Array.isArray(message.content)) {
+            for (const part of message.content) {
+              // OpenAI format
+              if (part.type === 'image_url' && part.image_url?.url) {
+                const match = part.image_url.url.match(/base64,(.+)$/);
+                if (match) images.push(match[1]);
+              }
+              // Anthropic format
+              else if (part.type === 'image' && part.source?.data) {
+                images.push(part.source.data);
+              }
+              // Nova format
+              else if (part.image?.source?.bytes) {
+                images.push(part.image.source.bytes);
+              }
+            }
+          } else if (message.parts && Array.isArray(message.parts)) {
+            // Gemini format
+            for (const part of message.parts) {
+              if (part.inline_data?.data) {
+                images.push(part.inline_data.data);
+              } else if (part.inlineData?.data) {
+                images.push(part.inlineData.data);
+              }
+            }
+          }
+        }
       }
-    } else {
-      sanitized[key] = value;
+    } catch {
+      // Not JSON, check if it's raw base64
+      if (input.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/)) {
+        images.push(input);
+      }
     }
   }
 
-  return sanitized;
+  return images;
 }
 
 function sanitizeInputForGEval(input: string): string {
@@ -545,9 +627,32 @@ function processContextForTemplating(
 export async function renderLlmRubricPrompt(
   rubricPrompt: string,
   context: Record<string, string | object>,
+  providerType?: string,
+  includeImages?: boolean,
 ) {
   const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
   const processedContext = processContextForTemplating(context, enableObjectAccess);
+
+  // Extract images from context (including vars) if we should include them
+  let extractedImages: string[] = [];
+  if (includeImages) {
+    // Check all context properties for image data
+    for (const [key, value] of Object.entries(context)) {
+      if (typeof value === 'string' && value.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/)) {
+        extractedImages.push(value);
+      } else if (typeof value === 'object' && value !== null) {
+        // Check nested objects like vars
+        for (const [nestedKey, nestedValue] of Object.entries(value)) {
+          if (
+            typeof nestedValue === 'string' &&
+            nestedValue.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/)
+          ) {
+            extractedImages.push(nestedValue);
+          }
+        }
+      }
+    }
+  }
 
   try {
     // Render every string scalar within the JSON
@@ -555,6 +660,12 @@ export async function renderLlmRubricPrompt(
     const parsed = JSON.parse(rubricPrompt, (k, v) =>
       typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
     );
+
+    // If we have images and a provider type, format the prompt with images
+    if (extractedImages.length > 0 && providerType && includeImages) {
+      return formatPromptWithImages(JSON.stringify(parsed), extractedImages, providerType);
+    }
+
     return JSON.stringify(parsed);
   } catch {
     // not valid JSON...
@@ -562,7 +673,59 @@ export async function renderLlmRubricPrompt(
   }
 
   // Legacy rendering for non-JSON prompts
-  return nunjucks.renderString(rubricPrompt, processedContext);
+  const renderedPrompt = nunjucks.renderString(rubricPrompt, processedContext);
+
+  // If we have images and a provider type, format the prompt with images
+  if (extractedImages.length > 0 && providerType && includeImages) {
+    return formatPromptWithImages(renderedPrompt, extractedImages, providerType);
+  }
+
+  return renderedPrompt;
+}
+
+/**
+ * Formats a text prompt with images for vision-capable providers.
+ */
+function formatPromptWithImages(
+  textPrompt: string,
+  images: string[],
+  providerType: string,
+): string {
+  const messageContent: any[] = [
+    {
+      type: 'text',
+      text: textPrompt,
+    },
+  ];
+
+  // Add images in the appropriate format
+  for (const imageData of images) {
+    messageContent.push(formatImageForProvider(imageData, providerType));
+  }
+
+  // Build the message structure based on provider type
+  if (providerType.includes('gemini') || providerType.includes('google')) {
+    // Gemini uses 'parts' instead of 'content'
+    return JSON.stringify([
+      {
+        role: 'user',
+        parts: messageContent.map((item) => {
+          if (item.type === 'text') {
+            return { text: item.text };
+          }
+          return item; // Already in correct format from formatImageForProvider
+        }),
+      },
+    ]);
+  } else {
+    // OpenAI, Anthropic, and Nova use 'content' array
+    return JSON.stringify([
+      {
+        role: 'user',
+        content: messageContent,
+      },
+    ]);
+  }
 }
 
 export async function matchesLlmRubric(
@@ -594,13 +757,6 @@ export async function matchesLlmRubric(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
-  // Sanitize variables to avoid sending image data to grading model
-  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
-  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
-    output: tryParse(llmOutput),
-    rubric,
-    ...sanitizedVars,
-  });
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
@@ -610,6 +766,25 @@ export async function matchesLlmRubric(
     grading.provider,
     defaultProvider,
     'llm-rubric check',
+  );
+
+  // Check if we have image data in vars
+  const hasImages =
+    vars &&
+    Object.values(vars).some(
+      (v) => typeof v === 'string' && v.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/),
+    );
+
+  const prompt = await renderLlmRubricPrompt(
+    rubricPrompt,
+    {
+      output: tryParse(llmOutput),
+      rubric,
+      vars: vars || {},
+      ...(vars || {}),
+    },
+    finalProvider.id(),
+    hasImages, // Include images if present
   );
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
@@ -734,21 +909,32 @@ export async function matchesFactuality(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
-  // Sanitize variables to avoid sending image data to grading model
-  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
-  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
-    input,
-    ideal: expected,
-    completion: tryParse(output),
-    ...sanitizedVars,
-  });
 
-  // Get the appropriate provider
+  // Get the provider for image formatting
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
     (await getDefaultProviders()).gradingProvider,
     'factuality check',
+  );
+
+  // Check if we have image data in vars
+  const hasImages =
+    vars &&
+    Object.values(vars).some(
+      (v) => typeof v === 'string' && v.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/),
+    );
+
+  const prompt = await renderLlmRubricPrompt(
+    rubricPrompt,
+    {
+      input,
+      ideal: expected,
+      completion: tryParse(output),
+      ...(vars || {}),
+    },
+    finalProvider.id(),
+    hasImages,
   );
 
   const resp = await finalProvider.callApi(prompt);
@@ -890,21 +1076,33 @@ export async function matchesClosedQa(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
-  // Sanitize variables to avoid sending image data to grading model
-  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
-  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
-    input,
-    criteria: expected,
-    completion: tryParse(output),
-    ...sanitizedVars,
-  });
 
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
     (await getDefaultProviders()).gradingProvider,
-    'model-graded-closedqa check',
+    'closed-qa check',
   );
+
+  // Check if we have image data in vars
+  const hasImages =
+    vars &&
+    Object.values(vars).some(
+      (v) => typeof v === 'string' && v.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/),
+    );
+
+  const prompt = await renderLlmRubricPrompt(
+    rubricPrompt,
+    {
+      input,
+      criteria: expected,
+      completion: tryParse(output),
+      ...(vars || {}),
+    },
+    finalProvider.id(),
+    hasImages,
+  );
+
   const resp = await finalProvider.callApi(prompt);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
@@ -1008,16 +1206,29 @@ export async function matchesGEval(
       : undefined;
   const evalPrompt = await loadRubricPrompt(evalRubricPrompt, GEVAL_PROMPT_EVALUATE);
 
-  // Sanitize input if it contains image data
-  const sanitizedInput = sanitizeInputForGEval(input);
+  // Extract images from input for vision-based grading
+  const extractedImages = extractImagesFromInput(input);
+  const hasImages = extractedImages.length > 0;
 
-  const promptText = await renderLlmRubricPrompt(evalPrompt, {
-    criteria,
-    steps: steps.join('\n- '),
-    maxScore: maxScore.toString(),
-    input: tryParse(sanitizedInput),
-    output: tryParse(output),
-  });
+  // Extract text content from input for the prompt context
+  const textInput = sanitizeInputForGEval(input);
+
+  const promptText = await renderLlmRubricPrompt(
+    evalPrompt,
+    {
+      criteria,
+      steps: steps.join('\n- '),
+      maxScore: maxScore.toString(),
+      input: tryParse(textInput),
+      output: tryParse(output),
+      // Add images to vars for extraction
+      vars: hasImages
+        ? Object.fromEntries(extractedImages.map((img, i) => [`_image_${i}`, img]))
+        : {},
+    },
+    textProvider.id(),
+    hasImages,
+  );
 
   const resp = await textProvider.callApi(promptText);
   accumulateTokens(tokensUsed, resp.tokenUsage);
@@ -1159,13 +1370,24 @@ export async function matchesContextRecall(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
-  // Sanitize variables to avoid sending image data to grading model
-  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
-  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
-    context,
-    groundTruth,
-    ...sanitizedVars,
-  });
+
+  // Check if we have image data in vars
+  const hasImages =
+    vars &&
+    Object.values(vars).some(
+      (v) => typeof v === 'string' && v.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/),
+    );
+
+  const promptText = await renderLlmRubricPrompt(
+    rubricPrompt,
+    {
+      context,
+      groundTruth,
+      ...(vars || {}),
+    },
+    textProvider.id(),
+    hasImages,
+  );
 
   const resp = await textProvider.callApi(promptText);
   if (resp.error || !resp.output) {
@@ -1342,13 +1564,23 @@ export async function matchesContextFaithfulness(
       ? grading?.rubricPrompt?.[1]
       : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
 
-  // Sanitize variables to avoid sending image data to grading model
-  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
-  let promptText = await renderLlmRubricPrompt(longformPrompt, {
-    question: query,
-    answer: tryParse(output),
-    ...sanitizedVars,
-  });
+  // Check if we have image data in vars
+  const hasImages =
+    vars &&
+    Object.values(vars).some(
+      (v) => typeof v === 'string' && v.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/),
+    );
+
+  let promptText = await renderLlmRubricPrompt(
+    longformPrompt,
+    {
+      question: query,
+      answer: tryParse(output),
+      ...(vars || {}),
+    },
+    textProvider.id(),
+    hasImages,
+  );
 
   let resp = await textProvider.callApi(promptText);
   accumulateTokens(tokensUsed, resp.tokenUsage);
@@ -1359,11 +1591,16 @@ export async function matchesContextFaithfulness(
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
   const statements = splitIntoSentences(resp.output);
-  promptText = await renderLlmRubricPrompt(nliPrompt, {
-    context,
-    statements,
-    ...sanitizedVars,
-  });
+  promptText = await renderLlmRubricPrompt(
+    nliPrompt,
+    {
+      context,
+      statements,
+      ...(vars || {}),
+    },
+    textProvider.id(),
+    hasImages,
+  );
 
   resp = await textProvider.callApi(promptText);
   accumulateTokens(tokensUsed, resp.tokenUsage);
@@ -1415,13 +1652,24 @@ export async function matchesSelectBest(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
-  // Sanitize variables to avoid sending image data to grading model
-  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
-  const promptText = await renderLlmRubricPrompt(rubricPrompt, {
-    criteria,
-    outputs: outputs.map((o) => tryParse(o)),
-    ...sanitizedVars,
-  });
+
+  // Check if we have image data in vars
+  const hasImages =
+    vars &&
+    Object.values(vars).some(
+      (v) => typeof v === 'string' && v.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/),
+    );
+
+  const promptText = await renderLlmRubricPrompt(
+    rubricPrompt,
+    {
+      criteria,
+      outputs: outputs.map((o) => tryParse(o)),
+      ...(vars || {}),
+    },
+    textProvider.id(),
+    hasImages,
+  );
 
   const resp = await textProvider.callApi(promptText);
   if (resp.error || !resp.output) {
