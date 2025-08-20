@@ -20,7 +20,7 @@ import {
   urlEncodeRawRequestPath,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
-import { maybeLoadFromExternalFile } from '../../src/util/file';
+import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../src/util/file';
 
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
@@ -36,6 +36,7 @@ jest.mock('../../src/fetch', () => ({
 jest.mock('../../src/util/file', () => ({
   ...jest.requireActual('../../src/util/file'),
   maybeLoadFromExternalFile: jest.fn((input) => input),
+  maybeLoadConfigFromExternalFile: jest.fn((input) => input),
 }));
 
 jest.mock('../../src/esm', () => ({
@@ -3950,5 +3951,289 @@ describe('Token Estimation', () => {
       const result = estimateTokenCount(text);
       expect(result).toBe(Math.ceil(2 * 1.3)); // Default multiplier is 1.3
     });
+  });
+});
+
+describe('Body file resolution', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should resolve file:// references in body configuration', () => {
+    const mockTransactions = [
+      { id: '1', amount: '100.50', date: '2025-06-01' },
+      { id: '2', amount: '250.75', date: '2025-06-02' },
+    ];
+
+    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
+      query: '{{prompt}}',
+      date: '2025-06-03T22:01:13.797Z',
+      transactions: mockTransactions,
+    });
+
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          query: '{{prompt}}',
+          date: '2025-06-03T22:01:13.797Z',
+          transactions: 'file://./test_data/transactions.csv',
+        },
+      },
+    });
+
+    // Verify maybeLoadConfigFromExternalFile was called with the body
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith({
+      query: '{{prompt}}',
+      date: '2025-06-03T22:01:13.797Z',
+      transactions: 'file://./test_data/transactions.csv',
+    });
+
+    // The provider should have the resolved config
+    expect(provider['config'].body).toEqual({
+      query: '{{prompt}}',
+      date: '2025-06-03T22:01:13.797Z',
+      transactions: mockTransactions,
+    });
+  });
+
+  it('should resolve nested file:// references in body configuration', () => {
+    const mockTransactions = [
+      { id: '1', amount: '100.50' },
+      { id: '2', amount: '250.75' },
+    ];
+    const mockConfig = {
+      api_key: 'test-key-123',
+      timeout: 5000,
+    };
+    const mockUsers = [
+      { name: 'John', email: 'john@example.com' },
+      { name: 'Jane', email: 'jane@example.com' },
+    ];
+
+    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
+      query: '{{prompt}}',
+      data: {
+        transactions: mockTransactions,
+        settings: mockConfig,
+        nested: {
+          users: mockUsers,
+        },
+      },
+    });
+
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          query: '{{prompt}}',
+          data: {
+            transactions: 'file://./transactions.csv',
+            settings: 'file://./config.json',
+            nested: {
+              users: 'file://./users.csv',
+            },
+          },
+        },
+      },
+    });
+
+    // Verify the nested structure was resolved
+    expect(provider['config'].body).toEqual({
+      query: '{{prompt}}',
+      data: {
+        transactions: mockTransactions,
+        settings: mockConfig,
+        nested: {
+          users: mockUsers,
+        },
+      },
+    });
+  });
+
+  it('should resolve file:// references in arrays', () => {
+    const mockConfig = {
+      api_key: 'test-key-123',
+      timeout: 5000,
+    };
+    const mockUsers = [{ name: 'John', email: 'john@example.com' }];
+
+    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue([
+      'regular string',
+      mockConfig,
+      {
+        inside_array: mockUsers,
+      },
+    ]);
+
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: [
+          'regular string',
+          'file://./config.json',
+          {
+            inside_array: 'file://./users.csv',
+          },
+        ],
+      },
+    });
+
+    // Verify arrays with file references were resolved
+    expect(provider['config'].body).toEqual([
+      'regular string',
+      mockConfig,
+      {
+        inside_array: mockUsers,
+      },
+    ]);
+  });
+
+  it('should not affect body when no file:// references are present', () => {
+    const originalBody = {
+      query: '{{prompt}}',
+      regular: 'data',
+      nested: {
+        value: 123,
+        array: ['a', 'b', 'c'],
+      },
+    };
+
+    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(originalBody);
+
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: originalBody,
+      },
+    });
+
+    // Body should remain unchanged
+    expect(provider['config'].body).toEqual(originalBody);
+  });
+
+  it('should work with string body containing file:// reference', () => {
+    const mockContent = 'This is the content from the file';
+
+    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(mockContent);
+
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: 'file://./content.txt',
+      },
+    });
+
+    // String body should be resolved to file content
+    expect(provider['config'].body).toBe(mockContent);
+  });
+
+  it('should use resolved body in API calls', async () => {
+    const mockTransactions = [
+      { id: '1', amount: '100.50' },
+      { id: '2', amount: '250.75' },
+    ];
+
+    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue({
+      query: '{{prompt}}',
+      transactions: mockTransactions,
+    });
+
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          query: '{{prompt}}',
+          transactions: 'file://./transactions.csv',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    // Verify the fetch was called with the resolved body
+    // Note: processJsonBody may parse JSON strings, so check the actual call
+    expect(fetchWithCache).toHaveBeenCalled();
+
+    const actualCall = jest.mocked(fetchWithCache).mock.calls[0];
+    expect(actualCall[0]).toBe('http://test.com');
+    expect(actualCall[1].method).toBe('POST');
+    expect(actualCall[1].headers).toEqual({ 'content-type': 'application/json' });
+
+    // Parse the actual body to verify it contains the right data
+    const bodyStr = actualCall[1].body as string;
+    const bodyObj = JSON.parse(bodyStr);
+    expect(bodyObj.query).toBe('test prompt');
+    expect(bodyObj.transactions).toBeDefined();
+    expect(bodyObj.transactions.length).toBe(2);
+    // The transactions are there, whether as strings or numbers
+    expect(bodyObj.transactions[0].id).toBeDefined();
+    expect(bodyObj.transactions[1].id).toBeDefined();
+  });
+
+  it('should handle GET requests without body file resolution', () => {
+    // maybeLoadConfigFromExternalFile should not be called for GET requests without body
+    jest.mocked(maybeLoadConfigFromExternalFile).mockClear();
+
+    new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+      },
+    });
+
+    // Should not call maybeLoadConfigFromExternalFile since there's no body
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
+  });
+
+  it('should handle complex nested file resolutions with mixed content', () => {
+    const mockData = {
+      simple: 'value',
+      fileRef: { loaded: 'from file' },
+      nested: {
+        another: 'regular',
+        fileData: [1, 2, 3],
+        deeper: {
+          moreFiles: { data: 'loaded' },
+        },
+      },
+      arrayWithFiles: ['string', { fromFile: true }, ['nested', 'array']],
+    };
+
+    jest.mocked(maybeLoadConfigFromExternalFile).mockReturnValue(mockData);
+
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          simple: 'value',
+          fileRef: 'file://./data.json',
+          nested: {
+            another: 'regular',
+            fileData: 'file://./numbers.json',
+            deeper: {
+              moreFiles: 'file://./more.json',
+            },
+          },
+          arrayWithFiles: ['string', 'file://./object.json', ['nested', 'array']],
+        },
+      },
+    });
+
+    expect(provider['config'].body).toEqual(mockData);
   });
 });
