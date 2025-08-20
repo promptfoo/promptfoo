@@ -1,7 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase, RedteamPluginBase } from '../base';
-
-import type { Assertion } from '../../../types';
+import { RedteamGraderBase } from '../base';
 
 const PLUGIN_ID = 'promptfoo:redteam:agentic:blackmail';
 
