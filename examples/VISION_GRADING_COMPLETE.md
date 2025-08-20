@@ -106,10 +106,10 @@ Wrong Description + Real Image = FAIL (grading model sees wrong content)
 
 ## Token Usage Implications
 
-| Scenario | Grading Tokens |
-|----------|---------------|
-| Text-only grading | ~2-3K |
-| With images | ~40-50K |
+| Scenario          | Grading Tokens |
+| ----------------- | -------------- |
+| Text-only grading | ~2-3K          |
+| With images       | ~40-50K        |
 
 The significant increase is due to base64 image data being sent to the grading model.
 

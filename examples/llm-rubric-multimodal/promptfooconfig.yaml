@@ -1,0 +1,110 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Multi-modal LLM-Rubric evaluation with provider-specific vision formatting
+
+prompts:
+  # OpenAI format for vision models
+  - label: "Describe Image"
+    raw: |
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe this image in detail, including all shapes, colors, and text you can see."
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,{{image}}"
+              }
+            }
+          ]
+        }
+      ]
+
+providers:
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
+  - bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+  - bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - vertex:gemini-1.5-flash
+  - vertex:gemini-1.5-pro
+  - bedrock:amazon.nova-pro-v1:0
+
+tests:
+  # Shapes image test with provider-specific rubrics
+  - description: "Geometric shapes - OpenAI grading"
+    vars:
+      image: file://shapes.png
+    assert:
+      - type: llm-rubric
+        value: |
+          The output should accurately describe:
+          1. Four geometric shapes: square, circle, triangle, and star
+          2. Their colors: blue square, red circle, green triangle, yellow star
+          3. The "Test Shapes" title at the top
+          4. The 2x2 grid arrangement
+          
+          Award full points only if all elements are correctly identified.
+        threshold: 0.8
+        provider: openai:gpt-4o-mini
+        rubricPrompt: file://rubrics/openai-template.js
+
+  - description: "Geometric shapes - Anthropic grading"
+    vars:
+      image: file://shapes.png
+    assert:
+      - type: llm-rubric
+        value: |
+          Evaluate if the description correctly identifies the four shapes
+          (square, circle, triangle, star) and their respective colors.
+        threshold: 0.8
+        provider: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+        rubricPrompt: file://rubrics/anthropic.js
+
+  - description: "Geometric shapes - Gemini grading"
+    vars:
+      image: file://shapes.png
+    assert:
+      - type: llm-rubric
+        value: |
+          Check if the output mentions all four shapes and their colors correctly.
+        threshold: 0.8
+        provider: vertex:gemini-1.5-flash
+        rubricPrompt: file://rubrics/gemini.js
+
+  - description: "Geometric shapes - Nova grading"
+    vars:
+      image: file://shapes.png
+    assert:
+      - type: llm-rubric
+        value: |
+          Verify the description includes shapes, colors, and spatial arrangement.
+        threshold: 0.8
+        provider: bedrock:amazon.nova-pro-v1:0
+        rubricPrompt: file://rubrics/bedrock-nova.js
+
+  # Chart image test
+  - description: "Bar chart analysis"
+    vars:
+      image: file://chart.png
+    assert:
+      - type: llm-rubric
+        value: |
+          The output should identify:
+          1. Chart type: bar chart
+          2. Title: "Sales Performance by Product"
+          3. Four products labeled A, B, C, D
+          4. Their relative values/heights
+          5. Y-axis scale (0-50 in thousands)
+        threshold: 0.7
+        provider: openai:gpt-4o-mini
+        rubricPrompt: file://rubrics/openai.js
+
+      - type: llm-rubric
+        value: |
+          Check if the chart type, title, and product labels are correctly identified.
+        threshold: 0.7
+        provider: vertex:gemini-1.5-flash
+        rubricPrompt: file://rubrics/gemini.js
