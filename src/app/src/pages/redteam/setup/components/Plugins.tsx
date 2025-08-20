@@ -10,6 +10,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { Grid2 } from '@mui/material';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -591,6 +592,24 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       p.plugins.size === selectedPlugins.size,
   );
 
+  // Check if user has selected all or most plugins
+  const hasSelectedMostPlugins = useMemo(() => {
+    // Get all unique plugins from risk categories (excluding intent and policy)
+    const allAvailablePlugins = new Set<Plugin>();
+    Object.values(riskCategories).forEach((plugins) => {
+      plugins.forEach((plugin) => {
+        if (plugin !== 'intent' && plugin !== 'policy') {
+          allAvailablePlugins.add(plugin);
+        }
+      });
+    });
+
+    const totalAvailable = allAvailablePlugins.size;
+    const totalSelected = selectedPlugins.size;
+    // Show warning if more than 80% of plugins are selected or all plugins are selected
+    return totalSelected >= totalAvailable * 0.8 || totalSelected === totalAvailable;
+  }, [selectedPlugins]);
+
   return (
     <PageWrapper
       title="Plugins"
@@ -621,6 +640,38 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         !isConfigValid() || !hasAnyPluginsConfigured() ? getNextButtonTooltip() : undefined
       }
     >
+      {/* Warning banner when all/most plugins are selected - full width sticky */}
+      {hasSelectedMostPlugins && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon />}
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 9,
+            margin: -3,
+            marginBottom: 3,
+            padding: theme.spacing(2, 3),
+            borderRadius: 0,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            '& .MuiAlert-message': {
+              width: '100%',
+            },
+          }}
+        >
+          <Box>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Performance Warning: Too Many Plugins Selected
+            </Typography>
+            <Typography variant="body2">
+              Selecting many plugins is usually not efficient and will significantly increase
+              evaluation time and cost. It's recommended to use the preset configurations or select
+              only the plugins specifically needed for your use case.
+            </Typography>
+          </Box>
+        </Alert>
+      )}
+
       <ErrorBoundary FallbackComponent={ErrorFallback}>
         <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
           {/* Main content */}

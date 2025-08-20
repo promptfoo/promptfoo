@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 
 import cliState from '../../cliState';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -326,9 +327,22 @@ export async function tryUnblocking({
       '2025-06-16T14:49:11-07:00',
     );
 
+    // Allow disabling unblocking via environment variable
+    if (getEnvBool('PROMPTFOO_DISABLE_UNBLOCKING')) {
+      logger.debug('[Unblocking] Disabled via PROMPTFOO_DISABLE_UNBLOCKING');
+      // Return a response that will not increment numRequests
+      return {
+        success: false,
+        tokenUsage: { numRequests: 0 } as Partial<TokenUsage> as TokenUsage,
+      };
+    }
+
     if (!supportsUnblocking) {
       logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');
-      return { success: false };
+      return {
+        success: false,
+        tokenUsage: { numRequests: 0 } as Partial<TokenUsage> as TokenUsage,
+      };
     }
 
     logger.debug('[Unblocking] Attempting to unblock with blocking-question-analysis task');
@@ -383,7 +397,7 @@ export async function tryUnblocking({
       };
     }
   } catch (error) {
-    logger.error(`[Unblocking] Error in unblocking: ${error}`);
+    logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
     return { success: false };
   }
 }

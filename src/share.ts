@@ -178,7 +178,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   logger.debug(`Largest result size from sample: ${largestSize} bytes`);
 
   // Determine how many results per chunk
-  const TARGET_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+  const TARGET_CHUNK_SIZE = 0.9 * 1024 * 1024; // 900KB in bytes
   const estimatedResultsPerChunk =
     getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
     Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
