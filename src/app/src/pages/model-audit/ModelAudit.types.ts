@@ -1,3 +1,4 @@
+import { ModelAuditCheck } from '@promptfoo/types/modelAudit';
 export interface ScanPath {
   path: string;
   type: 'file' | 'directory';
@@ -10,6 +11,7 @@ export interface ScanOptions {
   maxFileSize?: number;
   maxTotalSize?: number;
   verbose: boolean;
+  author?: string;
 }
 
 export interface ScanIssue {
@@ -25,6 +27,14 @@ export interface ScanIssue {
   timestamp?: number;
 }
 
+export type ScanCheck = ModelAuditCheck;
+
+export interface ScanAsset {
+  path: string;
+  type?: string;
+  size?: number;
+}
+
 export interface ScanResult {
   path: string;
   issues: ScanIssue[];
@@ -34,4 +44,18 @@ export interface ScanResult {
   duration?: number;
   rawOutput?: string;
   scannedFilesList?: string[];
+
+  // Check-related fields
+  checks?: ScanCheck[];
+  total_checks?: number;
+  passed_checks?: number;
+  failed_checks?: number;
+  assets?: ScanAsset[];
+  files_scanned?: number;
+
+  // Alternative camelCase versions (for compatibility)
+  totalChecks?: number;
+  passedChecks?: number;
+  failedChecks?: number;
+  filesScanned?: number;
 }

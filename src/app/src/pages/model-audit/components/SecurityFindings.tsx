@@ -7,8 +7,8 @@ import {
   Error as ErrorIcon,
   ExpandLess,
   ExpandMore,
-  Info as InfoIcon,
   InsertDriveFile as FileIcon,
+  Info as InfoIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import Alert from '@mui/material/Alert';
@@ -28,9 +28,9 @@ import Stack from '@mui/material/Stack';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { SeverityBadge } from '../ModelAudit.styles';
-import { getSeverityLabel, getIssueFilePath } from '../utils';
+import { getIssueFilePath, getSeverityLabel } from '../utils';
 
-import type { ScanResult, ScanIssue } from '../ModelAudit.types';
+import type { ScanIssue, ScanResult } from '../ModelAudit.types';
 
 interface SecurityFindingsProps {
   scanResults: ScanResult;
@@ -431,7 +431,7 @@ export default function SecurityFindings({
               fontSize: '0.875rem',
             }}
           >
-            {scanResults.rawOutput || 'No raw output available'}
+            {scanResults.rawOutput || JSON.stringify(scanResults, null, 2)}
           </pre>
         </DialogContent>
       </Dialog>
