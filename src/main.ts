@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+
 import { version } from '../package.json';
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
@@ -16,6 +17,7 @@ import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { modelScanCommand } from './commands/modelScan';
+import { scanRepoCommand } from './commands/scanRepo';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
@@ -105,6 +107,7 @@ async function main() {
   importCommand(program);
   listCommand(program);
   modelScanCommand(program);
+  scanRepoCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 

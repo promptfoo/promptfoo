@@ -1,23 +1,28 @@
-import { relations, sql } from 'drizzle-orm';
 import {
-  text,
-  integer,
-  sqliteTable,
-  primaryKey,
+  relations,
+  sql,
+} from 'drizzle-orm';
+import {
   index,
-  uniqueIndex,
+  integer,
+  primaryKey,
   real,
+  sqliteTable,
+  text,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
+
+import type { RepoScanResult } from '../scanner/types';
 import {
-  type Prompt,
-  type ProviderResponse,
-  type GradingResult,
-  type UnifiedConfig,
-  type ProviderOptions,
   type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateSummaryV2,
+  type GradingResult,
+  type Prompt,
+  type ProviderOptions,
+  type ProviderResponse,
   ResultFailureReason,
+  type UnifiedConfig,
 } from '../types';
 
 // ------------ Prompts ------------
@@ -385,3 +390,20 @@ export const spansRelations = relations(spansTable, ({ one }) => ({
     references: [tracesTable.traceId],
   }),
 }));
+
+export const repoScansTable = sqliteTable(
+  'repo_scans',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+    label: text('label'),
+    rootPaths: text('root_paths', { mode: 'json' }).$type<string[]>(),
+    options: text('options', { mode: 'json' }).$type<Record<string, unknown>>(),
+    result: text('result', { mode: 'json' }).$type<RepoScanResult>().notNull(),
+  },
+  (table) => ({
+    createdAtIdx: index('repo_scans_created_at_idx').on(table.createdAt),
+  }),
+);

@@ -1,0 +1,8 @@
+# Default ignore patterns for repo scanner (substring match)
+# Users can customize this file per repo. Lines starting with # are comments.
+
+/test/
+/tests/
+.spec.
+.test. 
+

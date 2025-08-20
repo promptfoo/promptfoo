@@ -1,13 +1,15 @@
 import React, { useEffect } from 'react';
+
 import {
   createBrowserRouter,
   createRoutesFromElements,
   Navigate,
+  Outlet,
   Route,
   RouterProvider,
   useLocation,
-  Outlet,
 } from 'react-router-dom';
+
 import PageShell from './components/PageShell';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
@@ -22,6 +24,8 @@ import ModelAuditPage from './pages/model-audit/page';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
+import RepoScanDetailPage from './pages/repo-scans/detail';
+import RepoScansIndexPage from './pages/repo-scans/page';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -64,6 +68,8 @@ const router = createBrowserRouter(
 
           <Route path="/prompts" element={<PromptsPage />} />
           <Route path="/model-audit" element={<ModelAuditPage />} />
+          <Route path="/repo-scans" element={<RepoScansIndexPage />} />
+          <Route path="/repo-scans/:id" element={<RepoScanDetailPage />} />
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />
           <Route path="/report" element={<ReportPage />} />

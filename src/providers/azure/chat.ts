@@ -1,13 +1,26 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import {
+  getEnvFloat,
+  getEnvInt,
+} from '../../envars';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types';
+import {
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import {
+  parseChatPrompt,
+  REQUEST_TIMEOUT_MS,
+} from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -52,8 +65,19 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...context?.prompt?.config,
     };
 
-    // Parse chat prompt
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    // Parse chat prompt - this handles JSON/YAML formats or falls back to user message
+    const userMessages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+    // Construct messages with optional system prompt
+    const messages = [];
+    
+    // Add system prompt if configured
+    if (config.systemPrompt && typeof config.systemPrompt === 'string' && config.systemPrompt.trim()) {
+      messages.push({ role: 'system', content: config.systemPrompt.trim() });
+    }
+    
+    // Add the parsed user messages
+    messages.push(...userMessages);
 
     // Response format with variable rendering
     const responseFormat = config.response_format

@@ -1,22 +1,39 @@
-import compression from 'compression';
-import cors from 'cors';
 import 'dotenv/config';
-import type { Request, Response } from 'express';
-import express from 'express';
+
 import http from 'node:http';
 import path from 'node:path';
+
+import compression from 'compression';
+import cors from 'cors';
+import type {
+  Request,
+  Response,
+} from 'express';
+import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
-import { getDefaultPort, VERSION } from '../constants';
+
+import {
+  getDefaultPort,
+  VERSION,
+} from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
-import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
+import type {
+  Prompt,
+  PromptWithMetadata,
+  TestCase,
+  TestSuite,
+} from '../index';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
-import { createShareableUrl, determineShareDomain } from '../share';
+import {
+  createShareableUrl,
+  determineShareDomain,
+} from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import type { EvalSummary } from '../types';
@@ -29,12 +46,16 @@ import {
   readResult,
 } from '../util/database';
 import invariant from '../util/invariant';
-import { BrowserBehavior, openBrowser } from '../util/server';
+import {
+  BrowserBehavior,
+  openBrowser,
+} from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
+import { repoScansRouter } from './routes/repoScans';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 
@@ -215,6 +236,7 @@ export function createApp() {
   app.use('/api/configs', configsRouter);
   app.use('/api/model-audit', modelAuditRouter);
   app.use('/api/traces', tracesRouter);
+  app.use('/api/repo-scans', repoScansRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
