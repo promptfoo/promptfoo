@@ -1,12 +1,13 @@
 # LLM-Rubric Image Handling Analysis
 
-## Current Behavior
+## Current Behavior (UPDATED)
 
 ### What happens with llm-rubric and images:
 
-1. **Image data is passed through**: The base64 image data from vars is passed to the grading model via the grading prompt context
+1. **Image data is now sanitized**: Base64 image data is replaced with `[Image data]` placeholder before sending to grading model
 2. **Success with both vision and non-vision models**: Tests pass with both GPT-4o-mini (vision) and GPT-3.5-turbo (non-vision) as grading models
 3. **Grading is based on text output only**: The grading model evaluates the generated text description, not the image itself
+4. **Consistent with G-Eval**: Now uses the same sanitization approach as G-Eval for efficiency
 
 ### Key Findings from Testing:
 
@@ -20,20 +21,22 @@ Available variables:
 
 The image variable (containing base64 data) is available in the grading context and passed to the grading model.
 
-## Comparison with G-Eval
+## Comparison with G-Eval (UPDATED)
 
-| Aspect                   | G-Eval                                            | llm-rubric                          |
-| ------------------------ | ------------------------------------------------- | ----------------------------------- |
-| Image handling           | Sanitizes input, replaces with `[Image provided]` | Passes raw base64 data through vars |
-| Token usage              | Lower (no image data sent)                        | Higher (includes base64 data)       |
-| Grading focus            | Text description only                             | Text description only               |
-| Vision model requirement | No                                                | No (but sends data anyway)          |
+| Aspect                   | G-Eval                                            | llm-rubric                              |
+| ------------------------ | ------------------------------------------------- | --------------------------------------- |
+| Image handling           | Sanitizes input, replaces with `[Image provided]` | NOW SAME: Sanitizes vars with `[Image data]` |
+| Token usage              | Lower (no image data sent)                        | NOW SAME: Lower (no image data sent)   |
+| Grading focus            | Text description only                             | Text description only                   |
+| Vision model requirement | No                                                | No                                      |
 
-## Potential Issues with Current llm-rubric Behavior
+## ~~Potential Issues with Current llm-rubric Behavior~~ ✅ RESOLVED
 
-1. **Unnecessary token usage**: Sending base64 image data to the grading model increases token count significantly
-2. **Potential confusion**: Grading models might try to process base64 strings as text
-3. **Inconsistency**: Different behavior from G-Eval for similar use cases
+~~1. **Unnecessary token usage**: Sending base64 image data to the grading model increases token count significantly~~
+~~2. **Potential confusion**: Grading models might try to process base64 strings as text~~
+~~3. **Inconsistency**: Different behavior from G-Eval for similar use cases~~
+
+**UPDATE**: All issues have been resolved by implementing the same sanitization approach as G-Eval.
 
 ## Should llm-rubric Be Modified?
 
@@ -49,12 +52,15 @@ The image variable (containing base64 data) is available in the grading context 
 - **Backward compatibility**: Existing use cases might depend on vars being passed through
 - **Different purpose**: llm-rubric is more general-purpose than G-Eval
 
-## Recommendation
+## ~~Recommendation~~ ✅ IMPLEMENTED
 
-For image inputs, llm-rubric should:
+~~For image inputs, llm-rubric should:~~
 
-1. **Keep current behavior by default** for backward compatibility
-2. **Optionally allow sanitization** via a configuration flag
-3. **Document the behavior** clearly so users understand the token implications
+~~1. **Keep current behavior by default** for backward compatibility~~
+~~2. **Optionally allow sanitization** via a configuration flag~~
+~~3. **Document the behavior** clearly so users understand the token implications~~
 
-This preserves flexibility while allowing users to optimize for their specific use case.
+**UPDATE**: We have implemented automatic image sanitization for llm-rubric to match G-Eval's behavior. This provides:
+- **Efficiency**: Reduced token usage by not sending unnecessary base64 data
+- **Consistency**: Same behavior as G-Eval for image handling
+- **Clarity**: Grading focuses on the text output, not the input image

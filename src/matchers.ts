@@ -410,6 +410,31 @@ function tryParse(content: string) {
  * If the input contains base64 image data, it returns a placeholder description.
  * Otherwise, it returns the original input.
  */
+/**
+ * Sanitizes variables to replace image data with placeholders for grading.
+ * Used by both G-Eval and llm-rubric to avoid sending unnecessary image data to grading models.
+ */
+function sanitizeVarsForGrading(
+  vars: Record<string, string | object>,
+): Record<string, string | object> {
+  const sanitized: Record<string, string | object> = {};
+
+  for (const [key, value] of Object.entries(vars)) {
+    if (typeof value === 'string') {
+      // Check if this looks like base64 image data
+      if (value.match(/^[A-Za-z0-9+/]{1000,}={0,2}$/)) {
+        sanitized[key] = '[Image data]';
+      } else {
+        sanitized[key] = value;
+      }
+    } else {
+      sanitized[key] = value;
+    }
+  }
+
+  return sanitized;
+}
+
 function sanitizeInputForGEval(input: string): string {
   // Check if this is a JSON message format (for vision models)
   try {
@@ -569,10 +594,12 @@ export async function matchesLlmRubric(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
+  // Sanitize variables to avoid sending image data to grading model
+  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
   const prompt = await renderLlmRubricPrompt(rubricPrompt, {
     output: tryParse(llmOutput),
     rubric,
-    ...(vars || {}),
+    ...sanitizedVars,
   });
 
   const defaultProviders = await getDefaultProviders();
@@ -707,11 +734,13 @@ export async function matchesFactuality(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
+  // Sanitize variables to avoid sending image data to grading model
+  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
   const prompt = await renderLlmRubricPrompt(rubricPrompt, {
     input,
     ideal: expected,
     completion: tryParse(output),
-    ...(vars || {}),
+    ...sanitizedVars,
   });
 
   // Get the appropriate provider
@@ -861,11 +890,13 @@ export async function matchesClosedQa(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
+  // Sanitize variables to avoid sending image data to grading model
+  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
   const prompt = await renderLlmRubricPrompt(rubricPrompt, {
     input,
     criteria: expected,
     completion: tryParse(output),
-    ...(vars || {}),
+    ...sanitizedVars,
   });
 
   const finalProvider = await getAndCheckProvider(
@@ -1128,10 +1159,12 @@ export async function matchesContextRecall(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
+  // Sanitize variables to avoid sending image data to grading model
+  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
     context,
     groundTruth,
-    ...(vars || {}),
+    ...sanitizedVars,
   });
 
   const resp = await textProvider.callApi(promptText);
@@ -1309,10 +1342,12 @@ export async function matchesContextFaithfulness(
       ? grading?.rubricPrompt?.[1]
       : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
 
+  // Sanitize variables to avoid sending image data to grading model
+  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
   let promptText = await renderLlmRubricPrompt(longformPrompt, {
     question: query,
     answer: tryParse(output),
-    ...(vars || {}),
+    ...sanitizedVars,
   });
 
   let resp = await textProvider.callApi(promptText);
@@ -1327,7 +1362,7 @@ export async function matchesContextFaithfulness(
   promptText = await renderLlmRubricPrompt(nliPrompt, {
     context,
     statements,
-    ...(vars || {}),
+    ...sanitizedVars,
   });
 
   resp = await textProvider.callApi(promptText);
@@ -1380,10 +1415,12 @@ export async function matchesSelectBest(
   );
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, SELECT_BEST_PROMPT);
+  // Sanitize variables to avoid sending image data to grading model
+  const sanitizedVars = vars ? sanitizeVarsForGrading(vars) : {};
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
     criteria,
     outputs: outputs.map((o) => tryParse(o)),
-    ...(vars || {}),
+    ...sanitizedVars,
   });
 
   const resp = await textProvider.callApi(promptText);
