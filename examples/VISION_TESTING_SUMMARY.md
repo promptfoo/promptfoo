@@ -22,12 +22,12 @@ Successfully tested and enhanced both G-Eval and llm-rubric assertions with imag
 
 ## Key Differences (UPDATED)
 
-| Feature                               | G-Eval                                   | LLM-Rubric                              |
-| ------------------------------------- | ---------------------------------------- | --------------------------------------- |
-| **Image Sanitization**                | ✅ Yes - removes image data              | ✅ Yes - removes image data             |
-| **Token Usage**                       | Lower (~3-4K for grading)                | Lower (~3-4K for grading)               |
-| **Grading Focus**                     | Text output only                         | Text output only                        |
-| **Vision Model Required for Grading** | No                                       | No                                      |
+| Feature                               | G-Eval                                   | LLM-Rubric                                |
+| ------------------------------------- | ---------------------------------------- | ----------------------------------------- |
+| **Image Sanitization**                | ✅ Yes - removes image data               | ✅ Yes - removes image data                |
+| **Token Usage**                       | Lower (~3-4K for grading)                | Lower (~3-4K for grading)                 |
+| **Grading Focus**                     | Text output only                         | Text output only                          |
+| **Vision Model Required for Grading** | No                                       | No                                        |
 | **Implementation Location**           | `sanitizeInputForGEval()` in matchers.ts | `sanitizeVarsForGrading()` in matchers.ts |
 
 ## Implementation Details
