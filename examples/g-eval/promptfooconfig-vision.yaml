@@ -89,21 +89,11 @@ prompts:
       ]
 
 providers:
-  - id: openai-vision
-    config:
-      apiProvider: openai:gpt-4o-mini
-      
-  - id: anthropic-vision
-    config:
-      apiProvider: bedrock:anthropic.claude-3-sonnet-20240229-v1:0
-      
-  - id: gemini-vision
-    config:
-      apiProvider: vertex:gemini-1.5-flash
-      
-  - id: nova-vision
-    config:
-      apiProvider: bedrock:amazon.nova-pro-v1:0
+  - openai:gpt-4o-mini
+  - openai:gpt-4o
+  - bedrock:anthropic.claude-3-sonnet-20240229-v1:0
+  - vertex:gemini-1.5-flash
+  - bedrock:amazon.nova-pro-v1:0
 
 tests:
   # Test 1: Standard G-Eval with automatic image inclusion
