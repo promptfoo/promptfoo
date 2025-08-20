@@ -46,7 +46,6 @@ async function loadRedteamProvider({
     ret = new OpenAiChatCompletionProvider(defaultModel, {
       config: {
         temperature: TEMPERATURE,
-        max_tokens: 24000, // Allow for complete scenario generation with 5+ emails
         response_format: jsonOnly ? { type: 'json_object' } : undefined,
       },
     });
