@@ -3,7 +3,7 @@ description: Test Agentic Blackmail Plugin - Full Test
 
 providers:
   # Use OpenAI (set OPENAI_API_KEY environment variable)
-  - anthropic:messages:claude-opus-4-20250514
+  - openai:o3
   
   # Alternative: Use Anthropic (set ANTHROPIC_API_KEY)  
   # - anthropic:claude-3-haiku-20240307
