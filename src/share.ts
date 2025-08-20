@@ -144,18 +144,20 @@ async function sendChunkOfResults(
       evalId,
       responseBody: responseBody.length > 500 ? `${responseBody.slice(0, 500)}...` : responseBody,
     };
-    
+
     logger.error(
       `Failed to send results chunk to ${targetUrl}: status code: ${response.status}, status text: ${response.statusText}, body: ${responseBody}`,
     );
     logger.error(`Debug info: ${JSON.stringify(debugInfo, null, 2)}`);
-    
+
     if (response.status === 413) {
       throw new Error(
         `Results chunk too large. It contained ${stringifiedChunk.length} bytes (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB). Please reduce the number of results per chunk using the environment variable PROMPTFOO_SHARE_CHUNK_SIZE. Example: PROMPTFOO_SHARE_CHUNK_SIZE=10 promptfoo share`,
       );
     }
-    throw new Error(`Failed to send results chunk to ${targetUrl}. Status: ${response.status} ${response.statusText}. Chunk size: ${chunk.length} results (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB). See debug logs for more details.`);
+    throw new Error(
+      `Failed to send results chunk to ${targetUrl}. Status: ${response.status} ${response.statusText}. Chunk size: ${chunk.length} results (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB). See debug logs for more details.`,
+    );
   }
 }
 
