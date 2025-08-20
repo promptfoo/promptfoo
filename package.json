@@ -70,7 +70,8 @@
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
     "tsc": "tsc",
-    "mcp": "node dist/src/main.js mcp"
+    "mcp": "node dist/src/main.js mcp",
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy\" --ignore-dirs=\"dist,site,examples,node_modules\""
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
@@ -168,6 +169,7 @@
     "axios": "^1.11.0",
     "check-dependency-version-consistency": "^5.0.1",
     "concurrently": "^9.2.0",
+    "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.4",
     "ibm-cloud-sdk-core": "^5.4.2",
     "jest": "^30.0.5",
