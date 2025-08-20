@@ -43,6 +43,8 @@ import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
 import './Report.css';
 
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+
 const App: React.FC = () => {
   const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
@@ -51,6 +53,14 @@ const App: React.FC = () => {
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
   const { recordEvent } = useTelemetry();
+
+  // Vulnerabilities DataGrid
+  const vulnerabilitiesDataGridRef = React.useRef<HTMLDivElement>(null);
+  const [vulnerabilitiesDataGridFilterModel, setVulnerabilitiesDataGridFilterModel] =
+    React.useState<GridFilterModel>({
+      items: [],
+      logicOperator: GridLogicOperator.Or,
+    });
 
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
@@ -434,7 +444,12 @@ const App: React.FC = () => {
             )}
           </Box>
         </Card>
-        <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
+        <Overview
+          categoryStats={categoryStats}
+          plugins={evalData.config.redteam.plugins || []}
+          vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
+          setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
+        />
         <StrategyStats
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
@@ -451,6 +466,9 @@ const App: React.FC = () => {
           evalId={evalId}
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
+          vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
+          vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
+          setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
         />
         <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
       </Stack>
