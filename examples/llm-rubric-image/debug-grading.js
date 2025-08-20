@@ -3,7 +3,7 @@ module.exports = async function debugGrading(output, context) {
   console.log('\n=== DEBUG: Grading Context ===');
   console.log('Output length:', output.length);
   console.log('Output preview:', output.substring(0, 200) + '...');
-  
+
   console.log('\nAvailable variables:');
   if (context.vars) {
     for (const [key, value] of Object.entries(context.vars)) {
@@ -22,14 +22,14 @@ module.exports = async function debugGrading(output, context) {
       }
     }
   }
-  
+
   console.log('\nPrompt:', context.prompt ? context.prompt.substring(0, 100) + '...' : 'N/A');
   console.log('=========================\n');
-  
+
   // Always pass to see the output
   return {
     pass: true,
     score: 1.0,
-    reason: 'Debug assertion - check console output'
+    reason: 'Debug assertion - check console output',
   };
-}; 
+};

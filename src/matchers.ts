@@ -422,7 +422,7 @@ function sanitizeInputForGEval(input: string): string {
         if (message.role === 'system') {
           continue;
         }
-        
+
         // Handle OpenAI/standard format
         if (message.content) {
           if (Array.isArray(message.content)) {

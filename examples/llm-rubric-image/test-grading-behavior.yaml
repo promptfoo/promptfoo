@@ -29,7 +29,7 @@ tests:
   - vars:
       image: file://../g-eval/test-image.png
     options:
-      provider: openai:gpt-3.5-turbo  # This model doesn't support vision
+      provider: openai:gpt-3.5-turbo # This model doesn't support vision
     assert:
       - type: llm-rubric
         value: |
@@ -38,12 +38,12 @@ tests:
           2. Colors (blue, red, green, yellow)
           3. Title "Test Shapes"
         threshold: 0.7
-  
+
   # Test with vision-capable grading provider
   - vars:
       image: file://../g-eval/test-image.png
     options:
-      provider: openai:gpt-4o-mini  # This model supports vision
+      provider: openai:gpt-4o-mini # This model supports vision
     assert:
       - type: llm-rubric
         value: |
@@ -51,4 +51,4 @@ tests:
           1. Four geometric shapes
           2. Colors (blue, red, green, yellow)
           3. Title "Test Shapes"
-        threshold: 0.7 
+        threshold: 0.7

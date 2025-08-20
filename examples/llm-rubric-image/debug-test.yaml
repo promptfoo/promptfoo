@@ -27,13 +27,13 @@ providers:
 tests:
   - vars:
       image: file://../g-eval/test-image.png
-      extra_var: "This is a test variable"
+      extra_var: 'This is a test variable'
     assert:
       # Debug assertion to see what's available
       - type: javascript
         value: file://debug-grading.js
-      
+
       # Regular llm-rubric assertion
       - type: llm-rubric
-        value: "The description should mention geometric shapes"
-        threshold: 0.5 
+        value: 'The description should mention geometric shapes'
+        threshold: 0.5

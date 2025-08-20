@@ -7,12 +7,14 @@ Successfully tested both G-Eval and llm-rubric assertions with image inputs acro
 ## Test Results
 
 ### G-Eval with Images
+
 - **Pass Rate**: 93.33% (14/15 tests)
 - **Providers Tested**: GPT-4o-mini, Claude 3.5 Sonnet, Gemini 1.5 Pro, Nova Pro, Claude via Bedrock
 - **Grading Provider**: OpenAI GPT-4.1-mini
 - **Image Handling**: ✅ Sanitizes input, replaces images with `[Image provided]` placeholder
 
 ### LLM-Rubric with Images
+
 - **Pass Rate**: 100% (6/6 tests)
 - **Providers Tested**: GPT-4o-mini, Claude 3.5 Sonnet, Gemini 1.5 Pro
 - **Grading Provider**: OpenAI GPT-4o-mini
@@ -22,7 +24,7 @@ Successfully tested both G-Eval and llm-rubric assertions with image inputs acro
 
 | Feature                               | G-Eval                                   | LLM-Rubric                   |
 | ------------------------------------- | ---------------------------------------- | ---------------------------- |
-| **Image Sanitization**                | ✅ Yes - removes image data               | ❌ No - passes through        |
+| **Image Sanitization**                | ✅ Yes - removes image data              | ❌ No - passes through       |
 | **Token Usage**                       | Lower (~3-4K for grading)                | Higher (includes base64)     |
 | **Grading Focus**                     | Text output only                         | Text output only             |
 | **Vision Model Required for Grading** | No                                       | No (but receives image data) |
@@ -31,11 +33,12 @@ Successfully tested both G-Eval and llm-rubric assertions with image inputs acro
 ## Implementation Details
 
 ### G-Eval Sanitization (matchers.ts)
+
 ```typescript
 function sanitizeInputForGEval(input: string): string {
   // Handles multiple formats:
   // - OpenAI: type: "image_url"
-  // - Anthropic: type: "image"  
+  // - Anthropic: type: "image"
   // - Gemini: parts with inline_data
   // - Nova: content with image object
   // Returns text with "[Image provided]" placeholders
@@ -47,34 +50,40 @@ function sanitizeInputForGEval(input: string): string {
 All major vision model formats are handled:
 
 1. **OpenAI/Azure**:
+
 ```json
-{"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+{ "type": "image_url", "image_url": { "url": "data:image/png;base64,..." } }
 ```
 
 2. **Anthropic**:
+
 ```json
-{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "..."}}
+{ "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": "..." } }
 ```
 
 3. **Google Gemini**:
+
 ```json
-{"parts": [{"text": "..."}, {"inline_data": {"mime_type": "image/png", "data": "..."}}]}
+{ "parts": [{ "text": "..." }, { "inline_data": { "mime_type": "image/png", "data": "..." } }] }
 ```
 
 4. **Amazon Nova**:
+
 ```json
-{"content": [{"text": "..."}, {"image": {"format": "png", "source": {"bytes": "..."}}}]}
+{ "content": [{ "text": "..." }, { "image": { "format": "png", "source": { "bytes": "..." } } }] }
 ```
 
 ## Test Files Created
 
 ### G-Eval Tests
+
 - `examples/g-eval/promptfooconfig-image.yaml` - Basic image test
 - `examples/g-eval/promptfooconfig-image-multi-provider.yaml` - Multi-provider test
 - `examples/g-eval/test-image.png` - Geometric shapes test image
 - `examples/g-eval/test-chart.png` - Bar chart test image
 
 ### LLM-Rubric Tests
+
 - `examples/llm-rubric-image/promptfooconfig.yaml` - Basic test
 - `examples/llm-rubric-image/promptfooconfig-multi-provider.yaml` - Multi-provider test
 - `examples/llm-rubric-image/debug-grading.js` - Debug assertion
@@ -83,14 +92,18 @@ All major vision model formats are handled:
 ## Recommendations
 
 ### For G-Eval
+
 ✅ **Current implementation is correct and optimal**
+
 - Efficiently removes unnecessary image data from grading
 - Maintains semantic meaning with placeholders
 - Reduces token usage
 - Works across all providers
 
 ### For LLM-Rubric
+
 ⚠️ **Consider optional sanitization**
+
 - Current behavior: Passes all vars including base64 images
 - Recommendation: Add optional flag to sanitize images like G-Eval
 - Preserve backward compatibility by keeping current behavior as default
@@ -98,6 +111,7 @@ All major vision model formats are handled:
 ## Usage Examples
 
 ### G-Eval with Images
+
 ```yaml
 assert:
   - type: g-eval
@@ -108,6 +122,7 @@ assert:
 ```
 
 ### LLM-Rubric with Images
+
 ```yaml
 assert:
   - type: llm-rubric
@@ -121,4 +136,4 @@ assert:
 
 ## Conclusion
 
-Both G-Eval and llm-rubric successfully work with image inputs across major vision models. G-Eval's sanitization approach is more efficient for text-based evaluation, while llm-rubric's pass-through approach offers more flexibility at the cost of higher token usage. The implementations are robust and production-ready. 
+Both G-Eval and llm-rubric successfully work with image inputs across major vision models. G-Eval's sanitization approach is more efficient for text-based evaluation, while llm-rubric's pass-through approach offers more flexibility at the cost of higher token usage. The implementations are robust and production-ready.

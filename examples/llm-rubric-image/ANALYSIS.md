@@ -38,11 +38,13 @@ The image variable (containing base64 data) is available in the grading context 
 ## Should llm-rubric Be Modified?
 
 ### Arguments FOR sanitizing images in llm-rubric:
+
 - **Efficiency**: Reduce token usage by not sending unnecessary base64 data
 - **Consistency**: Match G-Eval's behavior for similar evaluation scenarios
 - **Clarity**: Grading should focus on the text output, not the input image
 
 ### Arguments AGAINST sanitizing images in llm-rubric:
+
 - **Flexibility**: Some rubrics might want to reference the original image (if grading model supports vision)
 - **Backward compatibility**: Existing use cases might depend on vars being passed through
 - **Different purpose**: llm-rubric is more general-purpose than G-Eval
@@ -55,4 +57,4 @@ For image inputs, llm-rubric should:
 2. **Optionally allow sanitization** via a configuration flag
 3. **Document the behavior** clearly so users understand the token implications
 
-This preserves flexibility while allowing users to optimize for their specific use case. 
+This preserves flexibility while allowing users to optimize for their specific use case.

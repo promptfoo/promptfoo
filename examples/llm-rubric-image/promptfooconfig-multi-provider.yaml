@@ -4,10 +4,10 @@ description: LLM-Rubric evaluation with multiple providers and image inputs
 # Default test options including the grading provider
 defaultTest:
   options:
-    provider: openai:gpt-4o-mini  # Use GPT-4o-mini as the grading provider for llm-rubric
+    provider: openai:gpt-4o-mini # Use GPT-4o-mini as the grading provider for llm-rubric
 
 prompts:
-  - label: "OpenAI Format"
+  - label: 'OpenAI Format'
     raw: |
       [
         {
@@ -26,8 +26,8 @@ prompts:
           ]
         }
       ]
-  
-  - label: "Anthropic Format"
+
+  - label: 'Anthropic Format'
     raw: |
       [
         {
@@ -48,8 +48,8 @@ prompts:
           ]
         }
       ]
-  
-  - label: "Gemini Format"
+
+  - label: 'Gemini Format'
     raw: |
       [
         {
@@ -71,21 +71,21 @@ prompts:
 providers:
   # OpenAI GPT-4o-mini (supports vision)
   - id: openai:gpt-4o-mini
-    label: "GPT-4o-mini"
+    label: 'GPT-4o-mini'
     prompts:
-      - "OpenAI Format"
-  
+      - 'OpenAI Format'
+
   # Anthropic Claude 3.5 Sonnet (supports vision)
   - id: anthropic:claude-3-5-sonnet-20241022
-    label: "Claude 3.5 Sonnet"
+    label: 'Claude 3.5 Sonnet'
     prompts:
-      - "Anthropic Format"
-  
+      - 'Anthropic Format'
+
   # Google Gemini 1.5 Pro (supports vision)
   - id: google:gemini-1.5-pro-002
-    label: "Gemini 1.5 Pro"
+    label: 'Gemini 1.5 Pro'
     prompts:
-      - "Gemini Format"
+      - 'Gemini Format'
 
 tests:
   # Test with geometric shapes image
@@ -102,7 +102,7 @@ tests:
           4. Mention the "Test Shapes" title
           5. Be clear and well-organized
         threshold: 0.7
-      
+
       # Compare with g-eval
       - type: g-eval
         value: >-
@@ -110,7 +110,7 @@ tests:
           geometric shapes with their correct colors and positions, mention the title,
           and be well-organized without hallucinations.
         threshold: 0.7
-  
+
   # Test with bar chart image
   - vars:
       image: file://../g-eval/test-chart.png
@@ -125,10 +125,10 @@ tests:
           4. Note that Product B has the highest sales (45)
           5. Describe the axis labels correctly
         threshold: 0.75
-      
+
       # Compare with g-eval
       - type: g-eval
         value: >-
           Chart analysis completeness - the description should correctly identify the chart type,
           title, all products, the highest value (Product B at 45), and axis labels.
-        threshold: 0.75 
+        threshold: 0.75
