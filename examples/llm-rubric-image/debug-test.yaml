@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Debug what's available to llm-rubric grading
+
+prompts:
+  - |
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe this image:"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,{{image}}"
+            }
+          }
+        ]
+      }
+    ]
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  - vars:
+      image: file://../g-eval/test-image.png
+      extra_var: "This is a test variable"
+    assert:
+      # Debug assertion to see what's available
+      - type: javascript
+        value: file://debug-grading.js
+      
+      # Regular llm-rubric assertion
+      - type: llm-rubric
+        value: "The description should mention geometric shapes"
+        threshold: 0.5 

@@ -1,0 +1,134 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: LLM-Rubric evaluation with multiple providers and image inputs
+
+# Default test options including the grading provider
+defaultTest:
+  options:
+    provider: openai:gpt-4o-mini  # Use GPT-4o-mini as the grading provider for llm-rubric
+
+prompts:
+  - label: "OpenAI Format"
+    raw: |
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe this image in detail:"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,{{image}}"
+              }
+            }
+          ]
+        }
+      ]
+  
+  - label: "Anthropic Format"
+    raw: |
+      [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe this image in detail:"
+            },
+            {
+              "type": "image",
+              "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "{{image}}"
+              }
+            }
+          ]
+        }
+      ]
+  
+  - label: "Gemini Format"
+    raw: |
+      [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "text": "Describe this image in detail:"
+            },
+            {
+              "inline_data": {
+                "mime_type": "image/png",
+                "data": "{{image}}"
+              }
+            }
+          ]
+        }
+      ]
+
+providers:
+  # OpenAI GPT-4o-mini (supports vision)
+  - id: openai:gpt-4o-mini
+    label: "GPT-4o-mini"
+    prompts:
+      - "OpenAI Format"
+  
+  # Anthropic Claude 3.5 Sonnet (supports vision)
+  - id: anthropic:claude-3-5-sonnet-20241022
+    label: "Claude 3.5 Sonnet"
+    prompts:
+      - "Anthropic Format"
+  
+  # Google Gemini 1.5 Pro (supports vision)
+  - id: google:gemini-1.5-pro-002
+    label: "Gemini 1.5 Pro"
+    prompts:
+      - "Gemini Format"
+
+tests:
+  # Test with geometric shapes image
+  - vars:
+      image: file://../g-eval/test-image.png
+    assert:
+      # Test llm-rubric
+      - type: llm-rubric
+        value: |
+          The image description should:
+          1. Accurately describe what is visible in the image
+          2. Include all four geometric shapes (square, circle, triangle, star)
+          3. Correctly identify the colors (blue, red, green, yellow)
+          4. Mention the "Test Shapes" title
+          5. Be clear and well-organized
+        threshold: 0.7
+      
+      # Compare with g-eval
+      - type: g-eval
+        value: >-
+          Accuracy and completeness - the description should accurately identify all four
+          geometric shapes with their correct colors and positions, mention the title,
+          and be well-organized without hallucinations.
+        threshold: 0.7
+  
+  # Test with bar chart image
+  - vars:
+      image: file://../g-eval/test-chart.png
+    assert:
+      # Test llm-rubric
+      - type: llm-rubric
+        value: |
+          For the chart, the description must:
+          1. Identify it as a bar chart
+          2. Mention the title "Sales Performance by Product"
+          3. List all four products (A, B, C, D)
+          4. Note that Product B has the highest sales (45)
+          5. Describe the axis labels correctly
+        threshold: 0.75
+      
+      # Compare with g-eval
+      - type: g-eval
+        value: >-
+          Chart analysis completeness - the description should correctly identify the chart type,
+          title, all products, the highest value (Product B at 45), and axis labels.
+        threshold: 0.75 

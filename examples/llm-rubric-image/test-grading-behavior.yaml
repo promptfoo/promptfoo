@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test what llm-rubric sends to grading model
+
+prompts:
+  - |
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe this image:"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,{{image}}"
+            }
+          }
+        ]
+      }
+    ]
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  # Test with explicit grading provider that doesn't support vision
+  - vars:
+      image: file://../g-eval/test-image.png
+    options:
+      provider: openai:gpt-3.5-turbo  # This model doesn't support vision
+    assert:
+      - type: llm-rubric
+        value: |
+          The description should mention:
+          1. Four geometric shapes
+          2. Colors (blue, red, green, yellow)
+          3. Title "Test Shapes"
+        threshold: 0.7
+  
+  # Test with vision-capable grading provider
+  - vars:
+      image: file://../g-eval/test-image.png
+    options:
+      provider: openai:gpt-4o-mini  # This model supports vision
+    assert:
+      - type: llm-rubric
+        value: |
+          The description should mention:
+          1. Four geometric shapes
+          2. Colors (blue, red, green, yellow)
+          3. Title "Test Shapes"
+        threshold: 0.7 

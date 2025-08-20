@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: LLM-Rubric evaluation with image inputs
+
+prompts:
+  # Format prompt as JSON to properly handle image inputs
+  - |
+    [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe this image in detail:"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,{{image}}"
+            }
+          }
+        ]
+      }
+    ]
+
+providers:
+  - openai:gpt-4o-mini  # Using gpt-4o-mini which supports vision
+
+tests:
+  # Test with a sample image
+  - vars:
+      image: file://../g-eval/test-image.png
+    assert:
+      # Test llm-rubric with image description quality
+      - type: llm-rubric
+        value: |
+          The image description should:
+          1. Accurately describe what is visible in the image
+          2. Include key objects, colors, and spatial relationships
+          3. Not include made-up details or hallucinations
+          4. Be clear and well-organized
+        threshold: 0.7
+      
+      # Compare with g-eval on the same criteria
+      - type: g-eval
+        value: >-
+          Accuracy - the description should accurately describe what is visible in the image,
+          including key objects, colors, and spatial relationships. The description should not
+          include made-up details or hallucinations.
+        threshold: 0.7
+  
+  # Test with bar chart image
+  - vars:
+      image: file://../g-eval/test-chart.png
+    assert:
+      - type: llm-rubric
+        value: |
+          For a chart or graph, the description should:
+          1. Identify the type of chart correctly
+          2. Describe the data being presented
+          3. Note any trends or patterns
+          4. Mention key values or labels if visible
+        threshold: 0.75
+      
+      - type: g-eval
+        value: >-
+          Chart Analysis - If the image contains a chart or graph, the description should
+          accurately identify the type of chart, describe the data being presented, note
+          any trends or patterns, and mention key values or labels if visible.
+        threshold: 0.75 
