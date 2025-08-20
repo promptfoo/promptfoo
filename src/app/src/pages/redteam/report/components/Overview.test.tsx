@@ -1,3 +1,5 @@
+import React from 'react';
+
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { GridLogicOperator } from '@mui/x-data-grid';
 import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
@@ -16,7 +18,7 @@ describe('Overview', () => {
   const defaultTheme = createTheme();
   const darkTheme = createTheme({ palette: { mode: 'dark' } });
   const mockSetFilterModel = vi.fn();
-  const mockRef = { current: null };
+  const mockRef: React.MutableRefObject<HTMLDivElement | null> = { current: null };
 
   beforeEach(() => {
     vi.clearAllMocks();
