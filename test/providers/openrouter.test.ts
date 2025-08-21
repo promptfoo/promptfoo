@@ -303,5 +303,179 @@ describe('OpenRouter', () => {
         expect(requestBody.provider).toEqual({ order: ['google', 'anthropic'] });
       });
     });
+
+    describe('JSON schema response format handling', () => {
+      beforeEach(() => {
+        process.env.OPENROUTER_API_KEY = 'test-key';
+      });
+
+      afterEach(() => {
+        delete process.env.OPENROUTER_API_KEY;
+      });
+
+      it('should parse JSON output when response_format.type is json_schema', async () => {
+        const providerWithJsonSchema = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'test_schema',
+                schema: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    age: { type: 'number' },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: '{"name": "John Doe", "age": 30}',
+              },
+            },
+          ],
+          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await providerWithJsonSchema.callApi('Generate JSON');
+
+        // Should parse the JSON string into an object
+        expect(result.output).toEqual({
+          name: 'John Doe',
+          age: 30,
+        });
+        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+      });
+
+      it('should handle invalid JSON gracefully when response_format.type is json_schema', async () => {
+        const providerWithJsonSchema = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'test_schema',
+                schema: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: 'This is not valid JSON { broken: }',
+              },
+            },
+          ],
+          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await providerWithJsonSchema.callApi('Generate JSON');
+
+        // Should return the original string when JSON parsing fails
+        expect(result.output).toBe('This is not valid JSON { broken: }');
+        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+      });
+
+      it('should not parse JSON when response_format.type is not json_schema', async () => {
+        const regularProvider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: '{"name": "John Doe", "age": 30}',
+              },
+            },
+          ],
+          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await regularProvider.callApi('Generate JSON');
+
+        // Should return the string as-is without parsing
+        expect(result.output).toBe('{"name": "John Doe", "age": 30}');
+        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+      });
+
+      it('should handle json_schema with reasoning field', async () => {
+        const providerWithJsonSchema = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'test_schema',
+                schema: {
+                  type: 'object',
+                  properties: {
+                    result: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: '{"result": "success"}',
+                reasoning: 'I formatted the response as JSON according to the schema',
+              },
+            },
+          ],
+          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await providerWithJsonSchema.callApi('Generate JSON with reasoning');
+
+        // Should parse JSON after adding reasoning prefix
+        // The output is built as "Thinking: ...\n\n{content}" and then parsed
+        // Since the combined string is not valid JSON, it should return as-is
+        expect(result.output).toStrictEqual({ result: 'success' });
+        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+      });
+    });
   });
 });

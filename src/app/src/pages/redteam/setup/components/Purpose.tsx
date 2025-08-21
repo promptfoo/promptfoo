@@ -283,6 +283,13 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   // RENDERING ===================================================================
   // =============================================================================
 
+  const getNextButtonTooltip = () => {
+    if (testMode === 'application' && !isPurposePresent) {
+      return 'Please enter the application purpose to continue';
+    }
+    return undefined;
+  };
+
   return (
     <PageWrapper
       title="Application Details"
@@ -290,6 +297,9 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
       onNext={onNext}
       onBack={onBack}
       nextDisabled={testMode === 'application' && !isPurposePresent}
+      warningMessage={
+        testMode === 'application' && !isPurposePresent ? getNextButtonTooltip() : undefined
+      }
     >
       <Box sx={{ width: '100%', px: 3 }}>
         <Stack direction="column" spacing={4}>

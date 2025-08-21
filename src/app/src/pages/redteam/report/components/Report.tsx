@@ -25,6 +25,7 @@ import {
   type EvaluateSummaryV2,
   type GradingResult,
   isProviderOptions,
+  ResultFailureReason,
   type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
@@ -118,7 +119,7 @@ const App: React.FC = () => {
       }
 
       // Exclude results with errors from being counted as failures
-      if (result.error) {
+      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
         return;
       }
 
@@ -158,7 +159,7 @@ const App: React.FC = () => {
       }
 
       // Exclude results with errors from being counted
-      if (result.error) {
+      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
         return;
       }
 
@@ -191,7 +192,7 @@ const App: React.FC = () => {
         }
 
         // Exclude results with errors from statistics
-        if (row.error) {
+        if (row.error && row.failureReason === ResultFailureReason.ERROR) {
           return acc;
         }
 

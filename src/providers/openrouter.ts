@@ -131,6 +131,25 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       output = message.function_call || message.tool_calls;
     }
 
+    // Handle structured output
+    if (config.response_format?.type === 'json_schema') {
+      // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
+      const jsonCandidate =
+        typeof message?.content === 'string'
+          ? message.content
+          : typeof output === 'string'
+            ? output
+            : null;
+      if (jsonCandidate) {
+        try {
+          output = JSON.parse(jsonCandidate);
+        } catch (error) {
+          // Keep the original output (which may include "Thinking:" prefix) if parsing fails
+          logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
+        }
+      }
+    }
+
     return {
       output,
       tokenUsage: getTokenUsage(data, cached),
