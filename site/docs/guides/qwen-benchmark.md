@@ -1,5 +1,6 @@
 ---
 sidebar_label: Qwen vs Llama vs GPT
+description: Compare Qwen-2-72B vs GPT-4o vs Llama-3-70B performance on customer support tasks with custom benchmarks to optimize your chatbot's response quality
 ---
 
 # Qwen vs Llama vs GPT: Run a Custom Benchmark

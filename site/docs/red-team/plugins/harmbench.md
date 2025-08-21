@@ -1,5 +1,6 @@
 ---
 sidebar_label: HarmBench
+description: Red team LLM safety using HarmBench's 400 harmful behavior tests to detect chemical, biological, cybercrime, and misinformation vulnerabilities in AI systems
 ---
 
 # HarmBench Plugin

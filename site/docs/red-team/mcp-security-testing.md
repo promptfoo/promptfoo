@@ -1,6 +1,6 @@
 ---
 title: MCP Security Testing Guide
-description: Learn how to perform security testing of Model Context Protocol (MCP) servers using Promptfoo, including red teaming scenarios, tool poisoning detection, and direct API security assessments.
+description: Secure Model Context Protocol servers through comprehensive red teaming, tool poisoning tests, and API vulnerability scanning
 sidebar_label: MCP Security Testing
 ---
 
@@ -212,12 +212,12 @@ jobs:
   security-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
 
       - name: Install dependencies
         run: npm install

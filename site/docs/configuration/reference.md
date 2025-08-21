@@ -37,6 +37,7 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.showProgressBar | boolean                                                                                          | No       | Whether to display the progress bar                                                                                                                                                                         |
 | extensions                      | string[]                                                                                         | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
 | env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                   |
+| commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                        | No       | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                      |
 
 ### Test Case
 
@@ -72,6 +73,104 @@ More details on using assertions, including examples [here](/docs/configuration/
 | provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                               |
 | metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                                                                                                                                               |
 | contextTransform | string | No       | Javascript expression to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
+
+### CommandLineOptions
+
+Set default values for command-line options. These defaults will be used unless overridden by command-line arguments.
+
+| Property                 | Type     | Description                                                                     |
+| ------------------------ | -------- | ------------------------------------------------------------------------------- |
+| **Basic Configuration**  |          |                                                                                 |
+| description              | string   | Description of what your LLM is trying to do                                    |
+| config                   | string[] | Path(s) to configuration files                                                  |
+| envPath                  | string   | Path to .env file to load environment variables from                            |
+| **Input Files**          |          |                                                                                 |
+| prompts                  | string[] | One or more paths to prompt files                                               |
+| providers                | string[] | One or more LLM provider identifiers                                            |
+| tests                    | string   | Path to CSV file with test cases                                                |
+| vars                     | string   | Path to CSV file with test variables                                            |
+| assertions               | string   | Path to assertions file                                                         |
+| modelOutputs             | string   | Path to JSON file containing model outputs                                      |
+| **Prompt Modifications** |          |                                                                                 |
+| promptPrefix             | string   | Text to prepend to every prompt                                                 |
+| promptSuffix             | string   | Text to append to every prompt                                                  |
+| generateSuggestions      | boolean  | Generate new prompts and append them to the prompt list                         |
+| **Test Execution**       |          |                                                                                 |
+| maxConcurrency           | number   | Maximum number of concurrent requests                                           |
+| repeat                   | number   | Number of times to run each test case                                           |
+| delay                    | number   | Delay between API calls in milliseconds                                         |
+| grader                   | string   | Model that will grade outputs                                                   |
+| var                      | object   | Set test variables as key-value pairs (e.g. `{key1: 'value1', key2: 'value2'}`) |
+| **Filtering**            |          |                                                                                 |
+| filterPattern            | string   | Only run tests whose description matches the regular expression pattern         |
+| filterProviders          | string   | Only run tests with providers matching this regex                               |
+| filterTargets            | string   | Only run tests with targets matching this regex (alias for filterProviders)     |
+| filterFirstN             | number   | Only run the first N test cases                                                 |
+| filterSample             | number   | Run a random sample of N test cases                                             |
+| filterMetadata           | string   | Only run tests matching metadata filter (JSON format)                           |
+| filterErrorsOnly         | string   | Only run tests that resulted in errors (expects previous output path)           |
+| filterFailing            | string   | Only run tests that failed assertions (expects previous output path)            |
+| **Output & Display**     |          |                                                                                 |
+| output                   | string[] | Output file paths (csv, txt, json, yaml, yml, html)                             |
+| table                    | boolean  | Show output table (default: true, disable with --no-table)                      |
+| tableCellMaxLength       | number   | Maximum length of table cells in console output                                 |
+| progressBar              | boolean  | Whether to display progress bar during evaluation                               |
+| verbose                  | boolean  | Enable verbose output                                                           |
+| share                    | boolean  | Whether to create a shareable URL                                               |
+| **Caching & Storage**    |          |                                                                                 |
+| cache                    | boolean  | Whether to use disk cache for results (default: true)                           |
+| write                    | boolean  | Whether to write results to promptfoo directory (default: true)                 |
+| **Other Options**        |          |                                                                                 |
+| watch                    | boolean  | Whether to watch for config changes and re-run automatically                    |
+
+#### Example
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - prompt1.txt
+  - prompt2.txt
+
+providers:
+  - openai:gpt-4
+
+tests: tests.csv
+
+# Set default command-line options
+commandLineOptions:
+  maxConcurrency: 10
+  repeat: 3
+  delay: 1000
+  verbose: true
+  grader: openai:gpt-4o-mini
+  table: true
+  cache: false
+  tableCellMaxLength: 100
+
+  # Filtering options
+  filterPattern: 'auth.*' # Only run tests with 'auth' in description
+  filterProviders: 'openai.*' # Only test OpenAI providers
+  filterSample: 50 # Random sample of 50 tests
+
+  # Prompt modifications
+  promptPrefix: 'You are a helpful assistant. '
+  promptSuffix: "\n\nPlease be concise."
+
+  # Variables
+  var:
+    temperature: '0.7'
+    max_tokens: '1000'
+```
+
+With this configuration, running `npx promptfoo eval` will use these defaults. You can still override them:
+
+```bash
+# Uses maxConcurrency: 10 from config
+npx promptfoo eval
+
+# Overrides maxConcurrency to 5
+npx promptfoo eval --max-concurrency 5
+```
 
 ### AssertionValueFunctionContext
 
@@ -122,6 +221,66 @@ Promptfoo supports extension hooks that allow you to run custom code that modifi
 | afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` |
 | beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
 | afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
+
+#### Session Management in Hooks
+
+For multi-turn conversations or stateful interactions, the `sessionId` is made available in the `afterEach` hook context at:
+
+```javascript
+context.result.metadata.sessionId;
+```
+
+This sessionId comes from either:
+
+1. The provider's response (`response.sessionId`) - takes priority
+2. The test variables (`vars.sessionId`) - used as fallback for client-generated session IDs
+
+**Note:** The provider's `response.sessionId` takes precedence over `vars.sessionId`. The session ID from vars is only used if the provider doesn't return one.
+
+Example usage in an extension:
+
+```javascript
+async function extensionHook(hookName, context) {
+  if (hookName === 'afterEach') {
+    const sessionId = context.result.metadata.sessionId;
+    if (sessionId) {
+      console.log(`Test completed with session: ${sessionId}`);
+      // You can use this sessionId for tracking, logging, or cleanup
+    }
+  }
+}
+```
+
+For iterative red team strategies (e.g., jailbreak, tree search), the `sessionIds` array is made available in the `afterEach` hook context at:
+
+```javascript
+context.result.metadata.sessionIds;
+```
+
+This is an array containing all session IDs from the iterative exploration process. Each iteration may have its own session ID, allowing you to track the full conversation history across multiple attempts.
+
+Example usage for iterative providers:
+
+```javascript
+async function extensionHook(hookName, context) {
+  if (hookName === 'afterEach') {
+    // For regular providers - single session ID
+    const sessionId = context.result.metadata.sessionId;
+
+    // For iterative providers (jailbreak, tree search) - array of session IDs
+    const sessionIds = context.result.metadata.sessionIds;
+    if (sessionIds && Array.isArray(sessionIds)) {
+      console.log(`Jailbreak completed with ${sessionIds.length} iterations`);
+      sessionIds.forEach((id, index) => {
+        console.log(`  Iteration ${index + 1}: session ${id}`);
+      });
+      // You can use these sessionIds for detailed tracking of the attack path
+    }
+  }
+}
+```
+
+Note: The `sessionIds` array only contains defined session IDs - any iterations without a session ID are filtered out.
 
 ### Implementing Hooks
 
@@ -243,16 +402,16 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 
 #### beforeAll
 
-| Property                          | Type                       | Description                            |
-| --------------------------------- | -------------------------- | -------------------------------------- |
-| `context.suite.prompts`           | `Prompt[]`                 | The prompts to be evaluated.           |
-| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to prompts.      |
-| `context.suite.tests`             | `TestCase[]`               | The test cases to be evaluated.        |
-| `context.suite.scenarios`         | `Scenario[]`               | The scenarios to be evaluated.         |
-| `context.suite.defaultTest`       | `TestCase`                 | The default test case to be evaluated. |
-| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of Nunjucks filters.             |
-| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of derived metrics.              |
-| `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.          |
+| Property                          | Type                       | Description                                                                                |
+| --------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
+| `context.suite.prompts`           | `Prompt[]`                 | The prompts to be evaluated.                                                               |
+| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to prompts.                                                          |
+| `context.suite.tests`             | `TestCase[]`               | The test cases to be evaluated.                                                            |
+| `context.suite.scenarios`         | `Scenario[]`               | The scenarios to be evaluated.                                                             |
+| `context.suite.defaultTest`       | `TestCase`                 | The default test case to be evaluated.                                                     |
+| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of Nunjucks filters.                                                                 |
+| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
+| `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.                                                              |
 
 #### beforeEach
 
@@ -546,6 +705,7 @@ interface EvaluateResult {
   score: number;
   latencyMs: number;
   gradingResult?: GradingResult;
+  metadata?: Record<string, any>;
 }
 ```
 

@@ -403,6 +403,7 @@ const config: Config = {
 
   plugins: [
     require.resolve('docusaurus-plugin-image-zoom'),
+    require.resolve('./src/plugins/docusaurus-plugin-og-image'),
     [
       '@docusaurus/plugin-client-redirects',
       {

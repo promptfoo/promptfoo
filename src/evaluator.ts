@@ -1,10 +1,12 @@
-import { randomUUID } from 'crypto';
-import * as path from 'path';
-
 import async from 'async';
 import chalk from 'chalk';
+import type { SingleBar } from 'cli-progress';
 import cliProgress from 'cli-progress';
+import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
+import * as path from 'path';
+import type winston from 'winston';
+
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { getCache } from './cache';
 import cliState from './cliState';
@@ -13,6 +15,8 @@ import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
+import { selectMaxScore } from './matchers';
+import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
@@ -25,6 +29,7 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
+import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
   type AssertionType,
@@ -46,12 +51,136 @@ import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/jso
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
-import { type TransformContext, TransformInputType, transform } from './util/transform';
-import type { MultiBar, SingleBar } from 'cli-progress';
-import type winston from 'winston';
+import {
+  createEmptyTokenUsage,
+  createEmptyAssertions,
+  accumulateAssertionTokenUsage,
+  accumulateResponseTokenUsage,
+} from './util/tokenUsageUtils';
+import { transform, type TransformContext, TransformInputType } from './util/transform';
 
-import type Eval from './models/eval';
-import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
+/**
+ * Manages a single progress bar for the evaluation
+ */
+class ProgressBarManager {
+  private progressBar: SingleBar | undefined;
+  private isWebUI: boolean;
+
+  // Track overall progress
+  private totalCount: number = 0;
+  private completedCount: number = 0;
+  private concurrency: number = 1;
+
+  constructor(isWebUI: boolean) {
+    this.isWebUI = isWebUI;
+  }
+
+  /**
+   * Initialize progress bar
+   */
+  async initialize(
+    runEvalOptions: RunEvalOptions[],
+    concurrency: number,
+    compareRowsCount: number,
+  ): Promise<void> {
+    if (this.isWebUI) {
+      return;
+    }
+
+    this.totalCount = runEvalOptions.length + compareRowsCount;
+    this.concurrency = concurrency;
+
+    // Create single progress bar
+    this.progressBar = new cliProgress.SingleBar(
+      {
+        format: 'Evaluating [{bar}] {percentage}% | {value}/{total} | {provider} {prompt} {vars}',
+        hideCursor: true,
+        gracefulExit: true,
+      },
+      cliProgress.Presets.shades_classic,
+    );
+
+    // Start the progress bar
+    this.progressBar.start(this.totalCount, 0, {
+      provider: '',
+      prompt: '',
+      vars: '',
+    });
+  }
+
+  /**
+   * Update progress for a specific evaluation
+   */
+  updateProgress(
+    index: number,
+    evalStep: RunEvalOptions | undefined,
+    phase: 'serial' | 'concurrent' = 'concurrent',
+  ): void {
+    if (this.isWebUI || !evalStep || !this.progressBar) {
+      return;
+    }
+
+    this.completedCount++;
+    const provider = evalStep.provider.label || evalStep.provider.id();
+    const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
+    const vars = formatVarsForDisplay(evalStep.test.vars, 10);
+
+    this.progressBar.increment({
+      provider,
+      prompt: prompt || '""',
+      vars: vars || '',
+    });
+  }
+
+  /**
+   * Update comparison progress
+   */
+  updateComparisonProgress(prompt: string): void {
+    if (this.isWebUI || !this.progressBar) {
+      return;
+    }
+
+    this.completedCount++;
+    this.progressBar.increment({
+      provider: 'Grading',
+      prompt: `"${prompt.slice(0, 10).replace(/\n/g, ' ')}"`,
+      vars: '',
+    });
+  }
+
+  /**
+   * Update total count when comparison count is determined
+   */
+  updateTotalCount(additionalCount: number): void {
+    if (this.isWebUI || !this.progressBar || additionalCount <= 0) {
+      return;
+    }
+
+    this.totalCount += additionalCount;
+    this.progressBar.setTotal(this.totalCount);
+  }
+
+  /**
+   * Mark evaluation as complete
+   */
+  complete(): void {
+    if (this.isWebUI || !this.progressBar) {
+      return;
+    }
+
+    // Just ensure we're at 100% - the bar will be stopped in stop()
+    this.progressBar.update(this.totalCount);
+  }
+
+  /**
+   * Stop the progress bar
+   */
+  stop(): void {
+    if (this.progressBar) {
+      this.progressBar.stop();
+    }
+  }
+}
 
 export const DEFAULT_MAX_CONCURRENCY = 4;
 
@@ -64,41 +193,11 @@ function updateAssertionMetrics(
 ): void {
   if (metrics.tokenUsage && assertionTokens) {
     if (!metrics.tokenUsage.assertions) {
-      metrics.tokenUsage.assertions = {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      };
+      metrics.tokenUsage.assertions = createEmptyAssertions();
     }
 
-    const assertions = metrics.tokenUsage.assertions;
-
-    // Update basic token counts
-    assertions.total = (assertions.total ?? 0) + (assertionTokens.total ?? 0);
-    assertions.prompt = (assertions.prompt ?? 0) + (assertionTokens.prompt ?? 0);
-    assertions.completion = (assertions.completion ?? 0) + (assertionTokens.completion ?? 0);
-    assertions.cached = (assertions.cached ?? 0) + (assertionTokens.cached ?? 0);
-
-    // Update completion details if present
-    if (assertionTokens.completionDetails && assertions.completionDetails) {
-      assertions.completionDetails.reasoning =
-        (assertions.completionDetails.reasoning ?? 0) +
-        (assertionTokens.completionDetails.reasoning ?? 0);
-
-      assertions.completionDetails.acceptedPrediction =
-        (assertions.completionDetails.acceptedPrediction ?? 0) +
-        (assertionTokens.completionDetails.acceptedPrediction ?? 0);
-
-      assertions.completionDetails.rejectedPrediction =
-        (assertions.completionDetails.rejectedPrediction ?? 0) +
-        (assertionTokens.completionDetails.rejectedPrediction ?? 0);
-    }
+    // Accumulate assertion tokens using the specialized assertion function
+    accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, assertionTokens);
   }
 }
 
@@ -125,32 +224,6 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
     allowedPrompts.includes(prompt.label) ||
     allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
   );
-}
-
-export function newTokenUsage(): Required<TokenUsage> {
-  return {
-    prompt: 0,
-    completion: 0,
-    cached: 0,
-    total: 0,
-    numRequests: 0,
-    completionDetails: {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-    assertions: {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    },
-  };
 }
 
 /**
@@ -244,7 +317,7 @@ export async function runEval({
     const startTime = Date.now();
     let response: ProviderResponse = {
       output: '',
-      tokenUsage: {},
+      tokenUsage: createEmptyTokenUsage(),
       cost: 0,
       cached: false,
     };
@@ -343,12 +416,32 @@ export async function runEval({
         ...test.metadata,
         ...response.metadata,
         [FILE_METADATA_KEY]: fileMetadata,
+        // Add session information to metadata
+        ...(() => {
+          // If sessionIds array exists from iterative providers, use it
+          if (test.metadata?.sessionIds) {
+            return { sessionIds: test.metadata.sessionIds };
+          }
+
+          // Otherwise, use single sessionId (prioritize response over vars)
+          if (response.sessionId) {
+            return { sessionId: response.sessionId };
+          }
+
+          // Check if vars.sessionId is a valid string
+          const varsSessionId = vars.sessionId;
+          if (typeof varsSessionId === 'string' && varsSessionId.trim() !== '') {
+            return { sessionId: varsSessionId };
+          }
+
+          return {};
+        })(),
       },
       promptIdx,
       testIdx,
       testCase: test,
       promptId: prompt.id || '',
-      tokenUsage: newTokenUsage(),
+      tokenUsage: createEmptyTokenUsage(),
     };
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
@@ -421,20 +514,15 @@ export async function runEval({
       ret.success = checkResult.pass;
       ret.score = checkResult.score;
       ret.namedScores = checkResult.namedScores || {};
+      // Track assertion request count
+      if (!ret.tokenUsage.assertions) {
+        ret.tokenUsage.assertions = createEmptyAssertions();
+      }
+      ret.tokenUsage.assertions.numRequests = (ret.tokenUsage.assertions.numRequests ?? 0) + 1;
+
+      // Track assertion token usage if provided
       if (checkResult.tokensUsed) {
-        ret.tokenUsage.total += checkResult.tokensUsed.total || 0;
-        ret.tokenUsage.prompt += checkResult.tokensUsed.prompt || 0;
-        ret.tokenUsage.completion += checkResult.tokensUsed.completion || 0;
-        ret.tokenUsage.cached += checkResult.tokensUsed.cached || 0;
-        ret.tokenUsage.numRequests += checkResult.tokensUsed.numRequests || 1;
-        if (checkResult.tokensUsed.completionDetails) {
-          ret.tokenUsage.completionDetails.reasoning! +=
-            checkResult.tokensUsed.completionDetails.reasoning || 0;
-          ret.tokenUsage.completionDetails.acceptedPrediction! +=
-            checkResult.tokensUsed.completionDetails.acceptedPrediction || 0;
-          ret.tokenUsage.completionDetails.rejectedPrediction! +=
-            checkResult.tokensUsed.completionDetails.rejectedPrediction || 0;
-        }
+        accumulateAssertionTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
       }
       ret.response = processedResponse;
       ret.gradingResult = checkResult;
@@ -442,20 +530,7 @@ export async function runEval({
 
     // Update token usage stats
     if (response.tokenUsage) {
-      ret.tokenUsage.total += response.tokenUsage.total || 0;
-      ret.tokenUsage.prompt += response.tokenUsage.prompt || 0;
-      ret.tokenUsage.completion += response.tokenUsage.completion || 0;
-      ret.tokenUsage.cached += response.tokenUsage.cached || 0;
-      ret.tokenUsage.numRequests += response.tokenUsage.numRequests || 1;
-
-      if (response.tokenUsage.completionDetails) {
-        ret.tokenUsage.completionDetails.reasoning! +=
-          response.tokenUsage.completionDetails.reasoning || 0;
-        ret.tokenUsage.completionDetails.acceptedPrediction! +=
-          response.tokenUsage.completionDetails.acceptedPrediction || 0;
-        ret.tokenUsage.completionDetails.rejectedPrediction! +=
-          response.tokenUsage.completionDetails.rejectedPrediction || 0;
-      }
+      accumulateResponseTokenUsage(ret.tokenUsage, response);
     }
 
     if (test.options?.storeOutputAs && ret.response?.output && registers) {
@@ -481,23 +556,6 @@ export async function runEval({
       },
     ];
   }
-}
-
-/**
- * Calculates the number of threads allocated to a specific progress bar.
- * @param concurrency Total number of concurrent threads
- * @param numProgressBars Total number of progress bars
- * @param barIndex Index of the progress bar (0-based)
- * @returns Number of threads allocated to this progress bar
- */
-export function calculateThreadsPerBar(
-  concurrency: number,
-  numProgressBars: number,
-  barIndex: number,
-): number {
-  const threadsPerBar = Math.floor(concurrency / numProgressBars);
-  const extraThreads = concurrency % numProgressBars;
-  return barIndex < extraThreads ? threadsPerBar + 1 : threadsPerBar;
 }
 
 /**
@@ -596,7 +654,7 @@ class Evaluator {
       successes: 0,
       failures: 0,
       errors: 0,
-      tokenUsage: newTokenUsage(),
+      tokenUsage: createEmptyTokenUsage(),
     };
     this.conversations = {};
     this.registers = {};
@@ -647,6 +705,7 @@ class Evaluator {
     const prompts: CompletedPrompt[] = [];
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
+    const rowsWithMaxScoreAssertion = new Set<number>();
 
     const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
       suite: testSuite,
@@ -707,24 +766,7 @@ class Evaluator {
             assertPassCount: 0,
             assertFailCount: 0,
             totalLatencyMs: 0,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              numRequests: 0,
-              completionDetails: {
-                reasoning: 0,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-              assertions: {
-                total: 0,
-                prompt: 0,
-                completion: 0,
-                cached: 0,
-              },
-            },
+            tokenUsage: createEmptyTokenUsage(),
             namedScores: {},
             namedScoresCount: {},
             cost: 0,
@@ -1009,19 +1051,11 @@ class Evaluator {
               const tokensUsed = row.gradingResult.tokensUsed;
 
               if (!this.stats.tokenUsage.assertions) {
-                this.stats.tokenUsage.assertions = {
-                  total: 0,
-                  prompt: 0,
-                  completion: 0,
-                  cached: 0,
-                };
+                this.stats.tokenUsage.assertions = createEmptyAssertions();
               }
 
-              const assertions = this.stats.tokenUsage.assertions;
-              assertions.total = (assertions.total ?? 0) + (tokensUsed.total ?? 0);
-              assertions.prompt = (assertions.prompt ?? 0) + (tokensUsed.prompt ?? 0);
-              assertions.completion = (assertions.completion ?? 0) + (tokensUsed.completion ?? 0);
-              assertions.cached = (assertions.cached ?? 0) + (tokensUsed.cached ?? 0);
+              // Accumulate assertion tokens using the specialized assertion function
+              accumulateAssertionTokenUsage(this.stats.tokenUsage.assertions, tokensUsed);
 
               break;
             }
@@ -1038,23 +1072,14 @@ class Evaluator {
         }
 
         if (row.tokenUsage) {
-          this.stats.tokenUsage.total += row.tokenUsage.total || 0;
-          this.stats.tokenUsage.prompt += row.tokenUsage.prompt || 0;
-          this.stats.tokenUsage.completion += row.tokenUsage.completion || 0;
-          this.stats.tokenUsage.cached += row.tokenUsage.cached || 0;
-          this.stats.tokenUsage.numRequests += row.tokenUsage.numRequests || 1;
-          if (row.tokenUsage.completionDetails) {
-            this.stats.tokenUsage.completionDetails.reasoning! +=
-              row.tokenUsage.completionDetails.reasoning || 0;
-            this.stats.tokenUsage.completionDetails.acceptedPrediction! +=
-              row.tokenUsage.completionDetails.acceptedPrediction || 0;
-            this.stats.tokenUsage.completionDetails.rejectedPrediction! +=
-              row.tokenUsage.completionDetails.rejectedPrediction || 0;
-          }
+          accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
         }
 
         if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
           rowsWithSelectBestAssertion.add(row.testIdx);
+        }
+        if (evalStep.test.assert?.some((a) => a.type === 'max-score')) {
+          rowsWithMaxScoreAssertion.add(row.testIdx);
         }
         for (const assert of evalStep.test.assert || []) {
           if (assert.type) {
@@ -1128,27 +1153,7 @@ class Evaluator {
         metrics.assertFailCount +=
           row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
         metrics.totalLatencyMs += row.latencyMs || 0;
-        metrics.tokenUsage.cached =
-          (metrics.tokenUsage.cached || 0) + (row.response?.tokenUsage?.cached || 0);
-        metrics.tokenUsage.completion =
-          (metrics.tokenUsage.completion || 0) + (row.response?.tokenUsage?.completion || 0);
-        metrics.tokenUsage.prompt =
-          (metrics.tokenUsage.prompt || 0) + (row.response?.tokenUsage?.prompt || 0);
-        metrics.tokenUsage.total =
-          (metrics.tokenUsage.total || 0) + (row.response?.tokenUsage?.total || 0);
-        metrics.tokenUsage.numRequests =
-          (metrics.tokenUsage.numRequests || 0) + (row.response?.tokenUsage?.numRequests || 1);
-        metrics.tokenUsage.completionDetails = {
-          reasoning:
-            (metrics.tokenUsage.completionDetails?.reasoning || 0) +
-            (row.response?.tokenUsage?.completionDetails?.reasoning || 0),
-          acceptedPrediction:
-            (metrics.tokenUsage.completionDetails?.acceptedPrediction || 0) +
-            (row.response?.tokenUsage?.completionDetails?.acceptedPrediction || 0),
-          rejectedPrediction:
-            (metrics.tokenUsage.completionDetails?.rejectedPrediction || 0) +
-            (row.response?.tokenUsage?.completionDetails?.rejectedPrediction || 0),
-        };
+        accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
 
         // Add assertion token usage to the metrics
         if (row.gradingResult?.tokensUsed) {
@@ -1282,11 +1287,15 @@ class Evaluator {
       }
     };
 
-    // Set up main progress bars
-    let multibar: MultiBar | undefined;
-    let multiProgressBars: SingleBar[] = [];
+    // Set up progress tracking
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
+    const progressBarManager = new ProgressBarManager(isWebUI);
+
+    // Initialize progress bar manager if needed
+    logger.debug(
+      `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
+    );
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
@@ -1297,84 +1306,14 @@ class Evaluator {
         const provider = evalStep.provider.label || evalStep.provider.id();
         const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
-      } else if (multibar && evalStep) {
-        const numProgressBars = Math.min(concurrency, 20);
-
-        // Calculate which progress bar to use
-        const progressBarIndex = index % numProgressBars;
-        const progressbar = multiProgressBars[progressBarIndex];
-
-        // Calculate how many threads are assigned to this progress bar
-        const threadsForThisBar = calculateThreadsPerBar(
-          concurrency,
-          numProgressBars,
-          progressBarIndex,
-        );
-
-        const vars = formatVarsForDisplay(evalStep.test.vars, 10);
-        progressbar.increment({
-          provider: evalStep.provider.label || evalStep.provider.id(),
-          prompt: evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' '),
-          vars,
-          activeThreads: threadsForThisBar,
-        });
+      } else if (this.options.showProgressBar) {
+        // Progress bar update is handled by the manager
+        const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
+        progressBarManager.updateProgress(index, evalStep, phase);
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
       }
     };
-
-    const createMultiBars = async (evalOptions: RunEvalOptions[]) => {
-      // Only create progress bars if not in web UI mode
-      if (isWebUI) {
-        return;
-      }
-
-      const numProgressBars = Math.min(concurrency, 20);
-
-      const showThreadCounts = concurrency > numProgressBars;
-
-      multibar = new cliProgress.MultiBar(
-        {
-          format: showThreadCounts
-            ? 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {activeThreads}/{maxThreads} threads | {provider} "{prompt}" {vars}'
-            : 'Group {groupId} [{bar}] {percentage}% | {value}/{total} | {provider} "{prompt}" {vars}',
-          hideCursor: true,
-          gracefulExit: true,
-        },
-        cliProgress.Presets.shades_classic,
-      );
-
-      if (!multibar) {
-        return;
-      }
-
-      const stepsPerProgressBar = Math.floor(evalOptions.length / numProgressBars);
-      const remainingSteps = evalOptions.length % numProgressBars;
-      multiProgressBars = [];
-
-      for (let i = 0; i < numProgressBars; i++) {
-        const totalSteps = i < remainingSteps ? stepsPerProgressBar + 1 : stepsPerProgressBar;
-        if (totalSteps > 0) {
-          // Calculate how many threads are assigned to this progress bar
-          const threadsForThisBar = calculateThreadsPerBar(concurrency, numProgressBars, i);
-
-          const progressbar = multibar.create(totalSteps, 0, {
-            groupId: `${i + 1}/${numProgressBars}`,
-            provider: '',
-            prompt: '',
-            vars: '',
-            activeThreads: 0,
-            maxThreads: threadsForThisBar,
-          });
-          multiProgressBars.push(progressbar);
-        }
-      }
-    };
-
-    // Run the evals
-    if (this.options.showProgressBar) {
-      await createMultiBars(runEvalOptions);
-    }
 
     // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
@@ -1388,10 +1327,24 @@ class Evaluator {
       }
     }
 
+    // Print info messages before starting progress bar
+    if (serialRunEvalOptions.length > 0) {
+      logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+    }
+    if (concurrentRunEvalOptions.length > 0) {
+      logger.info(
+        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+      );
+    }
+
+    // Now start the progress bar after info messages
+    if (this.options.showProgressBar) {
+      await progressBarManager.initialize(runEvalOptions, concurrency, 0);
+    }
+
     try {
       if (serialRunEvalOptions.length > 0) {
-        // Run serial evaluations first
-        logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+        // Run serial evaluations
         for (const evalStep of serialRunEvalOptions) {
           if (isWebUI) {
             const provider = evalStep.provider.label || evalStep.provider.id();
@@ -1404,12 +1357,11 @@ class Evaluator {
           await processEvalStepWithTimeout(evalStep, idx);
           processedIndices.add(idx);
         }
+
+        // Serial phase complete - no specific action needed with single bar
       }
 
       // Then run concurrent evaluations
-      logger.info(
-        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
-      );
       await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
         checkAbort();
         const idx = runEvalOptions.indexOf(evalStep);
@@ -1427,16 +1379,13 @@ class Evaluator {
     }
 
     // Do we have to run comparisons between row outputs?
-    const compareRowsCount = rowsWithSelectBestAssertion.size;
+    const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
 
-    let progressBar;
-    if (compareRowsCount > 0 && multibar && !isWebUI) {
-      progressBar = multibar.create(compareRowsCount, 0, {
-        provider: 'Running model-graded comparisons',
-        prompt: '',
-        vars: '',
-      });
+    // Update total count now that we know comparison count
+    if (this.options.showProgressBar && compareRowsCount > 0) {
+      progressBarManager.updateTotalCount(compareRowsCount);
     }
+
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
       compareCount++;
@@ -1521,12 +1470,82 @@ class Evaluator {
             await result.save();
           }
         }
-        if (progressBar) {
-          progressBar.increment({
-            prompt: resultsToCompare[0].prompt.raw.slice(0, 10).replace(/\n/g, ''),
-          });
+        if (this.options.showProgressBar) {
+          progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
         } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
+        }
+      }
+    }
+
+    // Process max-score assertions
+    const maxScoreRowsCount = rowsWithMaxScoreAssertion.size;
+    if (maxScoreRowsCount > 0) {
+      logger.info(`Processing ${maxScoreRowsCount} max-score assertions...`);
+
+      for (const testIdx of rowsWithMaxScoreAssertion) {
+        const resultsToCompare = this.evalRecord.persisted
+          ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
+          : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+
+        if (resultsToCompare.length === 0) {
+          logger.warn(`Expected results to be found for test index ${testIdx}`);
+          continue;
+        }
+
+        const maxScoreAssertion = resultsToCompare[0].testCase.assert?.find(
+          (a) => a.type === 'max-score',
+        ) as Assertion;
+
+        if (maxScoreAssertion) {
+          const outputs = resultsToCompare.map((r) => r.response?.output || '');
+
+          // Pass the results with their grading results to selectMaxScore
+          const maxScoreGradingResults = await selectMaxScore(
+            outputs,
+            resultsToCompare,
+            maxScoreAssertion,
+          );
+
+          // Update progress bar
+          if (this.options.showProgressBar) {
+            progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+          } else if (!isWebUI) {
+            logger.debug(`Max-score assertion for test #${testIdx} complete`);
+          }
+
+          // Update results with max-score outcomes
+          for (let index = 0; index < resultsToCompare.length; index++) {
+            const result = resultsToCompare[index];
+            const maxScoreGradingResult = {
+              ...maxScoreGradingResults[index],
+              assertion: maxScoreAssertion,
+            };
+
+            // Preserve existing gradingResult data and add max-score result to componentResults
+            const existingComponentResults = result.gradingResult?.componentResults || [];
+            const existingGradingResult = result.gradingResult;
+
+            result.gradingResult = {
+              pass: maxScoreGradingResult.pass,
+              score: maxScoreGradingResult.score,
+              reason: maxScoreGradingResult.reason,
+              componentResults: [...existingComponentResults, maxScoreGradingResult],
+              namedScores: {
+                ...(existingGradingResult?.namedScores || {}),
+                ...maxScoreGradingResult.namedScores,
+              },
+              tokensUsed: existingGradingResult?.tokensUsed || maxScoreGradingResult.tokensUsed,
+              assertion: maxScoreAssertion,
+            };
+
+            // Don't overwrite overall success/score - max-score is just another assertion
+            // The overall result should be determined by all assertions, not just max-score
+
+            if (this.evalRecord.persisted) {
+              await result.save();
+            }
+          }
         }
       }
     }
@@ -1534,11 +1553,9 @@ class Evaluator {
     await this.evalRecord.addPrompts(prompts);
 
     // Finish up
-    if (multibar) {
-      multibar.stop();
-    }
-    if (progressBar) {
-      progressBar.stop();
+    if (this.options.showProgressBar) {
+      progressBarManager.complete();
+      progressBarManager.stop();
     }
 
     if (globalTimeout) {
@@ -1592,45 +1609,111 @@ class Evaluator {
       suite: testSuite,
     });
 
-    telemetry.record('eval_ran', {
-      numPrompts: prompts.length,
-      numTests: prompts.reduce(
-        (acc, p) =>
-          acc +
-          (p.metrics?.testPassCount || 0) +
-          (p.metrics?.testFailCount || 0) +
-          (p.metrics?.testErrorCount || 0),
-        0,
+    // Calculate additional metrics for telemetry
+    const endTime = Date.now();
+    const totalEvalTimeMs = endTime - startTime;
+
+    // Calculate aggregated metrics
+    const totalCost = prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0);
+    const totalRequests = this.stats.tokenUsage.numRequests;
+
+    // Calculate efficiency metrics
+    const totalTokens = this.stats.tokenUsage.total;
+    const cachedTokens = this.stats.tokenUsage.cached;
+
+    // Calculate correct average latency by summing individual request latencies
+    const totalLatencyMs = this.evalRecord.results.reduce(
+      (sum, result) => sum + (result.latencyMs || 0),
+      0,
+    );
+    const avgLatencyMs =
+      this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
+
+    // Detect key feature usage patterns
+    const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
+    const usesTransforms = Boolean(
+      tests.some((t) => t.options?.transform || t.options?.postprocess) ||
+        testSuite.providers.some((p) => Boolean(p.transform)),
+    );
+    const usesScenarios = Boolean(testSuite.scenarios && testSuite.scenarios.length > 0);
+
+    // Detect if using any promptfoo.app example provider
+    const usesExampleProvider = testSuite.providers.some((provider) => {
+      const url = typeof provider.config?.url === 'string' ? provider.config.url : '';
+      const label = provider.label || '';
+      return url.includes('promptfoo.app') || label.toLowerCase().includes('example');
+    });
+
+    // Calculate assertion metrics
+    const totalAssertions = prompts.reduce(
+      (acc, p) => acc + (p.metrics?.assertPassCount || 0) + (p.metrics?.assertFailCount || 0),
+      0,
+    );
+    const passedAssertions = prompts.reduce((acc, p) => acc + (p.metrics?.assertPassCount || 0), 0);
+
+    // Count model-graded vs other assertion types
+    const modelGradedCount = Array.from(assertionTypes).filter((type) =>
+      MODEL_GRADED_ASSERTION_TYPES.has(type as AssertionType),
+    ).length;
+
+    // Calculate provider distribution (maintain exact compatibility)
+    const providerPrefixes = Array.from(
+      new Set(
+        testSuite.providers.map((p) => {
+          const idParts = p.id().split(':');
+          return idParts.length > 1 ? idParts[0] : 'unknown';
+        }),
       ),
+    );
+
+    // Detect timeout occurrences (more robust than string matching)
+    const timeoutOccurred =
+      evalTimedOut ||
+      this.evalRecord.results.some(
+        (r) => r.failureReason === ResultFailureReason.ERROR && r.error?.includes('timed out'),
+      );
+
+    telemetry.record('eval_ran', {
+      // Basic metrics
+      numPrompts: prompts.length,
+      numTests: this.stats.successes + this.stats.failures + this.stats.errors,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
-      providerPrefixes: Array.from(
-        new Set(
-          testSuite.providers.map((p) => {
-            const idParts = p.id().split(':');
-            return idParts.length > 1 ? idParts[0] : 'unknown';
-          }),
-        ),
-      ).sort(),
+      providerPrefixes: providerPrefixes.sort(),
       assertionTypes: Array.from(assertionTypes).sort(),
       eventSource: options.eventSource || 'default',
       ci: isCI(),
-      hasAnyPass: this.evalRecord.prompts.some(
-        (p) => p.metrics?.testPassCount && p.metrics.testPassCount > 0,
-      ),
-      numPasses: this.evalRecord.prompts.reduce(
-        (acc, p) => acc + (p.metrics?.testPassCount || 0),
-        0,
-      ),
-      numFails: this.evalRecord.prompts.reduce(
-        (acc, p) => acc + (p.metrics?.testFailCount || 0),
-        0,
-      ),
-      numErrors: this.evalRecord.prompts.reduce(
-        (acc, p) => acc + (p.metrics?.testErrorCount || 0),
-        0,
-      ),
+      hasAnyPass: this.stats.successes > 0,
+
+      // Result counts
+      numPasses: this.stats.successes,
+      numFails: this.stats.failures,
+      numErrors: this.stats.errors,
+
+      // Performance metrics
+      totalEvalTimeMs,
+      avgLatencyMs: Math.round(avgLatencyMs),
+      concurrencyUsed: concurrency,
+      timeoutOccurred,
+
+      // Token and cost metrics
+      totalTokens,
+      cachedTokens,
+      totalCost,
+      totalRequests,
+
+      // Assertion metrics
+      numAssertions: totalAssertions,
+      passedAssertions,
+      modelGradedAssertions: modelGradedCount,
+      assertionPassRate: totalAssertions > 0 ? passedAssertions / totalAssertions : 0,
+
+      // Feature usage
+      usesConversationVar,
+      usesTransforms,
+      usesScenarios,
+      usesExampleProvider,
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
       isRedteam: Boolean(options.isRedteam),
     });

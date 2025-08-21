@@ -48,7 +48,7 @@ function PricingTable() {
         'Team sharing & collaboration',
         'Continuous monitoring',
         'Centralized security/compliance dashboard',
-        'Customizable scan templates and target settings',
+        'Customizable attack profiles and target settings',
         'SSO and granular permission profiles',
         'Promptfoo API access',
         'Managed cloud deployment',
@@ -155,7 +155,7 @@ function FeatureComparisonTable() {
           enterpriseOnPrem: true,
         },
         {
-          name: 'Organization-specific scan templates',
+          name: 'Organization-specific attack profiles',
           community: false,
           enterprise: true,
           enterpriseOnPrem: true,

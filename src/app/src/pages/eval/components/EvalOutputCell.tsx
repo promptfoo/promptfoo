@@ -9,7 +9,7 @@ import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
-import { useResultsViewSettingsStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 
@@ -53,10 +53,12 @@ function EvalOutputCell({
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
-  searchText: string;
+  searchText?: string;
 }) {
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewSettingsStore();
+
+  const { shouldHighlightSearchText } = useTableStore();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -163,7 +165,7 @@ function EvalOutputCell({
     );
   }
 
-  if (searchText) {
+  if (searchText && shouldHighlightSearchText) {
     // Highlight search matches
     try {
       const regex = new RegExp(searchText, 'gi');
@@ -350,7 +352,7 @@ function EvalOutputCell({
 
       tokenUsageDisplay = (
         <Tooltip
-          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total & ${reasoningTokens} reasoning tokens`}
+          title={`${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`}
         >
           <span>
             {totalTokens}
@@ -585,6 +587,8 @@ function EvalOutputCell({
               metadata={output.metadata}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
+              testIndex={rowIndex}
+              variables={output.testCase?.vars}
             />
           )}
         </>

@@ -58,7 +58,7 @@ class ErrorBoundary extends React.Component<Props, State> {
         return this.props.fallback;
       }
 
-      const isDev = process.env.NODE_ENV === 'development';
+      const isDev = import.meta.env.DEV;
 
       return (
         <Box sx={{ p: 2, maxWidth: '100%' }}>

@@ -1,22 +1,25 @@
-import { exec, spawn } from 'child_process';
+import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { promisify } from 'util';
 
 import { Router } from 'express';
+import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
+import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
 import type { Request, Response } from 'express';
 
-const execAsync = promisify(exec);
+import type { ModelAuditScanResults } from '../../types/modelAudit';
+
 export const modelAuditRouter = Router();
 
 // Check if modelaudit is installed
 modelAuditRouter.get('/check-installed', async (req: Request, res: Response): Promise<void> => {
   try {
-    await execAsync('python -c "import modelaudit"');
-    res.json({ installed: true, cwd: process.cwd() });
+    // First try to check if the modelaudit CLI is available
+    const installed = await checkModelAuditInstalled();
+    res.json({ installed, cwd: process.cwd() });
   } catch {
     res.json({ installed: false, cwd: process.cwd() });
   }
@@ -75,9 +78,8 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     }
 
     // Check if modelaudit is installed
-    try {
-      await execAsync('python -c "import modelaudit"');
-    } catch {
+    const installed = await checkModelAuditInstalled();
+    if (!installed) {
       res.status(400).json({
         error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',
       });
@@ -152,6 +154,9 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
 
     logger.info(`Running model scan on: ${resolvedPaths.join(', ')}`);
 
+    // Default to persisting results unless explicitly disabled
+    const persist = options.persist !== false;
+
     // Track the scan
     telemetry.record('webui_api', {
       event: 'model_scan',
@@ -159,6 +164,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       hasBlacklist: options.blacklist?.length > 0,
       timeout: options.timeout,
       verbose: options.verbose,
+      persist,
     });
 
     // Run the scan
@@ -181,109 +187,139 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       });
     });
 
-    modelAudit.on('close', (code) => {
+    modelAudit.on('close', async (code) => {
       // ModelAudit returns exit code 1 when it finds issues, which is expected
-      if (code === 0 || code === 1) {
-        try {
-          // Find JSON in the output (it might be mixed with other log messages)
-          const jsonMatch = stdout.match(/\{[\s\S]*\}/);
-          if (!jsonMatch) {
-            throw new Error('No JSON found in output');
-          }
-
-          // Parse JSON output
-          const scanResults = JSON.parse(jsonMatch[0]);
-
-          // Transform the results into our expected format
-          const transformedResults = {
-            path: resolvedPaths[0], // Primary resolved path
-            issues: scanResults.issues || [],
-            success: true,
-            scannedFiles: scanResults.files_scanned || resolvedPaths.length,
-            totalFiles: scanResults.files_total || resolvedPaths.length,
-            duration: scanResults.scan_duration || null,
-            rawOutput: stdout, // Always include raw output for debugging
-          };
-
-          res.json(transformedResults);
-        } catch (parseError) {
-          logger.debug(`Failed to parse JSON from stdout: ${parseError}`);
-          logger.debug(`stdout: ${stdout}`);
-          logger.debug(`stderr: ${stderr}`);
-          // If JSON parsing fails, parse text output
-          const issues: Array<{ severity: string; message: string; location?: string }> = [];
-
-          // Parse the log format output
-          const lines = stdout.split('\n');
-          lines.forEach((line) => {
-            // Parse lines like: "2025-06-08 20:46:58,090 - modelaudit.scanners - WARNING - [WARNING] (/path/to/file): Message"
-            const warningMatch = line.match(/\[WARNING\]\s*\(([^)]+)\):\s*(.+)/);
-            const errorMatch = line.match(/\[ERROR\]\s*\(([^)]+)\):\s*(.+)/);
-            const infoMatch = line.match(/\[INFO\]\s*\(([^)]+)\):\s*(.+)/);
-
-            if (warningMatch) {
-              issues.push({
-                severity: 'warning',
-                message: warningMatch[2],
-                location: warningMatch[1],
-              });
-            } else if (errorMatch) {
-              issues.push({
-                severity: 'error',
-                message: errorMatch[2],
-                location: errorMatch[1],
-              });
-            } else if (infoMatch) {
-              issues.push({
-                severity: 'info',
-                message: infoMatch[2],
-                location: infoMatch[1],
-              });
-            } else if (line.includes(' - WARNING - ')) {
-              // Fallback for other warning formats
-              const parts = line.split(' - WARNING - ');
-              if (parts[1]) {
-                issues.push({
-                  severity: 'warning',
-                  message: parts[1],
-                });
-              }
-            } else if (line.includes(' - ERROR - ')) {
-              // Fallback for other error formats
-              const parts = line.split(' - ERROR - ');
-              if (parts[1]) {
-                issues.push({
-                  severity: 'error',
-                  message: parts[1],
-                });
-              }
-            }
-          });
-
-          // Count scanned files from the output
-          const scannedFiles = lines.filter(
-            (line) => line.includes('Scanning file:') || line.includes('Scanning directory:'),
-          ).length;
-
-          res.json({
-            path: resolvedPaths[0],
-            issues,
-            success: true,
-            scannedFiles: scannedFiles || resolvedPaths.length,
-            rawOutput: stdout,
-          });
-        }
-      } else {
-        // Only treat codes other than 0 and 1 as actual errors
-        logger.error(`Model scan failed with code ${code}: ${stderr}`);
+      if (code !== null && code !== 0 && code !== 1) {
+        logger.error(`Model scan process exited with code ${code}`);
         res.status(500).json({
-          error: `Model scan failed with exit code ${code}: ${stderr || stdout || 'Unknown error'}`,
-          code,
+          error: `Model scan failed with exit code ${code}`,
+          stderr: stderr || undefined,
+        });
+        return;
+      }
+
+      try {
+        const jsonOutput = stdout.trim();
+        if (!jsonOutput) {
+          res.status(500).json({
+            error: 'No output received from model scan',
+            stderr: stderr || undefined,
+          });
+          return;
+        }
+
+        let scanResults: ModelAuditScanResults;
+        try {
+          scanResults = JSON.parse(jsonOutput);
+        } catch (parseError) {
+          logger.error(`Failed to parse model scan output: ${parseError}`);
+          res.status(500).json({
+            error: 'Failed to parse scan results',
+            output: jsonOutput.substring(0, 500), // Include first 500 chars for debugging
+          });
+          return;
+        }
+
+        // Persist to database by default
+        let auditId: string | undefined;
+        if (persist) {
+          try {
+            const audit = await ModelAudit.create({
+              name: options.name || `API scan ${new Date().toISOString()}`,
+              author: options.author || null,
+              modelPath: resolvedPaths.join(', '),
+              results: {
+                ...scanResults,
+                rawOutput: jsonOutput, // Include raw output in persisted results
+              },
+              metadata: {
+                paths: resolvedPaths,
+                originalPaths: paths,
+                options: {
+                  blacklist: options.blacklist,
+                  timeout: options.timeout,
+                  maxFileSize: options.maxFileSize,
+                  maxTotalSize: options.maxTotalSize,
+                  verbose: options.verbose,
+                },
+              },
+            });
+            auditId = audit.id;
+            logger.info(`Model scan results saved to database with ID: ${auditId}`);
+          } catch (dbError) {
+            logger.error(`Failed to save scan results to database: ${dbError}`);
+            // Continue - we'll still return the results even if DB save failed
+          }
+        }
+
+        // Return the scan results along with audit ID if saved
+        res.json({
+          ...scanResults,
+          rawOutput: jsonOutput, // Include the raw output from the scanner
+          ...(auditId && { auditId }),
+          persisted: persist && !!auditId,
+        });
+      } catch (error) {
+        logger.error(`Error processing model scan results: ${error}`);
+        res.status(500).json({
+          error: 'Error processing scan results',
+          details: String(error),
         });
       }
     });
   } catch (error) {
-    logger.error(`Error in model scan: ${error}`);
+    logger.error(`Error in model scan endpoint: ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get all model scans
+modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+    const audits = await ModelAudit.getMany(limit);
+
+    res.json({
+      scans: audits.map((audit) => audit.toJSON()),
+      total: audits.length,
+    });
+  } catch (error) {
+    logger.error(`Error fetching model audits: ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get specific model scan by ID
+modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const audit = await ModelAudit.findById(req.params.id);
+
+    if (!audit) {
+      res.status(404).json({ error: 'Model scan not found' });
+      return;
+    }
+
+    res.json(audit.toJSON());
+  } catch (error) {
+    logger.error(`Error fetching model audit: ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Delete model scan
+modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const audit = await ModelAudit.findById(req.params.id);
+
+    if (!audit) {
+      res.status(404).json({ error: 'Model scan not found' });
+      return;
+    }
+
+    await audit.delete();
+    res.json({ success: true, message: 'Model scan deleted successfully' });
+  } catch (error) {
+    logger.error(`Error deleting model audit: ${error}`);
     res.status(500).json({ error: String(error) });
   }
 });

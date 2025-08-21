@@ -1,7 +1,7 @@
 ---
 sidebar_label: AWS Bedrock
 sidebar_position: 3
-description: Learn how to use Amazon Bedrock models in your evaluations, including Claude, Llama, Nova, and other models
+description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
 ---
 
 # Bedrock
@@ -136,6 +136,11 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
+  - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
   - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
     config:
       region: 'us-east-1'

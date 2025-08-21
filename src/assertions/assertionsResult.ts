@@ -8,6 +8,7 @@ export const DEFAULT_TOKENS_USED = {
   prompt: 0,
   completion: 0,
   cached: 0,
+  numRequests: 0,
 };
 
 interface ParentAssertionSet {
@@ -93,6 +94,7 @@ export class AssertionsResult {
       this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
       this.tokensUsed.completion += result.tokensUsed.completion || 0;
       this.tokensUsed.cached += result.tokensUsed.cached || 0;
+      this.tokensUsed.numRequests += result.tokensUsed.numRequests || 0;
     }
 
     if (result.pass) {

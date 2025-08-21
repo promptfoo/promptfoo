@@ -10,6 +10,7 @@ import { NodeHttp2Handler } from '@smithy/node-http-handler';
 import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import logger from '../../logger';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 import type {
@@ -421,8 +422,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       return {
         output: assistantTranscript || '[No response received from API]',
         ...audioOutput,
-        // TODO: Add token usage
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        // TODO: Add proper token usage tracking
+        tokenUsage: createEmptyTokenUsage(),
         cached: false,
         metadata: {
           ...audioOutput,

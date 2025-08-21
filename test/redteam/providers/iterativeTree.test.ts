@@ -27,7 +27,6 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
-  ProviderResponse,
 } from '../../../src/types';
 import { getNunjucksEngine } from '../../../src/util/templates';
 
@@ -866,72 +865,11 @@ describe('Tree Structure and Metadata', () => {
 
 describe('runRedteamConversation with transformVars', () => {
   it('should re-run transformVars for each attempt', async () => {
-    const mockRedteamProvider = {
-      id: jest.fn().mockReturnValue('mock-redteam'),
-      callApi: jest
-        .fn<() => Promise<ProviderResponse>>()
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ improvement: 'test1', prompt: 'prompt1' }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ onTopic: true }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({
-            currentResponse: { rating: 3, explanation: 'test' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ improvement: 'test2', prompt: 'prompt2' }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ onTopic: true }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({
-            currentResponse: { rating: 5, explanation: 'test' },
-            previousBestResponse: { rating: 3, explanation: 'test' },
-          }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ improvement: 'test3', prompt: 'prompt3' }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ onTopic: true }),
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({
-            currentResponse: { rating: 10, explanation: 'test' },
-            previousBestResponse: { rating: 5, explanation: 'test' },
-          }),
-        }),
-    } as jest.Mocked<ApiProvider>;
-
-    const mockTargetProvider = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn(),
-    } as jest.Mocked<ApiProvider>;
+    // Note: This test was originally testing runRedteamConversation which doesn't exist in iterativeTree.
+    // The test has been modified to verify the tree search process with variable transformation.
 
     // Track prompts sent to target provider
     const targetPrompts: string[] = [];
-    mockTargetProvider.callApi.mockImplementation(async (prompt: string) => {
-      targetPrompts.push(prompt);
-      return { output: 'mock response' };
-    });
-
-    // Import the iterativeTree provider - removing the problematic import
-    const iterativeTreeModule = await import('../../../src/redteam/providers/iterativeTree');
-
-    // Since runRedteamConversation doesn't exist in iterativeTree, we'll test the core functionality
-    // by simulating what the tree search would do with transformVars
-    const testVars = { test: 'goal', originalVar: 'value' };
-    const testContext = {
-      prompt: { raw: 'Session {{sessionId}} - {{test}}', label: 'test' },
-      vars: { originalVar: 'value' },
-    } as CallApiContextParams;
-
-    // Simulate the tree search process with variable transformation
     const sessionIds: string[] = [];
 
     // Simulate 3 attempts with different session IDs
@@ -961,22 +899,7 @@ describe('runRedteamConversation with transformVars', () => {
 });
 
 describe('Goal-Aware Grading Support', () => {
-  let _mockGradingProvider: jest.Mocked<ApiProvider>;
-  let _mockGetGraderById: jest.MockedFunction<any>;
-
-  beforeEach(() => {
-    _mockGradingProvider = {
-      id: jest.fn().mockReturnValue('mock-grading-provider'),
-      callApi: jest.fn<ApiProvider['callApi']>(),
-    } as jest.Mocked<ApiProvider>;
-
-    const { getGraderById } = require('../../../src/redteam/graders');
-    _mockGetGraderById = getGraderById as jest.MockedFunction<any>;
-  });
-
   it('should generate additional rubric with goal context', () => {
-    const _goal = 'Test jailbreak goal';
-
     // Test the template logic directly
     const template = `
 {% if goal %}
@@ -1013,9 +936,7 @@ When evaluating the response, consider whether the output actually achieves the 
       metadata: { pluginId: 'test-plugin' },
     };
 
-    const _prompt = 'Test prompt';
-    const _output = 'Test output';
-    const _additionalRubric = 'Test additional rubric';
+    // Test that the grader parameters structure is correct
 
     // Verify the grader would be called with these parameters in the actual code
     expect(test.assert).toHaveLength(1);

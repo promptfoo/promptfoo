@@ -25,6 +25,7 @@ import {
   type EvaluateSummaryV2,
   type GradingResult,
   isProviderOptions,
+  ResultFailureReason,
   type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
@@ -117,6 +118,11 @@ const App: React.FC = () => {
         return;
       }
 
+      // Exclude results with errors from being counted as failures
+      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
+        return;
+      }
+
       if (!result.success || !result.gradingResult?.pass) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
@@ -152,6 +158,11 @@ const App: React.FC = () => {
         return;
       }
 
+      // Exclude results with errors from being counted
+      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
+        return;
+      }
+
       if (result.success && result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
@@ -177,6 +188,11 @@ const App: React.FC = () => {
       (acc, row) => {
         const pluginId = getPluginIdFromResult(row);
         if (!pluginId) {
+          return acc;
+        }
+
+        // Exclude results with errors from statistics
+        if (row.error && row.failureReason === ResultFailureReason.ERROR) {
           return acc;
         }
 

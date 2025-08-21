@@ -1,5 +1,6 @@
 ---
 sidebar_label: DBRX benchmarks
+description: Compare DBRX vs Mixtral vs GPT-3.5 performance with custom benchmarks to evaluate real-world task accuracy and identify the optimal model for your use case
 ---
 
 # DBRX vs Mixtral vs GPT: create your own benchmark

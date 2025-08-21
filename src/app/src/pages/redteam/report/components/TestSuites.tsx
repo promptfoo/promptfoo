@@ -23,7 +23,6 @@ import {
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
-import { getMetricNameFromPlugin } from '../utils/metricMapping';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
@@ -327,14 +326,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({ evalId, categoryStats, plugins 
                         size="small"
                         onClick={() => {
                           const pluginId = subCategory.pluginName;
-                          const categoryType = subCategory.type;
-
-                          const metricName = getMetricNameFromPlugin(
-                            pluginId || categoryType,
-                            categoryType,
-                          );
-
-                          navigate(`/eval/${evalId}?metric=${encodeURIComponent(metricName)}`);
+                          navigate(`/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`);
                         }}
                       >
                         View logs

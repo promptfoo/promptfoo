@@ -26,8 +26,9 @@
     "@mdx-js/react": "^3.1.0",
     "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^6.5.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@segment/ajv-human-errors": "^2.15.0",
-    "@swc/core": "^1.12.14",
+    "@swc/core": "^1.13.3",
     "@swc/jest": "^0.2.39",
     "@tsconfig/docusaurus": "^2.0.3",
     "canvas-confetti": "^1.9.3",
@@ -35,11 +36,13 @@
     "dedent": "^1.6.0",
     "docusaurus-plugin-image-zoom": "^2.0.0",
     "framer-motion": "^11.18.2",
-    "lucide-react": "^0.525.0",
+    "gray-matter": "^4.0.3",
+    "lucide-react": "^0.534.0",
     "prism-react-renderer": "^2.4.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "typescript": "^5.8.3"
+    "sharp": "^0.34.3",
+    "typescript": "^5.9.2"
   },
   "browserslist": {
     "production": [

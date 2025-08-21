@@ -1,5 +1,6 @@
 ---
 sidebar_label: Web Browser
+description: 'Execute LLM evaluations directly in browsers using WebGPU acceleration and local models for privacy-preserving testing'
 ---
 
 # Browser Provider
@@ -68,6 +69,33 @@ providers:
           name: searchResults
       transformResponse: 'extracted.searchResults'
 ```
+
+### Connecting to Existing Browser Sessions
+
+You can connect to an existing Chrome browser session (e.g., with OAuth authentication already completed):
+
+```yaml
+providers:
+  - id: browser
+    config:
+      connectOptions:
+        debuggingPort: 9222 # Chrome debugging port
+
+      steps:
+        # Your test steps here
+```
+
+**Setup Instructions**:
+
+1. Start Chrome with debugging: `chrome --remote-debugging-port=9222 --user-data-dir=/tmp/test`
+2. Complete authentication manually
+3. Run your tests
+
+**Connection Options**:
+
+- `debuggingPort`: Port number for Chrome DevTools Protocol (default: 9222)
+- `mode`: Connection mode - `'cdp'` (default) or `'websocket'`
+- `wsEndpoint`: Direct WebSocket endpoint (when using `mode: 'websocket'`)
 
 ## Supported Actions
 

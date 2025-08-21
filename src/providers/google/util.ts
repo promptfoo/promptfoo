@@ -294,8 +294,13 @@ export async function hasGoogleDefaultCredentials() {
 }
 
 export function getCandidate(data: GeminiResponseData) {
-  if (!(data && data.candidates && data.candidates.length === 1)) {
-    throw new Error('Expected one candidate in API response.');
+  if (!data || !data.candidates || data.candidates.length < 1) {
+    throw new Error('Expected at least one candidate in AI Studio API response.');
+  }
+  if (data.candidates.length > 1) {
+    logger.debug(
+      `Expected one candidate in AI Studio API response, but got ${data.candidates.length}.`,
+    );
   }
   const candidate = data.candidates[0];
   return candidate;
@@ -412,7 +417,7 @@ function isValidBase64Image(data: string): boolean {
       data.startsWith('/9j/') || // JPEG
       data.startsWith('iVBORw0KGgo') || // PNG
       data.startsWith('R0lGODlh') || // GIF
-      data.startsWith('UklGRg') // WebP
+      data.startsWith('UklGR') // WebP
     );
   } catch {
     return false;
@@ -426,7 +431,7 @@ function getMimeTypeFromBase64(base64Data: string): string {
     return 'image/png';
   } else if (base64Data.startsWith('R0lGODlh')) {
     return 'image/gif';
-  } else if (base64Data.startsWith('UklGRg')) {
+  } else if (base64Data.startsWith('UklGR')) {
     return 'image/webp';
   }
   // Default to jpeg for unknown formats
@@ -456,26 +461,55 @@ function processImagesInContents(
       for (const part of content.parts) {
         if (part.text) {
           const lines = part.text.split('\n');
+          let foundValidImage = false;
+          let currentTextBlock = '';
+          const processedParts: Part[] = [];
 
+          // First pass: check if any line is a valid base64 image from context variables
           for (const line of lines) {
             const trimmedLine = line.trim();
 
             // Check if this line is a base64 image that was loaded from a variable
             if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
-              const mimeType = getMimeTypeFromBase64(trimmedLine);
+              foundValidImage = true;
 
-              newParts.push({
+              // Add any accumulated text as a text part
+              if (currentTextBlock.length > 0) {
+                processedParts.push({
+                  text: currentTextBlock,
+                });
+                currentTextBlock = '';
+              }
+
+              // Add the image part
+              const mimeType = getMimeTypeFromBase64(trimmedLine);
+              processedParts.push({
                 inlineData: {
                   mimeType,
                   data: trimmedLine,
                 },
               });
-            } else if (trimmedLine.length > 0) {
-              // Regular text
-              newParts.push({
-                text: trimmedLine,
-              });
+            } else {
+              // Accumulate text, preserving original formatting including newlines
+              if (currentTextBlock.length > 0) {
+                currentTextBlock += '\n';
+              }
+              currentTextBlock += line;
             }
+          }
+
+          // Add any remaining text block
+          if (currentTextBlock.length > 0) {
+            processedParts.push({
+              text: currentTextBlock,
+            });
+          }
+
+          // If we found valid images, use the processed parts; otherwise, keep the original part
+          if (foundValidImage) {
+            newParts.push(...processedParts);
+          } else {
+            newParts.push(part);
           }
         } else {
           // Keep non-text parts as is

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -88,7 +89,17 @@ jest.mock('../../src/esm', () => ({
 jest.mock('../../src/util/file', () => ({
   maybeLoadConfigFromExternalFile: jest.fn((config) => {
     // Mock implementation that handles file:// references
-    if (config && typeof config === 'object') {
+
+    // Handle arrays first to preserve their type
+    if (Array.isArray(config)) {
+      return config.map((item) => {
+        const mockFn = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+        return mockFn(item);
+      });
+    }
+
+    // Handle objects (but not arrays)
+    if (config && typeof config === 'object' && config !== null) {
       const result = { ...config };
       for (const [key, value] of Object.entries(config)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
@@ -108,6 +119,7 @@ jest.mock('../../src/util/file', () => ({
       }
       return result;
     }
+
     return config;
   }),
 }));
@@ -613,6 +625,118 @@ describe('readTest', () => {
       });
       expect(result.provider).toBe(mockProvider);
     });
+  });
+
+  it('should skip validation when isDefaultTest is true', async () => {
+    const defaultTestInput = {
+      options: {
+        provider: {
+          embedding: {
+            id: 'bedrock:embeddings:amazon.titan-embed-text-v2:0',
+            config: {
+              region: 'us-east-1',
+            },
+          },
+        },
+      },
+    };
+
+    // This should not throw even though it doesn't have required properties
+    const result = await readTest(defaultTestInput, '', true);
+    expect(result.options).toEqual(defaultTestInput.options);
+    expect(result.vars).toBeUndefined();
+  });
+
+  it('should skip validation for defaultTest with model-graded eval provider', async () => {
+    const defaultTestInput = {
+      options: {
+        provider: 'openai:gpt-4.1-mini-0613',
+      },
+    };
+
+    // This should not throw even though it doesn't have required properties
+    const result = await readTest(defaultTestInput, '', true);
+    expect(result.options?.provider).toBe('openai:gpt-4.1-mini-0613');
+    expect(result.vars).toBeUndefined();
+  });
+
+  it('should skip validation for defaultTest with text provider configuration', async () => {
+    const defaultTestInput = {
+      options: {
+        provider: {
+          text: {
+            id: 'openai:gpt-4',
+            config: {
+              temperature: 0.7,
+            },
+          },
+        },
+      },
+    };
+
+    // This should not throw even though it doesn't have required properties
+    const result = await readTest(defaultTestInput, '', true);
+    expect(result.options?.provider).toBeDefined();
+    expect(result.options?.provider).toEqual({
+      text: {
+        id: 'openai:gpt-4',
+        config: {
+          temperature: 0.7,
+        },
+      },
+    });
+    expect(result.vars).toBeUndefined();
+  });
+
+  it('should skip validation for defaultTest with provider object configuration', async () => {
+    const defaultTestInput = {
+      options: {
+        provider: {
+          id: 'anthropic:claude-3-opus',
+          config: {
+            temperature: 0.5,
+            max_tokens: 1000,
+          },
+        },
+      },
+    };
+
+    // This should not throw even though it doesn't have required properties
+    const result = await readTest(defaultTestInput, '', true);
+    expect(result.options?.provider).toEqual({
+      id: 'anthropic:claude-3-opus',
+      config: {
+        temperature: 0.5,
+        max_tokens: 1000,
+      },
+    });
+    expect(result.vars).toBeUndefined();
+  });
+
+  it('should throw when not a defaultTest and missing required properties', async () => {
+    // Create a test input that truly has no valid properties after loadTestWithVars
+    const invalidTestInput = {
+      someInvalidProperty: 'invalid',
+    } as any; // Cast to any to bypass type checking for invalid input
+
+    await expect(readTest(invalidTestInput, '', false)).rejects.toThrow(
+      'Test case must contain one of the following properties',
+    );
+  });
+
+  it('should read test from file', async () => {
+    const testPath = 'test1.yaml';
+    const testContent = {
+      description: 'Test 1',
+      vars: { var1: 'value1', var2: 'value2' },
+      assert: [{ type: 'equals', value: 'value1' }],
+    };
+    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(testContent));
+
+    const result = await readTest(testPath);
+
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(testContent);
   });
 });
 
@@ -1247,6 +1371,134 @@ describe('loadTestsFromGlob', () => {
       'huggingface://datasets/example/dataset',
     );
     expect(result).toEqual(mockDataset);
+  });
+
+  it('should recursively resolve file:// references in YAML test files', async () => {
+    const yamlContentWithRefs = [
+      {
+        description: 'Test with file refs',
+        vars: {
+          input: 'file://input.txt',
+          expected: 'file://expected.json',
+        },
+        assert: ['file://assertions.yaml'],
+      },
+    ];
+
+    const resolvedContent = [
+      {
+        description: 'Test with file refs',
+        vars: {
+          input: 'What is 2 + 2?',
+          expected: { answer: '4' },
+        },
+        assert: [{ type: 'equals', value: '4' }],
+      },
+    ];
+
+    jest.mocked(globSync).mockReturnValue(['tests.yaml']);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlContentWithRefs));
+
+    // Mock maybeLoadConfigFromExternalFile to resolve file:// references
+    const mockMaybeLoadConfig =
+      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+    mockMaybeLoadConfig.mockReturnValue(resolvedContent);
+
+    const result = await loadTestsFromGlob('tests.yaml');
+
+    expect(mockMaybeLoadConfig).toHaveBeenCalledWith(yamlContentWithRefs);
+    expect(result).toEqual(resolvedContent);
+  });
+
+  it.skip('should recursively resolve file:// references in JSON test files', async () => {
+    const jsonContentWithRefs = [
+      {
+        description: 'JSON test with file refs',
+        vars: {
+          systemPrompt: 'file://system.md',
+          context: 'file://context.json',
+        },
+        assert: ['file://validations.json'],
+      },
+    ];
+
+    const resolvedContent = [
+      {
+        description: 'JSON test with file refs',
+        vars: {
+          systemPrompt: 'You are a helpful assistant.',
+          context: { documents: ['doc1', 'doc2'] },
+        },
+        assert: [
+          { type: 'contains', value: 'helpful' },
+          { type: 'not-contains', value: 'error' },
+        ],
+      },
+    ];
+
+    jest.mocked(globSync).mockReturnValue(['tests.json']);
+
+    // Mock fs.readFileSync to return JSON content
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContentWithRefs));
+
+    // Mock the require function to return the parsed JSON
+    jest.doMock(path.resolve('tests.json'), () => jsonContentWithRefs, { virtual: true });
+
+    // Mock maybeLoadConfigFromExternalFile to resolve file:// references
+    const mockMaybeLoadConfig =
+      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+    mockMaybeLoadConfig.mockReturnValue(resolvedContent);
+
+    const result = await loadTestsFromGlob('tests.json');
+
+    expect(mockMaybeLoadConfig).toHaveBeenCalledWith(jsonContentWithRefs);
+    expect(result).toEqual(resolvedContent);
+
+    // Clean up the mock
+    jest.dontMock(path.resolve('tests.json'));
+  });
+
+  it('should handle nested file:// references in complex test structures', async () => {
+    const complexYamlWithRefs = [
+      {
+        description: 'Complex test',
+        vars: {
+          config: 'file://config.yaml',
+          prompts: ['file://prompt1.txt', 'file://prompt2.txt'],
+        },
+        assert: ['file://assert1.yaml', 'file://assert2.yaml'],
+      },
+    ];
+
+    const resolvedContent = [
+      {
+        description: 'Complex test',
+        vars: {
+          config: { temperature: 0.7, maxTokens: 100 },
+          prompts: ['First prompt', 'Second prompt'],
+        },
+        assert: [
+          { type: 'equals', value: 'expected1' },
+          { type: 'contains', value: 'expected2' },
+        ],
+      },
+    ];
+
+    jest.mocked(globSync).mockReturnValue(['complex-tests.yaml']);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(complexYamlWithRefs));
+
+    // Mock maybeLoadConfigFromExternalFile to resolve file:// references
+    const mockMaybeLoadConfig =
+      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+    mockMaybeLoadConfig.mockReturnValue(resolvedContent);
+
+    const result = await loadTestsFromGlob('complex-tests.yaml');
+
+    expect(mockMaybeLoadConfig).toHaveBeenCalledWith(complexYamlWithRefs);
+    // Note: provider field is not included in the resolved content from our test file structure
+    expect(result[0].description).toEqual(resolvedContent[0].description);
+    expect(result[0].vars).toEqual(resolvedContent[0].vars);
+    expect(result[0].assert).toEqual(resolvedContent[0].assert);
   });
 });
 

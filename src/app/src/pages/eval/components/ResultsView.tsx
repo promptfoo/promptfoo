@@ -30,6 +30,7 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
@@ -475,77 +476,16 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  // Handle metric parameter from URL
-  React.useEffect(() => {
-    const metricParam = searchParams.get('metric');
-    if (metricParam) {
-      const { addFilter, resetFilters } = useTableStore.getState();
-
-      resetFilters();
-
-      addFilter({
-        type: 'metric',
-        operator: 'equals',
-        value: metricParam,
-      });
-
-      setSearchParams((prev) => {
-        const newParams = new URLSearchParams(prev);
-        newParams.delete('metric');
-        return newParams;
-      });
-    }
-  }, [searchParams, setSearchParams]);
-
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const canRenderResultsCharts = (table && config && table.head.prompts.length > 1) ?? false;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
-  /**
-   * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
-   * (and the rendering of duplicative, useless scrollbars).
-   * Only apply this for the Results tab (activeTab === 0), not for the Metrics tab.
-   */
-  React.useEffect(() => {
-    if (activeTab === 0) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'auto';
-    }
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, [activeTab]);
-
-  /**
-   * Determine whether the tab controller (switcher) should be rendered based on whether there is
-   * a performance tab to render.
-   */
-  const hasMetrics = table?.head.prompts.some((prompt) => prompt.metrics?.namedScores);
-  const hasPerformanceTab = canRenderResultsCharts || hasMetrics;
-  const renderTabController = hasPerformanceTab;
-
   return (
     <>
-      <Box
-        id="results-view-container"
-        px={2}
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-        ref={(el: HTMLDivElement | null) => {
-          const top = el?.getBoundingClientRect().top;
-          if (top) {
-            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-            el.style.height = `calc(100vh - ${top}px)`;
-          }
-        }}
-      >
-        <Box>
+      <Box px={2} pt={2}>
+        <Box sx={{ transition: 'all 0.3s ease' }}>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
               <TextField
@@ -600,17 +540,93 @@ export default function ResultsView({
             ))}
           </ResponsiveStack>
 
-          {/* TABS */}
-          {renderTabController && (
-            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-              <Tabs
-                value={activeTab}
-                onChange={(_, newValue) => setActiveTab(newValue)}
-                aria-label="evaluation results tabs"
-              >
-                <Tab label="Results" />
-                <Tab label="Performance" />
-              </Tabs>
+            <FiltersButton
+              appliedFiltersCount={filters.appliedCount}
+              onClick={() => setFiltersFormOpen(true)}
+              ref={filtersButtonRef}
+            />
+            <FiltersForm
+              open={filtersFormOpen}
+              onClose={() => setFiltersFormOpen(false)}
+              anchorEl={filtersButtonRef.current}
+            />
+
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                borderRadius: '16px',
+                padding: '4px 12px',
+                fontSize: '0.875rem',
+              }}
+            >
+              {searchText || filterMode !== 'all' || filters.appliedCount > 0 ? (
+                <>
+                  <strong>{filteredResultsCount}</strong>
+                  <span style={{ margin: '0 4px' }}>of</span>
+                  <strong>{totalResultsCount}</strong>
+                  <span style={{ margin: '0 4px' }}>results</span>
+                  {searchText && (
+                    <Chip
+                      size="small"
+                      label={`Search: ${searchText.length > 4 ? searchText.substring(0, 5) + '...' : searchText}`}
+                      onDelete={() => handleSearchTextChange('')}
+                      sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                    />
+                  )}
+                  {filterMode !== 'all' && (
+                    <Chip
+                      size="small"
+                      label={`Filter: ${filterMode}`}
+                      onDelete={() => setFilterMode('all')}
+                      sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                    />
+                  )}
+                  {filters.appliedCount > 0 &&
+                    Object.values(filters.values).map((filter) => {
+                      // For metadata filters, both field and value must be present
+                      if (
+                        filter.type === 'metadata' ? !filter.value || !filter.field : !filter.value
+                      ) {
+                        return null;
+                      }
+                      const truncatedValue =
+                        filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
+
+                      let label: string;
+                      if (filter.type === 'metric') {
+                        label = `Metric: ${truncatedValue}`;
+                      } else if (filter.type === 'plugin') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label = `Plugin: ${displayName}`;
+                      } else if (filter.type === 'strategy') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label = `Strategy: ${displayName}`;
+                      } else {
+                        // metadata type
+                        label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      }
+
+                      return (
+                        <Chip
+                          key={filter.id}
+                          size="small"
+                          label={label}
+                          title={filter.value} // Show full value on hover
+                          onDelete={() => removeFilter(filter.id)}
+                          sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
+                        />
+                      );
+                    })}
+                </>
+              ) : (
+                <>{filteredResultsCount} results</>
+              )}
             </Box>
           )}
 
@@ -867,31 +883,19 @@ export default function ResultsView({
             <ResultsCharts handleHideCharts={() => setRenderResultsCharts(false)} />
           )}
         </Box>
-
-        {activeTab === 0 && (
-          <ResultsTable
-            maxTextLength={maxTextLength}
-            columnVisibility={currentColumnState.columnVisibility}
-            wordBreak={wordBreak}
-            showStats={showInferenceDetails}
-            filterMode={filterMode}
-            failureFilter={failureFilter}
-            searchText={searchText}
-            debouncedSearchText={debouncedSearchValue}
-            onFailureFilterToggle={handleFailureFilterToggle}
-            onSearchTextChange={handleSearchTextChange}
-            setFilterMode={setFilterMode}
-            zoom={resultsTableZoom}
-            handleSwitchToPerformanceTab={() => setActiveTab(1)}
-          />
-        )}
-        {activeTab === 1 && (
-          <EvalPerformanceView
-            handleSwitchToResultsTab={() => setActiveTab(0)}
-            renderResultsCharts={canRenderResultsCharts}
-            renderMetricsTable={hasMetrics}
-          />
-        )}
+        <ResultsTable
+          maxTextLength={maxTextLength}
+          columnVisibility={currentColumnState.columnVisibility}
+          wordBreak={wordBreak}
+          showStats={showInferenceDetails}
+          filterMode={filterMode}
+          failureFilter={failureFilter}
+          debouncedSearchText={debouncedSearchValue}
+          onFailureFilterToggle={handleFailureFilterToggle}
+          onSearchTextChange={handleSearchTextChange}
+          setFilterMode={setFilterMode}
+          zoom={resultsTableZoom}
+        />
       </Box>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal

@@ -244,11 +244,58 @@ export const OPENAI_CHAT_MODELS = [
       output: 4.4 / 1e6,
     },
   })),
+  // GPT-5 models - hypothetical pricing based on model progression
+  ...['gpt-5', 'gpt-5-2025-08-07'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5-chat-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5-nano', 'gpt-5-nano-2025-08-07'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.05 / 1e6,
+      output: 0.4 / 1e6,
+    },
+  })),
+  ...['gpt-5-mini', 'gpt-5-mini-2025-08-07'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.25 / 1e6,
+      output: 2 / 1e6,
+    },
+  })),
   ...['codex-mini-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1.5 / 1e6,
       output: 6.0 / 1e6,
+    },
+  })),
+];
+
+// Deep research models for Responses API
+export const OPENAI_DEEP_RESEARCH_MODELS = [
+  ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
+    id: model,
+    cost: {
+      input: 10 / 1e6,
+      output: 40 / 1e6,
+    },
+  })),
+  ...['o4-mini-deep-research', 'o4-mini-deep-research-2025-06-26'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2 / 1e6,
+      output: 8 / 1e6,
     },
   })),
 ];
@@ -319,6 +366,7 @@ export function calculateOpenAICost(
       ...OPENAI_CHAT_MODELS,
       ...OPENAI_COMPLETION_MODELS,
       ...OPENAI_REALTIME_MODELS,
+      ...OPENAI_DEEP_RESEARCH_MODELS,
     ]);
   }
 
@@ -340,6 +388,7 @@ export function calculateOpenAICost(
     ...OPENAI_CHAT_MODELS,
     ...OPENAI_COMPLETION_MODELS,
     ...OPENAI_REALTIME_MODELS,
+    ...OPENAI_DEEP_RESEARCH_MODELS,
   ].find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;

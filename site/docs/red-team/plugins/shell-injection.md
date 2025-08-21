@@ -1,5 +1,6 @@
 ---
 sidebar_label: Shell Injection
+description: Red team shell injection vulnerabilities by testing AI systems' resistance to unauthorized command execution, protecting LLM agents from malicious system access
 ---
 
 # Shell Injection Plugin

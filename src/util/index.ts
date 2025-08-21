@@ -8,7 +8,8 @@ import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { TERMINAL_MAX_WIDTH } from '../constants';
+import * as os from 'os';
+import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
@@ -61,6 +62,28 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
     `.trim();
 };
 
+export function createOutputMetadata(evalRecord: Eval) {
+  let evaluationCreatedAt: string | undefined;
+  if (evalRecord.createdAt) {
+    try {
+      const date = new Date(evalRecord.createdAt);
+      evaluationCreatedAt = Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+    } catch {
+      evaluationCreatedAt = undefined;
+    }
+  }
+
+  return {
+    promptfooVersion: VERSION,
+    nodeVersion: process.version,
+    platform: os.platform(),
+    arch: os.arch(),
+    exportedAt: new Date().toISOString(),
+    evaluationCreatedAt,
+    author: evalRecord.author,
+  };
+}
+
 export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
@@ -97,6 +120,8 @@ export async function writeOutput(
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
+
+  const metadata = createOutputMetadata(evalRecord);
 
   if (outputExtension === 'csv') {
     // Write headers first
@@ -135,6 +160,7 @@ export async function writeOutput(
           results: summary,
           config: evalRecord.config,
           shareableUrl,
+          metadata,
         } satisfies OutputFile,
         null,
         2,
@@ -149,6 +175,7 @@ export async function writeOutput(
         results: summary,
         config: evalRecord.config,
         shareableUrl,
+        metadata,
       } as OutputFile),
     );
   } else if (outputExtension === 'html') {
@@ -176,6 +203,32 @@ export async function writeOutput(
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
+
+    // Sanitize data for XML builder to prevent textValue.replace errors
+    const sanitizeForXml = (obj: any): any => {
+      if (obj === null || obj === undefined) {
+        return '';
+      }
+      if (typeof obj === 'boolean' || typeof obj === 'number') {
+        return String(obj);
+      }
+      if (typeof obj === 'string') {
+        return obj;
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(sanitizeForXml);
+      }
+      if (typeof obj === 'object') {
+        const sanitized: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+          sanitized[key] = sanitizeForXml(value);
+        }
+        return sanitized;
+      }
+      // For any other type, convert to string
+      return String(obj);
+    };
+
     const xmlBuilder = new XMLBuilder({
       ignoreAttributes: false,
       format: true,
@@ -184,9 +237,9 @@ export async function writeOutput(
     const xmlData = xmlBuilder.build({
       promptfoo: {
         evalId: evalRecord.id,
-        results: summary,
-        config: evalRecord.config,
-        shareableUrl: shareableUrl || undefined,
+        results: sanitizeForXml(summary),
+        config: sanitizeForXml(evalRecord.config),
+        shareableUrl: shareableUrl || '',
       },
     });
     fs.writeFileSync(outputPath, xmlData);
