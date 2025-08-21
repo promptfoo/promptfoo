@@ -224,7 +224,7 @@ export function modelScanCommand(program: Command): void {
         let stdout = '';
         let stderr = '';
 
-        const modelAudit = spawn('modelaudit', args, { stdio: 'inherit', env: delegationEnv });
+        const modelAudit = spawn('modelaudit', args, { env: delegationEnv });
 
         modelAudit.stdout?.on('data', (data) => {
           stdout += data.toString();
@@ -368,7 +368,6 @@ export function modelScanCommand(program: Command): void {
               );
               console.log(`Duration: ${(results.duration ?? 0 / 1000).toFixed(2)} seconds`);
               console.log(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
-              console.log(chalk.gray(`  View full report: promptfoo view model-audit ${audit.id}`));
             }
 
             // Save to file if requested
@@ -386,8 +385,7 @@ export function modelScanCommand(program: Command): void {
           }
         });
       } else {
-        // Original behavior when explicitly not saving to database (--no-write flag)
-        const modelAudit = spawn('modelaudit', args, { stdio: 'inherit' });
+        const modelAudit = spawn('modelaudit', args, { stdio: 'inherit', env: delegationEnv });
 
         modelAudit.on('error', (error) => {
           logger.error(`Failed to start modelaudit: ${error.message}`);
