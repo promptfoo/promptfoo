@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import {
+  createAndDisplayShareableModelAuditUrl,
   createAndDisplayShareableUrl,
   notCloudEnabledShareInstructions,
   shareCommand,
@@ -7,7 +8,13 @@ import {
 import * as envars from '../../src/envars';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { createShareableUrl, isSharingEnabled } from '../../src/share';
+import ModelAudit from '../../src/models/modelAudit';
+import {
+  createShareableModelAuditUrl,
+  createShareableUrl,
+  isModelAuditSharingEnabled,
+  isSharingEnabled,
+} from '../../src/share';
 import { loadDefaultConfig } from '../../src/util/config/default';
 
 jest.mock('../../src/share');
@@ -19,6 +26,7 @@ jest.mock('../../src/telemetry', () => ({
 jest.mock('../../src/envars');
 jest.mock('readline');
 jest.mock('../../src/models/eval');
+jest.mock('../../src/models/modelAudit');
 jest.mock('../../src/util', () => ({
   setupEnv: jest.fn(),
 }));
@@ -84,6 +92,59 @@ describe('Share Command', () => {
     });
   });
 
+  describe('createAndDisplayShareableModelAuditUrl', () => {
+    it('should return a URL and log it when successful', async () => {
+      const mockAudit = {
+        id: 'test-audit-id',
+        modelPath: '/path/to/model',
+        results: {},
+      } as ModelAudit;
+      const mockUrl = 'https://app.promptfoo.dev/model-audit/test-audit-id';
+
+      jest.mocked(createShareableModelAuditUrl).mockResolvedValue(mockUrl);
+
+      const result = await createAndDisplayShareableModelAuditUrl(mockAudit, false);
+
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(mockUrl));
+      expect(result).toBe(mockUrl);
+    });
+
+    it('should pass showAuth parameter correctly', async () => {
+      const mockAudit = {
+        id: 'test-audit-id',
+        modelPath: '/path/to/model',
+        results: {},
+      } as ModelAudit;
+      const mockUrl = 'https://app.promptfoo.dev/model-audit/test-audit-id';
+
+      jest.mocked(createShareableModelAuditUrl).mockResolvedValue(mockUrl);
+
+      await createAndDisplayShareableModelAuditUrl(mockAudit, true);
+
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, true);
+    });
+
+    it('should return null when createShareableModelAuditUrl returns null', async () => {
+      const mockAudit = {
+        id: 'test-audit-id',
+        modelPath: '/path/to/model',
+        results: {},
+      } as ModelAudit;
+
+      jest.mocked(createShareableModelAuditUrl).mockResolvedValue(null);
+
+      const result = await createAndDisplayShareableModelAuditUrl(mockAudit, false);
+
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
+      expect(result).toBeNull();
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to create shareable URL for model audit test-audit-id',
+      );
+      expect(logger.info).not.toHaveBeenCalled();
+    });
+  });
+
   describe('shareCommand', () => {
     let program: Command;
 
@@ -102,6 +163,79 @@ describe('Share Command', () => {
       const options = cmd?.options;
       expect(options?.find((o) => o.long === '--show-auth')).toBeDefined();
       expect(options?.find((o) => o.long === '--yes')).toBeDefined();
+      expect(options?.find((o) => o.long === '--model-audit')).toBeDefined();
+    });
+
+    it('should handle model audit sharing with specific auditId', async () => {
+      const mockAudit = {
+        id: 'test-audit-id',
+        modelPath: '/path/to/model',
+        results: {},
+      } as ModelAudit;
+
+      jest.spyOn(ModelAudit, 'findById').mockImplementation().mockResolvedValue(mockAudit);
+      jest.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
+      jest
+        .mocked(createShareableModelAuditUrl)
+        .mockResolvedValue('https://example.com/model-audit/test-audit-id');
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', 'test-audit-id', '--model-audit']);
+
+      expect(ModelAudit.findById).toHaveBeenCalledWith('test-audit-id');
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('View ModelAudit Scan Results'),
+      );
+    });
+
+    it('should handle model audit sharing with latest audit', async () => {
+      const mockAudit = {
+        id: 'latest-audit-id',
+        modelPath: '/path/to/model',
+        results: {},
+      } as ModelAudit;
+
+      jest.spyOn(ModelAudit, 'latest').mockImplementation().mockResolvedValue(mockAudit);
+      jest.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
+      jest
+        .mocked(createShareableModelAuditUrl)
+        .mockResolvedValue('https://example.com/model-audit/latest-audit-id');
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', '--model-audit']);
+
+      expect(ModelAudit.latest).toHaveBeenCalledWith();
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Sharing latest model audit'),
+      );
+    });
+
+    it('should handle model audit not found', async () => {
+      jest.spyOn(ModelAudit, 'findById').mockImplementation().mockResolvedValue(null);
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', 'non-existent-id', '--model-audit']);
+
+      expect(ModelAudit.findById).toHaveBeenCalledWith('non-existent-id');
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Could not find model audit with ID'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should handle no model audits available', async () => {
+      jest.spyOn(ModelAudit, 'latest').mockImplementation().mockResolvedValue(undefined);
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', '--model-audit']);
+
+      expect(ModelAudit.latest).toHaveBeenCalledWith();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Could not load model audit results'),
+      );
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle specific evalId not found', async () => {

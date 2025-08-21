@@ -179,6 +179,26 @@ export default class ModelAudit {
     return results.map((r) => new ModelAudit({ ...r, persisted: true }));
   }
 
+  /**
+   * Get the most recent model audit scan.
+   * @returns The latest model audit or undefined if none exists.
+   */
+  static async latest(): Promise<ModelAudit | undefined> {
+    const db = getDb();
+    const results = await db
+      .select()
+      .from(modelAuditsTable)
+      .orderBy(desc(modelAuditsTable.createdAt))
+      .limit(1)
+      .all();
+
+    if (results.length === 0) {
+      return undefined;
+    }
+
+    return new ModelAudit({ ...results[0], persisted: true });
+  }
+
   async save(): Promise<void> {
     const db = getDb();
     const now = Date.now();

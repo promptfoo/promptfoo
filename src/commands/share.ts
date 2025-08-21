@@ -5,7 +5,17 @@ import { getDefaultShareViewBaseUrl } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
-import { createShareableUrl, getShareableUrl, hasEvalBeenShared, isSharingEnabled } from '../share';
+import ModelAudit from '../models/modelAudit';
+import {
+  createShareableModelAuditUrl,
+  createShareableUrl,
+  getShareableModelAuditUrl,
+  getShareableUrl,
+  hasEvalBeenShared,
+  hasModelAuditBeenShared,
+  isModelAuditSharingEnabled,
+  isSharingEnabled,
+} from '../share';
 import telemetry from '../telemetry';
 import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
@@ -39,6 +49,21 @@ export async function createAndDisplayShareableUrl(
   return url;
 }
 
+export async function createAndDisplayShareableModelAuditUrl(
+  auditRecord: ModelAudit,
+  showAuth: boolean,
+): Promise<string | null> {
+  const url = await createShareableModelAuditUrl(auditRecord, showAuth);
+
+  if (url) {
+    logger.info(`View ModelAudit Scan Results: ${chalk.greenBright.bold(url)}`);
+  } else {
+    logger.error(`Failed to create shareable URL for model audit ${auditRecord.id}`);
+    process.exitCode = 1;
+  }
+  return url;
+}
+
 export function shareCommand(program: Command) {
   program
     .command('share [evalId]')
@@ -48,6 +73,7 @@ export function shareCommand(program: Command) {
       'Show username/password authentication information in the URL if exists',
       false,
     )
+    .option('--model-audit', 'Share a model audit scan instead of an evaluation', false)
     // NOTE: Added in 0.109.1 after migrating sharing to promptfoo.app in 0.108.0
     .option(
       '-y, --yes',
@@ -57,12 +83,71 @@ export function shareCommand(program: Command) {
     .action(
       async (
         evalId: string | undefined,
-        cmdObj: { yes: boolean; envPath?: string; showAuth: boolean } & Command,
+        cmdObj: {
+          yes: boolean;
+          envPath?: string;
+          showAuth: boolean;
+          modelAudit: boolean;
+        } & Command,
       ) => {
         telemetry.record('command_used', {
           name: 'share',
         });
 
+        // Handle model audit sharing
+        if (cmdObj.modelAudit) {
+          let audit: ModelAudit | undefined | null = null;
+          if (evalId) {
+            audit = await ModelAudit.findById(evalId);
+            if (!audit) {
+              logger.error(`Could not find model audit with ID ${chalk.bold(evalId)}.`);
+              process.exitCode = 1;
+              return;
+            }
+          } else {
+            audit = await ModelAudit.latest();
+            if (!audit) {
+              logger.error(
+                'Could not load model audit results. Do you need to run `promptfoo scan-model` first?',
+              );
+              process.exitCode = 1;
+              return;
+            }
+            logger.info(`Sharing latest model audit (${audit.id})`);
+          }
+
+          // Validate that the user has authenticated with Cloud for model audit sharing.
+          if (!isModelAuditSharingEnabled(audit)) {
+            notCloudEnabledShareInstructions();
+            process.exitCode = 1;
+            return;
+          }
+
+          if (
+            // Idempotency is not implemented in self-hosted mode.
+            cloudConfig.isEnabled() &&
+            (await hasModelAuditBeenShared(audit))
+          ) {
+            const url = await getShareableModelAuditUrl(
+              audit,
+              // `remoteAuditId` is always the Audit ID when sharing to Cloud.
+              audit.id,
+              cmdObj.showAuth,
+            );
+            const shouldContinue = await confirm({
+              message: `This model audit is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
+            });
+            if (!shouldContinue) {
+              process.exitCode = 0;
+              return;
+            }
+          }
+
+          await createAndDisplayShareableModelAuditUrl(audit, cmdObj.showAuth);
+          return;
+        }
+
+        // Original evaluation sharing logic
         let eval_: Eval | undefined | null = null;
         if (evalId) {
           eval_ = await Eval.findById(evalId);
