@@ -66,14 +66,15 @@ export async function createAndDisplayShareableModelAuditUrl(
 
 export function shareCommand(program: Command) {
   program
-    .command('share [evalId]')
-    .description('Create a shareable URL of an eval (defaults to most recent)' + '\n\n')
+    .command('share [id]')
+    .description(
+      'Create a shareable URL of an eval or model audit (defaults to most recent)' + '\n\n',
+    )
     .option(
       '--show-auth',
       'Show username/password authentication information in the URL if exists',
       false,
     )
-    .option('--model-audit', 'Share a model audit scan instead of an evaluation', false)
     // NOTE: Added in 0.109.1 after migrating sharing to promptfoo.app in 0.108.0
     .option(
       '-y, --yes',
@@ -82,40 +83,68 @@ export function shareCommand(program: Command) {
     )
     .action(
       async (
-        evalId: string | undefined,
+        id: string | undefined,
         cmdObj: {
           yes: boolean;
           envPath?: string;
           showAuth: boolean;
-          modelAudit: boolean;
         } & Command,
       ) => {
         telemetry.record('command_used', {
           name: 'share',
         });
 
-        // Handle model audit sharing
-        if (cmdObj.modelAudit) {
-          let audit: ModelAudit | undefined | null = null;
-          if (evalId) {
-            audit = await ModelAudit.findById(evalId);
+        let isModelAudit = false;
+        let eval_: Eval | undefined | null = null;
+        let audit: ModelAudit | undefined | null = null;
+
+        if (id) {
+          // Determine type based on ID format
+          if (id.startsWith('scan-')) {
+            isModelAudit = true;
+            audit = await ModelAudit.findById(id);
             if (!audit) {
-              logger.error(`Could not find model audit with ID ${chalk.bold(evalId)}.`);
+              logger.error(`Could not find model audit with ID ${chalk.bold(id)}.`);
               process.exitCode = 1;
               return;
             }
           } else {
-            audit = await ModelAudit.latest();
-            if (!audit) {
-              logger.error(
-                'Could not load model audit results. Do you need to run `promptfoo scan-model` first?',
-              );
+            // Assume it's an eval ID (could be eval- prefix or other format)
+            eval_ = await Eval.findById(id);
+            if (!eval_) {
+              logger.error(`Could not find eval with ID ${chalk.bold(id)}.`);
               process.exitCode = 1;
               return;
             }
-            logger.info(`Sharing latest model audit (${audit.id})`);
+          }
+        } else {
+          // No ID provided, find the most recent of either type
+          const [latestEval, latestAudit] = await Promise.all([Eval.latest(), ModelAudit.latest()]);
+
+          if (!latestEval && !latestAudit) {
+            logger.error(
+              'Could not load results. Do you need to run `promptfoo eval` or `promptfoo scan-model` first?',
+            );
+            process.exitCode = 1;
+            return;
           }
 
+          // Choose the most recent based on creation time
+          const evalTime = latestEval?.createdAt || 0;
+          const auditTime = latestAudit?.createdAt || 0;
+
+          if (auditTime > evalTime) {
+            isModelAudit = true;
+            audit = latestAudit;
+            logger.info(`Sharing latest model audit (${audit!.id})`);
+          } else {
+            eval_ = latestEval;
+            logger.info(`Sharing latest eval (${eval_!.id})`);
+          }
+        }
+
+        // Handle model audit sharing
+        if (isModelAudit && audit) {
           // Validate that the user has authenticated with Cloud for model audit sharing.
           if (!isModelAuditSharingEnabled(audit)) {
             notCloudEnabledShareInstructions();
@@ -147,23 +176,11 @@ export function shareCommand(program: Command) {
           return;
         }
 
-        // Original evaluation sharing logic
-        let eval_: Eval | undefined | null = null;
-        if (evalId) {
-          eval_ = await Eval.findById(evalId);
-          if (!eval_) {
-            logger.error(`Could not find eval with ID ${chalk.bold(evalId)}.`);
-            process.exitCode = 1;
-            return;
-          }
-        } else {
-          eval_ = await Eval.latest();
-          if (!eval_) {
-            logger.error('Could not load results. Do you need to run `promptfoo eval` first?');
-            process.exitCode = 1;
-            return;
-          }
-          logger.info(`Sharing latest eval (${eval_.id})`);
+        // Handle evaluation sharing
+        if (!eval_) {
+          logger.error('Unexpected error: no eval or audit to share');
+          process.exitCode = 1;
+          return;
         }
 
         try {
