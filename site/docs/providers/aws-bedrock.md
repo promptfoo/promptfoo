@@ -1,7 +1,7 @@
 ---
 sidebar_label: AWS Bedrock
 sidebar_position: 3
-description: Learn how to use Amazon Bedrock models in your evaluations, including Claude, Llama, Nova, and other models
+description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
 ---
 
 # Bedrock

@@ -7,6 +7,7 @@ import Button from '@mui/material/Button';
 import { alpha, styled } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { SIDEBAR_WIDTH } from '../page';
 
 interface PageWrapperProps {
   title: string;
@@ -42,7 +43,10 @@ const HeaderContainer = styled(Box, {
   position: 'sticky',
   top: 0,
   zIndex: 10,
-  backgroundColor: alpha(theme.palette.background.default, 0.95),
+  backgroundColor:
+    theme.palette.mode === 'dark'
+      ? alpha(theme.palette.background.default, 0.9)
+      : alpha(theme.palette.background.default, 0.95),
   backdropFilter: 'blur(8px)',
   borderBottom: `1px solid ${theme.palette.divider}`,
   padding: theme.spacing(isMinimized ? 1.5 : 3, 3),
@@ -87,7 +91,7 @@ const ContentBox = styled(Box)(({ theme }) => ({
 const NavigationContainer = styled(Box)(({ theme }) => ({
   position: 'fixed',
   bottom: 0,
-  left: '280px', // Account for sidebar width
+  left: SIDEBAR_WIDTH, // Account for sidebar width
   right: 0,
   zIndex: 15,
   backgroundColor: alpha(theme.palette.background.paper, 0.95),

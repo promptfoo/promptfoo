@@ -1,3 +1,7 @@
+---
+description: Privacy policy for promptfoo services - we don't collect PII, API keys stay local, and telemetry is anonymous and opt-out
+---
+
 # Privacy Policy
 
 This Privacy Policy describes how your personal information is collected, used, and shared when you use Promptfoo Command Line Interface (CLI), library, and website.

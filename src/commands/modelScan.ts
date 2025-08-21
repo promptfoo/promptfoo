@@ -3,6 +3,7 @@ import { promisify } from 'util';
 
 import chalk from 'chalk';
 import logger from '../logger';
+import { checkModelAuditUpdates } from '../updates';
 import type { Command } from 'commander';
 
 const execAsync = promisify(exec);
@@ -55,6 +56,9 @@ export function modelScanCommand(program: Command): void {
         process.exit(1);
       }
 
+      // Check for modelaudit updates
+      await checkModelAuditUpdates();
+
       const args = ['scan', ...paths];
 
       // Add options
@@ -90,7 +94,13 @@ export function modelScanCommand(program: Command): void {
 
       logger.info(`Running model scan on: ${paths.join(', ')}`);
 
-      const modelAudit = spawn('modelaudit', args, { stdio: 'inherit' });
+      // Set up environment for delegation
+      const delegationEnv = {
+        ...process.env,
+        PROMPTFOO_DELEGATED: 'true', // Signal to modelaudit that it's being delegated
+      };
+
+      const modelAudit = spawn('modelaudit', args, { stdio: 'inherit', env: delegationEnv });
 
       modelAudit.on('error', (error) => {
         logger.error(`Failed to start modelaudit: ${error.message}`);

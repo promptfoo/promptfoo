@@ -1,5 +1,6 @@
 ---
 sidebar_label: OpenRouter
+description: "Access 100+ LLM providers through OpenRouter's unified API gateway with automatic routing and cost optimization features"
 ---
 
 # OpenRouter

@@ -150,7 +150,6 @@ describe('FoundationModelConfiguration', () => {
     expect(modelIdInput).toHaveAttribute('placeholder', 'azure:chat:your-deployment-name');
   });
 
-  // [Tusk] FAILING TEST
   it('should update the Model ID input value when selectedTarget.id prop changes', () => {
     const { rerender } = renderWithTheme(
       <FoundationModelConfiguration

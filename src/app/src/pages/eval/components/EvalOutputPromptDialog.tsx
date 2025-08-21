@@ -3,10 +3,13 @@ import type React from 'react';
 
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import EditIcon from '@mui/icons-material/Edit';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -20,9 +23,11 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { ErrorBoundary } from 'react-error-boundary';
+import { callApi } from '@app/utils/api';
 import { ellipsize } from '../../../../../util/text';
 import TraceView from '../../../components/traces/TraceView';
 import ChatMessages, { type Message } from './ChatMessages';
@@ -314,6 +319,8 @@ interface EvalOutputPromptDialogProps {
   metadata?: Record<string, any>;
   evaluationId?: string;
   testCaseId?: string;
+  testIndex?: number;
+  variables?: Record<string, any>;
 }
 
 // URL detection function
@@ -336,16 +343,27 @@ export default function EvalOutputPromptDialog({
   metadata,
   evaluationId,
   testCaseId,
+  testIndex,
+  variables,
 }: EvalOutputPromptDialogProps) {
   const [copied, setCopied] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
   const [hoveredElement, setHoveredElement] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editedPrompt, setEditedPrompt] = useState(prompt);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [replayOutput, setReplayOutput] = useState<string | null>(null);
+  const [replayError, setReplayError] = useState<string | null>(null);
   const { addFilter, resetFilters } = useTableStore();
 
   useEffect(() => {
     setCopied(false);
     setCopiedFields({});
+    setEditMode(false);
+    setEditedPrompt(prompt);
+    setReplayOutput(null);
+    setReplayError(null);
   }, [prompt]);
 
   const copyToClipboard = async (text: string) => {
@@ -361,6 +379,56 @@ export default function EvalOutputPromptDialog({
     setTimeout(() => {
       setCopiedFields((prev) => ({ ...prev, [key]: false }));
     }, 2000);
+  };
+
+  const handleReplay = async () => {
+    if (!evaluationId || !provider) {
+      setReplayError('Missing evaluation ID or provider');
+      return;
+    }
+
+    setReplayLoading(true);
+    setReplayError(null);
+    setReplayOutput(null);
+
+    try {
+      const response = await callApi('/eval/replay', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          evaluationId,
+          testIndex,
+          prompt: editedPrompt,
+          variables,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error || 'Failed to replay evaluation');
+      }
+
+      const data = await response.json();
+
+      // Handle the response, checking for output in various locations
+      if (data.output) {
+        setReplayOutput(data.output);
+      } else if (data.response?.output) {
+        setReplayOutput(data.response.output);
+      } else if (data.response?.raw) {
+        setReplayOutput(data.response.raw);
+      } else if (data.error) {
+        setReplayError(`Provider error: ${data.error}`);
+      } else {
+        setReplayOutput('(No output returned)');
+      }
+    } catch (error) {
+      setReplayError(error instanceof Error ? error.message : 'An error occurred');
+    } finally {
+      setReplayLoading(false);
+    }
   };
 
   const handleMetadataClick = (key: string) => {
@@ -406,15 +474,87 @@ export default function EvalOutputPromptDialog({
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>Details{provider && `: ${provider}`}</DialogTitle>
       <DialogContent>
-        <CodeDisplay
-          content={prompt}
-          title="Prompt"
-          onCopy={() => copyToClipboard(prompt)}
-          copied={copied}
-          onMouseEnter={() => setHoveredElement('prompt')}
-          onMouseLeave={() => setHoveredElement(null)}
-          showCopyButton={hoveredElement === 'prompt' || copied}
-        />
+        <Box mb={2}>
+          <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+            <Typography variant="subtitle1" sx={subtitleTypographySx}>
+              Prompt
+            </Typography>
+            <Box display="flex" gap={1}>
+              {!editMode && (
+                <Tooltip title="Edit & Replay">
+                  <IconButton
+                    size="small"
+                    onClick={() => setEditMode(true)}
+                    sx={{
+                      color: 'text.secondary',
+                      '&:hover': {
+                        color: 'primary.main',
+                      },
+                    }}
+                  >
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+              {editMode && (
+                <>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={replayLoading ? <CircularProgress size={16} /> : <PlayArrowIcon />}
+                    onClick={handleReplay}
+                    disabled={replayLoading || !editedPrompt.trim()}
+                  >
+                    Replay
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setEditMode(false);
+                      setEditedPrompt(prompt);
+                      setReplayOutput(null);
+                      setReplayError(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              )}
+            </Box>
+          </Box>
+          {editMode ? (
+            <TextField
+              fullWidth
+              multiline
+              variant="outlined"
+              value={editedPrompt}
+              onChange={(e) => setEditedPrompt(e.target.value)}
+              sx={{
+                '& .MuiInputBase-root': {
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem',
+                },
+              }}
+              minRows={4}
+              maxRows={20}
+            />
+          ) : (
+            <CodeDisplay
+              content={prompt}
+              title=""
+              onCopy={() => copyToClipboard(prompt)}
+              copied={copied}
+              onMouseEnter={() => setHoveredElement('prompt')}
+              onMouseLeave={() => setHoveredElement(null)}
+              showCopyButton={hoveredElement === 'prompt' || copied}
+            />
+          )}
+          {replayError && (
+            <Alert severity="error" sx={{ mt: 1 }}>
+              {replayError}
+            </Alert>
+          )}
+        </Box>
         {metadata?.redteamFinalPrompt && (
           <CodeDisplay
             content={metadata.redteamFinalPrompt}
@@ -428,10 +568,21 @@ export default function EvalOutputPromptDialog({
             }
           />
         )}
+        {replayOutput && (
+          <CodeDisplay
+            content={replayOutput}
+            title="Replay Output"
+            onCopy={() => copyFieldToClipboard('replayOutput', replayOutput)}
+            copied={copiedFields['replayOutput'] || false}
+            onMouseEnter={() => setHoveredElement('replayOutput')}
+            onMouseLeave={() => setHoveredElement(null)}
+            showCopyButton={hoveredElement === 'replayOutput' || copiedFields['replayOutput']}
+          />
+        )}
         {output && (
           <CodeDisplay
             content={output}
-            title="Output"
+            title="Original Output"
             onCopy={() => copyFieldToClipboard('output', output)}
             copied={copiedFields['output'] || false}
             onMouseEnter={() => setHoveredElement('output')}

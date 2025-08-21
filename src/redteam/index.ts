@@ -37,6 +37,8 @@ import { extractGoalFromPrompt, getShortPluginId } from './util';
 import type { StrategyExemptPlugin } from './constants';
 import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 
+const MAX_MAX_CONCURRENCY = 20;
+
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
  * @param pluginId - The ID of the plugin.
@@ -493,6 +495,11 @@ export async function synthesize({
   if (delay && maxConcurrency > 1) {
     maxConcurrency = 1;
     logger.warn('Delay is enabled, setting max concurrency to 1.');
+  }
+
+  if (maxConcurrency > MAX_MAX_CONCURRENCY) {
+    maxConcurrency = MAX_MAX_CONCURRENCY;
+    logger.info(`Max concurrency for test generation is capped at ${MAX_MAX_CONCURRENCY}.`);
   }
 
   const expandedStrategies: typeof strategies = [];

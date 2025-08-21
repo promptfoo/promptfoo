@@ -2,6 +2,7 @@
 sidebar_position: 1
 sidebar_label: Intro
 title: LLM red teaming guide (open source)
+description: Red team LLM systems through systematic adversarial testing to detect content policy violations, information leakage, and API misuse before production deployment
 ---
 
 # LLM red teaming

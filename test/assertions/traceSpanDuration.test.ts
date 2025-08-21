@@ -250,13 +250,9 @@ describe('handleTraceSpanDuration', () => {
       renderedValue: { max: 1000 },
     };
 
-    const result = handleTraceSpanDuration(params);
-    expect(result).toEqual({
-      pass: false,
-      score: 0,
-      reason: 'No trace data available for trace-span-duration assertion',
-      assertion: params.assertion,
-    });
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'No trace data available for trace-span-duration assertion',
+    );
   });
 
   it('should show top 3 slowest spans when limit exceeded', () => {

@@ -1,6 +1,7 @@
 ---
 sidebar_label: Advanced Usage
 sidebar_position: 120
+description: Automate LLM model scanning across cloud providers with remote storage integration, CI/CD workflows, and programmatic controls for advanced security testing
 ---
 
 # Advanced Usage
@@ -373,7 +374,7 @@ Automatic protection in archives:
    Solution: Increase the timeout:
 
    ```bash
-   promptfoo scan-model model.pkl --timeout 600
+   promptfoo scan-model model.pkl --timeout 7200  # 2 hours for very large models
    ```
 
 3. **File Size Limits**
@@ -403,6 +404,34 @@ Automatic protection in archives:
    ```
 
    Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner.
+
+6. **Disk Space Issues**
+
+   ```
+   Error: Insufficient disk space for download
+   ```
+
+   Solution: Free up disk space or use a different cache directory:
+
+   ```bash
+   promptfoo scan-model s3://bucket/model.bin --cache-dir /mnt/large-disk/cache
+   ```
+
+7. **License Compliance Failures**
+
+   ```
+   Error: AGPL license detected (strict mode enabled)
+   ```
+
+   Solution: Review the license implications or disable strict mode:
+
+   ```bash
+   # Without strict mode (warnings only)
+   promptfoo scan-model model.pkl
+
+   # With strict mode (fails on incompatible licenses)
+   promptfoo scan-model model.pkl --strict-license
+   ```
 
 ## Extending ModelAudit
 

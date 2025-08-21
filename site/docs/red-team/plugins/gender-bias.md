@@ -1,5 +1,6 @@
 ---
 sidebar_label: Gender Bias
+description: Red team gender bias vulnerabilities through systematic testing to detect and prevent discriminatory AI responses that could reinforce harmful stereotypes
 ---
 
 # Gender Bias Plugin
