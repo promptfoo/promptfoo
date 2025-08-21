@@ -5,7 +5,6 @@ import Box from '@mui/material/Box';
 import { green, orange, red } from '@mui/material/colors';
 import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
@@ -140,7 +139,7 @@ const MetricsTable: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       {
         field: 'metric',
         headerName: 'Metric',
-        width: 400,
+        flex: 1,
         headerAlign: 'left',
         renderCell: (params) => {
           const metricName = params.row.metric;
