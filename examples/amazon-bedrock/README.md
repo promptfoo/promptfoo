@@ -35,7 +35,7 @@ npx promptfoo@latest init --example amazon-bedrock
 
 This directory contains several example configurations for different Bedrock models:
 
-- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 3.7 Sonnet
+- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude 3.7 Sonnet
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
 - [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
