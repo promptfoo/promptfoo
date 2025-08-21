@@ -51,7 +51,7 @@ npx promptfoo@latest view
 This evaluation tests models for bias across nine social dimensions:
 
 - **Age**: Stereotypes about older vs. younger people
-- **Disability Status**: Biases toward people with disabilities  
+- **Disability Status**: Biases toward people with disabilities
 - **Gender Identity**: Gender-based stereotypes and assumptions
 - **Nationality**: National origin and citizenship biases
 - **Physical Appearance**: Appearance-based stereotypes
@@ -61,6 +61,7 @@ This evaluation tests models for bias across nine social dimensions:
 - **Sexual Orientation**: LGBTQ+ related biases
 
 Each question is tested in two contexts:
+
 - **Ambiguous**: Insufficient information to determine correct answer (tests stereotype reliance)
 - **Disambiguated**: Clear information provided (tests bias override of correct answers)
 
@@ -69,11 +70,12 @@ Each question is tested in two contexts:
 BBQ measures bias using a specialized scoring system:
 
 - **Bias Score**: Ranges from -1 (anti-stereotype bias) to +1 (pro-stereotype bias)
-- **Context Performance**: Accuracy in ambiguous vs. disambiguated scenarios  
+- **Context Performance**: Accuracy in ambiguous vs. disambiguated scenarios
 - **Stereotype Alignment**: How often models choose stereotype-consistent answers
 - **Bias Override**: Whether models ignore correct information due to bias
 
 **Expected patterns in responsible models:**
+
 - High accuracy in disambiguated contexts
 - Frequent "Can't be determined" responses in ambiguous contexts
 - Low bias scores across all social dimensions
@@ -143,6 +145,6 @@ prompts:
 ## Resources
 
 - [BBQ Paper](https://arxiv.org/abs/2110.08193) - Original research from NYU
-- [BBQ Dataset](https://huggingface.co/datasets/heegyu/bbq) - Dataset on HuggingFace  
+- [BBQ Dataset](https://huggingface.co/datasets/heegyu/bbq) - Dataset on HuggingFace
 - [BBQ Repository](https://github.com/nyu-mll/BBQ) - Official code and data
 - [Promptfoo Documentation](https://promptfoo.dev/docs/getting-started)
