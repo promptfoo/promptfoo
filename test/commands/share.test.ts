@@ -184,6 +184,7 @@ describe('Share Command', () => {
       await shareCmd?.parseAsync(['node', 'test', 'scan-test-123']);
 
       expect(ModelAudit.findById).toHaveBeenCalledWith('scan-test-123');
+      expect(isModelAuditSharingEnabled).toHaveBeenCalled();
       expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('View ModelAudit Scan Results:'),

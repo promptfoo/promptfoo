@@ -42,7 +42,7 @@ export function isSharingEnabled(evalRecord: Eval): boolean {
   return false;
 }
 
-export function isModelAuditSharingEnabled(auditRecord: ModelAudit): boolean {
+export function isModelAuditSharingEnabled(): boolean {
   // Model audit sharing uses the same configuration as eval sharing
   const sharingEnvUrl = getShareApiBaseUrl();
   const cloudSharingUrl = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : null;
@@ -464,7 +464,7 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
  */
 export async function hasModelAuditBeenShared(audit: ModelAudit): Promise<boolean> {
   try {
-    // GET /v1/api/model-audits/:id
+    // GET /api/v1/model-audits/:id
     const res = await makeCloudRequest(`model-audits/${audit.id}`, 'GET');
     switch (res.status) {
       // 200: Model audit already exists i.e. it has been shared before.
@@ -498,9 +498,7 @@ export async function createShareableModelAuditUrl(
   // Model audits use cloud config directly
 
   // 2. Get API configuration
-  const apiBaseUrl = cloudConfig.isEnabled()
-    ? cloudConfig.getApiHost()
-    : getShareApiBaseUrl() || getDefaultShareViewBaseUrl();
+  const apiBaseUrl = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : getShareApiBaseUrl();
 
   const headers = {
     'Content-Type': 'application/json',
