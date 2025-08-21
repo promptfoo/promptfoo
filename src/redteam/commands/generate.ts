@@ -5,11 +5,12 @@ import path from 'path';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
+import { validate as uuidValidate } from 'uuid';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
-import { VERSION } from '../../constants';
+import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -19,6 +20,7 @@ import telemetry from '../../telemetry';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
   getCloudDatabaseId,
+  getConfigFromCloud,
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
@@ -104,12 +106,30 @@ export async function doGenerateRedteam(
 
   let testSuite: TestSuite;
   let redteamConfig: RedteamFileConfig | undefined;
-  const configPath = options.config || options.defaultConfigPath;
+  let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
 
+  // Handle liveRedteamConfig (from cloud)
+  if (options.liveRedteamConfig) {
+    // Write liveRedteamConfig to a temporary file
+    const filename = `redteam-generate-${Date.now()}.yaml`;
+    const tmpDir = options.loadedFromCloud ? '' : path.join(require('os').tmpdir(), 'promptfoo');
+    const tmpFile = path.join(tmpDir, filename);
+    fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
+    fs.writeFileSync(tmpFile, yaml.dump(options.liveRedteamConfig));
+    configPath = tmpFile;
+    logger.debug(`Using live config from ${tmpFile}`);
+  }
+
   // Check for updates to the config file and decide whether to generate
-  let shouldGenerate = options.force;
-  if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
+  let shouldGenerate = options.force || options.liveRedteamConfig; // Always generate for live configs
+  if (
+    !options.force &&
+    !options.liveRedteamConfig &&
+    fs.existsSync(outputPath) &&
+    configPath &&
+    fs.existsSync(configPath)
+  ) {
     // Skip hash check for .burp files since they're not YAML
     if (!outputPath.endsWith('.burp')) {
       const redteamContent = yaml.load(
@@ -538,9 +558,13 @@ export function redteamGenerateCommand(
   program
     .command(command) // generate or redteam depending on if called from redteam or generate
     .description('Generate adversarial test cases')
-    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
+    .option(
+      '-c, --config [path]',
+      'Path to configuration file or cloud config UUID. Defaults to promptfooconfig.yaml',
+    )
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file', false)
+    .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .option(
       '--purpose <purpose>',
       'Set the system purpose. If not set, the system purpose will be inferred from the config file',
@@ -601,7 +625,36 @@ export function redteamGenerateCommand(
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
-    .action((opts: Partial<RedteamCliGenerateOptions>): void => {
+    .action(async (opts: Partial<RedteamCliGenerateOptions>): Promise<void> => {
+      setupEnv(opts.envFile);
+
+      // Handle cloud config with target
+      if (opts.config && uuidValidate(opts.config)) {
+        if (opts.target && !uuidValidate(opts.target)) {
+          throw new Error('Invalid target ID, it must be a valid UUID');
+        }
+        const configObj = await getConfigFromCloud(opts.config, opts.target);
+
+        // backwards compatible for old cloud servers
+        if (
+          opts.target &&
+          uuidValidate(opts.target) &&
+          (!configObj.targets || configObj.targets?.length === 0)
+        ) {
+          configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
+        }
+        opts.liveRedteamConfig = configObj;
+        opts.config = undefined;
+
+        opts.loadedFromCloud = true;
+      } else if (opts.target) {
+        logger.error(
+          `Target ID (-t) can only be used when -c is used with a cloud config UUID. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}.`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+
       if (opts.remote) {
         cliState.remote = true;
       }
@@ -638,7 +691,7 @@ export function redteamGenerateCommand(
           defaultConfig,
           defaultConfigPath,
         });
-        doGenerateRedteam(validatedOpts);
+        await doGenerateRedteam(validatedOpts);
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');

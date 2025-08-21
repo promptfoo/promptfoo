@@ -109,6 +109,7 @@ type CommonOptions = {
 export interface RedteamCliGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
+  target?: string;
   defaultConfig: Record<string, unknown>;
   defaultConfigPath?: string;
   envFile?: string;
@@ -121,6 +122,8 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
   progressBar?: boolean;
+  liveRedteamConfig?: any;
+  loadedFromCloud?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
