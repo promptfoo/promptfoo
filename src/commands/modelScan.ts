@@ -94,7 +94,13 @@ export function modelScanCommand(program: Command): void {
 
       logger.info(`Running model scan on: ${paths.join(', ')}`);
 
-      const modelAudit = spawn('modelaudit', args, { stdio: 'inherit' });
+      // Set up environment for delegation
+      const delegationEnv = {
+        ...process.env,
+        PROMPTFOO_DELEGATED: 'true', // Signal to modelaudit that it's being delegated
+      };
+
+      const modelAudit = spawn('modelaudit', args, { stdio: 'inherit', env: delegationEnv });
 
       modelAudit.on('error', (error) => {
         logger.error(`Failed to start modelaudit: ${error.message}`);
