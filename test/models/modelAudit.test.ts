@@ -30,9 +30,7 @@ describe('ModelAudit', () => {
     it('should set hasErrors to true when has_errors is true in results', () => {
       const results: ModelAuditScanResults = {
         has_errors: true,
-        issues: [
-          { severity: 'warning', message: 'Test warning' },
-        ],
+        issues: [{ severity: 'warning', message: 'Test warning' }],
       };
 
       const audit = new ModelAudit({
@@ -125,9 +123,7 @@ describe('ModelAudit', () => {
     it('should prioritize explicit hasErrors over computed value', () => {
       const results: ModelAuditScanResults = {
         has_errors: false,
-        issues: [
-          { severity: 'critical', message: 'Test critical issue' },
-        ],
+        issues: [{ severity: 'critical', message: 'Test critical issue' }],
       };
 
       const audit = new ModelAudit({
@@ -145,9 +141,7 @@ describe('ModelAudit', () => {
     it('should properly set hasErrors in create method with critical issues', async () => {
       const results: ModelAuditScanResults = {
         has_errors: false, // CLI tool incorrectly says no errors
-        issues: [
-          { severity: 'critical', message: 'Test critical issue' },
-        ],
+        issues: [{ severity: 'critical', message: 'Test critical issue' }],
       };
 
       const audit = await ModelAudit.create({
@@ -161,9 +155,7 @@ describe('ModelAudit', () => {
     it('should properly set hasErrors in create method with error issues', async () => {
       const results: ModelAuditScanResults = {
         has_errors: false, // CLI tool incorrectly says no errors
-        issues: [
-          { severity: 'error', message: 'Test error issue' },
-        ],
+        issues: [{ severity: 'error', message: 'Test error issue' }],
       };
 
       const audit = await ModelAudit.create({
@@ -177,9 +169,7 @@ describe('ModelAudit', () => {
     it('should keep hasErrors false when only warnings exist', async () => {
       const results: ModelAuditScanResults = {
         has_errors: false,
-        issues: [
-          { severity: 'warning', message: 'Test warning' },
-        ],
+        issues: [{ severity: 'warning', message: 'Test warning' }],
       };
 
       const audit = await ModelAudit.create({

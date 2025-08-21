@@ -95,12 +95,13 @@ export default class ModelAudit {
     const id = createScanId(createdAtDate);
 
     // Ensure hasErrors is properly set based on actual critical/error findings
-    const hasActualErrors =
+    const hasActualErrors = Boolean(
       params.results.has_errors ||
       (params.results.issues &&
         params.results.issues.some(
           (issue) => issue.severity === 'critical' || issue.severity === 'error',
-        ));
+        ))
+    );
 
     const data = {
       id,
@@ -120,17 +121,11 @@ export default class ModelAudit {
       metadata: params.metadata || null,
     };
     const db = getDb();
-    await db
-      .insert(modelAuditsTable)
-      .values({
-        ...data,
-        hasErrors: data.hasErrors ?? false,
-      })
-      .run();
+    await db.insert(modelAuditsTable).values(data).run();
 
     logger.debug(`Created model audit ${id} for ${params.modelPath}`);
 
-    return new ModelAudit({ ...data, hasErrors: data.hasErrors ?? false, persisted: true });
+    return new ModelAudit({ ...data, persisted: true });
   }
 
   static async findById(id: string): Promise<ModelAudit | null> {

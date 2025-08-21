@@ -12,7 +12,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { getIssueFilePath } from '../utils';
+import { getIssueFilePath, isCriticalSeverity } from '../utils';
 
 import type { ScanPath, ScanResult } from '../ModelAudit.types';
 
@@ -52,8 +52,8 @@ export default function ScannedFilesDialog({
                   const issueFile = getIssueFilePath(issue);
                   return issueFile !== 'Unknown' && issueFile.startsWith(file);
                 });
-                const criticalCount = fileIssues.filter(
-                  (i) => i.severity === 'error' || i.severity === 'critical',
+                const criticalCount = fileIssues.filter((i) =>
+                  isCriticalSeverity(i.severity),
                 ).length;
                 const warningCount = fileIssues.filter((i) => i.severity === 'warning').length;
 

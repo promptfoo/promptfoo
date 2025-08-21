@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 import {
   CheckCircle as CheckCircleIcon,
@@ -28,7 +28,12 @@ import Stack from '@mui/material/Stack';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import { SeverityBadge } from '../ModelAudit.styles';
-import { getIssueFilePath, getSeverityLabel } from '../utils';
+import {
+  getIssueFilePath,
+  getSeverityLabel,
+  isCriticalSeverity,
+  mapSeverityForFiltering,
+} from '../utils';
 
 import type { ScanIssue, ScanResult } from '../ModelAudit.types';
 
@@ -50,6 +55,21 @@ export default function SecurityFindings({
   const theme = useTheme();
   const [groupByFile, setGroupByFile] = useState(true);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  const [showFullRawOutput, setShowFullRawOutput] = useState(false);
+
+  // Constants for performance optimization
+  const MAX_OUTPUT_LENGTH = 10000;
+
+  // Compute stringified output for raw display (memoized for performance)
+  const stringifiedScanResults = useMemo(() => {
+    return JSON.stringify(scanResults, null, 2);
+  }, [scanResults]);
+
+  const truncatedScanResults = useMemo(() => {
+    return stringifiedScanResults.length > MAX_OUTPUT_LENGTH
+      ? stringifiedScanResults.substring(0, MAX_OUTPUT_LENGTH) + '\n... [truncated]'
+      : stringifiedScanResults;
+  }, [stringifiedScanResults, MAX_OUTPUT_LENGTH]);
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
@@ -91,14 +111,7 @@ export default function SecurityFindings({
     if (!selectedSeverity && issue.severity === 'debug') {
       return false;
     }
-    if (!selectedSeverity) {
-      return true;
-    }
-    // Handle critical/error mapping
-    if (selectedSeverity === 'error') {
-      return issue.severity === 'error' || issue.severity === 'critical';
-    }
-    return issue.severity === selectedSeverity;
+    return mapSeverityForFiltering(selectedSeverity, issue.severity);
   });
 
   // Group issues by file
@@ -240,9 +253,7 @@ export default function SecurityFindings({
       ) : groupByFile ? (
         <Stack spacing={4}>
           {Object.entries(issuesByFile).map(([file, issues]) => {
-            const criticalCount = issues.filter(
-              (i) => i.severity === 'error' || i.severity === 'critical',
-            ).length;
+            const criticalCount = issues.filter((i) => isCriticalSeverity(i.severity)).length;
             const warningCount = issues.filter((i) => i.severity === 'warning').length;
             const infoCount = issues.filter((i) => i.severity === 'info').length;
             const isExpanded = expandedFiles.has(file);
@@ -332,14 +343,13 @@ export default function SecurityFindings({
                             sx={{
                               p: 3,
                               borderLeft: 4,
-                              borderColor:
-                                issue.severity === 'error' || issue.severity === 'critical'
-                                  ? 'error.main'
-                                  : issue.severity === 'warning'
-                                    ? 'warning.main'
-                                    : 'info.main',
+                              borderColor: isCriticalSeverity(issue.severity)
+                                ? 'error.main'
+                                : issue.severity === 'warning'
+                                  ? 'warning.main'
+                                  : 'info.main',
                               bgcolor: alpha(
-                                issue.severity === 'error' || issue.severity === 'critical'
+                                isCriticalSeverity(issue.severity)
                                   ? theme.palette.error.main
                                   : issue.severity === 'warning'
                                     ? theme.palette.warning.main
@@ -392,14 +402,13 @@ export default function SecurityFindings({
               sx={{
                 p: 3,
                 borderLeft: 4,
-                borderColor:
-                  issue.severity === 'error' || issue.severity === 'critical'
-                    ? 'error.main'
-                    : issue.severity === 'warning'
-                      ? 'warning.main'
-                      : 'info.main',
+                borderColor: isCriticalSeverity(issue.severity)
+                  ? 'error.main'
+                  : issue.severity === 'warning'
+                    ? 'warning.main'
+                    : 'info.main',
                 bgcolor: alpha(
-                  issue.severity === 'error' || issue.severity === 'critical'
+                  isCriticalSeverity(issue.severity)
                     ? theme.palette.error.main
                     : issue.severity === 'warning'
                       ? theme.palette.warning.main
@@ -463,8 +472,22 @@ export default function SecurityFindings({
               fontSize: '0.875rem',
             }}
           >
-            {scanResults.rawOutput || JSON.stringify(scanResults, null, 2)}
+            {scanResults.rawOutput
+              ? scanResults.rawOutput
+              : showFullRawOutput
+                ? stringifiedScanResults
+                : truncatedScanResults}
           </pre>
+          {!scanResults.rawOutput && stringifiedScanResults.length > MAX_OUTPUT_LENGTH && (
+            <Button
+              variant="outlined"
+              size="small"
+              sx={{ mt: 2, ml: 2 }}
+              onClick={() => setShowFullRawOutput((prev) => !prev)}
+            >
+              {showFullRawOutput ? 'Show Less' : 'Show More'}
+            </Button>
+          )}
         </DialogContent>
       </Dialog>
     </Box>

@@ -11,7 +11,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { getIssueFilePath } from '../utils';
+import { getIssueFilePath, isCriticalSeverity } from '../utils';
 import ChecksSection from './ChecksSection';
 import ScanStatistics from './ScanStatistics';
 import SecurityFindings from './SecurityFindings';
@@ -59,9 +59,7 @@ export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTa
                 const issueFile = getIssueFilePath(issue);
                 return issueFile !== 'Unknown' && issueFile.startsWith(file);
               });
-              const criticalCount = fileIssues.filter(
-                (i) => i.severity === 'error' || i.severity === 'critical',
-              ).length;
+              const criticalCount = fileIssues.filter((i) => isCriticalSeverity(i.severity)).length;
               const warningCount = fileIssues.filter((i) => i.severity === 'warning').length;
               const infoCount = fileIssues.filter((i) => i.severity === 'info').length;
 

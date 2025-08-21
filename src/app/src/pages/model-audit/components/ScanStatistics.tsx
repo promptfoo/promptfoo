@@ -9,6 +9,7 @@ import { alpha, useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { StatCard } from '../ModelAudit.styles';
+import { isCriticalSeverity } from '../utils';
 
 import type { ScanResult } from '../ModelAudit.types';
 
@@ -33,8 +34,7 @@ export default function ScanStatistics({
       icon: ErrorIcon,
       label: 'Critical',
       color: theme.palette.error.main,
-      count: scanResults.issues.filter((i) => i.severity === 'error' || i.severity === 'critical')
-        .length,
+      count: scanResults.issues.filter((i) => isCriticalSeverity(i.severity)).length,
     },
     {
       severity: 'warning',
