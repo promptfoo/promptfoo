@@ -57,9 +57,10 @@ export interface ModelAuditFileMetadata {
 /**
  * Results from a model audit scan.
  * Contains information about scanned files, detected issues, and metadata.
+ * Based on the actual CLI output structure from ModelAudit tool.
  */
 export type ModelAuditScanResults = Partial<{
-  // Core results
+  // Core results that are usually present
   bytes_scanned: number;
   issues: ModelAuditIssue[];
   checks: ModelAuditCheck[];
@@ -78,13 +79,20 @@ export type ModelAuditScanResults = Partial<{
   passed_checks: number;
   failed_checks: number;
 
-  // Optional/legacy fields for backwards compatibility
-  path?: string;
-  success?: boolean;
-  scannedFiles?: number;
-  totalFiles?: number;
-  rawOutput?: string;
-  scannedFilesList?: string[];
+  // Additional fields that may be added by the server
+  path: string;
+  success: boolean;
+  rawOutput: string;
+  scannedFilesList: string[];
+  auditId: string;
+  persisted: boolean;
+
+  // Legacy camelCase fields (for backward compatibility)
+  scannedFiles: number;
+  totalFiles: number;
+  totalChecks: number;
+  passedChecks: number;
+  failedChecks: number;
 }>;
 
 export interface ModelAuditScanConfig {

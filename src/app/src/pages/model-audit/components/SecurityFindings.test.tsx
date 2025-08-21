@@ -149,7 +149,7 @@ describe('SecurityFindings', () => {
       />,
     );
 
-    const alertText = screen.getByText('Total issues found: 5 (including 2 debug messages)');
+    const alertText = screen.getByText('2 security issues found: 1 error, 1 warning');
     expect(alertText).toBeInTheDocument();
   });
 

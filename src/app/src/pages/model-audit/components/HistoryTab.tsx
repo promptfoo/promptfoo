@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import {
+  CheckCircle as CheckCircleIcon,
   Delete as DeleteIcon,
   Error as ErrorIcon,
   Refresh as RefreshIcon,
@@ -78,7 +79,11 @@ export default function HistoryTab() {
   };
 
   const getSeverityIcon = (hasErrors: boolean) => {
-    return hasErrors ? <ErrorIcon sx={{ fontSize: 16 }} /> : undefined;
+    return hasErrors ? (
+      <ErrorIcon sx={{ fontSize: 16 }} />
+    ) : (
+      <CheckCircleIcon sx={{ fontSize: 16 }} />
+    );
   };
 
   if (isLoadingHistory) {
@@ -198,12 +203,20 @@ export default function HistoryTab() {
                     label={scan.hasErrors ? 'Issues Found' : 'Clean'}
                     color={getSeverityColor(scan.hasErrors)}
                     size="small"
+                    variant="filled"
                     icon={getSeverityIcon(scan.hasErrors)}
+                    sx={{
+                      fontWeight: 500,
+                      minWidth: 90,
+                    }}
                   />
                 </TableCell>
                 <TableCell align="center">
                   {scan.results?.issues ? (
                     (() => {
+                      const criticalCount = scan.results.issues.filter(
+                        (i) => i.severity === 'critical',
+                      ).length;
                       const errorCount = scan.results.issues.filter(
                         (i) => i.severity === 'error',
                       ).length;
@@ -211,14 +224,39 @@ export default function HistoryTab() {
                         (i) => i.severity === 'warning',
                       ).length;
 
+                      const totalCriticalErrors = criticalCount + errorCount;
+
                       return (
-                        <Stack direction="row" spacing={1} justifyContent="center">
+                        <Stack
+                          direction="row"
+                          spacing={0.5}
+                          justifyContent="center"
+                          flexWrap="wrap"
+                        >
+                          {criticalCount > 0 && (
+                            <Chip
+                              label={`${criticalCount} Critical`}
+                              color="error"
+                              size="small"
+                              variant="filled"
+                              sx={{
+                                fontWeight: 600,
+                                fontSize: '0.75rem',
+                                height: 22,
+                              }}
+                            />
+                          )}
                           {errorCount > 0 && (
                             <Chip
                               label={`${errorCount} Error${errorCount > 1 ? 's' : ''}`}
                               color="error"
                               size="small"
                               variant="outlined"
+                              sx={{
+                                fontWeight: 500,
+                                fontSize: '0.75rem',
+                                height: 22,
+                              }}
                             />
                           )}
                           {warningCount > 0 && (
@@ -227,14 +265,24 @@ export default function HistoryTab() {
                               color="warning"
                               size="small"
                               variant="outlined"
+                              sx={{
+                                fontWeight: 500,
+                                fontSize: '0.75rem',
+                                height: 22,
+                              }}
                             />
                           )}
-                          {errorCount === 0 && warningCount === 0 && (
+                          {totalCriticalErrors === 0 && warningCount === 0 && (
                             <Chip
                               label="No Issues"
                               color="success"
                               size="small"
                               variant="outlined"
+                              sx={{
+                                fontWeight: 500,
+                                fontSize: '0.75rem',
+                                height: 22,
+                              }}
                             />
                           )}
                         </Stack>

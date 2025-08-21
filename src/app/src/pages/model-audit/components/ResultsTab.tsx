@@ -26,7 +26,6 @@ interface ResultsTabProps {
 export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTabProps) {
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
   const [showRawOutput, setShowRawOutput] = useState(false);
-  console.log(scanResults);
   return (
     <Box>
       <ScanStatistics
@@ -43,7 +42,7 @@ export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTa
         passedChecks={scanResults.passed_checks ?? scanResults.passedChecks}
         failedChecks={scanResults.failed_checks ?? scanResults.failedChecks}
         assets={scanResults.assets}
-        filesScanned={scanResults.files_scanned ?? scanResults.filesScanned}
+        filesScanned={scanResults.files_scanned ?? scanResults.scannedFiles}
       />
 
       {/* Scanned Files Section */}
@@ -60,7 +59,9 @@ export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTa
                 const issueFile = getIssueFilePath(issue);
                 return issueFile !== 'Unknown' && issueFile.startsWith(file);
               });
-              const criticalCount = fileIssues.filter((i) => i.severity === 'error').length;
+              const criticalCount = fileIssues.filter(
+                (i) => i.severity === 'error' || i.severity === 'critical',
+              ).length;
               const warningCount = fileIssues.filter((i) => i.severity === 'warning').length;
               const infoCount = fileIssues.filter((i) => i.severity === 'info').length;
 

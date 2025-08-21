@@ -33,7 +33,8 @@ export default function ScanStatistics({
       icon: ErrorIcon,
       label: 'Critical',
       color: theme.palette.error.main,
-      count: scanResults.issues.filter((i) => i.severity === 'error').length,
+      count: scanResults.issues.filter((i) => i.severity === 'error' || i.severity === 'critical')
+        .length,
     },
     {
       severity: 'warning',
@@ -106,7 +107,7 @@ export default function ScanStatistics({
           >
             <CheckCircleIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
             <Typography variant="h3" fontWeight={700} color="success.main">
-              {scanResults.scannedFiles || 0}
+              {scanResults.files_scanned ?? scanResults.scannedFiles ?? 0}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Files Scanned

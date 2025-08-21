@@ -54,6 +54,13 @@ export default function ChecksSection({
       field: 'status',
       headerName: 'Status',
       width: 120,
+      sortComparator: (v1: string, v2: string) => {
+        // Define status priority: failed > skipped > passed
+        const statusOrder = { failed: 2, skipped: 1, passed: 0 };
+        const order1 = statusOrder[v1 as keyof typeof statusOrder] ?? 0;
+        const order2 = statusOrder[v2 as keyof typeof statusOrder] ?? 0;
+        return order1 - order2;
+      },
       renderCell: (params: GridRenderCellParams) => {
         const status = params.value as string;
         const label = status === 'passed' ? 'Passed' : status === 'failed' ? 'Failed' : 'Skipped';
@@ -90,6 +97,13 @@ export default function ChecksSection({
       field: 'severity',
       headerName: 'Severity',
       width: 120,
+      sortComparator: (v1: string, v2: string) => {
+        // Define severity priority: critical > error > warning > info > debug
+        const severityOrder = { critical: 4, error: 3, warning: 2, info: 1, debug: 0 };
+        const order1 = severityOrder[v1 as keyof typeof severityOrder] ?? 0;
+        const order2 = severityOrder[v2 as keyof typeof severityOrder] ?? 0;
+        return order1 - order2;
+      },
       renderCell: (params: GridRenderCellParams) => {
         if (!params.value) {
           return null;
@@ -240,10 +254,16 @@ export default function ChecksSection({
                 columns={getColumns()}
                 initialState={{
                   pagination: {
-                    paginationModel: { pageSize: 10 },
+                    paginationModel: { pageSize: 25 },
+                  },
+                  sorting: {
+                    sortModel: [
+                      { field: 'severity', sort: 'desc' }, // Most critical first
+                      { field: 'status', sort: 'desc' }, // Failed checks first
+                    ],
                   },
                 }}
-                pageSizeOptions={[10, 25, 50]}
+                pageSizeOptions={[10, 25, 50, 100]}
                 disableRowSelectionOnClick
                 autoHeight
                 density="standard"

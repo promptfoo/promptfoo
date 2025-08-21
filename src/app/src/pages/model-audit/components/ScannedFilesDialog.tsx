@@ -52,7 +52,9 @@ export default function ScannedFilesDialog({
                   const issueFile = getIssueFilePath(issue);
                   return issueFile !== 'Unknown' && issueFile.startsWith(file);
                 });
-                const criticalCount = fileIssues.filter((i) => i.severity === 'error').length;
+                const criticalCount = fileIssues.filter(
+                  (i) => i.severity === 'error' || i.severity === 'critical',
+                ).length;
                 const warningCount = fileIssues.filter((i) => i.severity === 'warning').length;
 
                 return (

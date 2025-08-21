@@ -58,7 +58,23 @@ export default class ModelAudit {
     this.results = data.results || {};
     this.checks = data.checks || data.results?.checks || null;
     this.issues = data.issues || data.results?.issues || null;
-    this.hasErrors = data.hasErrors ?? false;
+
+    // Ensure hasErrors is properly set based on actual critical/error findings
+    const issues = data.issues || data.results?.issues;
+    const resultsHasErrors = data.results?.has_errors ?? false;
+
+    // If hasErrors is explicitly provided, use it; otherwise compute from results and issues
+    if (data.hasErrors !== undefined) {
+      this.hasErrors = data.hasErrors;
+    } else {
+      const hasActualErrors =
+        resultsHasErrors ||
+        (issues &&
+          issues.some((issue) => issue.severity === 'critical' || issue.severity === 'error')) ||
+        false;
+      this.hasErrors = hasActualErrors;
+    }
+
     this.totalChecks = data.totalChecks;
     this.passedChecks = data.passedChecks;
     this.failedChecks = data.failedChecks;
@@ -78,6 +94,14 @@ export default class ModelAudit {
     const createdAtDate = new Date(now);
     const id = createScanId(createdAtDate);
 
+    // Ensure hasErrors is properly set based on actual critical/error findings
+    const hasActualErrors =
+      params.results.has_errors ||
+      (params.results.issues &&
+        params.results.issues.some(
+          (issue) => issue.severity === 'critical' || issue.severity === 'error',
+        ));
+
     const data = {
       id,
       createdAt: now,
@@ -89,7 +113,7 @@ export default class ModelAudit {
       results: params.results,
       checks: params.results.checks || null,
       issues: params.results.issues || null,
-      hasErrors: params.results.has_errors,
+      hasErrors: hasActualErrors,
       totalChecks: params.results.total_checks || null,
       passedChecks: params.results.passed_checks || null,
       failedChecks: params.results.failed_checks || null,

@@ -91,7 +91,14 @@ export default function SecurityFindings({
     if (!selectedSeverity && issue.severity === 'debug') {
       return false;
     }
-    return !selectedSeverity || issue.severity === selectedSeverity;
+    if (!selectedSeverity) {
+      return true;
+    }
+    // Handle critical/error mapping
+    if (selectedSeverity === 'error') {
+      return issue.severity === 'error' || issue.severity === 'critical';
+    }
+    return issue.severity === selectedSeverity;
   });
 
   // Group issues by file
@@ -130,8 +137,31 @@ export default function SecurityFindings({
     <Box>
       {scanResults.issues.length > 0 && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Total issues found: {scanResults.issues.length} (including{' '}
-          {scanResults.issues.filter((i) => i.severity === 'debug').length} debug messages)
+          {(() => {
+            const criticalCount = scanResults.issues.filter(
+              (i) => i.severity === 'critical',
+            ).length;
+            const errorCount = scanResults.issues.filter((i) => i.severity === 'error').length;
+            const warningCount = scanResults.issues.filter((i) => i.severity === 'warning').length;
+            const totalMeaningful = criticalCount + errorCount + warningCount;
+
+            if (totalMeaningful === 0) {
+              return `${scanResults.issues.length} informational messages found`;
+            }
+
+            const parts = [];
+            if (criticalCount > 0) {
+              parts.push(`${criticalCount} critical`);
+            }
+            if (errorCount > 0) {
+              parts.push(`${errorCount} error${errorCount > 1 ? 's' : ''}`);
+            }
+            if (warningCount > 0) {
+              parts.push(`${warningCount} warning${warningCount > 1 ? 's' : ''}`);
+            }
+
+            return `${totalMeaningful} security issue${totalMeaningful > 1 ? 's' : ''} found: ${parts.join(', ')}`;
+          })()}
         </Alert>
       )}
 
@@ -210,7 +240,9 @@ export default function SecurityFindings({
       ) : groupByFile ? (
         <Stack spacing={4}>
           {Object.entries(issuesByFile).map(([file, issues]) => {
-            const criticalCount = issues.filter((i) => i.severity === 'error').length;
+            const criticalCount = issues.filter(
+              (i) => i.severity === 'error' || i.severity === 'critical',
+            ).length;
             const warningCount = issues.filter((i) => i.severity === 'warning').length;
             const infoCount = issues.filter((i) => i.severity === 'info').length;
             const isExpanded = expandedFiles.has(file);
@@ -301,13 +333,13 @@ export default function SecurityFindings({
                               p: 3,
                               borderLeft: 4,
                               borderColor:
-                                issue.severity === 'error'
+                                issue.severity === 'error' || issue.severity === 'critical'
                                   ? 'error.main'
                                   : issue.severity === 'warning'
                                     ? 'warning.main'
                                     : 'info.main',
                               bgcolor: alpha(
-                                issue.severity === 'error'
+                                issue.severity === 'error' || issue.severity === 'critical'
                                   ? theme.palette.error.main
                                   : issue.severity === 'warning'
                                     ? theme.palette.warning.main
@@ -361,13 +393,13 @@ export default function SecurityFindings({
                 p: 3,
                 borderLeft: 4,
                 borderColor:
-                  issue.severity === 'error'
+                  issue.severity === 'error' || issue.severity === 'critical'
                     ? 'error.main'
                     : issue.severity === 'warning'
                       ? 'warning.main'
                       : 'info.main',
                 bgcolor: alpha(
-                  issue.severity === 'error'
+                  issue.severity === 'error' || issue.severity === 'critical'
                     ? theme.palette.error.main
                     : issue.severity === 'warning'
                       ? theme.palette.warning.main

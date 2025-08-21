@@ -153,7 +153,7 @@ describe('ResultsTab', () => {
       total_checks: 10,
       passed_checks: 8,
       failed_checks: 2,
-      assets: [{ path: '/path/to/asset' }],
+      assets: [{ path: '/path/to/asset', type: 'model' }],
       files_scanned: 5,
     };
     const mockOnShowFilesDialog = vi.fn();
