@@ -132,11 +132,24 @@ export default function Eval({ fetchId }: EvalOptions) {
     // enables the "View Logs" functionality in Vulnerability reports.
     const pluginParam = searchParams.get('plugin');
 
+    const metricParams = searchParams.getAll('metric');
+
     if (pluginParam) {
       addFilter({
         type: 'plugin',
         operator: 'equals',
         value: pluginParam,
+      });
+    }
+
+    if (metricParams.length > 0) {
+      metricParams.forEach((metricParam) => {
+        addFilter({
+          type: 'metric',
+          operator: 'equals',
+          value: metricParam,
+          logicOperator: 'or',
+        });
       });
     }
 
