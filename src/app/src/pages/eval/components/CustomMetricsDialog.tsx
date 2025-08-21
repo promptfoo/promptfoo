@@ -355,45 +355,43 @@ const MetricsTable: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }
 
   return (
-    <Paper sx={{ width: '100%' }}>
-      <DataGrid
-        rows={rows}
-        columns={columns}
-        columnGroupingModel={columnGroupingModel}
-        density="compact"
-        disableRowSelectionOnClick
-        initialState={{
-          sorting: {
-            sortModel: [{ field: 'metric', sort: 'asc' }],
-          },
-          pagination: { paginationModel: { pageSize: 50 } },
-        }}
-        sx={{
-          '& .MuiDataGrid-row:hover': {
-            backgroundColor: 'action.hover',
-          },
-        }}
-        slots={{
-          toolbar: () => (
-            <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <GridToolbarFilterButton />
-              </Box>
-              <Box sx={{ flexGrow: 1 }} />
-              <GridToolbarQuickFilter
-                sx={{
-                  '& .MuiInputBase-root': {
-                    borderRadius: 2,
-                    backgroundColor: theme.palette.background.paper,
-                  },
-                }}
-              />
-            </GridToolbarContainer>
-          ),
-        }}
-        hideFooter
-      />
-    </Paper>
+    <DataGrid
+      rows={rows}
+      columns={columns}
+      columnGroupingModel={columnGroupingModel}
+      density="compact"
+      disableRowSelectionOnClick
+      initialState={{
+        sorting: {
+          sortModel: [{ field: 'metric', sort: 'asc' }],
+        },
+        pagination: { paginationModel: { pageSize: 50 } },
+      }}
+      sx={{
+        '& .MuiDataGrid-row:hover': {
+          backgroundColor: 'action.hover',
+        },
+      }}
+      slots={{
+        toolbar: () => (
+          <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <GridToolbarFilterButton />
+            </Box>
+            <Box sx={{ flexGrow: 1 }} />
+            <GridToolbarQuickFilter
+              sx={{
+                '& .MuiInputBase-root': {
+                  borderRadius: 2,
+                  backgroundColor: theme.palette.background.paper,
+                },
+              }}
+            />
+          </GridToolbarContainer>
+        ),
+      }}
+      hideFooter
+    />
   );
 };
 
