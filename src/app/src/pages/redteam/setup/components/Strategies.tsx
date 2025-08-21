@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { callApi } from '@app/utils/api';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -70,6 +72,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
   const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
+  const [testingStrategy, setTestingStrategy] = useState(false);
+  const [strategyTestResult, setStrategyTestResult] = useState<{
+    success: boolean;
+    message: string;
+    suggestions?: string[];
+  } | null>(null);
 
   const [configDialog, setConfigDialog] = useState<ConfigDialogState>({
     isOpen: false,
@@ -348,6 +356,77 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies, updateConfig],
   );
 
+  const handleTestStrategy = useCallback(async () => {
+    if (!config.target) {
+      setStrategyTestResult({
+        success: false,
+        message: 'Please configure a target first',
+      });
+      return;
+    }
+
+    // Find the first selected multi-modal strategy
+    const selectedMultiModalStrategy = selectedStrategyIds.find((id) =>
+      MULTI_MODAL_STRATEGIES.includes(id as any),
+    );
+
+    if (!selectedMultiModalStrategy) {
+      setStrategyTestResult({
+        success: false,
+        message: 'No multi-modal strategy selected',
+      });
+      return;
+    }
+
+    setTestingStrategy(true);
+    setStrategyTestResult(null);
+    recordEvent('feature_used', {
+      feature: 'redteam_config_strategy_test',
+      strategy: selectedMultiModalStrategy,
+    });
+
+    try {
+      const response = await callApi('/providers/test-strategy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: config.target,
+          strategyId: selectedMultiModalStrategy,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to test strategy';
+        try {
+          const errorData = await response.json();
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch {
+          // Ignore JSON parsing errors
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      setStrategyTestResult({
+        success: result.success,
+        message: result.message,
+        suggestions: result.suggestions,
+      });
+    } catch (error) {
+      console.error('Error testing strategy:', error);
+      setStrategyTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to test strategy',
+      });
+    } finally {
+      setTestingStrategy(false);
+    }
+  }, [config.target, selectedStrategyIds, recordEvent]);
+
   // ----------------------------------------------
   // Derived states
   // ----------------------------------------------
@@ -521,15 +600,80 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
         {/* Multi-modal strategies */}
         {categorizedStrategies.multiModal.length > 0 && (
-          <StrategySection
-            title="Multi-modal Strategies"
-            description="Test handling of non-text content including audio, video, and images"
-            strategies={categorizedStrategies.multiModal}
-            selectedIds={selectedStrategyIds}
-            onToggle={handleStrategyToggle}
-            onConfigClick={handleConfigClick}
-            onSelectNone={handleSelectNoneInSection}
-          />
+          <>
+            <StrategySection
+              title="Multi-modal Strategies"
+              description="Test handling of non-text content including audio, video, and images"
+              strategies={categorizedStrategies.multiModal}
+              selectedIds={selectedStrategyIds}
+              onToggle={handleStrategyToggle}
+              onConfigClick={handleConfigClick}
+              onSelectNone={handleSelectNoneInSection}
+            />
+            {selectedStrategyIds.some((id) => MULTI_MODAL_STRATEGIES.includes(id as any)) && (
+              <Alert
+                severity="info"
+                sx={{
+                  mb: 3,
+                  '& .MuiAlert-message': {
+                    width: '100%',
+                  },
+                }}
+              >
+                <Box>
+                  <Typography variant="body2" fontWeight="bold" gutterBottom>
+                    Multi-modal Strategy Requirements
+                  </Typography>
+                  <Typography variant="body2">
+                    You've selected multi-modal strategies (audio, image, or video). Please ensure
+                    your endpoint supports multi-modal inputs. Most standard text-only LLM endpoints
+                    will not work with these strategies.
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    Compatible providers typically include: OpenAI GPT-4 Vision, Claude 3+, Google
+                    Gemini Pro Vision, AWS Bedrock Nova, and similar multi-modal models.
+                  </Typography>
+                  {config.target && (
+                    <Box sx={{ mt: 2 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => handleTestStrategy()}
+                        disabled={testingStrategy}
+                      >
+                        {testingStrategy ? 'Testing...' : 'Test Strategy Compatibility'}
+                      </Button>
+                      {strategyTestResult && (
+                        <Box sx={{ mt: 1 }}>
+                          <Typography
+                            variant="body2"
+                            color={strategyTestResult.success ? 'success.main' : 'error.main'}
+                          >
+                            {strategyTestResult.message}
+                          </Typography>
+                          {strategyTestResult.suggestions &&
+                            strategyTestResult.suggestions.length > 0 && (
+                              <Box sx={{ mt: 1 }}>
+                                <Typography variant="body2" fontWeight="bold">
+                                  Suggestions:
+                                </Typography>
+                                <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                                  {strategyTestResult.suggestions.map((suggestion, idx) => (
+                                    <li key={idx}>
+                                      <Typography variant="body2">{suggestion}</Typography>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </Box>
+                            )}
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+                </Box>
+              </Alert>
+            )}
+          </>
         )}
 
         {/* Other strategies */}
