@@ -530,16 +530,16 @@ export async function getStandaloneEvals({
     .all();
 
   // Conservative optimization: Reduce N+1 by batching eval lookups while maintaining exact logic
-  const uniqueEvalIds = Array.from(new Set(results.map(r => r.evalId)));
-  
-  // Batch load all unique evals to reduce N+1 queries  
+  const uniqueEvalIds = Array.from(new Set(results.map((r) => r.evalId)));
+
+  // Batch load all unique evals to reduce N+1 queries
   const evalPromises = uniqueEvalIds.map(async (evalId) => {
     const eval_ = await Eval.findById(evalId);
     invariant(eval_, `Eval with ID ${evalId} not found`);
     const table = (await eval_.getTable()) || { body: [] };
     return { evalId, eval_, table };
   });
-  
+
   const evalData = await Promise.all(evalPromises);
   const evalMap = new Map(evalData.map(({ evalId, eval_, table }) => [evalId, { eval_, table }]));
 
@@ -553,11 +553,11 @@ export async function getStandaloneEvals({
       // @ts-ignore
       isRedteam,
     } = result;
-    
+
     const evalInfo = evalMap.get(evalId);
     invariant(evalInfo, `Eval with ID ${evalId} not found in map`);
     const { eval_, table } = evalInfo;
-    
+
     // @ts-ignore
     return eval_.getPrompts().map((col, index) => {
       // Compute some stats - keep original logic exactly
@@ -567,10 +567,8 @@ export async function getStandaloneEvals({
           const pluginId = row.test.metadata?.pluginId;
           if (pluginId) {
             const isPass = row.outputs[index].pass;
-            acc.pluginPassCount[pluginId] =
-              (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
-            acc.pluginFailCount[pluginId] =
-              (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
+            acc.pluginPassCount[pluginId] = (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
+            acc.pluginFailCount[pluginId] = (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
           }
           return acc;
         },
