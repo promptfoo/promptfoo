@@ -34,6 +34,8 @@ import {
 } from '@mui/material';
 import { useModelAuditStore } from '../store';
 
+import type { ScanIssue } from '../ModelAudit.types';
+
 export default function HistoryTab() {
   const {
     historicalScans,
@@ -213,81 +215,7 @@ export default function HistoryTab() {
                 </TableCell>
                 <TableCell align="center">
                   {scan.results?.issues ? (
-                    (() => {
-                      const criticalCount = scan.results.issues.filter(
-                        (i) => i.severity === 'critical',
-                      ).length;
-                      const errorCount = scan.results.issues.filter(
-                        (i) => i.severity === 'error',
-                      ).length;
-                      const warningCount = scan.results.issues.filter(
-                        (i) => i.severity === 'warning',
-                      ).length;
-
-                      const totalCriticalErrors = criticalCount + errorCount;
-
-                      return (
-                        <Stack
-                          direction="row"
-                          spacing={0.5}
-                          justifyContent="center"
-                          flexWrap="wrap"
-                        >
-                          {criticalCount > 0 && (
-                            <Chip
-                              label={`${criticalCount} Critical`}
-                              color="error"
-                              size="small"
-                              variant="filled"
-                              sx={{
-                                fontWeight: 600,
-                                fontSize: '0.75rem',
-                                height: 22,
-                              }}
-                            />
-                          )}
-                          {errorCount > 0 && (
-                            <Chip
-                              label={`${errorCount} Error${errorCount > 1 ? 's' : ''}`}
-                              color="error"
-                              size="small"
-                              variant="outlined"
-                              sx={{
-                                fontWeight: 500,
-                                fontSize: '0.75rem',
-                                height: 22,
-                              }}
-                            />
-                          )}
-                          {warningCount > 0 && (
-                            <Chip
-                              label={`${warningCount} Warning${warningCount > 1 ? 's' : ''}`}
-                              color="warning"
-                              size="small"
-                              variant="outlined"
-                              sx={{
-                                fontWeight: 500,
-                                fontSize: '0.75rem',
-                                height: 22,
-                              }}
-                            />
-                          )}
-                          {totalCriticalErrors === 0 && warningCount === 0 && (
-                            <Chip
-                              label="No Issues"
-                              color="success"
-                              size="small"
-                              variant="outlined"
-                              sx={{
-                                fontWeight: 500,
-                                fontSize: '0.75rem',
-                                height: 22,
-                              }}
-                            />
-                          )}
-                        </Stack>
-                      );
-                    })()
+                    <IssueSeverityChips issues={scan.results.issues} />
                   ) : (
                     <Typography variant="body2" color="text.secondary">
                       -
@@ -370,5 +298,81 @@ export default function HistoryTab() {
         </DialogActions>
       </Dialog>
     </>
+  );
+}
+
+interface IssueSeverityChipsProps {
+  issues: ScanIssue[] | undefined;
+}
+
+function IssueSeverityChips({ issues }: IssueSeverityChipsProps) {
+  if (!issues) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        -
+      </Typography>
+    );
+  }
+
+  const criticalCount = issues.filter((i) => i.severity === 'critical').length;
+  const errorCount = issues.filter((i) => i.severity === 'error').length;
+  const warningCount = issues.filter((i) => i.severity === 'warning').length;
+  const totalCriticalErrors = criticalCount + errorCount;
+
+  return (
+    <Stack direction="row" spacing={0.5} justifyContent="center" flexWrap="wrap">
+      {criticalCount > 0 && (
+        <Chip
+          label={`${criticalCount} Critical`}
+          color="error"
+          size="small"
+          variant="filled"
+          sx={{
+            fontWeight: 600,
+            fontSize: '0.75rem',
+            height: 22,
+          }}
+        />
+      )}
+      {errorCount > 0 && (
+        <Chip
+          label={`${errorCount} Error${errorCount > 1 ? 's' : ''}`}
+          color="error"
+          size="small"
+          variant="outlined"
+          sx={{
+            fontWeight: 500,
+            fontSize: '0.75rem',
+            height: 22,
+          }}
+        />
+      )}
+      {warningCount > 0 && (
+        <Chip
+          label={`${warningCount} Warning${warningCount > 1 ? 's' : ''}`}
+          color="warning"
+          size="small"
+          variant="outlined"
+          sx={{
+            fontWeight: 500,
+            fontSize: '0.75rem',
+            height: 22,
+          }}
+        />
+      )}
+      {totalCriticalErrors === 0 && warningCount === 0 && (
+        <Chip
+          label="No Issues"
+          color="success"
+          size="small"
+          variant="outlined"
+          sx={{
+            fontWeight: 500,
+            fontSize: '0.75rem',
+            height: 22,
+          }}
+        />
+      )}
+    </Stack>
   );
 }

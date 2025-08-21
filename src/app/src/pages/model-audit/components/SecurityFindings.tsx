@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import {
   CheckCircle as CheckCircleIcon,
@@ -43,6 +43,31 @@ interface SecurityFindingsProps {
   onSeverityChange: (severity: string | null) => void;
   showRawOutput: boolean;
   onToggleRawOutput: () => void;
+}
+
+// Helper function to generate issue summary text
+function getIssueSummaryText(issues: ScanIssue[]): string {
+  const criticalCount = issues.filter((i) => i.severity === 'critical').length;
+  const errorCount = issues.filter((i) => i.severity === 'error').length;
+  const warningCount = issues.filter((i) => i.severity === 'warning').length;
+  const totalMeaningful = criticalCount + errorCount + warningCount;
+
+  if (totalMeaningful === 0) {
+    return `${issues.length} informational messages found`;
+  }
+
+  const parts = [];
+  if (criticalCount > 0) {
+    parts.push(`${criticalCount} critical`);
+  }
+  if (errorCount > 0) {
+    parts.push(`${errorCount} error${errorCount > 1 ? 's' : ''}`);
+  }
+  if (warningCount > 0) {
+    parts.push(`${warningCount} warning${warningCount > 1 ? 's' : ''}`);
+  }
+
+  return `${totalMeaningful} security issue${totalMeaningful > 1 ? 's' : ''} found: ${parts.join(', ')}`;
 }
 
 export default function SecurityFindings({
@@ -150,31 +175,7 @@ export default function SecurityFindings({
     <Box>
       {scanResults.issues.length > 0 && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          {(() => {
-            const criticalCount = scanResults.issues.filter(
-              (i) => i.severity === 'critical',
-            ).length;
-            const errorCount = scanResults.issues.filter((i) => i.severity === 'error').length;
-            const warningCount = scanResults.issues.filter((i) => i.severity === 'warning').length;
-            const totalMeaningful = criticalCount + errorCount + warningCount;
-
-            if (totalMeaningful === 0) {
-              return `${scanResults.issues.length} informational messages found`;
-            }
-
-            const parts = [];
-            if (criticalCount > 0) {
-              parts.push(`${criticalCount} critical`);
-            }
-            if (errorCount > 0) {
-              parts.push(`${errorCount} error${errorCount > 1 ? 's' : ''}`);
-            }
-            if (warningCount > 0) {
-              parts.push(`${warningCount} warning${warningCount > 1 ? 's' : ''}`);
-            }
-
-            return `${totalMeaningful} security issue${totalMeaningful > 1 ? 's' : ''} found: ${parts.join(', ')}`;
-          })()}
+          {getIssueSummaryText(scanResults.issues)}
         </Alert>
       )}
 
