@@ -4170,12 +4170,16 @@ describe('Body file resolution', () => {
     expect(fetchWithCache).toHaveBeenCalled();
 
     const actualCall = jest.mocked(fetchWithCache).mock.calls[0];
+    expect(actualCall).toBeDefined();
     expect(actualCall[0]).toBe('http://test.com');
-    expect(actualCall[1].method).toBe('POST');
-    expect(actualCall[1].headers).toEqual({ 'content-type': 'application/json' });
+
+    const requestOptions = actualCall[1];
+    expect(requestOptions).toBeDefined();
+    expect(requestOptions!.method).toBe('POST');
+    expect(requestOptions!.headers).toEqual({ 'content-type': 'application/json' });
 
     // Parse the actual body to verify it contains the right data
-    const bodyStr = actualCall[1].body as string;
+    const bodyStr = requestOptions!.body as string;
     const bodyObj = JSON.parse(bodyStr);
     expect(bodyObj.query).toBe('test prompt');
     expect(bodyObj.transactions).toBeDefined();
