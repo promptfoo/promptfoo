@@ -24,6 +24,10 @@ ModelAudit is a lightweight static security scanner for machine learning models 
 
 By invoking `promptfoo scan-model`, you can use ModelAudit's static security scanning capabilities.
 
+:::info Authentication Delegation
+When running through Promptfoo Enterprise, ModelAudit can automatically inherit authentication from your Promptfoo session. This allows seamless scanning of private models and registries without separate credential management.
+:::
+
 ![example model scan results](/img/docs/modelaudit/modelaudit-result.png)
 
 Promptfoo also includes a UI that allows you to set up a scan:
@@ -46,6 +50,9 @@ AI/ML models can introduce security risks through:
 - Risky configurations in model architectures
 - Malicious content in ZIP archives
 - Embedded executables in binary model files
+- Hidden credentials (API keys, tokens, passwords)
+- Network communication patterns (URLs, IPs, sockets)
+- JIT/Script execution in TorchScript and ONNX models
 
 ModelAudit helps identify these risks before models are deployed to production environments, ensuring a more secure AI pipeline.
 
@@ -151,19 +158,26 @@ See the [Advanced Usage](./usage.md) guide for detailed authentication setup for
 
 ### Options
 
-| Option                 | Description                                                      |
-| ---------------------- | ---------------------------------------------------------------- |
-| `--blacklist`, `-b`    | Additional blacklist patterns to check against model names       |
-| `--format`, `-f`       | Output format (`text` or `json`) [default: text]                 |
-| `--output`, `-o`       | Output file path (prints to stdout if not specified)             |
-| `--timeout`, `-t`      | Scan timeout in seconds [default: 300]                           |
-| `--verbose`, `-v`      | Enable verbose output                                            |
-| `--max-file-size`      | Maximum file size to scan in bytes [default: unlimited]          |
-| `--max-total-size`     | Maximum total bytes to scan before stopping [default: unlimited] |
-| `--sbom`               | Generate CycloneDX Software Bill of Materials with license info  |
-| `--registry-uri`       | MLflow registry URI (only used for MLflow model URIs)            |
-| `--jfrog-api-token`    | JFrog API token for authentication                               |
-| `--jfrog-access-token` | JFrog access token for authentication                            |
+| Option                    | Description                                                         |
+| ------------------------- | ------------------------------------------------------------------- |
+| `--blacklist`, `-b`       | Additional blacklist patterns to check against model names          |
+| `--format`, `-f`          | Output format (`text` or `json`) [default: text]                    |
+| `--output`, `-o`          | Output file path (prints to stdout if not specified)                |
+| `--timeout`, `-t`         | Scan timeout in seconds [default: 3600]                             |
+| `--verbose`, `-v`         | Enable verbose output                                               |
+| `--max-file-size`         | Maximum file size to scan in bytes [default: unlimited]             |
+| `--max-total-size`        | Maximum total bytes to scan before stopping [default: unlimited]    |
+| `--sbom`                  | Generate CycloneDX Software Bill of Materials with license info     |
+| `--registry-uri`          | MLflow registry URI (only used for MLflow model URIs)               |
+| `--jfrog-api-token`       | JFrog API token for authentication                                  |
+| `--jfrog-access-token`    | JFrog access token for authentication                               |
+| `--strict-license`        | Fail scan when incompatible or deprecated licenses are detected     |
+| `--max-download-size`     | Maximum download size for cloud storage (e.g., 500MB, 2GB)          |
+| `--preview`               | Preview what would be downloaded without actually downloading       |
+| `--cache/--no-cache`      | Use cache for downloaded cloud storage files [default: cache]       |
+| `--cache-dir`             | Directory for caching downloaded files                              |
+| `--no-skip-files`         | Don't skip non-model file types during directory scans              |
+| `--selective/--all-files` | Download only scannable files from directories [default: selective] |
 
 ## Web Interface
 
@@ -236,6 +250,9 @@ The scanner looks for various security issues, including:
 - **Format Integrity**: Validating file format structure
 - **License Compliance**: Detecting AGPL obligations and commercial restrictions
 - **DVC Integration**: Automatic resolution and scanning of DVC-tracked models
+- **Secrets Detection**: Finding embedded API keys, tokens, and credentials
+- **Network Analysis**: Detecting URLs, IPs, and socket usage that could enable data exfiltration
+- **JIT Code Detection**: Scanning TorchScript, ONNX custom ops, and other JIT-compiled code
 
 ## Interpreting Results
 
@@ -280,6 +297,25 @@ ModelAudit returns specific exit codes for automation:
 In CI/CD pipelines, exit code 1 indicates findings that should be reviewed but don't necessarily block deployment. Only exit code 2 represents actual scan failures.
 :::
 
+## Diagnostics
+
+ModelAudit includes a `doctor` command to diagnose scanner compatibility and system status:
+
+```bash
+# Check system diagnostics and scanner status
+promptfoo scan-model doctor
+
+# Show details about failed scanners
+promptfoo scan-model doctor --show-failed
+```
+
+The `doctor` command provides:
+
+- Python and NumPy version information
+- Scanner loading status (available, loaded, failed)
+- Recommendations for fixing compatibility issues
+- Memory and disk space availability
+
 ## Requirements
 
 ModelAudit is included with Promptfoo, but specific model formats may require additional dependencies:
@@ -312,24 +348,12 @@ pip install mlflow
 
 ### NumPy Compatibility
 
-ModelAudit supports both NumPy 1.x and 2.x. Use the `doctor` command to diagnose scanner compatibility:
+ModelAudit supports both NumPy 1.x and 2.x. If you encounter NumPy compatibility issues:
 
 ```bash
-# Check system diagnostics and scanner status
-modelaudit doctor
-
-# Show details about failed scanners
-modelaudit doctor --show-failed
-
 # Force NumPy 1.x if needed for full compatibility
 pip install modelaudit[numpy1]
 ```
-
-The `doctor` command provides:
-
-- Python and NumPy version information
-- Scanner loading status (available, loaded, failed)
-- Recommendations for fixing compatibility issues
 
 ## Next Steps
 
