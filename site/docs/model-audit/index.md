@@ -24,10 +24,6 @@ ModelAudit is a lightweight static security scanner for machine learning models 
 
 By invoking `promptfoo scan-model`, you can use ModelAudit's static security scanning capabilities.
 
-:::info Authentication Delegation
-When running through Promptfoo Enterprise, ModelAudit can automatically inherit authentication from your Promptfoo session. This allows seamless scanning of private models and registries without separate credential management.
-:::
-
 ![example model scan results](/img/docs/modelaudit/modelaudit-result.png)
 
 Promptfoo also includes a UI that allows you to set up a scan:
