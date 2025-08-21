@@ -97,10 +97,10 @@ export default class ModelAudit {
     // Ensure hasErrors is properly set based on actual critical/error findings
     const hasActualErrors = Boolean(
       params.results.has_errors ||
-      (params.results.issues &&
-        params.results.issues.some(
-          (issue) => issue.severity === 'critical' || issue.severity === 'error',
-        ))
+        (params.results.issues &&
+          params.results.issues.some(
+            (issue) => issue.severity === 'critical' || issue.severity === 'error',
+          )),
     );
 
     const data = {
