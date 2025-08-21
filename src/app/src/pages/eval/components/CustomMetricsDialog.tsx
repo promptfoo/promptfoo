@@ -199,7 +199,7 @@ const MetricsTable: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         type: 'number',
         valueGetter: (_, row) => {
           const { hasScore, score, count } = row[columnId] as MetricScore;
-          return hasScore ? (score / count) * 100 : 0;
+          return hasScore && typeof count === 'number' && count > 0 ? (score / count) * 100 : 0;
         },
         renderCell: (params) => {
           const { backgroundColor, color } = getPercentageColors(params.value);
@@ -267,7 +267,7 @@ const MetricsTable: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         Object.entries(row).forEach(([key, value]) => {
           if (key.startsWith('prompt_')) {
             const { score, count, hasScore } = value as MetricScore;
-            if (hasScore) {
+            if (hasScore && typeof count === 'number' && count > 0) {
               promptCount++;
               totalPassRate += (score / count) * 100;
             }
