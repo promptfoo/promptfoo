@@ -213,7 +213,7 @@ describe('huggingfaceDatasets', () => {
     });
   });
 
-  it('should handle API errors gracefully', async () => {
+  it('should handle API errors by throwing', async () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce({
       data: null,
       cached: false,
@@ -221,9 +221,9 @@ describe('huggingfaceDatasets', () => {
       statusText: 'Not Found',
     } as any);
 
-    // With graceful degradation, it should return empty array instead of throwing
-    const result = await fetchHuggingFaceDataset('huggingface://datasets/nonexistent/dataset');
-    expect(result).toEqual([]);
+    await expect(
+      fetchHuggingFaceDataset('huggingface://datasets/nonexistent/dataset'),
+    ).rejects.toThrow('[HF Dataset] Failed to fetch dataset: Not Found');
   });
 
   it('should respect user-specified limit parameter (single request optimization)', async () => {
@@ -334,7 +334,7 @@ describe('huggingfaceDatasets', () => {
       expect(tests).toHaveLength(50);
     });
 
-    it('should return partial results on page fetch failure', async () => {
+    it('should throw error on page fetch failure', async () => {
       // First page succeeds
       jest.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -355,11 +355,10 @@ describe('huggingfaceDatasets', () => {
         statusText: 'Internal Server Error',
       } as any);
 
-      const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 200);
-
-      // Should return partial results (100 items) instead of throwing
-      expect(tests).toHaveLength(100);
-      expect(tests[99].vars?.text).toBe('Item 100');
+      // Should throw error instead of returning partial results
+      await expect(
+        fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 200)
+      ).rejects.toThrow('[HF Dataset] Failed to fetch dataset: Internal Server Error');
     });
 
     it('should adapt page size based on row size', async () => {

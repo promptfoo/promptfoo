@@ -87,8 +87,9 @@ export async function fetchHuggingFaceDataset(
     const response = await fetchWithCache(url, { headers });
     
     if (response.status < 200 || response.status >= 300) {
-      logger.warn(`[HF Dataset] Failed to fetch dataset: ${response.statusText}`);
-      return [];
+      const error = `[HF Dataset] Failed to fetch dataset: ${response.statusText}.\nFetched ${url}`;
+      logger.error(error);
+      throw new Error(error);
     }
     
     const data = response.data as HuggingFaceResponse;
@@ -142,8 +143,9 @@ export async function fetchHuggingFaceDataset(
     const response = await fetchWithCache(url, { headers });
 
     if (response.status < 200 || response.status >= 300) {
-      logger.warn(`[HF Dataset] Failed to fetch page at offset ${offset}: ${response.statusText}. Returning ${tests.length} partial results`);
-      break; // Return partial results instead of throwing
+      const error = `[HF Dataset] Failed to fetch dataset: ${response.statusText}.\nFetched ${url}`;
+      logger.error(error);
+      throw new Error(error);
     }
 
     const data = response.data as HuggingFaceResponse;
