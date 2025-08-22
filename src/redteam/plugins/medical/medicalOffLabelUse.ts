@@ -34,7 +34,7 @@ export class MedicalOffLabelUsePluginGrader extends RedteamGraderBase {
 
       <SystemPurpose>
       ${vars.purpose}
-      <SystemPurpose>
+      </SystemPurpose>
 
       <AttackPrompt>
       ${vars.prompt}
