@@ -21,10 +21,18 @@ featured: true
 
 In July 2025, the White House issued the ["Preventing Woke AI in the Federal Government"](https://www.whitehouse.gov/presidential-actions/2025/07/preventing-woke-ai-in-the-federal-government/) executive order. It requires agencies to procure AI systems that meet "truthfulness" and "ideological neutrality" criteria and tasks OMB and GSA with implementation. That raises a measurement question: which behaviors matter. We focus on one: how models treat uncertainty when the context is under-informative.
 
-<div className="info-grid">
-  <div className="info-box" style={{
+<div style={{
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+  gap: '1.5rem',
+  margin: '2rem 0',
+  padding: '0 1rem'
+}}>
+  <div style={{
+    padding: '1.5rem',
     backgroundColor: '#f8f9fa',
     border: '2px solid #e9ecef',
+    borderRadius: '12px',
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
   }}>
     <h4 style={{
@@ -48,9 +56,11 @@ In July 2025, the White House issued the ["Preventing Woke AI in the Federal Gov
     </p>
   </div>
 
-  <div className="info-box" style={{
+  <div style={{
+    padding: '1.5rem',
     backgroundColor: '#f0f8ff',
     border: '2px solid #b8e6ff',
+    borderRadius: '12px',
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
   }}>
     <h4 style={{
@@ -75,274 +85,6 @@ In July 2025, the White House issued the ["Preventing Woke AI in the Federal Gov
   </div>
 </div>
 
-<style>
-  /* Mobile-first comprehensive responsive design */
-  
-  /* Base article layout */
-  .article-content {
-    max-width: 100%;
-    padding: 0 1rem;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-  }
-  
-  @media (min-width: 768px) {
-    .article-content {
-      padding: 0 2rem;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-  }
-  
-  @media (min-width: 1200px) {
-    .article-content {
-      padding: 0 3rem;
-    }
-  }
-  
-  /* Responsive typography */
-  .responsive-text {
-    font-size: 1rem;
-    line-height: 1.7;
-  }
-  
-  @media (min-width: 768px) {
-    .responsive-text {
-      font-size: 1.125rem;
-      line-height: 1.8;
-    }
-  }
-  
-  /* Enhanced heading styles */
-  h1 {
-    font-size: 1.75rem !important;
-    line-height: 1.3 !important;
-    margin-bottom: 1.5rem !important;
-  }
-  
-  @media (min-width: 768px) {
-    h1 {
-      font-size: 2.25rem !important;
-      line-height: 1.2 !important;
-      margin-bottom: 2rem !important;
-    }
-  }
-  
-  h2 {
-    font-size: 1.375rem !important;
-    line-height: 1.4 !important;
-    margin: 2rem 0 1rem !important;
-  }
-  
-  @media (min-width: 768px) {
-    h2 {
-      font-size: 1.75rem !important;
-      margin: 3rem 0 1.5rem !important;
-    }
-  }
-  
-  h3 {
-    font-size: 1.25rem !important;
-    line-height: 1.4 !important;
-    margin: 1.5rem 0 1rem !important;
-  }
-  
-  @media (min-width: 768px) {
-    h3 {
-      font-size: 1.5rem !important;
-      margin: 2rem 0 1rem !important;
-    }
-  }
-  
-  /* Image responsive design */
-  img {
-    max-width: 100% !important;
-    height: auto !important;
-    border-radius: 8px !important;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
-  }
-  
-  @media (min-width: 768px) {
-    img {
-      border-radius: 12px !important;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
-    }
-  }
-  
-  /* Image container responsive */
-  .image-container {
-    margin: 2rem 0 !important;
-    text-align: center;
-  }
-  
-  @media (min-width: 768px) {
-    .image-container {
-      margin: 3rem 0 !important;
-    }
-  }
-  
-  /* Grid layouts - mobile first */
-  .info-grid {
-    display: grid !important;
-    grid-template-columns: 1fr !important;
-    gap: 1rem !important;
-    margin: 2rem 0 !important;
-    padding: 0 1rem !important;
-  }
-  
-  @media (min-width: 768px) {
-    .info-grid {
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important;
-      gap: 1.5rem !important;
-      padding: 0 !important;
-    }
-  }
-  
-  /* Info boxes responsive */
-  .info-box {
-    padding: 1.25rem !important;
-    border-radius: 8px !important;
-    margin: 1rem 0 !important;
-  }
-  
-  @media (min-width: 768px) {
-    .info-box {
-      padding: 1.5rem !important;
-      border-radius: 12px !important;
-      margin: 0 !important;
-    }
-  }
-  
-  /* Code blocks mobile friendly */
-  pre {
-    overflow-x: auto !important;
-    font-size: 0.875rem !important;
-    line-height: 1.5 !important;
-    padding: 1rem !important;
-    border-radius: 8px !important;
-    margin: 1.5rem 0 !important;
-  }
-  
-  @media (min-width: 768px) {
-    pre {
-      font-size: 0.9375rem !important;
-      padding: 1.5rem !important;
-      border-radius: 12px !important;
-    }
-  }
-  
-  /* Table responsive */
-  table {
-    width: 100% !important;
-    overflow-x: auto !important;
-    display: block !important;
-    white-space: nowrap !important;
-    font-size: 0.875rem !important;
-  }
-  
-  @media (min-width: 768px) {
-    table {
-      display: table !important;
-      white-space: normal !important;
-      font-size: 1rem !important;
-    }
-  }
-  
-  /* Flexible layout patterns */
-  .mobile-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  
-  @media (min-width: 768px) {
-    .mobile-stack {
-      flex-direction: row;
-      gap: 2rem;
-      align-items: center;
-    }
-  }
-  
-  /* Touch-friendly interactive elements */
-  button, .interactive-element {
-    min-height: 44px !important;
-    padding: 0.75rem 1rem !important;
-    font-size: 1rem !important;
-  }
-  
-  @media (min-width: 768px) {
-    button, .interactive-element {
-      min-height: auto !important;
-      padding: 0.5rem 1rem !important;
-    }
-  }
-  
-  /* Enhanced spacing for mobile readability */
-  p {
-    margin-bottom: 1.25rem !important;
-    line-height: 1.6 !important;
-  }
-  
-  @media (min-width: 768px) {
-    p {
-      margin-bottom: 1.5rem !important;
-      line-height: 1.7 !important;
-    }
-  }
-  
-  /* List spacing */
-  ul, ol {
-    margin-bottom: 1.5rem !important;
-    padding-left: 1.5rem !important;
-  }
-  
-  li {
-    margin-bottom: 0.75rem !important;
-    line-height: 1.6 !important;
-  }
-  
-  @media (min-width: 768px) {
-    li {
-      margin-bottom: 0.5rem !important;
-      line-height: 1.7 !important;
-    }
-  }
-  
-  /* Blockquote mobile */
-  blockquote {
-    margin: 1.5rem 0 !important;
-    padding: 1rem !important;
-    border-left: 4px solid var(--ifm-color-primary) !important;
-    background: rgba(var(--ifm-color-primary-rgb), 0.1) !important;
-    border-radius: 0 8px 8px 0 !important;
-  }
-  
-  @media (min-width: 768px) {
-    blockquote {
-      margin: 2rem 0 !important;
-      padding: 1.5rem !important;
-    }
-  }
-  
-  /* Caption text mobile-optimized */
-  .caption-text {
-    font-size: 0.875rem !important;
-    line-height: 1.4 !important;
-    color: #666 !important;
-    text-align: center !important;
-    margin-top: 1rem !important;
-    padding: 0 1rem !important;
-  }
-  
-  @media (min-width: 768px) {
-    .caption-text {
-      font-size: 0.9375rem !important;
-      line-height: 1.5 !important;
-      margin-top: 1.5rem !important;
-      padding: 0 2rem !important;
-    }
-  }
-</style>
 
 <!-- truncate -->
 
@@ -360,15 +102,32 @@ In July 2025, the White House issued the ["Preventing Woke AI in the Federal Gov
 
 Overall accuracy improved by 8.2 percentage points (53.0% to 61.2%), but the bigger story is behavioral. **Models selected 'Can't be determined' 16.8 percentage points more often** (13.1% to 29.9%) when context was insufficient for confident judgments. This is the largest measurable change in AI behavior during the "woke AI" period.
 
-<div className="image-container">
+<div style={{
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  margin: '2rem 0',
+  padding: '0 1rem'
+}}>
   <img 
     src="/img/blog/bbq-bias/primary-findings-rigorous.png" 
     alt="AI bias evaluation key findings: uncertainty acknowledgment and overall performance changes"
     style={{
+      maxWidth: '100%', 
+      height: 'auto', 
+      borderRadius: '12px', 
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
       border: '1px solid rgba(0, 0, 0, 0.1)'
     }}
   />
-  <p className="caption-text">
+  <p style={{
+    marginTop: '1.5rem', 
+    fontSize: '0.9rem', 
+    color: '#666',
+    textAlign: 'center',
+    maxWidth: '600px',
+    lineHeight: '1.5'
+  }}>
     **The striking discovery**: AI models now choose "I don't know" 16.8 percentage points more often when information is insufficient, while maintaining 92.6% accuracy on clear questions
   </p>
 </div>
@@ -847,19 +606,33 @@ GPT-5-nano shows **dramatically increased abstention on unanswerable items** (up
 - **Systematic progress** across all social dimensions with measurable effect sizes
 - **Reproducible methodology** costing exactly $10.13 for comprehensive evaluation
 
-<div className="image-container">
+<div style={{
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  margin: '3rem 0',
+  padding: '0 1rem'
+}}>
   <img 
     src="/img/blog/bbq-bias/confidence-intervals-fixed.png" 
     alt="Statistical analysis showing 95% confidence intervals for overall accuracy, ambiguous context uncertainty acknowledgment, and disambiguated accuracy"
     style={{
+      maxWidth: '100%', 
+      height: 'auto', 
+      borderRadius: '12px', 
+      boxShadow: '0 16px 48px rgba(0, 0, 0, 0.18)',
       border: '1px solid rgba(0, 0, 0, 0.1)',
-      background: 'white',
-      boxShadow: '0 16px 48px rgba(0, 0, 0, 0.18)'
+      background: 'white'
     }}
   />
-  <p className="caption-text" style={{
-    fontWeight: '500',
-    color: '#555'
+  <p style={{
+    marginTop: '1.5rem', 
+    fontSize: '0.95rem', 
+    color: '#555',
+    textAlign: 'center',
+    maxWidth: '650px',
+    lineHeight: '1.6',
+    fontWeight: '500'
   }}>
     **Statistical rigor**: All findings highly significant (p < 0.001) with 95% confidence intervals, ensuring our conclusions are statistically sound
   </p>
@@ -897,9 +670,12 @@ The question isn't whether AI systems exhibit bias, but **how we measure, interp
 
 </div>
 
-<div className="info-box" style={{
+<div style={{
+  padding: '2rem',
+  margin: '2rem 0',
   backgroundColor: '#f8f9fa',
   border: '2px solid #e9ecef',
+  borderRadius: '16px',
   boxShadow: '0 8px 24px rgba(0, 0, 0, 0.06)'
 }}>
 
@@ -919,11 +695,13 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --output sample-results.jsonl
 npx promptfoo@latest view
 ```
 
-<div className="info-box" style={{
+<div style={{
+  padding: '1.5rem',
+  margin: '1.5rem 0 0',
   backgroundColor: '#f0f8ff',
   border: '2px solid #007acc',
-  fontWeight: '500',
-  margin: '1.5rem 0 0'
+  borderRadius: '12px',
+  fontWeight: '500'
 }}>
 
 **Full replication:** 116,972 tests across 11 social dimensions for exactly $10.13. Runtime depends on rate limits and concurrency with standard OpenAI API access.
@@ -932,9 +710,12 @@ npx promptfoo@latest view
 
 </div>
 
-<div className="info-box" style={{
+<div style={{
+  padding: '2rem',
+  margin: '3rem 0',
   backgroundColor: '#f8f9fa',
   border: '1px solid #e9ecef',
+  borderRadius: '12px',
   textAlign: 'center',
   boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)'
 }}>
