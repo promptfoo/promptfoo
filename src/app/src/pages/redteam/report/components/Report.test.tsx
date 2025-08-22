@@ -1,9 +1,8 @@
+import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { GridLogicOperator, GridFilterModel } from '@mui/x-data-grid';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Report from './Report';
-import { callApi } from '@app/utils/api';
 
 // Mock dependencies
 vi.mock('react-router-dom', () => ({
