@@ -370,11 +370,6 @@ describe('TestSuites Component CSV Export', () => {
     expect(exportButton).toBeInTheDocument();
     expect(exportButton.closest('button')).toBeInTheDocument();
   });
-
-  it.skip('should trigger CSV download when export button is clicked', () => {
-    // Skip this test due to complex DOM mocking requirements with DataGrid
-    // The CSV export functionality is tested manually and works correctly
-  });
 });
 
 describe('TestSuites Component - Zero Attack Success Rate', () => {
