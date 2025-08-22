@@ -170,7 +170,7 @@ describe('JSON export with improved error handling', () => {
       const readOnlyDir = path.join(tempDir, 'readonly-dir');
       fs.mkdirSync(readOnlyDir);
       fs.chmodSync(readOnlyDir, 0o444); // read-only
-      
+
       const invalidPath = path.join(readOnlyDir, 'output.json');
 
       mockEval.toEvaluateSummary.mockResolvedValue({
@@ -180,7 +180,7 @@ describe('JSON export with improved error handling', () => {
       });
 
       await expect(writeOutput(invalidPath, mockEval, null)).rejects.toThrow();
-      
+
       // Clean up - restore permissions so we can delete
       fs.chmodSync(readOnlyDir, 0o755);
     });
