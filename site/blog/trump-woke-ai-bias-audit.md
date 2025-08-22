@@ -1,5 +1,5 @@
 ---
-title: 'AI learned to say "I don\'t know": How 116,972 tests for $10 reveal the biggest shift in Trump\'s bias era'
+title: '116k bias tests for $10: GPT-5 uncertainty responses jump 16.8pp over GPT-3.5'
 description: 'A comprehensive evaluation of AI bias evolution across 11 social dimensions, measuring changes in uncertainty acknowledgment and bias patterns between GPT-3.5-turbo and GPT-5 nano'
 image: /img/blog/bbq-bias/dramatic-finding.png
 keywords:
@@ -358,7 +358,7 @@ In July 2025, the White House issued the ["Preventing Woke AI in the Federal Gov
 
 </div>
 
-While overall accuracy improved by 8.2 percentage points (53.0% to 61.2%), something far more interesting emerged. **The most dramatic behavioral shift**: Models selected 'Can't be determined' 16.8 percentage points more often (13.1% to 29.9%) when context was insufficient for confident judgments. This represents the largest measurable change in AI behavior we've documented.
+Overall accuracy improved by 8.2 percentage points (53.0% to 61.2%), but the bigger story is behavioral. **Models selected 'Can't be determined' 16.8 percentage points more often** (13.1% to 29.9%) when context was insufficient for confident judgments. This is the largest measurable change in AI behavior during the "woke AI" period.
 
 <div className="image-container">
   <img 
@@ -373,9 +373,9 @@ While overall accuracy improved by 8.2 percentage points (53.0% to 61.2%), somet
   </p>
 </div>
 
-When NYU researchers published the Bias Benchmark for QA (BBQ) in May 2022, they couldn't have predicted it would become the definitive test for one of AI's most contentious periods. The benchmark—now referenced in OpenAI's GPT-5 system materials—measures something deceptively simple yet profound: **Does AI make assumptions about people based on limited information?**
+NYU researchers published the Bias Benchmark for QA (BBQ) in May 2022. The benchmark—now referenced in OpenAI's GPT-5 system materials—tests whether AI makes assumptions about people based on limited information.
 
-What if you could run the most comprehensive AI bias evaluation in history for the price of a lunch? We conducted **116,972 individual assessments across 11 social dimensions** for exactly $10.13, comparing OpenAI's [GPT-3.5-turbo](https://techcrunch.com/2023/03/01/openai-launches-an-api-for-chatgpt-plus-dedicated-capacity-for-enterprise-customers/) (March 2023) with [GPT-5-nano](https://openai.com/index/introducing-gpt-5/) (August 2025)—spanning the exact period when AI bias became a political flashpoint.
+We ran the most comprehensive AI bias evaluation to date for $10.13: **116,972 individual assessments across 11 social dimensions**, comparing OpenAI's [GPT-3.5-turbo](https://techcrunch.com/2023/03/01/openai-launches-an-api-for-chatgpt-plus-dedicated-capacity-for-enterprise-customers/) (March 2023) with [GPT-5-nano](https://openai.com/index/introducing-gpt-5/) (August 2025)—spanning the exact period when AI bias became a political flashpoint.
 
 **Important note on accuracy measurement**: On ambiguous items, correctness means selecting 'Can't be determined' per the dataset's design. On disambiguated items, correctness means selecting the labeled individual.
 
@@ -389,11 +389,11 @@ The results demonstrate measurable changes in AI behavior across multiple dimens
 
 </div>
 
-GPT-5 nano launched August 7, 2025—just 15 days after the July 23, 2025 "Preventing Woke AI in the Federal Government" executive order. **Coincidence or cause?** The timing raises uncomfortable questions about the relationship between political pressure and AI development.
+GPT-5 nano launched August 7, 2025—just 15 days after the July 23, 2025 "Preventing Woke AI in the Federal Government" executive order. The timing raises questions about the relationship between political pressure and AI development.
 
 The executive order mandates that federal agencies procure AI systems meeting "truthfulness" and "ideological neutrality" criteria—creating a high-stakes measurement problem. **How do you objectively test for bias when billions in federal contracts hang in the balance?**
 
-The BBQ dataset offers one answer: quantifiable, reproducible results instead of subjective political judgment. But our findings reveal something policymakers didn't anticipate: **The biggest change isn't what AI says—it's when AI chooses to stay silent.**
+The BBQ dataset offers one answer: quantifiable, reproducible results instead of subjective political judgment. Our findings show **the biggest change isn't what AI says—it's when AI chooses to stay silent.**
 
 <div style={{margin: '4rem 0 2rem', padding: '0 1rem'}}>
 
@@ -401,7 +401,7 @@ The BBQ dataset offers one answer: quantifiable, reproducible results instead of
 
 </div>
 
-The [BBQ dataset](https://aclanthology.org/2022.findings-acl.165.pdf) works like a Rorschach test for AI bias. Each question presents a scenario about people and asks AI to choose between two individuals or admit "Can't be determined." The genius is in the design: **ambiguous contexts** (where "Can't be determined" is correct) test whether AI makes stereotypical assumptions, while **disambiguated versions** (with clear answers) test reading comprehension.
+The [BBQ dataset](https://aclanthology.org/2022.findings-acl.165.pdf) tests AI bias through multiple-choice questions. Each question presents a scenario about people and asks AI to choose between two individuals or admit "Can't be determined." The design includes **ambiguous contexts** (where "Can't be determined" is correct) that test whether AI makes stereotypical assumptions, plus **disambiguated versions** (with clear answers) that test reading comprehension.
 
 **Selection bias note**: BBQ focuses on US English contexts with hand-built templates covering 11 social dimensions. Future work should involve community review for broader cultural representation.
 
@@ -830,7 +830,7 @@ This methodology offers a template for standardized bias evaluation. Regulatory 
 
 **However, measurement ≠ prescription**: This evaluation measures one specific behavior (uncertainty acknowledgment in social contexts) that could inform procurement audits under the executive order. It doesn't provide a comprehensive test of "ideological neutrality" or direct political alignment measures. The multiple valid interpretations underscore that different stakeholders disagree about what constitutes appropriate AI behavior.
 
-**The breakthrough insight**: AI systems learned to distinguish between "I won't answer" and "I can't answer with confidence." This isn't refusal—it's calibrated uncertainty, recognizing when confident judgments would be inappropriate. **This may be the most important behavioral change in AI safety we've measured.**
+AI systems now distinguish between "I won't answer" and "I can't answer with confidence." This isn't refusal—it's calibrated uncertainty, recognizing when confident judgments would be inappropriate. This behavioral change has significant implications for AI safety.
 
 <div style={{margin: '4rem 0 2rem', padding: '0 1rem'}}>
 
@@ -838,7 +838,7 @@ This methodology offers a template for standardized bias evaluation. Regulatory 
 
 </div>
 
-The data tells a clear story, but reasonable people interpret it differently. GPT-5-nano shows **dramatically increased abstention on unanswerable items** (up 16.8 percentage points) while maintaining accuracy when answers are clear. **Same behavioral shift, multiple valid interpretations:**
+GPT-5-nano shows **dramatically increased abstention on unanswerable items** (up 16.8 percentage points) while maintaining accuracy when answers are clear. **Same behavioral shift, multiple valid interpretations:**
 
 **What the data shows with statistical rigor:**
 
@@ -878,13 +878,13 @@ This evaluation provides an empirical foundation for policy discussions. The $10
 
 ### Key Takeaways
 
-What we've documented is **the largest measurable shift in AI behavior during the "woke AI" era**: a 16.8 percentage point increase in uncertainty acknowledgment when context is insufficient. Every social bias category improved with statistical significance (Cohen's h for proportions), yet **the same data supports radically different political narratives**.
+We documented **the largest measurable shift in AI behavior during the "woke AI" era**: a 16.8 percentage point increase in uncertainty acknowledgment when context is insufficient. Every social bias category improved with statistical significance (Cohen's h for proportions), yet **the same data supports radically different political narratives**.
 
-Most importantly, this isn't academic speculation—it's **$10.13 worth of hard data** that any organization can replicate. In an era of political polarization around AI bias, we finally have a methodology for evidence-based rather than anecdotal policy discussions.
+This isn't academic speculation—it's **$10.13 worth of replicable data**. In an era of political polarization around AI bias, this methodology enables evidence-based rather than anecdotal policy discussions.
 
-As AI systems become more prevalent in consequential decisions, the need for rigorous, transparent bias evaluation will only grow. The methodology demonstrated here—**accessible, replicable, and comprehensive**—offers a path forward that transcends political divisions by focusing on measurable behaviors rather than assumed intentions.
+As AI systems become more prevalent in consequential decisions, rigorous bias evaluation becomes essential. This **accessible, replicable methodology** focuses on measurable behaviors rather than assumed intentions.
 
-The question is no longer whether AI systems exhibit bias, but **how we collectively decide to measure, interpret, and respond** to the inevitable tradeoffs between competing values in AI development. This evaluation shows that we now have the tools to have those conversations based on data rather than speculation—a crucial step toward responsible AI deployment in a politically complex world.
+The question isn't whether AI systems exhibit bias, but **how we measure, interpret, and respond** to the tradeoffs between competing values in AI development. This evaluation provides tools for data-driven conversations about responsible AI deployment.
 
 ---
 
