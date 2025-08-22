@@ -11,7 +11,7 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { renderVarsInObject } from '../util';
-import { maybeLoadFromExternalFile } from '../util/file';
+import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
@@ -874,6 +874,11 @@ export class HttpProvider implements ApiProvider {
           this.config,
         )}`,
       );
+    }
+
+    // Process body to resolve file:// references
+    if (this.config.body) {
+      this.config.body = maybeLoadConfigFromExternalFile(this.config.body);
     }
   }
 

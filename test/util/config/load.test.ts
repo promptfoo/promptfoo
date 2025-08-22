@@ -213,7 +213,7 @@ describe('combineConfigs', () => {
         (
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
+        ) => {
           if (typeof path === 'string' && path === 'config1.json') {
             return JSON.stringify(config1);
           } else if (typeof path === 'string' && path === 'config2.json') {
@@ -442,7 +442,7 @@ describe('combineConfigs', () => {
         (
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
+        ) => {
           if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
               description: 'test1',
@@ -498,7 +498,7 @@ describe('combineConfigs', () => {
         (
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
+        ) => {
           if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
               description: 'test1',
