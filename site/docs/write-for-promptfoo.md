@@ -2,64 +2,92 @@
 id: write-for-promptfoo
 title: Write for Promptfoo
 sidebar_label: Write for Promptfoo
+description: Guidelines for contributing written content to Promptfoo's documentation and blog
+keywords: [contributing, writing, documentation, blog, content creation]
+sidebar_position: 99
 ---
 
 # Write for Promptfoo
 
-If you enjoy Promptfoo, would love to help others learn to use it, and are looking to build your reputation as a writer, this might be just the thing for you!
+If you enjoy Promptfoo, want to help others learn it, and would like to build your reputation as a writer, this is for you.
 
-## Types of content we value
+## What we publish
 
-We welcome contributions in various formats:
+We publish practical guides with working code for engineers developing, securing, and evaluating AI systems—from LLMs and agent frameworks to multi-agent deployments.
 
-- **Tutorials and guides** - Step-by-step instructions for common tasks.
-- **Integration use cases** - How to use Promptfoo with other tools, especially in the course of building a project or deployment.
-- **Best practices** - Tips and tricks for using Promptfoo effectively.
-- **Case studies** - Real-world examples of how Promptfoo is being used.
-- **Academic research** - Using Promptfoo in the process of creating published research.
-- **Troubleshooting guides** - Solutions to common problems.
-- **Integration examples** - How to use Promptfoo with other tools.
+Types of content we value:
+
+- **Engineering deep dives** - Novel benchmarks, evaluation methodologies, red teaming frameworks, safety testing protocols
+- **Production system guides** - Real-world Promptfoo deployments at scale, monitoring, observability, and performance optimization
+- **Research papers** - Academic work using Promptfoo for evaluation, with reproducible experiments and datasets
+- **Tutorials and guides** - Step-by-step instructions with exact commands and reproducible examples
+- **Video content** - YouTube tutorials, conference talks, and technical walkthroughs
+- **Integrations** - How to use Promptfoo with AI frameworks (LangChain, LlamaIndex, Crew AI, OpenAI Agents SDK), cloud providers (OpenAI, Anthropic, Google Vertex), CI/CD pipelines, and security tools
+- **Case studies** - Real-world deployments, metrics, and lessons learned from production systems
+- **Best practices** - Test design, guardrails, data quality, and reproducibility
+- **Troubleshooting** - Clear solutions to common problems
+
+> Avoid broad AI explainers. Go deep, show code, and report results.
+
+## Topics we want now
+
+- Production-scale Promptfoo deployments with monitoring and observability
+- Building red teaming workflows with Promptfoo in CI
+- Novel benchmark designs for multi-agent system evaluation
+- Evaluating model upgrades safely across providers (GPT-5, Claude 4, Gemini 2.5)
+- Reproducible jailbreak testing with shared datasets and academic rigor
+- Guardrail comparisons using Promptfoo evals
+- Promptfoo + OpenAI Agents SDK/CrewAI integration with live repo and CI
+- AI security testing workflows and best practices
+- Performance optimization for large-scale evaluation systems
+- Migrating from ad-hoc tests to evaluation plans
 
 ## Compensation
 
-We pay anything between $50 - $300 for the work being produced. We value engineering topics more over how-to guides, troublshooting, or integrations.
+We pay for quality technical content. Deep engineering posts with working code get more than basic tutorials.
 
 ## Writing guidelines
 
-- Keep it simple and clear
-- Use examples and code snippets
-- Include screenshots when helpful
+- Keep it clear and specific
+- Include runnable code with exact commands
+- Use version pins for models, SDKs, and Promptfoo
+- Add screenshots when helpful (include alt text)
+- Test all steps and provide a repo or example files
 - Follow our existing documentation style
-- Test your examples before submitting
 
-We expect the final work to have an authentic voice i.e. some form of personality. Anything entirely AI-generated will be rejected. We can do that ourselves.
+Write in your own voice. AI-assist is fine, but we reject copy-paste ChatGPT output.
 
-We also expect support for up to 30 days to keep the article updated. For example, if a new model version is released the article should be updated to use that instead.
+**Maintenance**: For 30 days after publication, we may request minor updates. Substantial revisions will be scoped separately.
+
+## How to pitch
+
+Email [inquiries@promptfoo.dev](mailto:inquiries@promptfoo.dev) with:
+
+- Topic and brief outline
+- Estimated length
+- Samples of your writing or relevant projects
+
+You will receive a response anywhere from a few days to two weeks.
 
 ## Process
 
-Email tabs@promptfoo.dev with:
+1. **Pitch review** - We evaluate your proposal and provide feedback
+2. **Draft submission** - Submit as GitHub PR or Google Doc
+3. **Editorial review** - We review and provide feedback
+4. **Final publication** - After final checks, we publish on our site
+5. **Promotion** - We promote your work on social media, newsletter, and Discord
 
-- Topic
-- Outline
-- Estimated length
-- Samples of your writing
+## Rights and licensing
 
-You will receive a response from anything within a few days to a couple of weeks.
+By submitting content, you grant Promptfoo a non-exclusive license to publish and distribute your article. You retain full ownership and may republish your work elsewhere. We ask that you use our URL as the canonical source when cross-posting.
 
-Once your draft is complete you'll need to add it to a GitHub PR, upon which we'll review and provide feedback. Once updates have been made and final checks have passed, we'll publish it on our site. Following this, we'll advertise the work on our social media, newsletter, and Discord.
+No affiliate links are permitted. Please disclose any conflicts of interest.
 
 ## Need help?
 
-If you have questions about contributing or need help getting started, feel free to reach out to Tabs on [Discord](https://discord.gg/promptfoo).
+If you have questions about contributing or need help getting started, reach out to Tabs on [Discord](https://discord.gg/promptfoo).
 
 ## FAQ
 
 **Q: May I cross-post to other websites?**  
-A: Yes, but only on the condition that canonical URLs are supported and that you use the link from our blog.
-
-**Q: Which languages may I use?**  
-A: English. We have no way of verifying the quality of writing in other languages at present.
-
-**Q: What rights do I have over what I produce?**  
-A: After you've written the article it will belong to Promptfoo and be published under the same license with which our content is distributed. You'll need to use canonical URLs wherever you cross-post, and the content must remain the same. You will be acknowledged as the author.
+A: Yes, but only on sites that support canonical URLs. Use our link as the canonical URL.
