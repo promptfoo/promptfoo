@@ -178,4 +178,57 @@ describe('ReportPage', () => {
 
     expect(container.firstChild).toBeNull();
   });
+
+  it('should properly encode the redirect URL when special characters are present in pathname and search', () => {
+    const navigate = vi.fn();
+    mockedUseNavigate.mockReturnValue(navigate);
+
+    mockedUseUserStore.mockReturnValue({
+      email: null,
+      isLoading: false,
+      fetchEmail: vi.fn(),
+    });
+
+    const pathname = '/report/path with spaces';
+    const search = '?evalId=test with spaces&param2=value with spaces';
+    const url = `http://localhost${pathname}${search}`;
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: new URL(url),
+    });
+
+    render(
+      <MemoryRouter>
+        <ReportPage />
+      </MemoryRouter>,
+    );
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith(
+      `/login?type=report&redirect=/report/path%20with%20spaces?evalId=test%20with%20spaces&param2=value%20with%20spaces`,
+    );
+  });
+
+  it('should handle malformed evalId values gracefully', () => {
+    const url = 'http://localhost/report?evalId=malformed-eval-id!';
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: new URL(url),
+    });
+
+    render(
+      <MemoryRouter>
+        <ReportPage />
+      </MemoryRouter>,
+    );
+
+    expect(mockedUsePageMeta).toHaveBeenCalledTimes(1);
+    expect(mockedUsePageMeta).toHaveBeenCalledWith({
+      title: 'Red team report',
+      description: 'View or browse red team results',
+    });
+    expect(screen.getByText('Report Component')).toBeInTheDocument();
+    expect(screen.queryByText('ReportIndex Component')).not.toBeInTheDocument();
+  });
 });
