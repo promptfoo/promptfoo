@@ -96,3 +96,36 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
     }
   }
 });
+
+userRouter.get('/cloud/status', async (req: Request, res: Response): Promise<void> => {
+  try {
+    let cloudConfig;
+    try {
+      const cloudModule = await import('../../globalConfig/cloud');
+      cloudConfig = cloudModule.cloudConfig;
+    } catch (importError) {
+      logger.error(`Error importing cloud config: ${importError}`);
+      throw new Error('Cloud configuration unavailable');
+    }
+
+    const isAuthenticated = cloudConfig.isEnabled();
+    const apiKey = cloudConfig.getApiKey();
+    const appUrl = cloudConfig.getAppUrl();
+
+    const responseData = {
+      isAuthenticated,
+      hasApiKey: !!apiKey,
+      appUrl: isAuthenticated ? appUrl : null, // Only expose URL if authenticated
+    };
+
+    res.json(ApiSchemas.User.CloudStatus.Response.parse(responseData));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.error(`Cloud status validation error: ${fromError(error)}`);
+      res.status(500).json({ error: 'Invalid cloud status data' });
+    } else {
+      logger.error(`Error checking cloud status: ${error}`);
+      res.status(500).json({ error: 'Failed to check cloud status' });
+    }
+  }
+});
