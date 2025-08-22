@@ -902,15 +902,15 @@ html[data-theme='dark'] .modelIncorrect {
   .scantronContainer {
     padding: 0 0.5rem;
   }
-  
+
   .scantronHeader {
     padding: 1.5rem;
   }
-  
+
   .questionBlock {
     padding: 1rem;
   }
-  
+
   .modelComparison {
     justify-content: center;
   }
