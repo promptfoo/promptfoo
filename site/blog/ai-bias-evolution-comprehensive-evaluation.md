@@ -44,7 +44,7 @@ When artificial intelligence researchers at New York University published the Bi
 
 To understand how AI bias has evolved during this contentious period, we conducted the most comprehensive bias evaluation attempted at this scale: **116,972 individual assessments across 11 social dimensions**, comparing OpenAI's [GPT-3.5-turbo](https://techcrunch.com/2023/03/01/openai-launches-an-api-for-chatgpt-plus-dedicated-capacity-for-enterprise-customers/) (released March 1, 2023) with [GPT-5-nano](https://openai.com/index/introducing-gpt-5/) (released August 7, 2025). The evaluation cost exactly **$10.13** ($3.96 for GPT-3.5-turbo using 7.81M tokens, $6.16 for GPT-5-nano using 22.09M tokens), making this methodology accessible to virtually any organization seeking to monitor AI bias.
 
-**Important methodological note**: Our GPT-5-nano results differ from OpenAI's [GPT-5 system card](https://openai.com/index/introducing-gpt-5/) BBQ performance due to model tier differences (nano vs thinking), constrained output format, and no web search capability.
+**Important methodological note**: Our GPT-5-nano results differ from OpenAI's [GPT-5 system card](https://openai.com/index/introducing-gpt-5/) BBQ performance, which shows high ambiguous accuracy for thinking models. Reasons for differences: model tier (nano vs thinking), constrained output format, no web search capability, and different decoding parameters. We disclose this to help readers triangulate results.
 
 The results reveal a more nuanced story than either AI critics or advocates might expect—one that illuminates not just how AI systems have changed, but why reasonable people can interpret the same behavioral shifts so differently.
 
@@ -58,7 +58,9 @@ The timing of our comparison is crucial. GPT-3.5-turbo was released in March 202
 
 ## The Experiment: Measuring Bias at Scale
 
-The [BBQ dataset](https://aclanthology.org/2022.findings-acl.165.pdf) (published May 2022 by NYU researchers) tests AI systems with carefully constructed scenarios designed to reveal social bias. Each question presents a context, asks about a person's characteristics or behavior, and offers three choices: two specific individuals and "Can't be determined." The dataset's key innovation is including both **ambiguous contexts** (where insufficient information makes judgment impossible and "Can't be determined" is the normatively correct answer) and **disambiguated versions** (where the context provides clear answers).
+The [BBQ dataset](https://aclanthology.org/2022.findings-acl.165.pdf) (published May 2022 by NYU researchers) tests AI systems with carefully constructed scenarios designed to reveal social bias. Each question presents a context, asks about a person's characteristics or behavior, and offers three choices: two specific individuals and "Can't be determined." The dataset's key innovation is including both **ambiguous contexts** (where insufficient information makes judgment impossible and "Can't be determined" is the normatively correct answer per BBQ's design) and **disambiguated versions** (where the context provides clear answers).
+
+**Selection bias note**: BBQ focuses on US English contexts with hand-built templates covering 11 social dimensions. Future work should involve community review for broader cultural representation.
 
 This design directly targets a core mechanism of bias: the tendency to make assumptions about people based on limited information and social stereotypes.
 
@@ -193,7 +195,7 @@ Consider this [real scenario from the BBQ dataset](https://huggingface.co/datase
 This behavioral shift—from making assumptions to acknowledging uncertainty—sits at the heart of contemporary debates about AI bias. **The same data supports multiple reasonable interpretations:**
 
 ### 🔧 The Technical Perspective
-Views increased epistemic humility as **improved accuracy**. GPT-5-nano demonstrates better calibration and uncertainty quantification, making fewer unfounded inferences from limited data.
+Views increased epistemic humility as **improved calibration**. GPT-5-nano demonstrates better uncertainty quantification, making fewer unfounded inferences from limited data while maintaining performance when information is available.
 
 ### 🛡️ The Safety Perspective  
 Emphasizes **harm reduction**. AI systems that resist stereotypical assumptions are less likely to perpetuate biases against marginalized groups, even if this means providing fewer definitive answers.
@@ -236,7 +238,9 @@ The comparison spans a critical period in AI development:
 - **GPT-5-nano Release:** August 7, 2025 (height of "woke AI" debate)
 - **Time Gap:** 2 years, 5 months
 
-This span encompasses the entire lifecycle of public AI bias concerns, from initial academic research through current political controversy. The systematic improvements across all bias categories suggest **focused post-training efforts**, though OpenAI has not disclosed specific bias mitigation techniques used in GPT-5's development.
+This span encompasses the entire lifecycle of public AI bias concerns, from initial academic research through current political controversy. The systematic improvements across all bias categories suggest **focused post-training efforts**.
+
+**OpenAI's stated approach**: The GPT-5 system card describes a shift from refusal-centric safety to "safe-completions" that aim to be helpful while staying within policy bounds. It emphasizes reducing deception and improving abstention when tasks are impossible—exactly the behavior we observe in ambiguous BBQ contexts.
 
 <div style={{textAlign: 'center', margin: '2rem 0'}}>
   <img 
@@ -307,7 +311,9 @@ Several caveats limit the generalizability of these findings:
 ### Dataset Age and Coverage
 The evaluation used a dataset published in 2022, potentially missing emerging forms of bias or changing social contexts. Of the expected 117,148 records (based on documented dataset splits), our evaluation captured 116,972 records—a 99.8% coverage rate with 176 missing records requiring further investigation.
 
-**Statistical Methods**: Confidence intervals computed using Wilson score intervals for proportions; statistical significance tested using two-proportion z-tests. All token counts and costs verified against API usage logs (prices as of evaluation date).
+**Statistical Methods**: Confidence intervals computed using Wilson score intervals for proportions; statistical significance tested using two-proportion z-tests. All token counts and costs verified against API usage logs.
+
+**Cost transparency**: Total cost $10.13 ($3.96 for GPT-3.5-turbo at 7.81M tokens, $6.16 for GPT-5-nano at 22.09M tokens) based on [OpenAI API pricing](https://openai.com/api/pricing/) as of evaluation date (August 2025). Prices subject to change.
 
 ### Task Limitations  
 The focus on multiple-choice questions may not capture bias in open-ended generation tasks that dominate real-world AI applications. The BBQ bias scores computed (sAMB and sDIS) show near-zero stereotyping in both models on disambiguated questions—BBQ's bias score penalizes stereotype-aligned errors, and both models' sDIS ≈ 0, consistent with high accuracy on factual questions. The improvements primarily reflect better uncertainty handling rather than reduced stereotype endorsement.
@@ -367,15 +373,23 @@ Understanding which categories show most improvement can guide future research p
 ### Supporting Alignment Research
 The relationship between uncertainty acknowledgment and bias reduction offers insights for AI alignment strategies.
 
-## Conclusion: What Trump's Orders Miss—And Why It Matters
+## Policy Implications: Measurement, Not Prescription
 
-The evolution from GPT-3.5-turbo to GPT-5-nano reveals AI systems becoming **more sophisticated in handling social uncertainty** during the exact period when "woke AI" became a political battleground. But the interpretation of this change depends heavily on one's framework for evaluating AI behavior.
+**What this evaluation provides**: A standardized method for measuring one specific behavior (uncertainty acknowledgment in social contexts) that could inform procurement audits under the executive order.
+
+**What it doesn't provide**: A comprehensive test of "ideological neutrality" or a direct measure of political alignment. Organizations should pair BBQ with domain-specific audits for complete evaluation.
+
+**Calibration, not censorship**: The increase in "Unknown" selection represents better uncertainty calibration—recognizing when tasks are impossible rather than refusing to engage with legitimate queries.
+
+## Conclusion: Beyond the Culture War
+
+The evolution from GPT-3.5-turbo to GPT-5-nano reveals AI systems becoming **more sophisticated in handling social uncertainty** during the exact period when "woke AI" became a political battleground. The interpretation depends heavily on one's framework:
 
 **What the data shows with statistical rigor:**
-- **Technical metrics** show improved accuracy (8.2 percentage point increase, highly significant p < 0.001)
-- **Most dramatic behavioral change**: 16.8 percentage point increase in epistemic humility for ambiguous contexts (29.9% vs 13.1%)
-- **Systematic improvement** across all social dimensions with measurable effect sizes
-- **Reproducible methodology** that costs exactly $10.13 for comprehensive evaluation
+- **Regime-specific improvements**: 16.8 percentage point increase in epistemic humility for ambiguous contexts without utility loss on disambiguated questions
+- **Better calibration**: Improved uncertainty acknowledgment where confidence would be misplaced
+- **Systematic progress** across all social dimensions with measurable effect sizes
+- **Reproducible methodology** costing exactly $10.13 for comprehensive evaluation
 
 <div style={{textAlign: 'center', margin: '2rem 0'}}>
   <img 
