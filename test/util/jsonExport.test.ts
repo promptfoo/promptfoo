@@ -98,12 +98,12 @@ describe('JSON export with bfj', () => {
       await writeOutput(tempFilePath, mockEval, 'https://test.url');
 
       const content = fs.readFileSync(tempFilePath, 'utf8');
-      
+
       // Verify proper 2-space indentation
       expect(content).toContain('{\n  "evalId":');
       expect(content).toContain('  "results": {');
       expect(content).toContain('    "version":');
-      
+
       // Should be valid JSON
       expect(() => JSON.parse(content)).not.toThrow();
     });
@@ -132,18 +132,16 @@ describe('JSON export with bfj', () => {
 
     it('should handle RangeError gracefully with helpful message', async () => {
       await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow(
-        'Dataset too large for JSON export'
+        'Dataset too large for JSON export',
       );
 
       await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow(
-        'Consider using JSONL format instead'
+        'Consider using JSONL format instead',
       );
     });
 
     it('should include result count in error message', async () => {
-      await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow(
-        '50000 results'
-      );
+      await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow('50000 results');
     });
 
     it('should not create output file when memory error occurs', async () => {
@@ -163,13 +161,13 @@ describe('JSON export with bfj', () => {
       mockEval.toEvaluateSummary.mockRejectedValue(testError);
 
       await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow(
-        'Database connection failed'
+        'Database connection failed',
       );
     });
 
     it('should handle file system errors', async () => {
       const invalidPath = '/invalid/path/that/does/not/exist/output.json';
-      
+
       mockEval.toEvaluateSummary.mockResolvedValue({
         version: 3,
         results: [],
@@ -190,13 +188,13 @@ describe('JSON export with bfj', () => {
           { raw: 'Test prompt 2', label: 'prompt2' },
         ],
         results: [
-          { 
-            testIdx: 0, 
-            promptIdx: 0, 
-            success: true, 
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            success: true,
             score: 1.0,
             vars: { input: 'test' },
-            output: 'response'
+            output: 'response',
           },
         ],
         stats: {
@@ -215,13 +213,9 @@ describe('JSON export with bfj', () => {
       const parsed = JSON.parse(content);
 
       // Verify exact structure
-      expect(Object.keys(parsed).sort()).toEqual([
-        'evalId',
-        'results', 
-        'config',
-        'shareableUrl',
-        'metadata'
-      ].sort());
+      expect(Object.keys(parsed).sort()).toEqual(
+        ['evalId', 'results', 'config', 'shareableUrl', 'metadata'].sort(),
+      );
 
       expect(parsed.results).toEqual(expectedSummary);
     });

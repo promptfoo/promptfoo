@@ -29,15 +29,15 @@ describe('bfj integration for large JSON', () => {
       success: true,
       score: Math.random(),
       latencyMs: 100 + i,
-      vars: { 
+      vars: {
         input: `This is a test input for evaluation ${i} with substantial content to increase object size`,
         context: `Additional context data for test ${i} that makes each result object significantly larger`,
-        metadata: { 
-          id: i, 
+        metadata: {
+          id: i,
           timestamp: new Date().toISOString(),
           tags: ['performance', 'test', `batch-${Math.floor(i / 1000)}`],
-          details: `Detailed information about test case ${i} with more content`
-        }
+          details: `Detailed information about test case ${i} with more content`,
+        },
       },
       output: `This is the generated output for test case ${i} with comprehensive response content that increases the overall size of the result object significantly`,
       provider: 'test-provider',
@@ -46,8 +46,8 @@ describe('bfj integration for large JSON', () => {
         assert: [
           { type: 'equals', value: 'expected response' },
           { type: 'contains', value: 'key phrase' },
-          { type: 'not-contains', value: 'unwanted content' }
-        ]
+          { type: 'not-contains', value: 'unwanted content' },
+        ],
       },
       gradingResult: {
         pass: true,
@@ -55,9 +55,9 @@ describe('bfj integration for large JSON', () => {
         reason: `Detailed grading explanation for test ${i} with comprehensive analysis`,
         componentResults: [
           { pass: true, score: 1.0, reason: 'Component 1 analysis' },
-          { pass: true, score: 0.9, reason: 'Component 2 analysis' }
-        ]
-      }
+          { pass: true, score: 0.9, reason: 'Component 2 analysis' },
+        ],
+      },
     }));
 
     const largeOutputData = {
@@ -66,15 +66,15 @@ describe('bfj integration for large JSON', () => {
         version: 3,
         timestamp: new Date().toISOString(),
         prompts: [
-          { 
+          {
             raw: 'This is a comprehensive test prompt with substantial content',
             label: 'performance-test-prompt',
-            id: 'prompt-1'
+            id: 'prompt-1',
           },
-          { 
+          {
             raw: 'This is another test prompt for the large dataset evaluation',
-            label: 'performance-test-prompt-2', 
-            id: 'prompt-2'
+            label: 'performance-test-prompt-2',
+            id: 'prompt-2',
           },
         ],
         results: largeResults,
@@ -82,21 +82,21 @@ describe('bfj integration for large JSON', () => {
           successes: largeResults.length,
           failures: 0,
           errors: 0,
-          tokenUsage: { 
-            total: largeResults.length * 50, 
-            prompt: largeResults.length * 25, 
+          tokenUsage: {
+            total: largeResults.length * 50,
+            prompt: largeResults.length * 25,
             completion: largeResults.length * 25,
             cached: 0,
-            numRequests: largeResults.length
+            numRequests: largeResults.length,
           },
         },
       },
-      config: { 
+      config: {
         description: 'Large dataset performance test configuration',
         prompts: ['prompt1.txt', 'prompt2.txt'],
         providers: ['test-provider'],
         tests: 'large-test-dataset.yaml',
-        outputPath: 'large-output.json'
+        outputPath: 'large-output.json',
       },
       shareableUrl: 'https://app.promptfoo.dev/eval/large-test-12345',
       metadata: {
@@ -105,8 +105,8 @@ describe('bfj integration for large JSON', () => {
         platform: process.platform,
         exportedAt: new Date().toISOString(),
         author: 'integration-test',
-        description: 'Large dataset integration test for memory efficiency'
-      }
+        description: 'Large dataset integration test for memory efficiency',
+      },
     };
 
     // This should work with bfj even though it would likely fail with JSON.stringify
@@ -116,7 +116,7 @@ describe('bfj integration for large JSON', () => {
 
     // Verify the file was created successfully
     expect(fs.existsSync(tempFilePath)).toBe(true);
-    
+
     const stats = fs.statSync(tempFilePath);
     expect(stats.size).toBeGreaterThan(5000000); // Should be a large file (>5MB)
 
@@ -129,7 +129,9 @@ describe('bfj integration for large JSON', () => {
     // Should complete in reasonable time (bfj is slower but manageable)
     expect(duration).toBeLessThan(30000); // 30 seconds max for very large dataset
 
-    console.log(`Successfully exported ${largeResults.length} results in ${duration}ms, file size: ${(stats.size / 1024 / 1024).toFixed(2)}MB`);
+    console.log(
+      `Successfully exported ${largeResults.length} results in ${duration}ms, file size: ${(stats.size / 1024 / 1024).toFixed(2)}MB`,
+    );
   }, 45000); // 45 second timeout for large data test
 
   it('should produce identical structure to JSON.stringify for smaller data', async () => {
@@ -146,7 +148,7 @@ describe('bfj integration for large JSON', () => {
       },
       config: { test: true },
       shareableUrl: null,
-      metadata: { version: '1.0.0' }
+      metadata: { version: '1.0.0' },
     };
 
     // Export with bfj
@@ -177,17 +179,17 @@ describe('bfj integration for large JSON', () => {
         nested: {
           deep: {
             structure: {
-              value: 'deeply nested'
-            }
-          }
-        }
+              value: 'deeply nested',
+            },
+          },
+        },
       },
       config: {},
-      shareableUrl: null
+      shareableUrl: null,
     };
 
     await bfj.write(tempFilePath, edgeCaseData, { space: 2 });
-    
+
     const content = fs.readFileSync(tempFilePath, 'utf8');
     const parsed = JSON.parse(content);
 
