@@ -228,7 +228,7 @@ export async function writeOutput(
     fs.writeFileSync(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      const text = batchResults.map((result) => JSON.stringify(result)).join('\n') + '\n';
+      const text = batchResults.map((result) => JSON.stringify(result)).join(os.EOL) + os.EOL;
       fs.appendFileSync(outputPath, text);
     }
   } else if (outputExtension === 'xml') {
