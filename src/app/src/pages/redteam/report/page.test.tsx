@@ -158,7 +158,7 @@ describe('ReportPage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Waiting for report data')).toBeInTheDocument();
     expect(screen.queryByText('Report Component')).not.toBeInTheDocument();
     expect(screen.queryByText('ReportIndex Component')).not.toBeInTheDocument();
   });

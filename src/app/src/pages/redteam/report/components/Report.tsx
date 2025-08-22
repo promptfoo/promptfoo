@@ -10,6 +10,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
@@ -260,7 +261,21 @@ const App: React.FC = () => {
   });
 
   if (!evalData || !evalId) {
-    return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '9rem',
+        }}
+      >
+        <CircularProgress size={22} />
+        <Box>Waiting for report data</Box>
+      </Box>
+    );
   }
 
   if (!evalData.config.redteam) {
