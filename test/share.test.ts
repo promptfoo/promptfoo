@@ -11,7 +11,7 @@ import {
 } from '../src/share';
 import { makeRequest } from '../src/util/cloud';
 
-import type EvalResult from 'src/models/evalResult';
+import type EvalResult from '../src/models/evalResult';
 
 import type Eval from '../src/models/eval';
 

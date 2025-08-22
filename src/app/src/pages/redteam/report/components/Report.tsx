@@ -11,6 +11,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
@@ -26,6 +27,7 @@ import {
   type EvaluateSummaryV2,
   type GradingResult,
   isProviderOptions,
+  ResultFailureReason,
   type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
@@ -119,7 +121,7 @@ const App: React.FC = () => {
       }
 
       // Exclude results with errors from being counted as failures
-      if (result.error) {
+      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
         return;
       }
 
@@ -159,7 +161,7 @@ const App: React.FC = () => {
       }
 
       // Exclude results with errors from being counted
-      if (result.error) {
+      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
         return;
       }
 
@@ -192,7 +194,7 @@ const App: React.FC = () => {
         }
 
         // Exclude results with errors from statistics
-        if (row.error) {
+        if (row.error && row.failureReason === ResultFailureReason.ERROR) {
           return acc;
         }
 
@@ -260,7 +262,21 @@ const App: React.FC = () => {
   });
 
   if (!evalData || !evalId) {
-    return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '9rem',
+        }}
+      >
+        <CircularProgress size={22} />
+        <Box>Waiting for report data</Box>
+      </Box>
+    );
   }
 
   if (!evalData.config.redteam) {
