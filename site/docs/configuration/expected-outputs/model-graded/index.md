@@ -9,32 +9,27 @@ Promptfoo supports several types of model-graded assertions:
 
 ## Output-based
 
-- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - Promptfoo's general-purpose grader; uses an LLM to grade outputs against custom criteria or rubrics.
-- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Similar to above; checks if answers meet specific requirements using OpenAI's public evals prompts.
-- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Compares LLM output against reference answers to check factual consistency. Uses OpenAI's public evals. Evaluates whether the output is:
-  - A subset of the reference (contains some facts but missing others).
-  - A superset of the reference (contains all facts plus additional ones).
-  - Equivalent to the reference (same factual content).
-  - In disagreement with the reference (contradictory facts).
-  - Different but factually equivalent (different wording, same meaning).
-- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Uses chain-of-thought prompting to evaluate outputs against custom criteria.
-- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Ensures LLM output is directly related to the original query.
-- [`similar`](/docs/configuration/expected-outputs/similar) - Checks semantic similarity between output and expected value using embeddings.
-- [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - Uses a dedicated evaluation model to score inputs/outputs against criteria.
-- [`classifier`](/docs/configuration/expected-outputs/classifier) - Uses the classifier assert type to run the LLM output through any HuggingFace text classifier. See [classifier grading docs](/docs/configuration/expected-outputs/classifier).
-- [`moderation`](/docs/configuration/expected-outputs/moderation) - Use the moderation assert type to ensure that LLM outputs are safe. See [moderation grading docs](/docs/configuration/expected-outputs/moderation).
-- [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - Compares multiple outputs and selects the best.
-- [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - Selects the output with the highest aggregate score from other assertions.
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - Promptfoo's general-purpose grader; uses an LLM to evaluate outputs against custom criteria or rubrics.
+- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Checks if LLM answers meet specific requirements using OpenAI's public evals prompts.
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Evaluates factual consistency between LLM output and a reference statement. Uses OpenAI's public evals prompt to determine if the output is factually consistent with the reference.
+- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Uses chain-of-thought prompting to evaluate outputs against custom criteria following the G-Eval framework.
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Evaluates whether LLM output is directly related to the original query.
+- [`similar`](/docs/configuration/expected-outputs/similar) - Checks semantic similarity between output and expected value using embedding models.
+- [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - Alternative scoring approach using a dedicated evaluation model to score inputs/outputs against criteria.
+- [`classifier`](/docs/configuration/expected-outputs/classifier) - Runs LLM output through HuggingFace text classifiers for detection of tone, bias, toxicity, and other properties. See [classifier grading docs](/docs/configuration/expected-outputs/classifier).
+- [`moderation`](/docs/configuration/expected-outputs/moderation) - Uses OpenAI's moderation API to ensure LLM outputs are safe and comply with usage policies. See [moderation grading docs](/docs/configuration/expected-outputs/moderation).
+- [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - Compares multiple outputs from different prompts/providers and selects the best one based on custom criteria.
+- [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - Selects the output with the highest aggregate score based on other assertion results.
 
 ## Context-based
 
-- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - Evaluates whether provided context contains information needed for a question or fact.
-- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - Evaluates whether context is relevant to the original query.
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - Evaluates if LLM output is supported by the context.
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - Evaluates whether retrieved context contains the information needed to answer a given question or support a ground truth fact.
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - Evaluates whether retrieved context is relevant and useful for answering the original query.
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - Evaluates whether the LLM output is factually supported by and consistent with the provided context.
 
 ## Conversational
 
-- [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - Evaluates whether responses remain relevant throughout a conversation.
+- [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - Evaluates whether responses remain relevant and contextually appropriate throughout multi-turn conversations.
 
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
@@ -156,7 +151,7 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
 
 1. Using the `--grader` CLI option:
 
-   ```
+   ```bash
    promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
@@ -288,19 +283,11 @@ Classifiers can be used to detect tone, bias, toxicity, helpfulness, and much mo
 
 ---
 
-## Context-based
-
-Context-based assertions are a special class of model-graded assertions that evaluate whether the LLM's output is supported by context provided at inference time. They are particularly useful for evaluating RAG systems.
-
-- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
-- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
-
-### Defining context
+## Defining context for context-based assertions
 
 Context can be defined in one of two ways: statically using test case variables or dynamically from the provider's response.
 
-#### Statically via test variables
+### Statically via test variables
 
 Set `context` as a variable in your test case:
 
@@ -314,7 +301,7 @@ tests:
         threshold: 0.8
 ```
 
-#### Dynamically via Context Transform
+### Dynamically via Context Transform
 
 Defining `contextTransform` allows you to construct context from provider responses. This is particularly useful for RAG systems.
 
