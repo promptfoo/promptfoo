@@ -8,6 +8,7 @@ import ListAltIcon from '@mui/icons-material/ListAlt';
 import PrintIcon from '@mui/icons-material/Print';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -338,25 +339,50 @@ const App: React.FC = () => {
         {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
           <Box
-            sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}
+            sx={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 1 }}
             className="print-hide"
           >
-            <Tooltip title="View all logs" placement="top">
-              <IconButton
-                sx={{ position: 'relative' }}
-                aria-label="view all logs"
-                onClick={(event) => {
-                  const url = `/eval/${evalId}`;
-                  if (event.ctrlKey || event.metaKey) {
-                    window.open(url, '_blank');
-                  } else {
-                    navigate(url);
-                  }
-                }}
-              >
-                <ListAltIcon />
-              </IconButton>
-            </Tooltip>
+            {evalId && (
+              <Tooltip title="View eval details and logs" placement="top">
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<ListAltIcon fontSize="small" />}
+                  sx={{
+                    minHeight: 36,
+                    py: 0.5,
+                    px: 1.5,
+                    fontSize: '0.8125rem',
+                    alignSelf: 'center',
+                    color: 'inherit',
+                    borderColor: (theme) =>
+                      theme.palette.mode === 'dark'
+                        ? 'rgba(255, 255, 255, 0.23)'
+                        : 'rgba(0, 0, 0, 0.23)',
+                    '&:hover': {
+                      borderColor: (theme) =>
+                        theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.23)'
+                          : 'rgba(0, 0, 0, 0.23)',
+                      backgroundColor: (theme) =>
+                        theme.palette.mode === 'dark'
+                          ? 'rgba(255, 255, 255, 0.08)'
+                          : 'rgba(0, 0, 0, 0.04)',
+                    },
+                  }}
+                  onClick={(event) => {
+                    const url = `/eval/${evalId}`;
+                    if (event.ctrlKey || event.metaKey) {
+                      window.open(url, '_blank');
+                    } else {
+                      navigate(url);
+                    }
+                  }}
+                >
+                  View Eval
+                </Button>
+              </Tooltip>
+            )}
             <ReportDownloadButton
               evalDescription={evalData.config.description || evalId}
               evalData={evalData}
