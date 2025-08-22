@@ -449,15 +449,11 @@ export default function Review({
   }, [pollInterval]);
 
   return (
-    <PageWrapper
-      title="Review & Run"
-      description="Review your configuration and run the red-team evaluation to identify potential vulnerabilities."
-      onBack={onBack}
-    >
+    <PageWrapper title="Review & Run" onBack={onBack}>
       <Box>
         <TextField
           fullWidth
-          label="Configuration Description"
+          label="Description"
           placeholder="My Red Team Configuration"
           value={config.description}
           onChange={handleDescriptionChange}
