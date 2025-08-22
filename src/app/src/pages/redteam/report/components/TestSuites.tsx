@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -12,6 +13,10 @@ import {
   GridFilterModel,
   GridRenderCellParams,
   type GridSortModel,
+  GridToolbarColumnsButton,
+  GridToolbarContainer,
+  GridToolbarDensitySelector,
+  GridToolbarFilterButton,
 } from '@mui/x-data-grid';
 import {
   categoryAliases,
@@ -34,6 +39,17 @@ interface TestSuitesProps {
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
 
+// Custom toolbar without export button
+function CustomToolbar() {
+  return (
+    <GridToolbarContainer>
+      <GridToolbarColumnsButton />
+      <GridToolbarFilterButton />
+      <GridToolbarDensitySelector />
+    </GridToolbarContainer>
+  );
+}
+
 const TestSuites: React.FC<TestSuitesProps> = ({
   evalId,
   categoryStats,
@@ -43,6 +59,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
   setVulnerabilitiesDataGridFilterModel,
 }) => {
   const navigate = useNavigate();
+  const { recordEvent } = useTelemetry();
   const [sortModel, setSortModel] = React.useState<GridSortModel>([
     { field: 'attackSuccessRate', sort: 'desc' },
   ]);
@@ -222,8 +239,18 @@ const TestSuites: React.FC<TestSuitesProps> = ({
               color="inherit"
               style={{ marginLeft: 8 }}
               onClick={() => {
-                window.location.href =
-                  'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A';
+                // Track the mitigation button click
+                recordEvent('feature_used', {
+                  feature: 'redteam_apply_mitigation_clicked',
+                  plugin: params.row.pluginName,
+                  evalId,
+                });
+
+                // Open email in new tab
+                window.open(
+                  'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A',
+                  '_blank',
+                );
               }}
             >
               Apply mitigation
@@ -276,18 +303,13 @@ const TestSuites: React.FC<TestSuitesProps> = ({
             onSortModelChange={setSortModel}
             filterModel={vulnerabilitiesDataGridFilterModel}
             onFilterModelChange={setVulnerabilitiesDataGridFilterModel}
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{
-              pagination: {
-                paginationModel: { pageSize: 10 },
-              },
-            }}
             sx={{
               '& .MuiDataGrid-cell': {
                 display: 'flex',
                 alignItems: 'center',
               },
             }}
+            slots={{ toolbar: CustomToolbar }}
           />
         </Box>
       </Paper>

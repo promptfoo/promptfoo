@@ -8,6 +8,12 @@ vi.mock('react-router-dom', () => ({
   useNavigate: vi.fn(),
 }));
 
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: () => ({
+    recordEvent: vi.fn(),
+  }),
+}));
+
 vi.mock('@promptfoo/redteam/constants', () => ({
   categoryAliases: {
     'test-plugin': 'Test Plugin',
@@ -233,6 +239,27 @@ describe('TestSuites Component Navigation', () => {
     fireEvent.click(viewLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith('/eval/test-eval-123?plugin=test-plugin');
+  });
+
+  it('should open email in new tab when clicking Apply mitigation', () => {
+    const mockOpen = vi.fn();
+    const originalOpen = window.open;
+    window.open = mockOpen;
+
+    render(<TestSuites {...defaultProps} />);
+
+    const applyMitigationButtons = screen.getAllByText('Apply mitigation');
+    const applyMitigationButton = applyMitigationButtons[0];
+
+    fireEvent.click(applyMitigationButton);
+
+    expect(mockOpen).toHaveBeenCalledWith(
+      'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A',
+      '_blank'
+    );
+
+    // Restore original window.open
+    window.open = originalOpen;
   });
 });
 
