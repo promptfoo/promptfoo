@@ -19,7 +19,7 @@ jest.mock('../../src/logger', () => ({
   warn: jest.fn(),
 }));
 
-describe('JSON export with bfj', () => {
+describe('JSON export with improved error handling', () => {
   let tempDir: string;
   let tempFilePath: string;
   let mockEval: any;
@@ -68,7 +68,7 @@ describe('JSON export with bfj', () => {
       });
     });
 
-    it('should export JSON successfully using bfj', async () => {
+    it('should export JSON successfully', async () => {
       await writeOutput(tempFilePath, mockEval, 'https://share.url');
 
       expect(fs.existsSync(tempFilePath)).toBe(true);

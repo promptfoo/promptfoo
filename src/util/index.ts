@@ -1,8 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-// @ts-ignore - bfj doesn't have TypeScript declarations
-import bfj from 'bfj';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
@@ -87,8 +85,8 @@ export function createOutputMetadata(evalRecord: Eval) {
 }
 
 /**
- * Memory-efficient JSON writer using bfj (Big Friendly JSON) to handle large datasets.
- * Uses try-catch approach to gracefully handle memory issues.
+ * JSON writer with improved error handling for large datasets.
+ * Provides helpful error messages when memory limits are exceeded.
  */
 async function writeJsonOutputSafely(
   outputPath: string,
@@ -98,7 +96,6 @@ async function writeJsonOutputSafely(
   const metadata = createOutputMetadata(evalRecord);
 
   try {
-    // Attempt the normal approach - let toEvaluateSummary() fail if it's too large
     const summary = await evalRecord.toEvaluateSummary();
     const outputData: OutputFile = {
       evalId: evalRecord.id,
@@ -108,12 +105,14 @@ async function writeJsonOutputSafely(
       metadata,
     };
 
-    // Use bfj.write which handles large JSON serialization
-    await bfj.write(outputPath, outputData, {
-      space: 2,
-    });
+    // Use standard JSON.stringify with proper formatting
+    const jsonString = JSON.stringify(outputData, null, 2);
+    fs.writeFileSync(outputPath, jsonString);
   } catch (error) {
-    if (error instanceof RangeError && error.message.includes('Invalid string length')) {
+    const msg = (error as Error)?.message ?? '';
+    const isStringLen = error instanceof RangeError && msg.includes('Invalid string length');
+    const isHeapOOM = /heap out of memory|Array buffer allocation failed|ERR_STRING_TOO_LONG/i.test(msg);
+    if (isStringLen || isHeapOOM) {
       // The dataset is too large to load into memory at once
       const resultCount = await evalRecord.getResultsCount();
       logger.error(`Dataset too large for JSON export (${resultCount} results).`);
@@ -227,7 +226,7 @@ export async function writeOutput(
     fs.writeFileSync(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
+      const text = batchResults.map((result) => JSON.stringify(result)).join('\n') + '\n';
       fs.appendFileSync(outputPath, text);
     }
   } else if (outputExtension === 'xml') {
