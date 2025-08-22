@@ -523,6 +523,8 @@ export async function createShareableModelAuditUrl(
         modelPath: auditRecord.modelPath,
         modelType: auditRecord.modelType,
         results: auditRecord.results,
+        checks: auditRecord.checks,
+        issues: auditRecord.issues,
         hasErrors: auditRecord.hasErrors,
         totalChecks: auditRecord.totalChecks,
         passedChecks: auditRecord.passedChecks,
