@@ -1,7 +1,6 @@
 import 'dotenv/config';
 
 import cliState from './cliState';
-
 import type { EnvOverrides } from './types/env';
 
 // Define the supported environment variables and their types
@@ -53,6 +52,7 @@ type EnvVars = {
   PROMPTFOO_STRIP_RESPONSE_OUTPUT?: boolean;
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
+  PROMPTFOO_DISABLE_UNBLOCKING?: boolean;
 
   //=========================================================================
   // promptfoo configuration options

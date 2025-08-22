@@ -1,7 +1,8 @@
 ---
 title: 'Top 5 Open Source AI Red Teaming Tools in 2025'
 description: 'Compare the top open source AI red teaming tools in 2025. See features, use cases, and real differences across Promptfoo, PyRIT, Garak, DeepTeam, and Viper.'
-authors: [promptfoo_team]
+image: /img/blog/top-5-open-source-ai-red-teaming-tools-2025.jpg
+authors: [tabs]
 tags: [red-teaming, security, open-source, ai-security, tools]
 keywords:
   [
@@ -26,6 +27,8 @@ AI systems are notoriously vulnerable to malicious attacks, AI model misconfigur
 If we want cybersecurity practices to take more of a foothold, particularly now that AI systems are becoming increasingly common, it's important to make them affordable and easy to use. Tools that sound intimidating and aren't intuitive will be less likely to change the culture surrounding cybersecurity-as-an-afterthought.
 
 I spend a lot of time discussing what makes AI red teaming software good at all. You're free to just skip to the software.
+
+<!-- truncate -->
 
 ### Summary: red teaming for AI security
 
