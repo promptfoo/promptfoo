@@ -81,7 +81,7 @@ interface HuggingFaceResponse {
     };
   }>;
   rows: Array<{
-    row: Record<string, string>;
+    row: Record<string, any>;
   }>;
 }
 
@@ -128,8 +128,14 @@ export async function fetchHuggingFaceDataset(
   const queryParamLimit = queryParams.get('limit');
   const userLimit = limit ?? (queryParamLimit ? Number.parseInt(queryParamLimit, 10) : undefined);
 
+  // Honor explicit 0 limit and avoid network traffic
+  if (userLimit === 0) {
+    logger.debug('[HF Dataset] User-specified limit is 0; returning no test cases');
+    return [];
+  }
+
   // Single request optimization for small datasets
-  if (userLimit && userLimit <= pageSize) {
+  if (userLimit !== undefined && userLimit <= pageSize) {
     logger.debug(
       `[HF Dataset] Single request optimization for ${owner}/${repo} (limit: ${userLimit})`,
     );
@@ -200,7 +206,7 @@ export async function fetchHuggingFaceDataset(
       );
 
       const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
-      logger.debug(`[Huggingface Dataset] Fetching page from ${url}`);
+      logger.debug(`[HF Dataset] Fetching page from ${url}`);
 
       const hfToken =
         getEnvString('HF_TOKEN') ||
@@ -208,7 +214,7 @@ export async function fetchHuggingFaceDataset(
         getEnvString('HUGGING_FACE_HUB_TOKEN');
       const headers: Record<string, string> = {};
       if (hfToken) {
-        logger.debug('[Huggingface Dataset] Using token for authentication');
+        logger.debug('[HF Dataset] Using token for authentication');
         headers.Authorization = `Bearer ${hfToken}`;
       }
 

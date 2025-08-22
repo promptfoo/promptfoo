@@ -16,7 +16,6 @@ jest.mock('../../src/envars', () => ({
 
 describe('huggingfaceDatasets', () => {
   beforeEach(() => {
-    jest.mocked(fetchWithCache).mockClear();
     jest.mocked(getEnvString).mockReturnValue('');
   });
 
@@ -136,6 +135,77 @@ describe('huggingfaceDatasets', () => {
     );
   });
 
+  it('should fall back to HF_API_TOKEN when HF_TOKEN is empty', async () => {
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      if (key === 'HF_TOKEN') {
+        return '';
+      }
+      if (key === 'HF_API_TOKEN') {
+        return 'api-token';
+      }
+      return '';
+    });
+
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        num_rows_total: 1,
+        features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+        rows: [{ row: { text: 'test' } }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 1);
+
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer api-token',
+        },
+      }),
+    );
+  });
+
+  it('should fall back to HUGGING_FACE_HUB_TOKEN when other tokens are empty', async () => {
+    jest.mocked(getEnvString).mockImplementation((key) => {
+      if (key === 'HF_TOKEN') {
+        return '';
+      }
+      if (key === 'HF_API_TOKEN') {
+        return '';
+      }
+      if (key === 'HUGGING_FACE_HUB_TOKEN') {
+        return 'hub-token';
+      }
+      return '';
+    });
+
+    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        num_rows_total: 1,
+        features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+        rows: [{ row: { text: 'test' } }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 1);
+
+    expect(jest.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer hub-token',
+        },
+      }),
+    );
+  });
+
   it('should handle custom query parameters', async () => {
     jest.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
@@ -225,6 +295,12 @@ describe('huggingfaceDatasets', () => {
     await expect(
       fetchHuggingFaceDataset('huggingface://datasets/nonexistent/dataset'),
     ).rejects.toThrow('[HF Dataset] Failed to fetch dataset: Not Found');
+  });
+
+  it('should short-circuit and return [] when limit is 0', async () => {
+    const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 0);
+    expect(jest.mocked(fetchWithCache)).not.toHaveBeenCalled();
+    expect(tests).toEqual([]);
   });
 
   it('should respect user-specified limit parameter (single request optimization)', async () => {
