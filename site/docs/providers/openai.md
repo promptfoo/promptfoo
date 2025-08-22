@@ -292,6 +292,71 @@ To display images in the web viewer, wrap vars or outputs in markdown image tags
 
 Then, enable 'Render markdown' under Table Settings.
 
+## Web Search Support
+
+The OpenAI Responses API supports web search capabilities through the `web_search_preview` tool, which enables the `search-rubric` assertion type. This allows models to search the web for current information and verify facts.
+
+### Enabling Web Search
+
+To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add the `web_search_preview` tool to your configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:o4-mini
+    config:
+      tools:
+        - type: web_search_preview
+```
+
+### Using Web Search Assertions
+
+The `search-rubric` assertion type uses web search to quickly verify current information:
+
+- Real-time data (weather, stock prices, news)
+- Current events and statistics
+- Time-sensitive information
+- Quick fact verification
+
+Example configuration:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'What is the current temperature in {{city}}?'
+
+providers:
+  - id: openai:responses:o4-mini
+    config:
+      tools:
+        - type: web_search_preview
+
+tests:
+  - vars:
+      city: New York
+    assert:
+      - type: search-rubric
+        value: Current temperature in New York City
+```
+
+### Cost Considerations
+
+:::info
+Web search is included in the OpenAI Responses API pricing:
+
+- No additional cost beyond standard API usage
+- Each search-rubric assertion may perform one or more searches
+- Use caching (`--cache`) to avoid redundant searches during development
+  :::
+
+### Best Practices
+
+1. **Use specific search queries**: More specific queries yield better verification results
+2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
+3. **Use appropriate models**: o4-mini is recommended for cost-effective web search
+4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
+
+For more details on using search-rubric assertions, see the [Search-Rubric documentation](/docs/configuration/expected-outputs/model-graded/search-rubric).
+
 ## Using tools and functions
 
 OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
