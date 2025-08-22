@@ -414,7 +414,9 @@ describe('huggingfaceDatasets', () => {
 
     it('should handle authentication tokens correctly', async () => {
       jest.mocked(getEnvString).mockImplementation((key) => {
-        if (key === 'HF_TOKEN') return 'test-token-123';
+        if (key === 'HF_TOKEN') {
+          return 'test-token-123';
+        }
         return '';
       });
 

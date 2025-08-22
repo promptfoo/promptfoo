@@ -21,10 +21,27 @@ class DatasetProgressBar {
   }
 
   /**
+   * Check if we're running in a CI environment where progress bars shouldn't be shown
+   */
+  private isCI(): boolean {
+    return Boolean(
+      process.env.CI ||
+        process.env.CONTINUOUS_INTEGRATION ||
+        process.env.BUILD_NUMBER ||
+        process.env.GITHUB_ACTIONS ||
+        process.env.GITLAB_CI ||
+        process.env.CIRCLECI ||
+        process.env.TRAVIS ||
+        process.env.JENKINS_URL ||
+        !process.stdout.isTTY,
+    );
+  }
+
+  /**
    * Initialize progress bar for dataset fetching
    */
   initialize(totalRows: number, userLimit?: number): void {
-    if (this.isWebUI) {
+    if (this.isWebUI || this.isCI()) {
       return;
     }
 
@@ -52,7 +69,7 @@ class DatasetProgressBar {
    * Update progress with newly fetched rows
    */
   update(newRows: number): void {
-    if (this.isWebUI || !this.progressBar) {
+    if (this.isWebUI || this.isCI() || !this.progressBar) {
       return;
     }
 
