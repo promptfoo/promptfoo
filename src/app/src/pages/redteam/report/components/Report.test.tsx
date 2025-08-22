@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Report from './Report';
+import { callApi } from '@app/utils/api';
 
 // Mock dependencies
 vi.mock('react-router-dom', () => ({
@@ -128,5 +129,25 @@ describe('Report Component Navigation', () => {
     fireEvent.click(viewLogsButton, { metaKey: true });
     expect(window.open).toHaveBeenCalledWith('/eval/test-123', '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('Report Component Rendering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(vi.fn());
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-123' },
+    });
+  });
+
+  it('should render loading state with spinner and message when data is not available', async () => {
+    vi.mocked(callApi).mockReturnValue(new Promise(() => {}));
+
+    render(<Report />);
+
+    expect(await screen.findByRole('progressbar')).toBeInTheDocument();
+    expect(await screen.findByText('Waiting for report data')).toBeInTheDocument();
   });
 });
