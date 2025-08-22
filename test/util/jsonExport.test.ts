@@ -166,12 +166,10 @@ describe('JSON export with improved error handling', () => {
     });
 
     it('should handle file system errors', async () => {
-      // Create a read-only directory to force a filesystem error
-      const readOnlyDir = path.join(tempDir, 'readonly-dir');
-      fs.mkdirSync(readOnlyDir);
-      fs.chmodSync(readOnlyDir, 0o444); // read-only
-
-      const invalidPath = path.join(readOnlyDir, 'output.json');
+      // Use a path that will definitely fail - writing to a file that already exists as a directory
+      const dirAsFile = path.join(tempDir, 'directory-as-file');
+      fs.mkdirSync(dirAsFile);
+      const invalidPath = dirAsFile; // Try to write to a directory path as if it were a file
 
       mockEval.toEvaluateSummary.mockResolvedValue({
         version: 3,
@@ -180,9 +178,6 @@ describe('JSON export with improved error handling', () => {
       });
 
       await expect(writeOutput(invalidPath, mockEval, null)).rejects.toThrow();
-
-      // Clean up - restore permissions so we can delete
-      fs.chmodSync(readOnlyDir, 0o755);
     });
   });
 
