@@ -183,8 +183,13 @@ const pluginFactories: PluginFactory[] = [
   ),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
   createPluginFactory(PlinyPlugin, 'pliny'),
-  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
-    invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
+  createPluginFactory<{ policy: any }>(PolicyPlugin, 'policy', (config: { policy: any }) =>
+    invariant(
+      config.policy &&
+        (typeof config.policy === 'string' ||
+          (typeof config.policy === 'object' && 'id' in config.policy)),
+      'Policy plugin requires `config.policy` to be set as a string or PolicyObject',
+    ),
   ),
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),

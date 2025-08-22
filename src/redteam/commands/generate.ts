@@ -276,11 +276,14 @@ export async function doGenerateRedteam(
     logger.debug(`Resolving policy references for ${policyPluginsWithRefs.length} plugins`);
     const ids = policyPluginsWithRefs.map((p) => (p.config!.policy! as PolicyObject).id);
     // Load the policy texts
-    const policies = await getPoliciesFromCloud(ids);
+    const policyTexts = await getPoliciesFromCloud(ids);
     // Overwrite the policy texts to the plugins
     for (const policyPlugin of policyPluginsWithRefs) {
-      policyPlugin.config!.policy = policies[(policyPlugin.config!.policy! as PolicyObject).id];
-      // TODO(Will): adds the policy id as metadata.
+      const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
+      policyPlugin.config!.policy = {
+        id: policyId,
+        text: policyTexts[policyId],
+      } as PolicyObject;
     }
   }
 
