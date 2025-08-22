@@ -15,10 +15,10 @@ Follow **all** of these steps:
 
 1. Do not use the `--no-write` flag. We need to write to disk to avoid memory issues.
 2. Use the `--no-table` flag.
-3. **Use JSONL format instead of JSON**: `--output results.jsonl`
+3. **Use JSONL format**: `--output results.jsonl`
 
-:::tip Why JSONL for Large Datasets?
-JSONL (JSON Lines) format processes results in batches rather than loading everything into memory at once. This allows it to handle evaluations of any size without hitting memory limits, whereas JSON export may fail with "Invalid string length" or out-of-memory errors for very large datasets.
+:::tip
+JSONL format processes results in batches, avoiding memory limits that cause JSON export to fail on large datasets.
 :::
 
 ### Granular memory optimization
@@ -76,7 +76,7 @@ tests:
 
 **Default solution:** Objects are automatically converted to JSON strings:
 
-```
+```text
 Product: {"name":"Headphones","price":99.99}
 ```
 
@@ -115,7 +115,7 @@ prompts:
 
 When running `npx promptfoo@latest`, you might encounter this error:
 
-```
+```text
 Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
 was compiled against a different Node.js version using
 NODE_MODULE_VERSION 115. This version of Node.js requires

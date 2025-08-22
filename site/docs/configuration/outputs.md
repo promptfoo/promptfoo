@@ -115,36 +115,18 @@ promptfoo eval --output results.yaml
 
 ### JSONL Format
 
-Line-delimited JSON for large datasets:
+Each line contains one JSON result:
 
 ```bash
 promptfoo eval --output results.jsonl
 ```
 
-**Features:**
-
-- Memory-efficient processing - handles datasets of any size
-- Streaming-friendly format
-- Each line contains one evaluation result
-- Compatible with data processing pipelines
-
-**Structure:**
+**Use when:** Working with very large evaluations or when JSON export fails with memory errors.
 
 ```jsonl
 {"testIdx": 0, "promptIdx": 0, "output": "Response 1", "success": true, "score": 1.0}
 {"testIdx": 1, "promptIdx": 0, "output": "Response 2", "success": true, "score": 0.9}
-{"testIdx": 2, "promptIdx": 0, "output": "Response 3", "success": false, "score": 0.1}
 ```
-
-**Use when:** Working with large evaluations (>10,000 results), memory-constrained environments, or when JSON export fails with memory errors.
-
-:::tip For Large Datasets
-If you encounter memory errors with JSON export, use JSONL format instead:
-```bash
-promptfoo eval --output large-results.jsonl
-```
-JSONL format processes results in batches and can handle datasets of any size without memory limitations.
-:::
 
 ### XML Format
 
@@ -276,7 +258,7 @@ print(summary)
 
 ### 1. Organize Output Files
 
-```
+```text
 project/
 ├── promptfooconfig.yaml
 ├── evaluations/
@@ -378,17 +360,10 @@ LANG=en_US.UTF-8 promptfoo eval --output results.csv
 
 ### Performance Tips
 
-1. **Use JSONL for very large datasets** - Memory-efficient, handles any dataset size
-2. **Use JSON for moderate datasets** - Comprehensive data structure
-3. **Generate HTML for presentations** - Best visual format
-4. **Use CSV for data analysis** - Easy Excel/Sheets integration
-
-#### When to Use Each Format
-
-- **Small to medium evaluations** (<10,000 results): Use JSON for complete data structure
-- **Large evaluations** (>10,000 results): Use JSONL to avoid memory issues
-- **Memory-constrained environments**: Always prefer JSONL over JSON
-- **If JSON export fails**: Switch to JSONL format immediately
+1. **Use JSONL for large datasets** - avoids memory issues
+2. **Use JSON for standard datasets** - complete data structure
+3. **Generate HTML for presentations** - best visual format
+4. **Use CSV for data analysis** - Excel/Sheets compatible
 
 ## Related Documentation
 
