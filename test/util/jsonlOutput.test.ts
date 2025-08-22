@@ -63,7 +63,7 @@ describe('JSONL output with proper line endings', () => {
     // Create async iterator for batches
     const batchIterator = [batch1, batch2];
     let batchIndex = 0;
-    
+
     mockEval.fetchResultsBatched = jest.fn().mockImplementation(async function* () {
       for (const batch of batchIterator) {
         yield batch;
@@ -74,13 +74,13 @@ describe('JSONL output with proper line endings', () => {
 
     expect(fs.existsSync(tempFilePath)).toBe(true);
     const content = fs.readFileSync(tempFilePath, 'utf8');
-    
+
     // Split by lines and filter out empty lines
-    const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
-    
+    const lines = content.split(/\r?\n/).filter((line) => line.trim() !== '');
+
     // Should have exactly 4 JSON objects (2 per batch)
     expect(lines).toHaveLength(4);
-    
+
     // Each line should be valid JSON
     lines.forEach((line, index) => {
       expect(() => JSON.parse(line)).not.toThrow();
@@ -94,9 +94,7 @@ describe('JSONL output with proper line endings', () => {
   });
 
   it('should handle single batch correctly', async () => {
-    const singleBatch = [
-      { testIdx: 0, success: true, score: 1.0, output: 'single result' },
-    ];
+    const singleBatch = [{ testIdx: 0, success: true, score: 1.0, output: 'single result' }];
 
     mockEval.fetchResultsBatched = jest.fn().mockImplementation(async function* () {
       yield singleBatch;
@@ -105,8 +103,8 @@ describe('JSONL output with proper line endings', () => {
     await writeOutput(tempFilePath, mockEval, null);
 
     const content = fs.readFileSync(tempFilePath, 'utf8');
-    const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
-    
+    const lines = content.split(/\r?\n/).filter((line) => line.trim() !== '');
+
     expect(lines).toHaveLength(1);
     expect(() => JSON.parse(lines[0])).not.toThrow();
     expect(content.endsWith('\n')).toBe(true);
@@ -122,8 +120,8 @@ describe('JSONL output with proper line endings', () => {
     await writeOutput(tempFilePath, mockEval, null);
 
     const content = fs.readFileSync(tempFilePath, 'utf8');
-    const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
-    
+    const lines = content.split(/\r?\n/).filter((line) => line.trim() !== '');
+
     expect(lines).toHaveLength(1);
     expect(() => JSON.parse(lines[0])).not.toThrow();
     const parsed = JSON.parse(lines[0]);
@@ -131,9 +129,7 @@ describe('JSONL output with proper line endings', () => {
   });
 
   it('should use OS-specific line endings', async () => {
-    const batch = [
-      { testIdx: 0, success: true, score: 1.0, output: 'test result' },
-    ];
+    const batch = [{ testIdx: 0, success: true, score: 1.0, output: 'test result' }];
 
     mockEval.fetchResultsBatched = jest.fn().mockImplementation(async function* () {
       yield batch;
@@ -142,28 +138,29 @@ describe('JSONL output with proper line endings', () => {
     await writeOutput(tempFilePath, mockEval, null);
 
     const content = fs.readFileSync(tempFilePath, 'utf8');
-    
+
     // Content should end with the OS-specific line ending
     expect(content.endsWith(os.EOL)).toBe(true);
-    
+
     // For multiple results, should use OS line endings between them
     const multiResultBatch = [
       { testIdx: 0, success: true, score: 1.0, output: 'result 1' },
       { testIdx: 1, success: true, score: 0.9, output: 'result 2' },
     ];
-    
+
     mockEval.fetchResultsBatched = jest.fn().mockImplementation(async function* () {
       yield multiResultBatch;
     });
 
     // Clear the file
     fs.unlinkSync(tempFilePath);
-    
+
     await writeOutput(tempFilePath, mockEval, null);
-    
+
     const multiContent = fs.readFileSync(tempFilePath, 'utf8');
-    const expectedContent = multiResultBatch.map(result => JSON.stringify(result)).join(os.EOL) + os.EOL;
-    
+    const expectedContent =
+      multiResultBatch.map((result) => JSON.stringify(result)).join(os.EOL) + os.EOL;
+
     expect(multiContent).toBe(expectedContent);
   });
 });
