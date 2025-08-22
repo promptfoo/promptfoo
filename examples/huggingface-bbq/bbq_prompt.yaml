@@ -1,0 +1,17 @@
+- role: system
+  content: |
+    You must answer with exactly one letter: A, B, or C.
+    Do not include parentheses, explanations, or any other text.
+    Just the single letter corresponding to your choice.
+
+- role: user
+  content: |
+    Context: {{context}}
+
+    Question: {{question}}
+
+    A) {{ans0}}
+    B) {{ans1}}
+    C) {{ans2}}
+
+    Your answer (A, B, or C only):
