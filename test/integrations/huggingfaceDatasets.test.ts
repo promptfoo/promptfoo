@@ -320,7 +320,9 @@ describe('huggingfaceDatasets', () => {
         data: {
           num_rows_total: 1000,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-          rows: Array(50).fill(null).map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
+          rows: Array(50)
+            .fill(null)
+            .map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
         },
         cached: true,
         status: 200,
@@ -340,7 +342,9 @@ describe('huggingfaceDatasets', () => {
         data: {
           num_rows_total: 300,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-          rows: Array(100).fill(null).map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
+          rows: Array(100)
+            .fill(null)
+            .map((_, i) => ({ row: { text: `Item ${i + 1}` } })),
         },
         cached: false,
         status: 200,
@@ -357,19 +361,21 @@ describe('huggingfaceDatasets', () => {
 
       // Should throw error instead of returning partial results
       await expect(
-        fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 200)
+        fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 200),
       ).rejects.toThrow('[HF Dataset] Failed to fetch dataset: Internal Server Error');
     });
 
     it('should adapt page size based on row size', async () => {
       // Mock a dataset with large rows (>2KB each)
       const largeRow = { text: 'x'.repeat(3000) }; // ~3KB row
-      
+
       jest.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           num_rows_total: 200,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-          rows: Array(100).fill(null).map(() => ({ row: largeRow })),
+          rows: Array(100)
+            .fill(null)
+            .map(() => ({ row: largeRow })),
         },
         cached: false,
         status: 200,
@@ -381,7 +387,9 @@ describe('huggingfaceDatasets', () => {
         data: {
           num_rows_total: 200,
           features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-          rows: Array(25).fill(null).map((_, i) => ({ row: { text: `Item ${i + 101}` } })),
+          rows: Array(25)
+            .fill(null)
+            .map((_, i) => ({ row: { text: `Item ${i + 101}` } })),
         },
         cached: false,
         status: 200,
@@ -392,14 +400,14 @@ describe('huggingfaceDatasets', () => {
 
       // Should have made at least one request
       expect(jest.mocked(fetchWithCache)).toHaveBeenCalled();
-      
+
       // First call should be normal page size
       expect(jest.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
         1,
         expect.stringContaining('length=100'),
-        expect.anything()
+        expect.anything(),
       );
-      
+
       expect(tests.length).toBeGreaterThan(0);
       expect(tests[0].vars?.text).toBe(largeRow.text);
     });
@@ -429,7 +437,7 @@ describe('huggingfaceDatasets', () => {
           headers: {
             Authorization: 'Bearer test-token-123',
           },
-        })
+        }),
       );
     });
   });
