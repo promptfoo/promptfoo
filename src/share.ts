@@ -133,15 +133,31 @@ async function sendChunkOfResults(
 
   if (!response.ok) {
     const responseBody = await response.text();
+    const debugInfo = {
+      url: targetUrl,
+      statusCode: response.status,
+      statusText: response.statusText,
+      chunkSize: chunk.length,
+      chunkSizeBytes,
+      chunkSizeMB: (chunkSizeBytes / 1024 / 1024).toFixed(2),
+      headers: Object.keys(headers),
+      evalId,
+      responseBody: responseBody.length > 500 ? `${responseBody.slice(0, 500)}...` : responseBody,
+    };
+
     logger.error(
       `Failed to send results chunk to ${targetUrl}: status code: ${response.status}, status text: ${response.statusText}, body: ${responseBody}`,
     );
+    logger.error(`Debug info: ${JSON.stringify(debugInfo, null, 2)}`);
+
     if (response.status === 413) {
       throw new Error(
-        `Results chunk too large. It contained ${stringifiedChunk.length} bytes. Please reduce the number of results per chunk using the environment variable PROMPTFOO_SHARE_CHUNK_SIZE. Example: PROMPTFOO_SHARE_CHUNK_SIZE=100 promptfoo share`,
+        `Results chunk too large. It contained ${stringifiedChunk.length} bytes (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB). Please reduce the number of results per chunk using the environment variable PROMPTFOO_SHARE_CHUNK_SIZE. Example: PROMPTFOO_SHARE_CHUNK_SIZE=10 promptfoo share`,
       );
     }
-    throw new Error(`Failed to send results chunk`);
+    throw new Error(
+      `Failed to send results chunk to ${targetUrl}. Status: ${response.status} ${response.statusText}. Chunk size: ${chunk.length} results (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB). See debug logs for more details.`,
+    );
   }
 }
 
@@ -178,7 +194,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   logger.debug(`Largest result size from sample: ${largestSize} bytes`);
 
   // Determine how many results per chunk
-  const TARGET_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+  const TARGET_CHUNK_SIZE = 0.9 * 1024 * 1024; // 900KB in bytes
   const estimatedResultsPerChunk =
     getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
     Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));

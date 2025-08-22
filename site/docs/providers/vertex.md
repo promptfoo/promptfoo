@@ -1,6 +1,7 @@
 ---
 sidebar_label: Google Vertex
-description: 'Deploy enterprise AI models with Google Cloud Vertex AI for production-scale machine learning and generative AI workloads'
+title: Google Vertex AI Provider
+description: Use Google Vertex AI models including Gemini, Claude, Llama, and specialized models for text, code, and embeddings in your evals
 ---
 
 # Google Vertex
@@ -27,6 +28,10 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 Anthropic's Claude models are available with the following versions:
 
+- `vertex:claude-opus-4-1@20250805` - Latest Claude 4.1 Opus model
+- `vertex:claude-opus-4@20250514` - Claude 4 Opus model
+- `vertex:claude-sonnet-4@20250514` - Claude 4 Sonnet model
+- `vertex:claude-3-7-sonnet@20250219` - Claude 3.7 Sonnet model
 - `vertex:claude-3-haiku@20240307` - Fast Claude 3 Haiku
 - `vertex:claude-3-opus@20240229` - Claude 3 Opus (Public Preview)
 - `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku
