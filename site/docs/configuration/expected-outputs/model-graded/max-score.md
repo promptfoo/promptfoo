@@ -4,9 +4,19 @@ description: Configure the `max-score` assertion to deterministically pick the h
 sidebar_label: Max Score
 ---
 
-# Max Score
+# Max score
 
-The `max-score` assertion selects the output with the highest aggregate score from other assertions. Unlike `select-best` which uses LLM judgment, `max-score` provides objective, deterministic selection based on quantitative scores from other assertions.
+The `max-score` assertion automatically selects the best output based on objective scores from other assertions.
+
+**What it measures**: Unlike `select-best` which uses LLM judgment, `max-score` aggregates numerical scores from other assertions (like factuality, contains, llm-rubric) and deterministically selects the highest-scoring output.
+
+**Example**:
+
+- Output A: Scores 0.6 on factuality, 1.0 on contains, 0.7 on rubric = Average 0.77 ✗
+- Output B: Scores 0.9 on factuality, 1.0 on contains, 0.8 on rubric = Average 0.90 ✓ Winner
+- Output C: Scores 0.8 on factuality, 0.0 on contains, 0.9 on rubric = Average 0.57 ✗
+
+This metric is ideal for **objective selection** when you want transparent, reproducible results without LLM API calls.
 
 ## When to use max-score
 
