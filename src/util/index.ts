@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+// @ts-ignore - bfj doesn't have TypeScript declarations
+import bfj from 'bfj';
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
@@ -84,6 +86,48 @@ export function createOutputMetadata(evalRecord: Eval) {
   };
 }
 
+/**
+ * Memory-efficient JSON writer using bfj (Big Friendly JSON) to handle large datasets.
+ * Uses try-catch approach to gracefully handle memory issues.
+ */
+async function writeJsonOutputSafely(
+  outputPath: string,
+  evalRecord: Eval,
+  shareableUrl: string | null,
+): Promise<void> {
+  const metadata = createOutputMetadata(evalRecord);
+  
+  try {
+    // Attempt the normal approach - let toEvaluateSummary() fail if it's too large
+    const summary = await evalRecord.toEvaluateSummary();
+    const outputData: OutputFile = {
+      evalId: evalRecord.id,
+      results: summary,
+      config: evalRecord.config,
+      shareableUrl,
+      metadata,
+    };
+
+    // Use bfj.write which handles large JSON serialization
+    await bfj.write(outputPath, outputData, { 
+      space: 2,
+    });
+    
+  } catch (error) {
+    if (error instanceof RangeError && error.message.includes('Invalid string length')) {
+      // The dataset is too large to load into memory at once
+      const resultCount = await evalRecord.getResultsCount();
+      logger.error(`Dataset too large for JSON export (${resultCount} results).`);
+      throw new Error(
+        `Dataset too large for JSON export. The evaluation has ${resultCount} results which exceeds memory limits. ` +
+        'Consider using JSONL format instead: --output output.jsonl'
+      );
+    } else {
+      throw error;
+    }
+  }
+}
+
 export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
@@ -151,21 +195,7 @@ export async function writeOutput(
       fs.appendFileSync(outputPath, batchCsv);
     }
   } else if (outputExtension === 'json') {
-    const summary = await evalRecord.toEvaluateSummary();
-    fs.writeFileSync(
-      outputPath,
-      JSON.stringify(
-        {
-          evalId: evalRecord.id,
-          results: summary,
-          config: evalRecord.config,
-          shareableUrl,
-          metadata,
-        } satisfies OutputFile,
-        null,
-        2,
-      ),
-    );
+    await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
     fs.writeFileSync(
