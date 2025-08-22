@@ -130,13 +130,30 @@ export default function Eval({ fetchId }: EvalOptions) {
 
     // Check for a `plugin` param in the URL; we support filtering on plugins via the URL which
     // enables the "View Logs" functionality in Vulnerability reports.
-    const pluginParam = searchParams.get('plugin');
+    const pluginParams = searchParams.getAll('plugin');
 
-    if (pluginParam) {
-      addFilter({
-        type: 'plugin',
-        operator: 'equals',
-        value: pluginParam,
+    // Check for >=1 metric params in the URL.
+    const metricParams = searchParams.getAll('metric');
+
+    if (pluginParams.length > 0) {
+      pluginParams.forEach((pluginParam) => {
+        addFilter({
+          type: 'plugin',
+          operator: 'equals',
+          value: pluginParam,
+          logicOperator: 'or',
+        });
+      });
+    }
+
+    if (metricParams.length > 0) {
+      metricParams.forEach((metricParam) => {
+        addFilter({
+          type: 'metric',
+          operator: 'equals',
+          value: metricParam,
+          logicOperator: 'or',
+        });
       });
     }
 
