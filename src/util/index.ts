@@ -96,7 +96,7 @@ async function writeJsonOutputSafely(
   shareableUrl: string | null,
 ): Promise<void> {
   const metadata = createOutputMetadata(evalRecord);
-  
+
   try {
     // Attempt the normal approach - let toEvaluateSummary() fail if it's too large
     const summary = await evalRecord.toEvaluateSummary();
@@ -109,10 +109,9 @@ async function writeJsonOutputSafely(
     };
 
     // Use bfj.write which handles large JSON serialization
-    await bfj.write(outputPath, outputData, { 
+    await bfj.write(outputPath, outputData, {
       space: 2,
     });
-    
   } catch (error) {
     if (error instanceof RangeError && error.message.includes('Invalid string length')) {
       // The dataset is too large to load into memory at once
@@ -120,7 +119,7 @@ async function writeJsonOutputSafely(
       logger.error(`Dataset too large for JSON export (${resultCount} results).`);
       throw new Error(
         `Dataset too large for JSON export. The evaluation has ${resultCount} results which exceeds memory limits. ` +
-        'Consider using JSONL format instead: --output output.jsonl'
+          'Consider using JSONL format instead: --output output.jsonl',
       );
     } else {
       throw error;
