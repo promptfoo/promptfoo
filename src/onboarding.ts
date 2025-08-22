@@ -425,6 +425,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
           'anthropic:messages:claude-sonnet-4-20250514',
+          'anthropic:messages:claude-opus-4-1-20250805',
           'anthropic:messages:claude-opus-4-20250514',
           'anthropic:messages:claude-3-7-sonnet-20250219',
         ],
