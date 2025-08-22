@@ -356,6 +356,15 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies, updateConfig],
   );
 
+  // ----------------------------------------------
+  // Derived states
+  // ----------------------------------------------
+
+  const selectedStrategyIds = useMemo(
+    () => config.strategies.map((s) => getStrategyId(s)),
+    [config.strategies],
+  );
+
   const handleTestStrategy = useCallback(async () => {
     if (!config.target) {
       setStrategyTestResult({
@@ -426,15 +435,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       setTestingStrategy(false);
     }
   }, [config.target, selectedStrategyIds, recordEvent]);
-
-  // ----------------------------------------------
-  // Derived states
-  // ----------------------------------------------
-
-  const selectedStrategyIds = useMemo(
-    () => config.strategies.map((s) => getStrategyId(s)),
-    [config.strategies],
-  );
 
   // Check if user has selected all or most strategies
   const hasSelectedMostStrategies = useMemo(() => {
