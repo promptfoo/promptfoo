@@ -1,7 +1,6 @@
 import React, { forwardRef, useState } from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import InfoIcon from '@mui/icons-material/Info';
@@ -9,7 +8,6 @@ import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
-import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import MenuList from '@mui/material/MenuList';
 import Paper from '@mui/material/Paper';
@@ -79,7 +77,6 @@ function NavLink({ href, label }: { href: string; label: string }) {
 
 function CreateDropdown() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
   const location = useLocation();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -241,7 +238,6 @@ function CreateDropdown() {
 
 function EvalsDropdown() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
   const location = useLocation();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
