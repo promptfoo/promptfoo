@@ -153,14 +153,12 @@ export class OllamaCompletionProvider implements ApiProvider {
       options: Object.keys(this.config).reduce(
         (options, key) => {
           const optionName = key as keyof OllamaCompletionOptions;
-          if (OllamaCompletionOptionKeys.has(optionName)) {
+          if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
             options[optionName] = this.config[optionName];
           }
           return options;
         },
-        {} as Partial<
-          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
-        >,
+        {} as Record<string, any>,
       ),
       ...(this.config.think !== undefined ? { think: this.config.think } : {}),
       ...(this.config.passthrough || {}),
@@ -274,9 +272,7 @@ export class OllamaChatProvider implements ApiProvider {
           }
           return options;
         },
-        {} as Partial<
-          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
-        >,
+        {} as Record<string, any>,
       ),
       ...(this.config.think !== undefined ? { think: this.config.think } : {}),
       ...(this.config.passthrough || {}),
