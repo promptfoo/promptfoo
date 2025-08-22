@@ -111,7 +111,9 @@ async function writeJsonOutputSafely(
   } catch (error) {
     const msg = (error as Error)?.message ?? '';
     const isStringLen = error instanceof RangeError && msg.includes('Invalid string length');
-    const isHeapOOM = /heap out of memory|Array buffer allocation failed|ERR_STRING_TOO_LONG/i.test(msg);
+    const isHeapOOM = /heap out of memory|Array buffer allocation failed|ERR_STRING_TOO_LONG/i.test(
+      msg,
+    );
     if (isStringLen || isHeapOOM) {
       // The dataset is too large to load into memory at once
       const resultCount = await evalRecord.getResultsCount();
