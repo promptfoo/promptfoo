@@ -15,7 +15,11 @@ Follow **all** of these steps:
 
 1. Do not use the `--no-write` flag. We need to write to disk to avoid memory issues.
 2. Use the `--no-table` flag.
-3. Only output to `jsonl` ex: `--output results.jsonl`
+3. **Use JSONL format instead of JSON**: `--output results.jsonl`
+
+:::tip Why JSONL for Large Datasets?
+JSONL (JSON Lines) format processes results in batches rather than loading everything into memory at once. This allows it to handle evaluations of any size without hitting memory limits, whereas JSON export may fail with "Invalid string length" or out-of-memory errors for very large datasets.
+:::
 
 ### Granular memory optimization
 

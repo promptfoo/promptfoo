@@ -113,6 +113,39 @@ promptfoo eval --output results.yaml
 
 **Use when:** Reviewing results in a text editor or version control.
 
+### JSONL Format
+
+Line-delimited JSON for large datasets:
+
+```bash
+promptfoo eval --output results.jsonl
+```
+
+**Features:**
+
+- Memory-efficient processing - handles datasets of any size
+- Streaming-friendly format
+- Each line contains one evaluation result
+- Compatible with data processing pipelines
+
+**Structure:**
+
+```jsonl
+{"testIdx": 0, "promptIdx": 0, "output": "Response 1", "success": true, "score": 1.0}
+{"testIdx": 1, "promptIdx": 0, "output": "Response 2", "success": true, "score": 0.9}
+{"testIdx": 2, "promptIdx": 0, "output": "Response 3", "success": false, "score": 0.1}
+```
+
+**Use when:** Working with large evaluations (>10,000 results), memory-constrained environments, or when JSON export fails with memory errors.
+
+:::tip For Large Datasets
+If you encounter memory errors with JSON export, use JSONL format instead:
+```bash
+promptfoo eval --output large-results.jsonl
+```
+JSONL format processes results in batches and can handle datasets of any size without memory limitations.
+:::
+
 ### XML Format
 
 Structured data for enterprise integrations:
@@ -345,10 +378,17 @@ LANG=en_US.UTF-8 promptfoo eval --output results.csv
 
 ### Performance Tips
 
-1. **Use JSON for large datasets** - Most efficient format
-2. **Generate HTML for presentations** - Best visual format
-3. **Use CSV for data analysis** - Easy Excel/Sheets integration
-4. **Stream outputs for huge evaluations** - Process results incrementally
+1. **Use JSONL for very large datasets** - Memory-efficient, handles any dataset size
+2. **Use JSON for moderate datasets** - Comprehensive data structure
+3. **Generate HTML for presentations** - Best visual format
+4. **Use CSV for data analysis** - Easy Excel/Sheets integration
+
+#### When to Use Each Format
+
+- **Small to medium evaluations** (<10,000 results): Use JSON for complete data structure
+- **Large evaluations** (>10,000 results): Use JSONL to avoid memory issues
+- **Memory-constrained environments**: Always prefer JSONL over JSON
+- **If JSON export fails**: Switch to JSONL format immediately
 
 ## Related Documentation
 
