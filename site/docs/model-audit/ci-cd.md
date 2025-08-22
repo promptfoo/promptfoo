@@ -495,4 +495,4 @@ DEBUG=promptfoo:* promptfoo scan-model models/ --verbose
 
 - [Configure Scanners](./scanners.md) - Learn about available security scanners
 - [Usage Guide](./usage.md) - Detailed usage instructions
-- [API Reference](/docs/reference/api) - Programmatic integration options
+- [Configuration Reference](/docs/configuration/reference) - Complete configuration options
