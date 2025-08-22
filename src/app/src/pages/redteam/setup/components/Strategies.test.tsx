@@ -1,10 +1,11 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Strategies from './Strategies';
+import { callApi } from '@app/utils/api';
 
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
@@ -12,6 +13,7 @@ vi.mock('@app/hooks/useTelemetry');
 vi.mock('./StrategyConfigDialog', () => ({
   default: () => <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>,
 }));
+vi.mock('@app/utils/api');
 
 const mockUpdateConfig = vi.fn();
 const mockRecordEvent = vi.fn();
@@ -244,6 +246,166 @@ describe('Strategies', () => {
       );
 
       expect(screen.getByText('Multi-modal Strategies')).toBeInTheDocument();
+    });
+  });
+
+  describe('Strategy compatibility testing', () => {
+    beforeEach(() => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            id: 'test-provider',
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'image' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+    });
+
+    it('displays a success message when the strategy test is successful', async () => {
+      (callApi as any).mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: 'Strategy is compatible!' }),
+      });
+
+      render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      const testButton = screen.getByRole('button', { name: 'Test Strategy Compatibility' });
+      fireEvent.click(testButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Strategy is compatible!')).toBeInTheDocument();
+      });
+    });
+
+    it('should display an error message and suggestions when the test strategy compatibility fails', async () => {
+      (callApi as any).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: false,
+          message: 'Provider is not compatible with the selected strategy.',
+          suggestions: ['Try a different provider.', 'Select a different strategy.'],
+        }),
+      });
+
+      render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      const testButton = screen.getByRole('button', { name: 'Test Strategy Compatibility' });
+      fireEvent.click(testButton);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Provider is not compatible with the selected strategy.'),
+        ).toBeInTheDocument();
+        expect(screen.getByText(/Try a different provider/)).toBeInTheDocument();
+        expect(screen.getByText(/Select a different strategy/)).toBeInTheDocument();
+      });
+    });
+
+    it('Test Strategy Compatibility button exits loading state on API error', async () => {
+      (callApi as any).mockRejectedValue(new Error('API Error'));
+
+      render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      const testButton = screen.getByRole('button', {
+        name: 'Test Strategy Compatibility',
+      });
+
+      fireEvent.click(testButton);
+
+      await waitFor(() => {
+        expect(testButton).not.toHaveTextContent('Testing...');
+      });
+
+      expect(testButton).toHaveTextContent('Test Strategy Compatibility');
+    });
+
+    it('handles non-JSON error response from API', async () => {
+      const mockNonJsonResponse = 'Internal Server Error';
+      (callApi as any).mockResolvedValue({
+        ok: false,
+        text: async () => mockNonJsonResponse,
+      });
+
+      render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      const testButton = screen.getByRole('button', {
+        name: 'Test Strategy Compatibility',
+      });
+      fireEvent.click(testButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to test strategy')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Multi-modal warning alert', () => {
+    it('removes the multi-modal warning alert when all multi-modal strategies are deselected', async () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'image' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      const { rerender } = render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('Multi-modal Strategy Requirements')).toBeInTheDocument();
+
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      rerender(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      expect(screen.queryByText('Multi-modal Strategy Requirements')).toBeNull();
     });
   });
 
