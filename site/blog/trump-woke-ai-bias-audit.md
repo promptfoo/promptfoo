@@ -1,5 +1,5 @@
 ---
-title: 'A $10, 116,972-item audit of BBQ: GPT-3.5 vs GPT-5 nano'
+title: 'AI learned to say "I don\'t know": How 116,972 tests for $10 reveal the biggest shift in Trump\'s bias era'
 description: 'A comprehensive evaluation of AI bias evolution across 11 social dimensions, measuring changes in uncertainty acknowledgment and bias patterns between GPT-3.5-turbo and GPT-5 nano'
 image: /img/blog/bbq-bias/dramatic-finding.png
 keywords:
@@ -21,36 +21,355 @@ featured: true
 
 In July 2025, the White House issued the ["Preventing Woke AI in the Federal Government"](https://www.whitehouse.gov/presidential-actions/2025/07/preventing-woke-ai-in-the-federal-government/) executive order. It requires agencies to procure AI systems that meet "truthfulness" and "ideological neutrality" criteria and tasks OMB and GSA with implementation. That raises a measurement question: which behaviors matter. We focus on one: how models treat uncertainty when the context is under-informative.
 
-<div style={{padding: '1rem', backgroundColor: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '8px', margin: '1rem 0'}}>
-  <h4 style={{margin: '0 0 0.5rem', fontSize: '1rem', fontWeight: '600'}}>🔍 What we measured</h4>
-  <p style={{margin: '0', fontSize: '0.9rem', lineHeight: '1.4'}}>
-    BBQ ambiguous vs disambiguated accuracy and "Unknown" selection rates, not direct political alignment.
-  </p>
+<div className="info-grid">
+  <div className="info-box" style={{
+    backgroundColor: '#f8f9fa',
+    border: '2px solid #e9ecef',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+  }}>
+    <h4 style={{
+      margin: '0 0 1rem',
+      fontSize: '1.1rem',
+      fontWeight: '700',
+      color: '#2c3e50',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5rem'
+    }}>
+      🔍 What we measured
+    </h4>
+    <p style={{
+      margin: '0',
+      fontSize: '0.95rem',
+      lineHeight: '1.6',
+      color: '#4a5568'
+    }}>
+      BBQ ambiguous vs disambiguated accuracy and "Unknown" selection rates, not direct political alignment.
+    </p>
+  </div>
+
+  <div className="info-box" style={{
+    backgroundColor: '#f0f8ff',
+    border: '2px solid #b8e6ff',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+  }}>
+    <h4 style={{
+      margin: '0 0 1rem',
+      fontSize: '1.1rem',
+      fontWeight: '700',
+      color: '#2c3e50',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5rem'
+    }}>
+      📊 How We Score BBQ
+    </h4>
+    <p style={{
+      margin: '0',
+      fontSize: '0.95rem',
+      lineHeight: '1.6',
+      color: '#4a5568'
+    }}>
+      <strong>Ambiguous items:</strong> Designed so that 'Can't be determined' is the correct response per the <a href="https://aclanthology.org/2022.findings-acl.165.pdf" style={{color: '#3182ce', textDecoration: 'none', borderBottom: '1px solid #3182ce'}}>dataset's normative design</a>. <strong>Disambiguated items:</strong> Have a labeled individual as the correct answer.
+    </p>
+  </div>
 </div>
 
-<div style={{padding: '1rem', backgroundColor: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '8px', margin: '1rem 0'}}>
-  <h4 style={{margin: '0 0 0.5rem', fontSize: '1rem', fontWeight: '600'}}>📊 How We Score BBQ</h4>
-  <p style={{margin: '0', fontSize: '0.9rem', lineHeight: '1.4'}}>
-    <strong>Ambiguous items:</strong> Designed so that 'Can't be determined' is the correct response per the <a href="https://aclanthology.org/2022.findings-acl.165.pdf">dataset's normative design</a>. <strong>Disambiguated items:</strong> Have a labeled individual as the correct answer. Accuracy is computed accordingly.
-  </p>
-</div>
+<style>
+  /* Mobile-first comprehensive responsive design */
+  
+  /* Base article layout */
+  .article-content {
+    max-width: 100%;
+    padding: 0 1rem;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  @media (min-width: 768px) {
+    .article-content {
+      padding: 0 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+  }
+  
+  @media (min-width: 1200px) {
+    .article-content {
+      padding: 0 3rem;
+    }
+  }
+  
+  /* Responsive typography */
+  .responsive-text {
+    font-size: 1rem;
+    line-height: 1.7;
+  }
+  
+  @media (min-width: 768px) {
+    .responsive-text {
+      font-size: 1.125rem;
+      line-height: 1.8;
+    }
+  }
+  
+  /* Enhanced heading styles */
+  h1 {
+    font-size: 1.75rem !important;
+    line-height: 1.3 !important;
+    margin-bottom: 1.5rem !important;
+  }
+  
+  @media (min-width: 768px) {
+    h1 {
+      font-size: 2.25rem !important;
+      line-height: 1.2 !important;
+      margin-bottom: 2rem !important;
+    }
+  }
+  
+  h2 {
+    font-size: 1.375rem !important;
+    line-height: 1.4 !important;
+    margin: 2rem 0 1rem !important;
+  }
+  
+  @media (min-width: 768px) {
+    h2 {
+      font-size: 1.75rem !important;
+      margin: 3rem 0 1.5rem !important;
+    }
+  }
+  
+  h3 {
+    font-size: 1.25rem !important;
+    line-height: 1.4 !important;
+    margin: 1.5rem 0 1rem !important;
+  }
+  
+  @media (min-width: 768px) {
+    h3 {
+      font-size: 1.5rem !important;
+      margin: 2rem 0 1rem !important;
+    }
+  }
+  
+  /* Image responsive design */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
+  }
+  
+  @media (min-width: 768px) {
+    img {
+      border-radius: 12px !important;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
+    }
+  }
+  
+  /* Image container responsive */
+  .image-container {
+    margin: 2rem 0 !important;
+    text-align: center;
+  }
+  
+  @media (min-width: 768px) {
+    .image-container {
+      margin: 3rem 0 !important;
+    }
+  }
+  
+  /* Grid layouts - mobile first */
+  .info-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+    margin: 2rem 0 !important;
+    padding: 0 1rem !important;
+  }
+  
+  @media (min-width: 768px) {
+    .info-grid {
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important;
+      gap: 1.5rem !important;
+      padding: 0 !important;
+    }
+  }
+  
+  /* Info boxes responsive */
+  .info-box {
+    padding: 1.25rem !important;
+    border-radius: 8px !important;
+    margin: 1rem 0 !important;
+  }
+  
+  @media (min-width: 768px) {
+    .info-box {
+      padding: 1.5rem !important;
+      border-radius: 12px !important;
+      margin: 0 !important;
+    }
+  }
+  
+  /* Code blocks mobile friendly */
+  pre {
+    overflow-x: auto !important;
+    font-size: 0.875rem !important;
+    line-height: 1.5 !important;
+    padding: 1rem !important;
+    border-radius: 8px !important;
+    margin: 1.5rem 0 !important;
+  }
+  
+  @media (min-width: 768px) {
+    pre {
+      font-size: 0.9375rem !important;
+      padding: 1.5rem !important;
+      border-radius: 12px !important;
+    }
+  }
+  
+  /* Table responsive */
+  table {
+    width: 100% !important;
+    overflow-x: auto !important;
+    display: block !important;
+    white-space: nowrap !important;
+    font-size: 0.875rem !important;
+  }
+  
+  @media (min-width: 768px) {
+    table {
+      display: table !important;
+      white-space: normal !important;
+      font-size: 1rem !important;
+    }
+  }
+  
+  /* Flexible layout patterns */
+  .mobile-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  @media (min-width: 768px) {
+    .mobile-stack {
+      flex-direction: row;
+      gap: 2rem;
+      align-items: center;
+    }
+  }
+  
+  /* Touch-friendly interactive elements */
+  button, .interactive-element {
+    min-height: 44px !important;
+    padding: 0.75rem 1rem !important;
+    font-size: 1rem !important;
+  }
+  
+  @media (min-width: 768px) {
+    button, .interactive-element {
+      min-height: auto !important;
+      padding: 0.5rem 1rem !important;
+    }
+  }
+  
+  /* Enhanced spacing for mobile readability */
+  p {
+    margin-bottom: 1.25rem !important;
+    line-height: 1.6 !important;
+  }
+  
+  @media (min-width: 768px) {
+    p {
+      margin-bottom: 1.5rem !important;
+      line-height: 1.7 !important;
+    }
+  }
+  
+  /* List spacing */
+  ul, ol {
+    margin-bottom: 1.5rem !important;
+    padding-left: 1.5rem !important;
+  }
+  
+  li {
+    margin-bottom: 0.75rem !important;
+    line-height: 1.6 !important;
+  }
+  
+  @media (min-width: 768px) {
+    li {
+      margin-bottom: 0.5rem !important;
+      line-height: 1.7 !important;
+    }
+  }
+  
+  /* Blockquote mobile */
+  blockquote {
+    margin: 1.5rem 0 !important;
+    padding: 1rem !important;
+    border-left: 4px solid var(--ifm-color-primary) !important;
+    background: rgba(var(--ifm-color-primary-rgb), 0.1) !important;
+    border-radius: 0 8px 8px 0 !important;
+  }
+  
+  @media (min-width: 768px) {
+    blockquote {
+      margin: 2rem 0 !important;
+      padding: 1.5rem !important;
+    }
+  }
+  
+  /* Caption text mobile-optimized */
+  .caption-text {
+    font-size: 0.875rem !important;
+    line-height: 1.4 !important;
+    color: #666 !important;
+    text-align: center !important;
+    margin-top: 1rem !important;
+    padding: 0 1rem !important;
+  }
+  
+  @media (min-width: 768px) {
+    .caption-text {
+      font-size: 0.9375rem !important;
+      line-height: 1.5 !important;
+      margin-top: 1.5rem !important;
+      padding: 0 2rem !important;
+    }
+  }
+</style>
 
 <!-- truncate -->
 
-We conducted a 116,972-item evaluation across 11 social dimensions for $10.13, comparing GPT-3.5-turbo (March 2023) with GPT-5 nano (August 2025).
+<div className="article-content">
 
-## The Striking Discovery: AI Models Choose "I Don't Know"
+**What if you could run the most comprehensive AI bias evaluation in history for the price of lunch?** We conducted a 116,972-item evaluation across 11 social dimensions for $10.13, comparing GPT-3.5-turbo (March 2023) with GPT-5 nano (August 2025).
+
+</div>
+
+<div style={{margin: '4rem 0 2rem', padding: '0 1rem'}}>
+
+## 🔍 The Striking Discovery: AI Models Choose "I Don't Know"
+
+</div>
 
 While overall accuracy improved by 8.2 percentage points (53.0% to 61.2%), something far more interesting emerged. **The most dramatic behavioral shift**: Models selected 'Can't be determined' 16.8 percentage points more often (13.1% to 29.9%) when context was insufficient for confident judgments. This represents the largest measurable change in AI behavior we've documented.
 
-<div style={{textAlign: 'center', margin: '2rem 0'}}>
+<div className="image-container">
   <img 
     src="/img/blog/bbq-bias/primary-findings-rigorous.png" 
     alt="AI bias evaluation key findings: uncertainty acknowledgment and overall performance changes"
-    style={{maxWidth: '100%', height: 'auto', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'}}
+    style={{
+      border: '1px solid rgba(0, 0, 0, 0.1)'
+    }}
   />
-  <p style={{marginTop: '1rem', fontSize: '0.9rem', color: '#666'}}>
-    Key findings: 16.8 percentage point increase in uncertainty acknowledgment and 8.2 percentage point improvement in overall accuracy
+  <p className="caption-text">
+    **The striking discovery**: AI models now choose "I don't know" 16.8 percentage points more often when information is insufficient, while maintaining 92.6% accuracy on clear questions
   </p>
 </div>
 
@@ -64,7 +383,11 @@ What if you could run the most comprehensive AI bias evaluation in history for t
 
 The results demonstrate measurable changes in AI behavior across multiple dimensions, with different stakeholder groups interpreting these changes according to their respective frameworks and priorities.
 
-## The $10 Billion Question: Why Did AI Behavior Change?
+<div style={{margin: '4rem 0 2rem', padding: '0 1rem'}}>
+
+## 💰 The $10 Billion Question: Why Did AI Behavior Change?
+
+</div>
 
 GPT-5 nano launched August 7, 2025—just 15 days after the July 23, 2025 "Preventing Woke AI in the Federal Government" executive order. **Coincidence or cause?** The timing raises uncomfortable questions about the relationship between political pressure and AI development.
 
@@ -72,7 +395,11 @@ The executive order mandates that federal agencies procure AI systems meeting "t
 
 The BBQ dataset offers one answer: quantifiable, reproducible results instead of subjective political judgment. But our findings reveal something policymakers didn't anticipate: **The biggest change isn't what AI says—it's when AI chooses to stay silent.**
 
-## The Experiment: Measuring Bias at Scale
+<div style={{margin: '4rem 0 2rem', padding: '0 1rem'}}>
+
+## 🧪 The Experiment: Measuring Bias at Scale
+
+</div>
 
 The [BBQ dataset](https://aclanthology.org/2022.findings-acl.165.pdf) works like a Rorschach test for AI bias. Each question presents a scenario about people and asks AI to choose between two individuals or admit "Can't be determined." The genius is in the design: **ambiguous contexts** (where "Can't be determined" is correct) test whether AI makes stereotypical assumptions, while **disambiguated versions** (with clear answers) test reading comprehension.
 
@@ -153,23 +480,75 @@ The prompt template emphasized response format while avoiding leading language:
     Your answer (A, B, or C only):
 ```
 
-## The Results: Regime-Specific Evolution
+<div style={{margin: '4rem 0 2rem', padding: '0 1rem'}}>
+
+## 📊 The Results: Regime-Specific Evolution
+
+</div>
 
 **First, the regime-specific results where the biggest changes occurred:**
 
-| **Context Type**                                 | **GPT-3.5-turbo**           | **GPT-5 nano**              | **Difference**     | **N**       |
-| ------------------------------------------------ | --------------------------- | --------------------------- | ------------------ | ----------- |
-| **Ambiguous** (Accuracy: "Unknown" = correct)    | 13.1% (95% CI: 12.7%-13.5%) | 29.9% (95% CI: 29.4%-30.4%) | **+16.8 points\*** | 29,243 each |
-| **Disambiguated** (Accuracy: labeled individual) | 92.9% (95% CI: 92.6%-93.2%) | 92.6% (95% CI: 92.3%-92.9%) | -0.3 points        | 29,243 each |
+<div style={{
+  overflowX: 'auto',
+  margin: '2rem 0',
+  padding: '0 1rem',
+  borderRadius: '12px',
+  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)'
+}}>
 
-*CIs are Wilson; tests are two-proportion z with continuity correction. Aggregate accuracy is the mean of ambiguous accuracy and disambiguated accuracy because the subsets have equal counts (N = 29,243 each). *p < 0.001, highly statistically significant
+| **Context Type**                             |               **GPT-3.5-turbo**                |                 **GPT-5 nano**                 |         **Difference**         |      **N**      |
+| :------------------------------------------- | :--------------------------------------------: | :--------------------------------------------: | :----------------------------: | :-------------: |
+| **Ambiguous**<br/>_("Unknown" = correct)_    | 13.1%<br/><small>(95% CI: 12.7%-13.5%)</small> | 29.9%<br/><small>(95% CI: 29.4%-30.4%)</small> | **+16.8 pts**<sup>\*\*\*</sup> | 29,243<br/>each |
+| **Disambiguated**<br/>_(labeled individual)_ | 92.9%<br/><small>(95% CI: 92.6%-93.2%)</small> | 92.6%<br/><small>(95% CI: 92.3%-92.9%)</small> |            -0.3 pts            | 29,243<br/>each |
+
+</div>
+
+<div style={{
+  fontSize: '0.85rem',
+  color: '#666',
+  fontStyle: 'italic',
+  marginTop: '1rem',
+  padding: '1rem',
+  backgroundColor: '#f8f9fa',
+  borderRadius: '8px',
+  borderLeft: '4px solid #007acc'
+}}>
+
+**Statistical notes**: CIs are Wilson intervals; tests are two-proportion z with continuity correction. Aggregate accuracy is the mean of ambiguous and disambiguated accuracy (equal N = 29,243 each). <sup>\*\*\*</sup>p < 0.001, highly statistically significant
+
+</div>
 
 **Key finding**: GPT-5 nano shows significantly improved abstention on unanswerable items while maintaining accuracy on disambiguated questions. **No utility loss on disambiguated items: false "Unknown" rates remained essentially unchanged (7.1% vs 7.4%), showing GPT-5 nano doesn't refuse to answer when answers are determinable.**
 
-<div style={{padding: '1rem', backgroundColor: '#e8f4fd', border: '1px solid #b8e6ff', borderRadius: '8px', margin: '1.5rem 0'}}>
-  <h4 style={{margin: '0 0 0.5rem', fontSize: '1rem', fontWeight: '600'}}>🔍 OpenAI's Stated Mechanism</h4>
-  <p style={{margin: '0', fontSize: '0.9rem', lineHeight: '1.4'}}>
-    OpenAI's <a href="https://cdn.openai.com/gpt-5-system-card.pdf">GPT-5 system card</a> describes safe-completions and calibrated abstention on unanswerable prompts. Our ambiguous-item results are consistent with that mechanism. Differences in absolute values reflect that we evaluated the nano tier without web and constrained outputs to a single letter.
+<div style={{
+  margin: '2.5rem 0',
+  padding: '2rem',
+  backgroundColor: '#f0f8ff',
+  border: '2px solid #b8e6ff',
+  borderRadius: '16px',
+  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.06)',
+  maxWidth: '800px',
+  marginLeft: 'auto',
+  marginRight: 'auto'
+}}>
+  <h4 style={{
+    margin: '0 0 1.5rem',
+    fontSize: '1.2rem',
+    fontWeight: '700',
+    color: '#2c3e50',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem'
+  }}>
+    🔍 OpenAI's Stated Mechanism
+  </h4>
+  <p style={{
+    margin: '0',
+    fontSize: '1rem',
+    lineHeight: '1.7',
+    color: '#4a5568'
+  }}>
+    OpenAI's <a href="https://cdn.openai.com/gpt-5-system-card.pdf" style={{color: '#3182ce', textDecoration: 'none', borderBottom: '2px solid #3182ce', fontWeight: '600'}}>GPT-5 system card</a> describes safe-completions and calibrated abstention on unanswerable prompts. Our ambiguous-item results are consistent with that mechanism. Differences in absolute values reflect that we evaluated the nano tier without web and constrained outputs to a single letter.
   </p>
 </div>
 
@@ -215,7 +594,11 @@ Consider this [real scenario from the BBQ dataset](https://huggingface.co/datase
 
 **GPT-5-nano** chose **C (Can't be determined)**, recognizing that the context provides insufficient information for a confident judgment.
 
-## The Interpretation Problem: Same Data, Different Lenses
+<div style={{margin: '4rem 0 2rem', padding: '0 1rem'}}>
+
+## 🔄 The Interpretation Problem: Same Data, Different Lenses
+
+</div>
 
 This behavioral shift—from making assumptions to acknowledging uncertainty—sits at the heart of contemporary debates about AI bias. **The same data supports multiple reasonable interpretations:**
 
@@ -237,30 +620,81 @@ Interprets the changes as **overdue bias correction**. Historical "common sense"
 
 Each interpretation contains elements of validity, highlighting why AI bias remains such a contentious issue.
 
-<div style={{textAlign: 'center', margin: '2rem 0'}}>
+<div style={{
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  margin: '3rem 0',
+  padding: '0 1rem'
+}}>
   <img 
     src="/img/blog/bbq-bias/political-interpretations-corrected.png" 
     alt="Four political lenses interpreting the same behavioral change in AI"
-    style={{maxWidth: '100%', height: 'auto', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'}}
+    style={{
+      maxWidth: '100%', 
+      height: 'auto', 
+      borderRadius: '12px', 
+      boxShadow: '0 16px 48px rgba(0, 0, 0, 0.18)',
+      border: '1px solid rgba(0, 0, 0, 0.1)',
+      background: 'white'
+    }}
   />
-  <p style={{marginTop: '1rem', fontSize: '0.9rem', color: '#666'}}>
-    The same 16.8% increase in uncertainty acknowledgment viewed through different political lenses
+  <p style={{
+    marginTop: '1.5rem', 
+    fontSize: '0.95rem', 
+    color: '#555',
+    textAlign: 'center',
+    maxWidth: '650px',
+    lineHeight: '1.6',
+    fontStyle: 'italic'
+  }}>
+    **Same empirical finding, different political interpretations**: The 16.8% increase in uncertainty acknowledgment can be viewed as progress, overcaution, or something in between
   </p>
 </div>
 
-## Test Your Understanding: Interactive BBQ Bias Quiz
+<div style={{margin: '4rem 0 2rem', padding: '0 1rem'}}>
+
+## 🧠 Test Your Understanding: Interactive BBQ Bias Quiz
+
+</div>
+
+<div style={{
+  padding: '2rem',
+  margin: '2rem 0',
+  backgroundColor: '#fffbf0',
+  border: '2px solid #fbb042',
+  borderRadius: '16px',
+  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.06)'
+}}>
 
 To understand how these bias patterns actually manifest, try answering the same types of questions that tripped up both AI models. These are **real questions from our evaluation** where at least one model failed—some where both models were wrong.
 
 **Content Note:** These items include sensitive identities and wording from a research dataset. We do not endorse any stereotype. Goal: measurement literacy. Names are part of the [dataset templates](https://aclanthology.org/2022.findings-acl.165.pdf).
 
+</div>
+
 import BBQBiasQuiz from './trump-woke-ai-bias-audit/components/BBQBiasQuiz';
 
 <BBQBiasQuiz />
 
+<div style={{
+  padding: '1.5rem',
+  margin: '2rem 0',
+  backgroundColor: '#f0f8ff',
+  border: '1px solid #b8e6ff',
+  borderRadius: '12px',
+  fontStyle: 'italic'
+}}>
+
 Try these questions yourself—they reveal how difficult it is to distinguish between contexts with enough information for confident judgments versus scenarios where acknowledging uncertainty is the wiser choice. **Most humans get several wrong**, making confident assumptions where uncertainty is warranted.
 
-## The Arc of AI Evolution: 2.5 Years That Changed Everything
+</div>
+
+<div style={{margin: '4rem 0 2rem', padding: '0 1rem'}}>
+
+## ⏳ The Arc of AI Evolution: 2.5 Years That Changed Everything
+
+</div>
 
 Our evaluation captures a pivotal moment in AI history:
 
@@ -272,14 +706,34 @@ Our evaluation captures a pivotal moment in AI history:
 
 **OpenAI's stated approach**: The GPT-5 system card describes a shift from refusal-centric safety to "safe-completions" that aim to be helpful while staying within policy bounds. It emphasizes reducing deception and improving abstention when tasks are impossible—exactly the behavior we observe in ambiguous BBQ contexts.
 
-<div style={{textAlign: 'center', margin: '2rem 0'}}>
+<div style={{
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  margin: '3rem 0',
+  padding: '0 1rem'
+}}>
   <img 
     src="/img/blog/bbq-bias/development-timeline-rigorous.png" 
     alt="AI development timeline showing behavioral changes over 2.5 years"
-    style={{maxWidth: '100%', height: 'auto', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'}}
+    style={{
+      maxWidth: '100%', 
+      height: 'auto', 
+      borderRadius: '12px', 
+      boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
+      border: '1px solid rgba(0, 0, 0, 0.1)'
+    }}
   />
-  <p style={{marginTop: '1rem', fontSize: '0.9rem', color: '#666'}}>
-    Development timeline: 2.5 years of measurable behavioral changes in AI bias patterns
+  <p style={{
+    marginTop: '1.5rem', 
+    fontSize: '0.95rem', 
+    color: '#555',
+    textAlign: 'center',
+    maxWidth: '650px',
+    lineHeight: '1.6',
+    fontWeight: '500'
+  }}>
+    The evolution spans the exact period when AI bias became politically charged—from GPT-3.5's release through the height of the "woke AI" debate
   </p>
 </div>
 
@@ -305,14 +759,34 @@ A system that refuses to make assumptions might still reflect biases in its trai
 
 Here's the remarkable part: **comprehensive bias testing is now cheaper than a movie ticket**. The $10.13 cost and open-source methodology mean any organization—from startups to governments—can run the same evaluation that would have cost tens of thousands just two years ago.
 
-<div style={{textAlign: 'center', margin: '2rem 0'}}>
+<div style={{
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  margin: '3rem 0',
+  padding: '0 1rem'
+}}>
   <img 
     src="/img/blog/bbq-bias/methodology-accessibility-rigorous.png" 
     alt="Bias evaluation methodology cost breakdown and comprehensive scope"
-    style={{maxWidth: '100%', height: 'auto', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'}}
+    style={{
+      maxWidth: '100%', 
+      height: 'auto', 
+      borderRadius: '12px', 
+      boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
+      border: '1px solid rgba(0, 0, 0, 0.1)'
+    }}
   />
-  <p style={{marginTop: '1rem', fontSize: '0.9rem', color: '#666'}}>
-    Methodology accessibility: $10.13 total cost for comprehensive evaluation across 116,972 tests
+  <p style={{
+    marginTop: '1.5rem', 
+    fontSize: '0.95rem', 
+    color: '#555',
+    textAlign: 'center',
+    maxWidth: '650px',
+    lineHeight: '1.6',
+    fontWeight: '500'
+  }}>
+    **Democratizing bias evaluation**: What once required tens of thousands of dollars can now be done for the price of lunch—making rigorous AI auditing accessible to any organization
   </p>
 </div>
 
@@ -358,7 +832,11 @@ This methodology offers a template for standardized bias evaluation. Regulatory 
 
 **The breakthrough insight**: AI systems learned to distinguish between "I won't answer" and "I can't answer with confidence." This isn't refusal—it's calibrated uncertainty, recognizing when confident judgments would be inappropriate. **This may be the most important behavioral change in AI safety we've measured.**
 
-## Conclusion
+<div style={{margin: '4rem 0 2rem', padding: '0 1rem'}}>
+
+## 🎯 Conclusion
+
+</div>
 
 The data tells a clear story, but reasonable people interpret it differently. GPT-5-nano shows **dramatically increased abstention on unanswerable items** (up 16.8 percentage points) while maintaining accuracy when answers are clear. **Same behavioral shift, multiple valid interpretations:**
 
@@ -369,14 +847,21 @@ The data tells a clear story, but reasonable people interpret it differently. GP
 - **Systematic progress** across all social dimensions with measurable effect sizes
 - **Reproducible methodology** costing exactly $10.13 for comprehensive evaluation
 
-<div style={{textAlign: 'center', margin: '2rem 0'}}>
+<div className="image-container">
   <img 
     src="/img/blog/bbq-bias/confidence-intervals-fixed.png" 
     alt="Statistical analysis showing 95% confidence intervals for overall accuracy, ambiguous context uncertainty acknowledgment, and disambiguated accuracy"
-    style={{maxWidth: '100%', height: 'auto', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'}}
+    style={{
+      border: '1px solid rgba(0, 0, 0, 0.1)',
+      background: 'white',
+      boxShadow: '0 16px 48px rgba(0, 0, 0, 0.18)'
+    }}
   />
-  <p style={{marginTop: '1rem', fontSize: '0.9rem', color: '#666'}}>
-    All findings statistically significant (p < 0.001) with 95% confidence intervals
+  <p className="caption-text" style={{
+    fontWeight: '500',
+    color: '#555'
+  }}>
+    **Statistical rigor**: All findings highly significant (p < 0.001) with 95% confidence intervals, ensuring our conclusions are statistically sound
   </p>
 </div>
 
@@ -403,7 +888,20 @@ The question is no longer whether AI systems exhibit bias, but **how we collecti
 
 ---
 
-## How to Replicate This Study
+<div style={{
+  margin: '4rem 0 2rem',
+  padding: '0 1rem'
+}}>
+
+## 🔄 How to Replicate This Study
+
+</div>
+
+<div className="info-box" style={{
+  backgroundColor: '#f8f9fa',
+  border: '2px solid #e9ecef',
+  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.06)'
+}}>
 
 You can run your own comprehensive bias evaluation using our open-source methodology:
 
@@ -421,8 +919,26 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --output sample-results.jsonl
 npx promptfoo@latest view
 ```
 
+<div className="info-box" style={{
+  backgroundColor: '#f0f8ff',
+  border: '2px solid #007acc',
+  fontWeight: '500',
+  margin: '1.5rem 0 0'
+}}>
+
 **Full replication:** 116,972 tests across 11 social dimensions for exactly $10.13. Runtime depends on rate limits and concurrency with standard OpenAI API access.
 
----
+</div>
 
-_Complete methodology, dataset, and analysis code: [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-bbq) | [Bias evaluation guide](https://promptfoo.dev/docs/guides/evaluate-llm-bias)_
+</div>
+
+<div className="info-box" style={{
+  backgroundColor: '#f8f9fa',
+  border: '1px solid #e9ecef',
+  textAlign: 'center',
+  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)'
+}}>
+
+**Resources**: [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-bbq) | [Bias evaluation guide](https://promptfoo.dev/docs/guides/evaluate-llm-bias)
+
+</div>
