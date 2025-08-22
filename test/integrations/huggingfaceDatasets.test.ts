@@ -11,6 +11,7 @@ jest.mock('../../src/cache', () => ({
 
 jest.mock('../../src/envars', () => ({
   getEnvString: jest.fn().mockReturnValue(''),
+  isCI: jest.fn().mockReturnValue(false),
 }));
 
 describe('huggingfaceDatasets', () => {
