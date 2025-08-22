@@ -232,6 +232,169 @@ describe('SecurityFindings', () => {
     expect(noIssuesMessage).toBeInTheDocument();
   });
 
+  it('should render a Paper for a file section with a border color of error.main and border width of 2 when the file contains at least one critical issue', () => {
+    const mockScanResults: ScanResult = createMockScanResults({
+      issues: [
+        {
+          severity: 'error',
+          message: 'A critical vulnerability was found in file1.py.',
+          details: {
+            path: '/path/to/file1.py',
+            code: 'os.system("rm -rf /")',
+          },
+        } as ScanIssue,
+      ],
+    });
+
+    render(
+      <SecurityFindings
+        scanResults={mockScanResults}
+        selectedSeverity={null}
+        onSeverityChange={mockOnSeverityChange}
+        showRawOutput={false}
+        onToggleRawOutput={mockOnToggleRawOutput}
+      />,
+    );
+
+    const fileNameElement = screen.getByText('file1.py');
+    const paperElement = fileNameElement.closest('.MuiPaper-root');
+
+    expect(paperElement).toHaveStyle('border-color: rgb(211, 47, 47)');
+    expect(paperElement).toHaveStyle('border-width: 2px');
+  });
+
+  it("should display an expand/collapse trigger in the grouped-by-file view with the label 'Show {N} Issues' (or 'Hide {N} Issues') and toggle the visibility of the issues list when clicked", async () => {
+    const user = userEvent.setup();
+    const mockScanResults: ScanResult = {
+      path: 'mock/path',
+      success: true,
+      issues: [
+        { severity: 'error', message: 'Error message', details: { path: 'file1.py' } },
+        { severity: 'warning', message: 'Warning message', details: { path: 'file1.py' } },
+      ] as ScanIssue[],
+      rawOutput: 'Raw scanner output text.',
+      scannedFiles: 1,
+    };
+
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <SecurityFindings
+          scanResults={mockScanResults}
+          selectedSeverity={null}
+          onSeverityChange={mockOnSeverityChange}
+          showRawOutput={false}
+          onToggleRawOutput={mockOnToggleRawOutput}
+        />
+      </ThemeProvider>,
+    );
+
+    const showIssuesButton = await screen.findByText('Show 2 Issues');
+    expect(showIssuesButton).toBeInTheDocument();
+
+    await user.click(showIssuesButton);
+
+    const hideIssuesButton = await screen.findByText('Hide 2 Issues');
+    expect(hideIssuesButton).toBeInTheDocument();
+
+    await user.click(hideIssuesButton);
+
+    const showIssuesButtonAgain = await screen.findByText('Show 2 Issues');
+    expect(showIssuesButtonAgain).toBeInTheDocument();
+  });
+
+  it('should display the file name and full file path in the file header for each file section in the grouped-by-file view', () => {
+    const mockScanResults = createMockScanResults({
+      issues: [
+        {
+          severity: 'error',
+          message: 'A critical vulnerability was found.',
+          details: {
+            path: '/path/to/vulnerable/file.py',
+            code: 'os.system("rm -rf /")',
+          },
+        },
+      ],
+    });
+
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <SecurityFindings
+          scanResults={mockScanResults}
+          selectedSeverity={null}
+          onSeverityChange={mockOnSeverityChange}
+          showRawOutput={false}
+          onToggleRawOutput={mockOnToggleRawOutput}
+        />
+      </ThemeProvider>,
+    );
+
+    const fileName = 'file.py';
+    const filePath = '/path/to/vulnerable/file.py';
+
+    expect(screen.getByText(fileName)).toBeInTheDocument();
+    expect(screen.getByText(filePath)).toBeInTheDocument();
+  });
+
+  describe('when handling unknown severity values', () => {
+    it('should render the issue with the default InfoIcon and label when the severity is unknown', () => {
+      const mockScanResults = createMockScanResults({
+        issues: [{ severity: 'info', message: 'Unknown severity issue' }],
+      });
+
+      render(
+        <SecurityFindings
+          scanResults={mockScanResults}
+          selectedSeverity={null}
+          onSeverityChange={mockOnSeverityChange}
+          showRawOutput={false}
+          onToggleRawOutput={mockOnToggleRawOutput}
+        />,
+      );
+
+      const issueElement = screen.getByText('Unknown severity issue');
+      expect(issueElement).toBeInTheDocument();
+
+      const infoIcon = screen.getByTestId('InfoIcon');
+      expect(infoIcon).toBeInTheDocument();
+
+      const severityBadge = screen.getByText('info');
+      expect(severityBadge).toBeInTheDocument();
+    });
+  });
+
+  it('should handle extremely long file names or paths in grouped-by-file view', () => {
+    const longFilePath =
+      'very/long/path/to/a/file/with/an/extremely/long/name/that/should/not/break/the/layout/file.py';
+    const mockScanResults = createMockScanResults({
+      issues: [
+        {
+          severity: 'error',
+          message: 'A critical vulnerability was found.',
+          details: {
+            path: longFilePath,
+            code: 'os.system("rm -rf /")',
+          },
+        },
+      ],
+    });
+
+    render(
+      <SecurityFindings
+        scanResults={mockScanResults}
+        selectedSeverity={null}
+        onSeverityChange={mockOnSeverityChange}
+        showRawOutput={false}
+        onToggleRawOutput={mockOnToggleRawOutput}
+      />,
+    );
+
+    const fileNameElement = screen.getByText('file.py');
+    const filePathElement = screen.getByText(longFilePath);
+
+    expect(fileNameElement).toBeInTheDocument();
+    expect(filePathElement).toBeInTheDocument();
+  });
+
   describe('when toggling group by file', () => {
     it('should display issues grouped by file initially, then as a flat list when toggled', async () => {
       const user = userEvent.setup();

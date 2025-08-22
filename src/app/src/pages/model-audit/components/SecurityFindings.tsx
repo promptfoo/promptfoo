@@ -261,22 +261,55 @@ export default function SecurityFindings({
             const fileName = file.split('/').pop() || file;
 
             return (
-              <Box key={file}>
-                {/* File Header - Always Visible */}
-                <Paper
-                  elevation={0}
+              <Paper
+                key={file}
+                elevation={1}
+                sx={{
+                  overflow: 'hidden',
+                  border: 1,
+                  borderColor: criticalCount > 0 ? 'error.main' : 'divider',
+                  borderWidth: criticalCount > 0 ? 2 : 1,
+                }}
+              >
+                {/* File Header */}
+                <Box
                   sx={{
                     p: 2,
-                    mb: 2,
-                    bgcolor: alpha(theme.palette.primary.main, 0.08),
-                    border: 1,
-                    borderColor: 'primary.main',
+                    bgcolor: alpha(
+                      criticalCount > 0
+                        ? theme.palette.error.main
+                        : warningCount > 0
+                          ? theme.palette.warning.main
+                          : theme.palette.primary.main,
+                      0.08,
+                    ),
+                    borderBottom: 1,
+                    borderColor: 'divider',
                   }}
                 >
                   <Stack direction="row" alignItems="center" spacing={2}>
-                    <FileIcon color="primary" />
+                    <FileIcon
+                      sx={{
+                        color:
+                          criticalCount > 0
+                            ? 'error.main'
+                            : warningCount > 0
+                              ? 'warning.main'
+                              : 'primary.main',
+                      }}
+                    />
                     <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="h6" color="primary.main">
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          color:
+                            criticalCount > 0
+                              ? 'error.main'
+                              : warningCount > 0
+                                ? 'warning.dark'
+                                : 'text.primary',
+                        }}
+                      >
                         {fileName}
                       </Typography>
                       <Typography
@@ -308,89 +341,85 @@ export default function SecurityFindings({
                       )}
                     </Stack>
                   </Stack>
-                </Paper>
+                </Box>
 
-                {/* Collapsible Issues Section */}
-                <Paper elevation={0} sx={{ border: 1, borderColor: 'divider' }}>
-                  <Box
-                    sx={{
-                      p: 2,
-                      cursor: 'pointer',
-                      bgcolor: alpha(theme.palette.action.hover, 0.02),
-                      '&:hover': {
-                        bgcolor: alpha(theme.palette.action.hover, 0.05),
-                      },
-                    }}
-                    onClick={() => toggleFileExpansion(file)}
-                  >
-                    <Stack direction="row" alignItems="center" spacing={2}>
-                      <IconButton size="small">
-                        {isExpanded ? <ExpandLess /> : <ExpandMore />}
-                      </IconButton>
+                {/* Expandable Trigger */}
+                <Box
+                  sx={{
+                    p: 2,
+                    cursor: 'pointer',
+                    bgcolor: alpha(theme.palette.action.hover, 0.01),
+                    '&:hover': {
+                      bgcolor: alpha(theme.palette.action.hover, 0.04),
+                    },
+                    transition: 'background-color 0.2s',
+                  }}
+                  onClick={() => toggleFileExpansion(file)}
+                >
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <IconButton size="small" sx={{ p: 0.5 }}>
+                      {isExpanded ? <ExpandLess /> : <ExpandMore />}
+                    </IconButton>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {isExpanded ? 'Hide' : 'Show'} {issues.length} Issue
+                      {issues.length !== 1 ? 's' : ''}
+                    </Typography>
+                  </Stack>
+                </Box>
 
-                      <Typography variant="body1">{isExpanded ? 'Hide' : 'Show'} Issues</Typography>
-
-                      <Box sx={{ flexGrow: 1 }} />
+                {/* Collapsible Issues Content */}
+                <Collapse in={isExpanded}>
+                  <Divider />
+                  <Box sx={{ p: 2, bgcolor: alpha(theme.palette.action.hover, 0.01) }}>
+                    <Stack spacing={2}>
+                      {issues.map((issue, index) => (
+                        <Paper
+                          key={index}
+                          variant="outlined"
+                          sx={{
+                            p: 2.5,
+                            borderLeft: 4,
+                            borderLeftColor: isCriticalSeverity(issue.severity)
+                              ? 'error.main'
+                              : issue.severity === 'warning'
+                                ? 'warning.main'
+                                : 'info.main',
+                            bgcolor: alpha(
+                              isCriticalSeverity(issue.severity)
+                                ? theme.palette.error.main
+                                : issue.severity === 'warning'
+                                  ? theme.palette.warning.main
+                                  : theme.palette.info.main,
+                              0.03,
+                            ),
+                          }}
+                        >
+                          <Stack direction="row" spacing={2} alignItems="flex-start">
+                            {getSeverityIcon(issue.severity)}
+                            <Box sx={{ flexGrow: 1 }}>
+                              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
+                                <Typography variant="body1" fontWeight={600}>
+                                  {issue.message}
+                                </Typography>
+                                <SeverityBadge severity={issue.severity}>
+                                  {getSeverityLabel(issue.severity)}
+                                </SeverityBadge>
+                              </Stack>
+                              {issue.details && (
+                                <Alert severity="info" sx={{ mt: 2 }}>
+                                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                                    {JSON.stringify(issue.details, null, 2)}
+                                  </pre>
+                                </Alert>
+                              )}
+                            </Box>
+                          </Stack>
+                        </Paper>
+                      ))}
                     </Stack>
                   </Box>
-
-                  <Collapse in={isExpanded}>
-                    <Divider />
-                    <Box sx={{ p: 2 }}>
-                      <Stack spacing={2}>
-                        {issues.map((issue, index) => (
-                          <Paper
-                            key={index}
-                            sx={{
-                              p: 3,
-                              borderLeft: 4,
-                              borderColor: isCriticalSeverity(issue.severity)
-                                ? 'error.main'
-                                : issue.severity === 'warning'
-                                  ? 'warning.main'
-                                  : 'info.main',
-                              bgcolor: alpha(
-                                isCriticalSeverity(issue.severity)
-                                  ? theme.palette.error.main
-                                  : issue.severity === 'warning'
-                                    ? theme.palette.warning.main
-                                    : theme.palette.info.main,
-                                0.02,
-                              ),
-                            }}
-                          >
-                            <Stack direction="row" spacing={2} alignItems="flex-start">
-                              {getSeverityIcon(issue.severity)}
-                              <Box sx={{ flexGrow: 1 }}>
-                                <Stack
-                                  direction="row"
-                                  spacing={2}
-                                  alignItems="center"
-                                  sx={{ mb: 1 }}
-                                >
-                                  <Typography variant="body1" fontWeight={600}>
-                                    {issue.message}
-                                  </Typography>
-                                  <SeverityBadge severity={issue.severity}>
-                                    {getSeverityLabel(issue.severity)}
-                                  </SeverityBadge>
-                                </Stack>
-                                {issue.details && (
-                                  <Alert severity="info" sx={{ mt: 2 }}>
-                                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                                      {JSON.stringify(issue.details, null, 2)}
-                                    </pre>
-                                  </Alert>
-                                )}
-                              </Box>
-                            </Stack>
-                          </Paper>
-                        ))}
-                      </Stack>
-                    </Box>
-                  </Collapse>
-                </Paper>
-              </Box>
+                </Collapse>
+              </Paper>
             );
           })}
         </Stack>
