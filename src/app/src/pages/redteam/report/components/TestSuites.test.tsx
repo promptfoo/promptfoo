@@ -255,7 +255,7 @@ describe('TestSuites Component Navigation', () => {
 
     expect(mockOpen).toHaveBeenCalledWith(
       'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A',
-      '_blank'
+      '_blank',
     );
 
     // Restore original window.open
