@@ -56,7 +56,7 @@ const FoundationModelConfiguration: React.FC<FoundationModelConfigurationProps> 
         defaultModel: 'google:gemini-2.5-pro',
         placeholder: 'google:gemini-2.5-pro, google:gemini-2.5-flash',
         docUrl: 'https://www.promptfoo.dev/docs/providers/google',
-        envVar: 'GOOGLE_API_KEY',
+        envVar: 'GOOGLE_API_KEY | GEMINI_API_KEY | PALM_API_KEY',
       },
       vertex: {
         name: 'Google Vertex AI',
