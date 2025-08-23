@@ -1,8 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Report from './Report';
-import { callApi } from '@app/utils/api';
 
 // Mock dependencies
 vi.mock('react-router-dom', () => ({
@@ -11,6 +11,12 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('@app/hooks/usePageMeta', () => ({
   usePageMeta: vi.fn(),
+}));
+
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: () => ({
+    recordEvent: vi.fn(),
+  }),
 }));
 
 vi.mock('@app/utils/api', () => ({
@@ -44,7 +50,7 @@ vi.mock('./EnterpriseBanner', () => ({
 }));
 
 vi.mock('./Overview', () => ({
-  default: () => null,
+  default: vi.fn(({ vulnerabilitiesDataGridRef }: any) => null),
 }));
 
 vi.mock('./StrategyStats', () => ({
@@ -56,7 +62,7 @@ vi.mock('./RiskCategories', () => ({
 }));
 
 vi.mock('./TestSuites', () => ({
-  default: () => null,
+  default: vi.fn(({ vulnerabilitiesDataGridRef }: any) => null),
 }));
 
 vi.mock('./FrameworkCompliance', () => ({
@@ -78,6 +84,9 @@ vi.mock('./ToolsDialog', () => ({
 vi.mock('@app/components/EnterpriseBanner', () => ({
   default: () => null,
 }));
+
+import Overview from './Overview';
+import TestSuites from './TestSuites';
 
 describe('Report Component Navigation', () => {
   const mockNavigate = vi.fn();
@@ -132,22 +141,86 @@ describe('Report Component Navigation', () => {
   });
 });
 
-describe('Report Component Rendering', () => {
+describe('Report Component DataGrid State', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(vi.fn());
+
     Object.defineProperty(window, 'location', {
       writable: true,
       value: { search: '?evalId=test-123' },
     });
   });
 
-  it('should render loading state with spinner and message when data is not available', async () => {
-    vi.mocked(callApi).mockReturnValue(new Promise(() => {}));
-
+  it('should initialize vulnerabilitiesDataGridFilterModel with an empty filter and pass props to Overview and TestSuites', async () => {
     render(<Report />);
 
-    expect(await screen.findByRole('progressbar')).toBeInTheDocument();
-    expect(await screen.findByText('Waiting for report data')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(Overview).toHaveBeenCalled();
+      expect(TestSuites).toHaveBeenCalled();
+    });
+
+    const testSuitesProps = vi.mocked(TestSuites).mock.calls[0][0];
+    expect(testSuitesProps.vulnerabilitiesDataGridFilterModel).toEqual({
+      items: [],
+      logicOperator: GridLogicOperator.Or,
+    });
+    expect(testSuitesProps.vulnerabilitiesDataGridRef).toBeDefined();
+    expect(testSuitesProps.vulnerabilitiesDataGridRef).toHaveProperty('current');
+    expect(testSuitesProps.setVulnerabilitiesDataGridFilterModel).toBeInstanceOf(Function);
+
+    const overviewProps = vi.mocked(Overview).mock.calls[0][0];
+    expect(overviewProps.vulnerabilitiesDataGridRef).toBeDefined();
+    expect(overviewProps.vulnerabilitiesDataGridRef).toHaveProperty('current');
+    expect(overviewProps.setVulnerabilitiesDataGridFilterModel).toBeInstanceOf(Function);
+  });
+
+  it('should update vulnerabilitiesDataGridFilterModel when setVulnerabilitiesDataGridFilterModel is called, and the updated filter model should be passed to TestSuites', async () => {
+    render(<Report />);
+
+    await waitFor(() => {
+      expect(TestSuites).toHaveBeenCalled();
+    });
+
+    const testSuitesProps = vi.mocked(TestSuites).mock.calls[0][0];
+    const setVulnerabilitiesDataGridFilterModel =
+      testSuitesProps.setVulnerabilitiesDataGridFilterModel;
+
+    const newFilterModel: GridFilterModel = {
+      items: [{ field: 'severity', operator: 'equals', value: 'high' }],
+      logicOperator: GridLogicOperator.And,
+    };
+
+    setVulnerabilitiesDataGridFilterModel(newFilterModel);
+
+    await waitFor(() => {
+      expect(TestSuites).toHaveBeenCalledTimes(2);
+    });
+
+    const updatedTestSuitesProps = vi.mocked(TestSuites).mock.calls[1][0];
+    expect(updatedTestSuitesProps.vulnerabilitiesDataGridFilterModel).toEqual(newFilterModel);
+  });
+});
+
+describe('Report Component Edge Cases', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(vi.fn());
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-123' },
+    });
+  });
+
+  it('should render without error when vulnerabilitiesDataGridRef.current is null', async () => {
+    const { findByText } = render(<Report />);
+
+    await waitFor(() => {
+      expect(Overview).toHaveBeenCalled();
+      expect(TestSuites).toHaveBeenCalled();
+    });
+
+    await findByText('LLM Risk Assessment');
   });
 });
