@@ -81,7 +81,7 @@ interface HuggingFaceResponse {
     };
   }>;
   rows: Array<{
-    row: Record<string, any>;
+    row: Record<string, unknown>;
   }>;
 }
 
@@ -263,7 +263,7 @@ export async function fetchHuggingFaceDataset(
             pageSize = Math.max(50, Math.min(pageSize, 75)); // Reduce to 50-75 rows
           } else if (avgRowSize < 256) {
             // Small rows (<256B each)
-            pageSize = Math.min(200, pageSize * 1.5); // Can increase to up to 200 rows
+            pageSize = Math.min(200, Math.round(pageSize * 1.5)); // Can increase to up to 200 rows
           }
 
           if (pageSize !== previousPageSize) {
