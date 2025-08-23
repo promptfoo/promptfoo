@@ -24,7 +24,16 @@ This assertion will use a language model to grade the output based on the specif
 
 ## How it works
 
-Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses GPT-4o, but you can override this by setting the `provider` option (see below).
+Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available:
+
+- **OpenAI API key**: `gpt-4.1-2025-04-14`
+- **Anthropic API key**: `claude-sonnet-4-20250514`
+- **Google credentials**: `gemini-1.5-pro`
+- **Mistral API key**: `mistral-large-latest`
+- **GitHub token**: `openai/gpt-4.1`
+- **Azure credentials**: Your configured Azure GPT deployment
+
+You can override this by setting the `provider` option (see below).
 
 It asks the model to output a JSON object that looks like this:
 

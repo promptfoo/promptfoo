@@ -28,6 +28,8 @@ If we want cybersecurity practices to take more of a foothold, particularly now 
 
 I spend a lot of time discussing what makes AI red teaming software good at all. You're free to just skip to the software.
 
+<!-- truncate -->
+
 ### Summary: red teaming for AI security
 
 AI [red teaming](https://www.promptfoo.dev/blog/owasp-red-teaming/) is a proactive and systematic process that uncovers risks and security vulnerabilities in AI systems, preferably before they hit production. In the spirit of traditional red teaming exercises, it simulates adversarial attacks and stress-tests AI models under real-world conditions. The benefits are numerous, which include:
