@@ -94,11 +94,12 @@ This ensures you're testing with your current changes instead of the installed v
 
 ## Git Workflow - CRITICAL
 
-**NEVER COMMIT DIRECTLY TO MAIN BRANCH**
+### NEVER COMMIT DIRECTLY TO MAIN BRANCH
 
 Always follow this workflow:
 
 1. **Create a feature branch**:
+
    ```bash
    git checkout main
    git pull origin main
@@ -106,20 +107,20 @@ Always follow this workflow:
    ```
 
 2. **Make your changes and commit**:
+
    ```bash
    git add .
    git commit -m "your commit message"
    ```
 
 3. **Push and create PR**:
+
    ```bash
    git push -u origin feature/your-branch-name
    gh pr create --title "Your PR Title" --body "PR description"
    ```
 
 4. **Wait for review and CI checks** before merging
-
-**Exception**: Only commit directly to main for urgent hotfixes or when explicitly instructed by maintainers.
 
 ## Project Conventions
 
