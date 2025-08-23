@@ -5,7 +5,34 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import cliState from '../cliState';
 
-import type { TestCase } from '../types';
+import type { TestCase, Vars } from '../types';
+
+/**
+ * Safely casts HuggingFace row data to Vars type
+ * HuggingFace typically returns string/number/boolean values which are compatible with Vars
+ */
+function castRowToVars(row: Record<string, unknown>): Vars {
+  return row as Record<
+    string,
+    string | number | boolean | any[] | Record<string, any> | (string | number | boolean)[]
+  >;
+}
+
+// Constants for performance optimization thresholds
+/** Multiplier for increasing page size when rows are small (<256B each) */
+const SMALL_ROW_PAGE_SIZE_MULTIPLIER = 1.5;
+
+/** Minimum pages remaining to trigger concurrent fetching */
+const CONCURRENT_FETCH_PAGES_THRESHOLD = 2;
+
+/** Progress threshold (80%) below which concurrent fetching is enabled */
+const CONCURRENT_FETCH_PROGRESS_THRESHOLD = 0.8;
+
+/** Maximum number of concurrent requests to make */
+const MAX_CONCURRENT_REQUESTS = 3;
+
+/** Frequency of progress logging (every N pages) */
+const PROGRESS_LOG_FREQUENCY_PAGES = 5;
 
 /**
  * Manages progress bar for HuggingFace dataset downloads
@@ -83,6 +110,16 @@ interface HuggingFaceResponse {
   rows: Array<{
     row: Record<string, unknown>;
   }>;
+}
+
+/**
+ * Result type for concurrent fetch operations
+ */
+interface ConcurrentFetchResult {
+  offset: number;
+  response: any;
+  success: boolean;
+  error?: Error;
 }
 
 export function parseDatasetPath(path: string): {
@@ -178,9 +215,7 @@ export async function fetchHuggingFaceDataset(
     const singleRequestTests: TestCase[] = [];
     for (const { row } of data.rows) {
       const test: TestCase = {
-        vars: {
-          ...row,
-        },
+        vars: castRowToVars(row),
         options: {
           disableVarExpansion: true,
         },
@@ -263,7 +298,7 @@ export async function fetchHuggingFaceDataset(
             pageSize = Math.max(50, Math.min(pageSize, 75)); // Reduce to 50-75 rows
           } else if (avgRowSize < 256) {
             // Small rows (<256B each)
-            pageSize = Math.min(200, Math.round(pageSize * 1.5)); // Can increase to up to 200 rows
+            pageSize = Math.min(200, Math.round(pageSize * SMALL_ROW_PAGE_SIZE_MULTIPLIER)); // Can increase to up to 200 rows
           }
 
           if (pageSize !== previousPageSize) {
@@ -288,9 +323,7 @@ export async function fetchHuggingFaceDataset(
       // Convert HuggingFace rows to test cases
       for (const { row } of data.rows) {
         const test: TestCase = {
-          vars: {
-            ...row,
-          },
+          vars: castRowToVars(row),
           options: {
             disableVarExpansion: true,
           },
@@ -318,10 +351,13 @@ export async function fetchHuggingFaceDataset(
       const remainingRows = totalNeeded - tests.length;
       const pagesRemaining = Math.ceil(remainingRows / pageSize);
 
-      if (pagesRemaining > 2 && tests.length < totalNeeded * 0.8) {
+      if (
+        pagesRemaining > CONCURRENT_FETCH_PAGES_THRESHOLD &&
+        tests.length < totalNeeded * CONCURRENT_FETCH_PROGRESS_THRESHOLD
+      ) {
         // Still have significant work left
-        const maxConcurrent = Math.min(3, pagesRemaining); // Max 3 concurrent requests
-        const concurrentPromises: Promise<any>[] = [];
+        const maxConcurrent = Math.min(MAX_CONCURRENT_REQUESTS, pagesRemaining);
+        const concurrentPromises: Promise<ConcurrentFetchResult>[] = [];
 
         for (let i = 1; i < maxConcurrent; i++) {
           // Start from next page
@@ -362,7 +398,7 @@ export async function fetchHuggingFaceDataset(
                   break;
                 }
                 tests.push({
-                  vars: { ...row },
+                  vars: castRowToVars(row),
                   options: { disableVarExpansion: true },
                 });
                 concurrentRowCount++;
@@ -381,8 +417,8 @@ export async function fetchHuggingFaceDataset(
         }
       }
 
-      // Progress logging for large datasets (every 5 pages or 500 rows)
-      if (offset > 0 && offset % (pageSize * 5) === 0) {
+      // Progress logging for large datasets (every PROGRESS_LOG_FREQUENCY_PAGES pages)
+      if (offset > 0 && offset % (pageSize * PROGRESS_LOG_FREQUENCY_PAGES) === 0) {
         const progress = Math.round((tests.length / (userLimit || data.num_rows_total)) * 100);
         logger.info(
           `[HF Dataset] ${owner}/${repo}: ${progress}% (${tests.length}/${userLimit || data.num_rows_total} rows)`,
