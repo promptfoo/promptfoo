@@ -31,11 +31,12 @@ export const executablePromptFunction = async (
   },
 ): Promise<string> => {
   invariant(context.provider?.id, 'provider.id is required');
-  
+
   const transformedContext: PromptFunctionContext = {
     vars: context.vars,
     provider: {
-      id: typeof context.provider?.id === 'function' ? context.provider?.id() : context.provider?.id,
+      id:
+        typeof context.provider?.id === 'function' ? context.provider?.id() : context.provider?.id,
       label: context.provider?.label,
     },
     config: context.config ?? {},
@@ -60,11 +61,9 @@ export const executablePromptFunction = async (
   return new Promise<string>((resolve, reject) => {
     const command = scriptParts.shift();
     invariant(command, 'No command found in script path');
-    
+
     // Pass context as JSON argument to the script
-    const scriptArgs = scriptParts.concat([
-      safeJsonStringify(transformedContext) as string,
-    ]);
+    const scriptArgs = scriptParts.concat([safeJsonStringify(transformedContext) as string]);
 
     const options = context.config?.basePath ? { cwd: context.config.basePath } : {};
 
@@ -79,7 +78,7 @@ export const executablePromptFunction = async (
 
       const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
       const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
-      
+
       if (errorOutput) {
         logger.debug(`Error output from executable prompt ${scriptPath}: ${errorOutput}`);
         if (!standardOutput) {
@@ -89,12 +88,12 @@ export const executablePromptFunction = async (
       }
 
       logger.debug(`Output from executable prompt ${scriptPath}: ${standardOutput}`);
-      
+
       if (fileHashes.length > 0 && isCacheEnabled()) {
         const cache = getCache();
         await cache.set(cacheKey, standardOutput);
       }
-      
+
       resolve(standardOutput);
     });
   });
@@ -104,7 +103,7 @@ export const executablePromptFunction = async (
  * Processes an executable file to generate prompts.
  * The executable can be any script or binary that outputs prompt text to stdout.
  * It receives the context as JSON in its first argument.
- * 
+ *
  * @param filePath - Path to the executable file (can include arguments).
  * @param prompt - The raw prompt data.
  * @param functionName - Not used for executables, but kept for interface consistency.
@@ -119,11 +118,12 @@ export function processExecutableFile(
   let rawContent = filePath;
   const scriptParts = parseScriptParts(filePath);
   const firstPart = scriptParts[0];
-  
+
   if (firstPart && fs.existsSync(firstPart)) {
     try {
       const stats = fs.statSync(firstPart);
-      if (stats.isFile() && stats.size < 1024 * 100) { // Only read files < 100KB
+      if (stats.isFile() && stats.size < 1024 * 100) {
+        // Only read files < 100KB
         const content = fs.readFileSync(firstPart, 'utf-8');
         // Check if it's likely a text file
         if (!/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(content.substring(0, 1000))) {
