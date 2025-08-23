@@ -400,6 +400,16 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
 }
 
 /**
+ * Check if a key is set in environment or env overrides
+ * @param key The environment variable key to check
+ * @param env Optional environment overrides
+ * @returns true if the key is set in either environment or overrides
+ */
+export function isKeySet(key: keyof EnvOverrides, env?: EnvOverrides): boolean {
+  return !!getEnvString(key) || !!env?.[key];
+}
+
+/**
  * Get the timeout in milliseconds for each individual test case/provider API call.
  * When this timeout is reached, that specific test is marked as an error.
  * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no timeout).
