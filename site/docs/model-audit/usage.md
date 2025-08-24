@@ -330,6 +330,7 @@ The SARIF output includes:
 - **Invocation Details**: Command-line arguments and scan statistics
 
 Example SARIF output structure:
+
 ```json
 {
   "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
@@ -378,6 +379,7 @@ Example SARIF output structure:
 ### Severity Mapping
 
 ModelAudit severities are mapped to SARIF levels:
+
 - `CRITICAL` → `error`
 - `WARNING` → `warning`
 - `INFO` → `note`
@@ -388,6 +390,7 @@ ModelAudit severities are mapped to SARIF levels:
 SARIF output enables integration with:
 
 #### GitHub Advanced Security
+
 ```yaml
 # .github/workflows/security.yml
 - name: Scan models
@@ -401,6 +404,7 @@ SARIF output enables integration with:
 ```
 
 #### Azure DevOps
+
 ```yaml
 # azure-pipelines.yml
 - script: |
@@ -416,6 +420,7 @@ SARIF output enables integration with:
 ```
 
 #### VS Code SARIF Viewer
+
 ```bash
 # Generate SARIF for local viewing
 promptfoo scan-model . --format sarif --output scan.sarif
@@ -425,7 +430,9 @@ code scan.sarif
 ```
 
 #### Static Analysis Platforms
+
 SARIF output is compatible with:
+
 - SonarQube/SonarCloud (via import)
 - Fortify
 - Checkmarx
