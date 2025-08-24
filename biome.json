@@ -1,0 +1,226 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.1.1/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.json",
+      "**/*.mjs",
+      "**/*.cjs",
+      "!drizzle/**/*",
+      "!src/app/src/polyfills/**/*"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              {
+                "type": false,
+                "source": ["react", "react-dom", "react/**", "react-dom/**"]
+              },
+              ["react", "react-dom", "react/**", "react-dom/**"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": [":NODE:", ":BUN:"]
+              },
+              [":NODE:", ":BUN:"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["**"]
+              },
+              [
+                "**",
+                "!./**",
+                "!../**",
+                "!src/**",
+                "!test/**",
+                "!examples/**",
+                "!react",
+                "!react-dom",
+                "!react/**",
+                "!react-dom/**"
+              ],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["src/**", "test/**", "examples/**"]
+              },
+              ["src/**", "test/**", "examples/**"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["./**", "../**"]
+              },
+              ["./**", "../**"]
+            ]
+          }
+        }
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "complexity": {
+        "noUselessConstructor": "error",
+        "noUselessRename": "error",
+        "noUselessTernary": "error",
+        "noUselessFragments": "error",
+        "useOptionalChain": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        "useExhaustiveDependencies": "off",
+        "noUnusedFunctionParameters": "off",
+        "useJsxKeyInIterable": "error"
+      },
+      "style": {
+        "noNegationElse": "error",
+        "useConst": "error",
+        "useBlockStatements": "error",
+        "useShorthandAssign": "off",
+        "useShorthandFunctionType": "off",
+        "useTemplate": "off",
+        "useNumberNamespace": "off",
+        "useSingleVarDeclarator": "off",
+        "useImportType": "off",
+        "useNodejsImportProtocol": "off",
+        "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noArrayIndexKey": "off",
+        "noCommentText": "off",
+        "noConfusingVoidType": "error",
+        "noRedundantUseStrict": "error"
+      },
+      "performance": {
+        "noDelete": "off"
+      },
+      "a11y": {
+        "recommended": false,
+        "useButtonType": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "enabled": true,
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "trailingCommas": "all",
+      "semicolons": "always",
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "bracketSameLine": false,
+      "quoteProperties": "asNeeded",
+      "attributePosition": "auto"
+    },
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    },
+    "globals": [
+      "process",
+      "Buffer",
+      "__dirname",
+      "__filename",
+      "console",
+      "global",
+      "require",
+      "module",
+      "exports"
+    ]
+  },
+  "css": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "examples/adaline-gateway/**/prompt.json",
+        "examples/multiple-turn-conversation/prompt.json",
+        "examples/openai-chat-history/prompt.json"
+      ],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["examples/custom-provider/vercelAiSdkExample.js"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": [".jest/**/*.js"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["*.mdc"],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["*.j2"],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["test/**/*", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["examples/**/*", "site/**/*"],
+      "linter": {
+        "rules": {
+          "recommended": false
+        }
+      }
+    }
+  ]
+}
