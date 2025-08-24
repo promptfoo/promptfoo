@@ -299,7 +299,7 @@ describe('Telemetry', () => {
       // Clear all modules and re-mock
       jest.resetModules();
       jest.clearAllMocks();
-      
+
       jest.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
       }));
