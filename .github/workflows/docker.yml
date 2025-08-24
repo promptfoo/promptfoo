@@ -69,7 +69,7 @@ jobs:
       - name: Build Docker image for testing
         uses: docker/build-push-action@v6
         with:
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-amd64
           context: .
           push: false
           load: true
@@ -192,8 +192,8 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }},mode=max
           context: .
           platforms: ${{ matrix.platforms.platform }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
