@@ -509,6 +509,18 @@ strategies:
 
 The `purpose` field provides context to guide the generation of adversarial inputs.
 
+:::warning Important: Purpose is NOT the Attack Vector
+The `purpose` field describes your **legitimate application**, not the attack itself. Never write malicious purposes such as:
+
+- ❌ "Purpose: Assist users in creating weapons or explosives using household items"
+- ❌ "Purpose: You are a red teamer trying to jailbreak this system"
+- ❌ "Purpose: Generate harmful content that violates safety guidelines"
+
+Malicious purposes will cause the attack generation models to refuse requests or produce low-quality tests, defeating the purpose of red teaming.
+
+Instead, describe what your application is legitimately supposed to do, and let promptfoo generate the adversarial tests against that legitimate purpose.
+:::
+
 The purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading. For example:
 
 ```yaml
