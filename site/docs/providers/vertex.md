@@ -193,7 +193,37 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"
 export VERTEX_PROJECT_ID="your-project-id"
 ```
 
-#### Option 3: Direct API Key (Quick Testing)
+#### Option 3: Service Account via Config (Alternative)
+
+You can also provide service account credentials directly in your configuration:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
+      # Load credentials from file
+      credentials: 'file://service-account.json'
+      projectId: 'your-project-id'
+```
+
+Or with inline credentials (not recommended for production):
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
+      credentials: '{"type":"service_account","project_id":"..."}'
+      projectId: 'your-project-id'
+```
+
+This approach:
+
+- Allows per-provider authentication
+- Enables using different service accounts for different models
+- Simplifies credential management in complex setups
+- Avoids the need for environment variables
+
+#### Option 4: Direct API Key (Quick Testing)
 
 For quick testing, you can use a temporary access token:
 
@@ -207,7 +237,7 @@ export VERTEX_PROJECT_ID="your-project-id"
 
 **Note:** Access tokens expire after 1 hour. For long-running evaluations, use Application Default Credentials or Service Account authentication.
 
-#### 4. Environment Variables
+#### 5. Environment Variables
 
 Promptfoo automatically loads environment variables from your shell or a `.env` file. Create a `.env` file in your project root:
 
@@ -361,8 +391,11 @@ jobs:
 providers:
   - id: vertex:gemini-2.5-pro
     config:
+      # Authentication options
+      credentials: 'file://service-account.json' # Optional: Use specific service account
       projectId: ${VERTEX_PROJECT_ID}
       region: ${VERTEX_REGION:-us-central1}
+
       generationConfig:
         temperature: 0.2
         maxOutputTokens: 2048
@@ -481,7 +514,8 @@ defaultTest:
 | `apiKey`                           | GCloud API token                                 | None                                 |
 | `apiHost`                          | API host override                                | `{region}-aiplatform.googleapis.com` |
 | `apiVersion`                       | API version                                      | `v1`                                 |
-| `projectId`                        | GCloud project ID                                | None                                 |
+| `credentials`                      | Service account credentials (JSON or file path)  | None                                 |
+| `projectId`                        | GCloud project ID                                | `VERTEX_PROJECT_ID` env var          |
 | `region`                           | GCloud region                                    | `us-central1`                        |
 | `publisher`                        | Model publisher                                  | `google`                             |
 | `context`                          | Model context                                    | None                                 |
