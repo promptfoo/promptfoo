@@ -139,6 +139,7 @@ export async function runAssertion({
     output = await transform(assertion.transform, output, {
       vars: test.vars,
       prompt: { label: prompt },
+      ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
     });
   }
 
