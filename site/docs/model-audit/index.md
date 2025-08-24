@@ -131,6 +131,9 @@ promptfoo scan-model model.pkl model2.h5 models_directory
 # Export results to JSON
 promptfoo scan-model model.pkl --format json --output results.json
 
+# Export results to SARIF for security tool integration
+promptfoo scan-model model.pkl --format sarif --output results.sarif
+
 # Add custom blacklist patterns
 promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious_net"
 
