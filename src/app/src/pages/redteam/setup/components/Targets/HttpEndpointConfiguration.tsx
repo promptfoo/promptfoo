@@ -81,7 +81,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
       value: String(value),
     })),
   );
-  const [isJsonContentType] = useState(true); // Used for syntax highlighting
+
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [request, setRequest] = useState(
     `POST /v1/chat HTTP/1.1
