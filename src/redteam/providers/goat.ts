@@ -354,6 +354,7 @@ export default class GoatProvider implements ApiProvider {
             test,
             targetProvider,
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            targetResponse,
             additionalRubric,
           );
           graderPassed = grade.pass;

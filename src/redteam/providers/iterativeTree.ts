@@ -691,6 +691,7 @@ async function runRedteamConversation({
               iterationTest,
               gradingProvider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              targetResponse,
               additionalRubric,
             );
             storedGraderResult = grade;
