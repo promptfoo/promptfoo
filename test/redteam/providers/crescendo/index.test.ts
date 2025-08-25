@@ -1,9 +1,8 @@
 import { getGraderById } from '../../../../src/redteam/graders';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo';
+import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
-
-import type { Message } from '../../../../src/redteam/providers/shared';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
   PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({
@@ -1136,6 +1135,88 @@ describe('CrescendoProvider', () => {
       expect(result.metadata?.stopReason).toBe('Max rounds reached');
       expect(result.metadata?.successfulAttacks).toBeInstanceOf(Array);
       expect(result.metadata?.totalSuccessfulAttacks).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('provider selection with PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER', () => {
+    const originalEnv = process.env.PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER;
+
+    beforeAll(() => {
+      jest.resetModules();
+    });
+
+    afterAll(() => {
+      process.env.PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER = originalEnv;
+    });
+
+    it('prefers local scoring when PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER=true', async () => {
+      process.env.PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER = 'true';
+
+      jest.doMock('../../../../src/redteam/remoteGeneration', () => ({
+        shouldGenerateRemote: () => true,
+      }));
+
+      const mockGetProvider = jest.fn().mockResolvedValue({
+        id: () => 'local-mock-provider',
+        callApi: jest.fn(),
+      });
+
+      jest.doMock('../../../../src/redteam/providers/shared', () => {
+        const original = jest.requireActual('../../../../src/redteam/providers/shared');
+        return {
+          ...original,
+          redteamProviderManager: {
+            getProvider: (...args: any[]) => mockGetProvider(...(args as any[])),
+          },
+        };
+      });
+
+      const { CrescendoProvider: LocalCrescendo } = await import(
+        '../../../../src/redteam/providers/crescendo'
+      );
+
+      const provider = new LocalCrescendo({
+        injectVar: 'inj',
+        redteamProvider: 'openai:gpt-4o',
+      } as any);
+      const scoring = await (provider as any).getScoringProvider();
+      expect(typeof scoring?.id).toBe('function');
+      expect(scoring.id()).toBe('local-mock-provider');
+    });
+
+    it('prefers local scoring when PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER=true', async () => {
+      process.env.PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER = 'true';
+
+      jest.doMock('../../../../src/redteam/remoteGeneration', () => ({
+        shouldGenerateRemote: () => true,
+      }));
+
+      const mockGetProvider = jest.fn().mockResolvedValue({
+        id: () => 'local-mock-provider',
+        callApi: jest.fn(),
+      });
+
+      jest.doMock('../../../../src/redteam/providers/shared', () => {
+        const original = jest.requireActual('../../../../src/redteam/providers/shared');
+        return {
+          ...original,
+          redteamProviderManager: {
+            getProvider: (...args: any[]) => mockGetProvider(...(args as any[])),
+          },
+        };
+      });
+
+      const { CrescendoProvider: LocalCrescendo } = await import(
+        '../../../../src/redteam/providers/crescendo'
+      );
+
+      const provider = new LocalCrescendo({
+        injectVar: 'inj',
+        redteamProvider: 'openai:gpt-4o',
+      } as any);
+      const scoring = await (provider as any).getScoringProvider();
+      expect(typeof scoring?.id).toBe('function');
+      expect(scoring.id()).toBe('local-mock-provider');
     });
   });
 });

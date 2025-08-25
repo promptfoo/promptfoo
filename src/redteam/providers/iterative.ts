@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 
-import { getEnvInt } from '../../envars';
+import { getEnvBool, getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -21,9 +21,9 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import {
+  accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
@@ -528,9 +528,9 @@ class RedteamIterativeProvider implements ApiProvider {
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
 
-    // Redteam provider can be set from the config.
+    const preferLocal = getEnvBool('PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER', false);
 
-    if (shouldGenerateRemote()) {
+    if (shouldGenerateRemote() && !preferLocal) {
       this.gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
         jsonOnly: true,

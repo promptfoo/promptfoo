@@ -17,6 +17,7 @@ import dedent from 'dedent';
 import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
 
+import { getEnvBool } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -37,10 +38,10 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import {
+  accumulateGraderTokenUsage,
+  accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { BaseRedteamMetadata } from '../types';
@@ -980,7 +981,9 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     let redteamProvider: ApiProvider;
     let gradingProvider: ApiProvider;
 
-    if (shouldGenerateRemote()) {
+    const preferLocal = getEnvBool('PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER', false);
+
+    if (shouldGenerateRemote() && !preferLocal) {
       gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
         jsonOnly: true,
