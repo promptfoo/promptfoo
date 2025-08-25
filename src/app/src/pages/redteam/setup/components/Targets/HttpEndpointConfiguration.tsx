@@ -1,6 +1,3 @@
-import 'prismjs/components/prism-http';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-yaml';
 import './syntax-highlighting.css';
 
 import React, { useCallback, useState } from 'react';
