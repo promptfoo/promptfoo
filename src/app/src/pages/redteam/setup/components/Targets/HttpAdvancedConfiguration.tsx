@@ -8,8 +8,7 @@ import 'prismjs/themes/prism.css';
 import React from 'react';
 
 import dedent from 'dedent';
-// @ts-expect-error: No types available
-import { highlight, languages } from 'prismjs/components/prism-core';
+import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 
 import { useToast } from '@app/hooks/useToast';
@@ -48,6 +47,16 @@ interface HttpAdvancedConfigurationProps {
   updateCustomTarget: (field: string, value: any) => void;
   defaultRequestTransform?: string;
 }
+
+const highlightJS = (code: string): string => {
+  try {
+    const grammar = (Prism as any)?.languages?.javascript;
+    if (!grammar) return code;
+    return Prism.highlight(code, grammar, 'javascript');
+  } catch {
+    return code;
+  }
+};
 
 const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
   selectedTarget,
@@ -106,7 +115,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <Editor
                 value={selectedTarget.config.transformRequest || defaultRequestTransform || ''}
                 onValueChange={(code) => updateCustomTarget('transformRequest', code)}
-                highlight={(code) => highlight(code, languages.javascript)}
+                highlight={highlightJS}
                 padding={10}
                 placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API. Format as:
 
@@ -154,7 +163,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <Editor
                 value={selectedTarget.config.transformResponse || ''}
                 onValueChange={(code) => updateCustomTarget('transformResponse', code)}
-                highlight={(code) => highlight(code, languages.javascript)}
+                highlight={highlightJS}
                 padding={10}
                 placeholder={dedent`Optional: Transform the API response before using it. Format as either:
 
@@ -982,7 +991,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <Editor
                 value={selectedTarget.config.validateStatus || ''}
                 onValueChange={(code) => updateCustomTarget('validateStatus', code)}
-                highlight={(code) => highlight(code, languages.javascript)}
+                highlight={highlightJS}
                 padding={10}
                 placeholder={dedent`Customize HTTP status code validation. Examples:
 
