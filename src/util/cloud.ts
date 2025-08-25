@@ -168,3 +168,44 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
     throw new Error(`Failed to fetch plugin severity overrides from cloud.`);
   }
 }
+
+/**
+ * Given a list of policy IDs, fetches custom policies from Promptfoo Cloud.
+ * @param ids - The IDs of the policies to fetch.
+ * @returns A record of policy IDs to policy texts.
+ */
+export async function getPoliciesFromCloud(ids: string[]): Promise<Record<string, string>> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch policies from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+  try {
+    // Encode the ids as search params
+    const searchParams = new URLSearchParams();
+    ids.forEach((id) => {
+      searchParams.append('id', id);
+    });
+    const response = await makeRequest(`/custom-policies/?${searchParams.toString()}`, 'GET');
+    if (!response.ok) {
+      const errorMessage = await response.text();
+      throw new Error(
+        `Failed to fetch policies from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
+      );
+    }
+    const body = await response.json();
+    // Deserialize the body into a map of policy IDs to policy texts.
+    const policies = body.reduce(
+      (acc: Record<string, string>, policy: { id: string; text: string }) => {
+        acc[policy.id] = policy.text;
+        return acc;
+      },
+      {},
+    );
+    return policies;
+  } catch (e) {
+    logger.error(`Failed to fetch policies from cloud.`);
+    logger.error(String(e));
+    throw new Error(`Failed to fetch policies from cloud.`);
+  }
+}

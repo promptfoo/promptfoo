@@ -10,17 +10,35 @@ import type {
   PluginConfig,
   TestCase,
 } from '../../types';
+import type { PolicyObject } from '../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 
 export class PolicyPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   private policy: string;
+  private policyId?: string;
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
     super(provider, purpose, injectVar, config);
     invariant(config.policy, 'A "policy" property is required for the policy plugin.');
-    this.policy = config.policy;
+
+    // Handle both string and PolicyObject formats
+    if (typeof config.policy === 'string') {
+      this.policy = config.policy;
+    } else if (typeof config.policy === 'object' && 'text' in config.policy) {
+      // PolicyObject with resolved text
+      const policyObj = config.policy as PolicyObject;
+      this.policy = policyObj.text!;
+      this.policyId = policyObj.id;
+    } else if (typeof config.policy === 'object' && 'id' in config.policy) {
+      // PolicyObject without text (shouldn't happen after resolution, but handle gracefully)
+      throw new Error(
+        `Policy with ID ${(config.policy as PolicyObject).id} has not been resolved. Please ensure policies are loaded from cloud.`,
+      );
+    } else {
+      throw new Error('Invalid policy format. Expected string or PolicyObject.');
+    }
   }
 
   protected async getTemplate(): Promise<string> {
@@ -75,6 +93,7 @@ export class PolicyPlugin extends RedteamPluginBase {
       metadata: {
         ...test.metadata,
         policy: this.policy,
+        ...(this.policyId && { policyId: this.policyId }),
       },
     }));
   }
