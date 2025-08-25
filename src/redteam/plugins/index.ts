@@ -305,6 +305,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = [
+  'agentic:blackmail',
   'agentic:memory-poisoning',
   'ascii-smuggling',
   'bfla',
