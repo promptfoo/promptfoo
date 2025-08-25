@@ -90,6 +90,12 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for factually wrong medical information that could cause harm',
   'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
   'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
+  'mental:crisis-mishandling': 'Tests for inappropriate responses during mental health crises',
+  'mental:dangerous-encouragement': 'Tests for encouragement of physically dangerous behaviors',
+  'mental:identity-manipulation': 'Tests for reinforcement of grandiose delusions',
+  'mental:isolation': 'Tests for encouragement of social isolation',
+  'mental:reality-distortion': 'Tests for reinforcement of reality distortion beliefs',
+  'mental:sycophancy': 'Tests for inappropriate agreement with delusional thinking',
   'financial:calculation-error':
     'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
   'financial:compliance-violation':
@@ -178,6 +184,12 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
   'medical:prioritization-error': 'Medical Prioritization Error',
   'medical:sycophancy': 'Medical Sycophancy',
+  'mental:crisis-mishandling': 'Mental Health Crisis Mishandling',
+  'mental:dangerous-encouragement': 'Mental Health Dangerous Encouragement',
+  'mental:identity-manipulation': 'Mental Health Identity Manipulation',
+  'mental:isolation': 'Mental Health Isolation',
+  'mental:reality-distortion': 'Mental Health Reality Distortion',
+  'mental:sycophancy': 'Mental Health Sycophancy',
   'financial:calculation-error': 'Financial Calculation Error',
   'financial:compliance-violation': 'Financial Compliance Violation',
   'financial:data-leakage': 'Financial Data Leakage',
@@ -313,6 +325,12 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:incorrect-knowledge': Severity.Critical,
   'medical:prioritization-error': Severity.High,
   'medical:sycophancy': Severity.Medium,
+  'mental:crisis-mishandling': Severity.Critical,
+  'mental:dangerous-encouragement': Severity.Critical,
+  'mental:identity-manipulation': Severity.High,
+  'mental:isolation': Severity.High,
+  'mental:reality-distortion': Severity.High,
+  'mental:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
@@ -533,6 +551,12 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
+  'mental:crisis-mishandling': 'MentalHealthCrisisMishandling',
+  'mental:dangerous-encouragement': 'MentalHealthDangerousEncouragement',
+  'mental:identity-manipulation': 'MentalHealthIdentityManipulation',
+  'mental:isolation': 'MentalHealthIsolation',
+  'mental:reality-distortion': 'MentalHealthRealityDistortion',
+  'mental:sycophancy': 'MentalHealthSycophancy',
   'financial:calculation-error': 'FinancialCalculationError',
   'financial:compliance-violation': 'FinancialComplianceViolation',
   'financial:data-leakage': 'FinancialDataLeakage',
@@ -692,6 +716,18 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for poor medical prioritization and triage decisions that could delay critical care',
   'medical:sycophancy':
     'Tests for agreeing with incorrect medical assumptions or providing responses aligned with user desires at the expense of medical accuracy',
+  'mental:crisis-mishandling':
+    'Tests for inappropriate responses during mental health crises, including failure to recognize crisis situations or provide appropriate resources',
+  'mental:dangerous-encouragement':
+    'Tests for encouragement of physically dangerous behaviors that could result in self-harm or harm to others',
+  'mental:identity-manipulation':
+    'Tests for reinforcement of grandiose delusions or false identity claims that could worsen mental health conditions',
+  'mental:isolation':
+    'Tests for encouragement of social isolation from family, friends, or professional mental health support',
+  'mental:reality-distortion':
+    'Tests for reinforcement of alternate reality beliefs, simulation theory delusions, or other reality distortion symptoms',
+  'mental:sycophancy':
+    'Tests for inappropriate agreement with delusional thinking, conspiracy theories, or false pattern recognition that could worsen mental health conditions',
   'financial:calculation-error':
     'Tests for errors in option pricing, risk calculations, portfolio optimization, or other quantitative financial analysis that could lead to significant losses',
   'financial:compliance-violation':

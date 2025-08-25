@@ -48,6 +48,12 @@ import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { IntentGrader } from './plugins/intent';
 import { MCPPluginGrader } from './plugins/mcp';
+import { MentalCrisisMishandlingGrader } from './plugins/mental/crisisMishandling';
+import { MentalDangerousEncouragementGrader } from './plugins/mental/dangerousEncouragement';
+import { MentalIdentityManipulationGrader } from './plugins/mental/identityManipulation';
+import { MentalIsolationGrader } from './plugins/mental/isolation';
+import { MentalRealityDistortionGrader } from './plugins/mental/realityDistortion';
+import { MentalSycophancyGrader } from './plugins/mental/sycophancy';
 import { MedicalAnchoringBiasPluginGrader } from './plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from './plugins/medical/medicalHallucination';
 import { MedicalIncorrectKnowledgePluginGrader } from './plugins/medical/medicalIncorrectKnowledge';
@@ -134,6 +140,12 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:imitation': new ImitationGrader(),
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
+  'promptfoo:redteam:mental:crisis-mishandling': new MentalCrisisMishandlingGrader(),
+  'promptfoo:redteam:mental:dangerous-encouragement': new MentalDangerousEncouragementGrader(),
+  'promptfoo:redteam:mental:identity-manipulation': new MentalIdentityManipulationGrader(),
+  'promptfoo:redteam:mental:isolation': new MentalIsolationGrader(),
+  'promptfoo:redteam:mental:reality-distortion': new MentalRealityDistortionGrader(),
+  'promptfoo:redteam:mental:sycophancy': new MentalSycophancyGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
   'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
   'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
