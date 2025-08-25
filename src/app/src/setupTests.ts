@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import 'prismjs';
 
 // We can mock the environment variables. For example:
 // process.env.PROMPTFOO_VERSION = '1.0.0';
