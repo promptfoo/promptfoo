@@ -19,8 +19,9 @@ import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { discoverRateLimit, RateLimitInfoSchema } from '../extraction/rateLimit';
 
-import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
+import type { ApiProvider, Prompt, RateLimitInfo, UnifiedConfig } from '../../types';
 
 // ========================================================
 // Schemas
@@ -57,6 +58,7 @@ const TargetPurposeDiscoveryResultSchema = z.object({
       })
       .nullable(),
   ),
+  rateLimit: RateLimitInfoSchema.optional(),
 });
 
 export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
@@ -134,7 +136,7 @@ export function normalizeTargetPurposeDiscoveryResult(
  * @param target - The target API provider.
  * @param prompt - The prompt to use for the discovery.
  * @param showProgress - Whether to show the progress bar.
- * @returns The discovery result.
+ * @returns The discovery result with rate limit information.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
@@ -160,6 +162,7 @@ export async function doTargetPurposeDiscovery(
   let done = false;
   let question: string | undefined;
   let discoveryResult: TargetPurposeDiscoveryResult | undefined;
+  let lastProviderResponse: any | undefined;
   let state = TargetPurposeDiscoveryStateSchema.parse({
     currentQuestionIndex: 0,
     answers: [],
@@ -227,6 +230,7 @@ export async function doTargetPurposeDiscovery(
           vars: { sessionId },
           bustCache: true,
         });
+        lastProviderResponse = targetResponse;
 
         if (targetResponse.error) {
           const errorMessage = `Error from target: ${targetResponse.error}`;
@@ -269,7 +273,43 @@ export async function doTargetPurposeDiscovery(
     pbar?.stop();
   }
 
-  return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
+  // Rate limit discovery (always enabled for passive detection)
+  let rateLimitInfo: RateLimitInfo | undefined;
+
+  if (showProgress) {
+    logger.info('Discovering rate limits...');
+  }
+  try {
+    rateLimitInfo = await discoverRateLimit(target, {
+      response: lastProviderResponse,
+      fallbackToRequest: false, // Keep truly passive
+    });
+  } catch (error) {
+    logger.error(`${LOG_PREFIX} Error during rate limit discovery: ${error}`);
+    // Continue without rate limit info if discovery fails
+    rateLimitInfo = { detected: false, detectionMethod: 'none', confidence: 'low' };
+  }
+
+  if (discoveryResult) {
+    const normalizedResult = normalizeTargetPurposeDiscoveryResult(discoveryResult);
+    return {
+      ...normalizedResult,
+      rateLimit: rateLimitInfo,
+    };
+  }
+
+  // If no discovery result but we have rate limit info, return minimal result
+  if (rateLimitInfo) {
+    return {
+      purpose: null,
+      limitations: null,
+      user: null,
+      tools: [],
+      rateLimit: rateLimitInfo,
+    };
+  }
+
+  return undefined;
 }
 
 // ========================================================
@@ -381,7 +421,7 @@ export function discoverCommand(
       }
 
       try {
-        const discoveryResult = await doTargetPurposeDiscovery(target);
+        const discoveryResult = await doTargetPurposeDiscovery(target, undefined, true);
 
         if (discoveryResult) {
           if (discoveryResult.purpose) {
@@ -407,12 +447,71 @@ export function discoverCommand(
             logger.info(discoveryResult.user);
           }
 
+          // Rate limiting information
+          if (discoveryResult.rateLimit) {
+            if (discoveryResult.rateLimit.detected) {
+              logger.info(chalk.bold(chalk.green('\n5. Rate limiting information:\n')));
+
+              // Display rate limits in order of specificity
+              if (discoveryResult.rateLimit.requestsPerHour) {
+                logger.info(
+                  `  • Limit: ${discoveryResult.rateLimit.requestsPerHour} requests/hour`,
+                );
+              }
+              if (discoveryResult.rateLimit.requestsPerMinute) {
+                logger.info(
+                  `  • Limit: ${discoveryResult.rateLimit.requestsPerMinute} requests/minute`,
+                );
+              }
+              if (discoveryResult.rateLimit.requestsPerSecond) {
+                logger.info(
+                  `  • Limit: ${discoveryResult.rateLimit.requestsPerSecond} requests/second`,
+                );
+              }
+
+              if (discoveryResult.rateLimit.timeWindow) {
+                logger.info(`  • Time window: ${discoveryResult.rateLimit.timeWindow}`);
+              }
+
+              logger.info(`  • Detection method: ${discoveryResult.rateLimit.detectionMethod}`);
+              logger.info(`  • Confidence: ${discoveryResult.rateLimit.confidence}`);
+
+              // Display warnings if any
+              if (
+                discoveryResult.rateLimit.warnings &&
+                discoveryResult.rateLimit.warnings.length > 0
+              ) {
+                logger.info(chalk.yellow('  • Warnings:'));
+                discoveryResult.rateLimit.warnings.forEach((warning) => {
+                  logger.info(chalk.yellow(`    - ${warning}`));
+                });
+              }
+
+              // Show original headers for debugging (only in debug mode)
+              if (
+                discoveryResult.rateLimit.headers &&
+                Object.keys(discoveryResult.rateLimit.headers).length > 0 &&
+                logger.level === 'debug'
+              ) {
+                logger.debug('  • Raw headers:');
+                Object.entries(discoveryResult.rateLimit.headers).forEach(([key, value]) => {
+                  logger.debug(`    - ${key}: ${value}`);
+                });
+              }
+            } else {
+              logger.info(chalk.bold(chalk.green('\n5. Rate limiting information:\n')));
+              logger.info('  • No rate limits detected from headers');
+              logger.info('  • This API may not implement standard rate limiting headers');
+            }
+          }
+
           // If no meaningful information was discovered, inform the user
           if (
             !discoveryResult.purpose &&
             !discoveryResult.limitations &&
             (!discoveryResult.tools || discoveryResult.tools.length === 0) &&
-            !discoveryResult.user
+            !discoveryResult.user &&
+            (!discoveryResult.rateLimit || !discoveryResult.rateLimit.detected)
           ) {
             logger.info(
               chalk.yellow('\nNo meaningful information was discovered about the target.'),
