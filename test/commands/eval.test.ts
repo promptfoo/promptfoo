@@ -179,8 +179,88 @@ describe('evalCommand', () => {
     );
   });
 
+  it('should handle repeat option from evaluateOptions in config', async () => {
+    const cmdObj = {};
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: {
+        evaluateOptions: { repeat: 5 },
+      } as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ repeat: 5 }),
+    );
+  });
+
+  it('should prioritize command line repeat over config evaluateOptions.repeat', async () => {
+    const cmdObj = { repeat: 3 };
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: {
+        evaluateOptions: { repeat: 5 },
+      } as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ repeat: 3 }),
+    );
+  });
+
   it('should handle delay option', async () => {
     const cmdObj = { delay: 1000 };
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ delay: 1000 }),
+    );
+  });
+
+  it('should handle delay option from evaluateOptions in config', async () => {
+    const cmdObj = {};
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: {
+        evaluateOptions: { delay: 2000 },
+      } as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ delay: 2000 }),
+    );
+  });
+
+  it('should prioritize command line delay over config evaluateOptions.delay', async () => {
+    const cmdObj = { delay: 1000 };
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: {
+        evaluateOptions: { delay: 2000 },
+      } as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
     expect(evaluate).toHaveBeenCalledWith(
       expect.anything(),

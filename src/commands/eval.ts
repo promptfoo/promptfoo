@@ -145,15 +145,7 @@ export async function doEval(
       }
     }
 
-    // Misc settings
-    const iterations = cmdObj.repeat ?? Number.NaN;
-    const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;
-
-    if (!cmdObj.cache || repeat > 1) {
-      logger.info('Cache is disabled.');
-      disableCache();
-    }
-
+    // First resolve configs to get the configuration file settings
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
     // Check if config has redteam section but no test cases
@@ -195,9 +187,18 @@ export async function doEval(
       };
     }
 
+    // Now get repeat from command line or evaluateOptions (which includes config file values)
+    const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
+    const repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
+
+    if (!cmdObj.cache || repeat > 1) {
+      logger.info('Cache is disabled.');
+      disableCache();
+    }
+
     let maxConcurrency =
       cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-    const delay = cmdObj.delay ?? 0;
+    const delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
 
     if (delay > 0) {
       maxConcurrency = 1;
