@@ -7,12 +7,41 @@ import { Plugins } from '../../redteam/plugins';
 import { redteamProviderManager } from '../../redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
+import { validatePurpose } from '../purposeValidator';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
 
 // Generate a single test case for a specific plugin
+// Validate purpose endpoint
+redteamRouter.post('/validate-purpose', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { purpose } = req.body;
+
+    if (!purpose) {
+      res.status(400).json({ error: 'Purpose is required' });
+      return;
+    }
+
+    // Get the red team provider for validation
+    const redteamProvider = await redteamProviderManager.getProvider({
+      provider: REDTEAM_MODEL,
+    });
+
+    // Validate the purpose
+    const validationResult = await validatePurpose(redteamProvider, purpose);
+
+    res.json(validationResult);
+  } catch (error) {
+    logger.error(`Error validating purpose: ${error}`);
+    res.status(500).json({
+      error: 'Failed to validate purpose',
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
 redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
   try {
     const { pluginId, config } = req.body;

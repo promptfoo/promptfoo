@@ -8,6 +8,8 @@ import { formatToolsAsJSDocs } from '@app/utils/discovery';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import VerifiedIcon from '@mui/icons-material/Verified';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -204,6 +206,55 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [discoveryResult, setDiscoveryResult] = useState<TargetPurposeDiscoveryResult | null>(null);
   const [showSlowDiscoveryMessage, setShowSlowDiscoveryMessage] = useState(false);
+
+  // Purpose validation state
+  const [isValidatingPurpose, setIsValidatingPurpose] = useState(false);
+  const [purposeValidation, setPurposeValidation] = useState<{
+    isValid: boolean;
+    issues: string[];
+    suggestions: string[];
+    improvedPurpose?: string;
+  } | null>(null);
+
+  const handleValidatePurpose = React.useCallback(async () => {
+    if (!config.applicationDefinition?.purpose) {
+      return;
+    }
+
+    recordEvent('feature_used', { feature: 'redteam_purpose_validation' });
+
+    try {
+      setIsValidatingPurpose(true);
+      setPurposeValidation(null);
+
+      const response = await callApi('/redteam/validate-purpose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          purpose: config.applicationDefinition.purpose,
+          provider: config.target,
+        }),
+      });
+
+      if (!response.ok) {
+        const { error } = (await response.json()) as { error: string };
+        console.error('Purpose validation error:', error);
+        return;
+      }
+
+      const validation = await response.json();
+      setPurposeValidation(validation);
+    } catch (error) {
+      console.error('Error validating purpose:', error);
+    } finally {
+      setIsValidatingPurpose(false);
+    }
+  }, [config.applicationDefinition?.purpose, config.target, recordEvent]);
+
+  // Clear validation when purpose changes
+  useEffect(() => {
+    setPurposeValidation(null);
+  }, [config.applicationDefinition?.purpose]);
 
   const handleTargetPurposeDiscovery = React.useCallback(async () => {
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
@@ -484,22 +535,100 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       <DiscoveryResult text={discoveryResult.purpose} section="purpose" />
                     )}
 
-                    <TextField
-                      fullWidth
-                      value={config.applicationDefinition?.purpose}
-                      onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
-                      placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
-                      multiline
-                      minRows={3}
-                      variant="outlined"
-                      required
-                      sx={{
-                        '& .MuiInputBase-inputMultiline': {
-                          resize: 'vertical',
-                          minHeight: '72px',
-                        },
-                      }}
-                    />
+                    <Stack spacing={2}>
+                      <TextField
+                        fullWidth
+                        value={config.applicationDefinition?.purpose}
+                        onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
+                        placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
+                        multiline
+                        minRows={3}
+                        variant="outlined"
+                        required
+                        sx={{
+                          '& .MuiInputBase-inputMultiline': {
+                            resize: 'vertical',
+                            minHeight: '72px',
+                          },
+                        }}
+                      />
+                      <Stack direction="row" spacing={2} alignItems="flex-start">
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={handleValidatePurpose}
+                          disabled={!config.applicationDefinition?.purpose || isValidatingPurpose}
+                          startIcon={isValidatingPurpose ? null : <VerifiedIcon />}
+                        >
+                          {isValidatingPurpose ? 'Validating...' : 'Validate Purpose'}
+                        </Button>
+                        {purposeValidation && (
+                          <Box sx={{ flex: 1 }}>
+                            {purposeValidation.isValid ? (
+                              <Alert severity="success" icon={<CheckCircleIcon />} sx={{ py: 0.5 }}>
+                                Purpose is well-defined and suitable for testing
+                              </Alert>
+                            ) : (
+                              <Alert
+                                severity="warning"
+                                icon={<WarningAmberIcon />}
+                                sx={{ py: 0.5 }}
+                              >
+                                <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 1 }}>
+                                  Purpose needs improvement:
+                                </Typography>
+                                {purposeValidation.issues.length > 0 && (
+                                  <Box sx={{ mb: 1 }}>
+                                    <Typography variant="caption" sx={{ fontWeight: 'medium' }}>
+                                      Issues:
+                                    </Typography>
+                                    <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                                      {purposeValidation.issues.map((issue, idx) => (
+                                        <li key={idx}>
+                                          <Typography variant="caption">{issue}</Typography>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </Box>
+                                )}
+                                {purposeValidation.suggestions.length > 0 && (
+                                  <Box>
+                                    <Typography variant="caption" sx={{ fontWeight: 'medium' }}>
+                                      Suggestions:
+                                    </Typography>
+                                    <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                                      {purposeValidation.suggestions.map((suggestion, idx) => (
+                                        <li key={idx}>
+                                          <Typography variant="caption">{suggestion}</Typography>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </Box>
+                                )}
+                                {purposeValidation.improvedPurpose && (
+                                  <Box sx={{ mt: 1 }}>
+                                    <Button
+                                      size="small"
+                                      variant="contained"
+                                      onClick={() => {
+                                        updateApplicationDefinition(
+                                          'purpose',
+                                          purposeValidation.improvedPurpose!,
+                                        );
+                                        setPurposeValidation(null);
+                                      }}
+                                      startIcon={<AutoAwesomeIcon fontSize="small" />}
+                                    >
+                                      Use Improved Purpose
+                                    </Button>
+                                  </Box>
+                                )}
+                              </Alert>
+                            )}
+                          </Box>
+                        )}
+                      </Stack>
+                    </Stack>
                   </Box>
                 </Box>
                 <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
