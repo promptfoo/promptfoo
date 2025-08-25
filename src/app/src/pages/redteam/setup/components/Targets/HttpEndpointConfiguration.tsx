@@ -1,4 +1,9 @@
+import './syntax-highlighting.css';
+
 import React, { useCallback, useState } from 'react';
+
+import yaml from 'js-yaml';
+import Editor from 'react-simple-code-editor';
 
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
@@ -18,22 +23,13 @@ import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
-import Switch from '@mui/material/Switch';
 import { useTheme } from '@mui/material/styles';
+import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import yaml from 'js-yaml';
-// @ts-expect-error: No types available
-import { highlight, languages } from 'prismjs/components/prism-core';
-import Editor from 'react-simple-code-editor';
-import 'prismjs/components/prism-http';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-yaml';
-
-import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 
 import type { ProviderOptions } from '../../types';
-import './syntax-highlighting.css';
+import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -82,7 +78,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
       value: String(value),
     })),
   );
-  const [isJsonContentType] = useState(true); // Used for syntax highlighting
+
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [request, setRequest] = useState(
     `POST /v1/chat HTTP/1.1
@@ -111,6 +107,16 @@ Content-Type: application/json
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Auto-size the raw request textarea between 10rem and 40rem based on line count
+  const computeRawTextareaHeight = useCallback((text: string) => {
+    const lineCount = (text?.match(/\n/g)?.length || 0) + 1;
+    const lineHeightPx = 20; // approx for 14px monospace
+    const minPx = 10 * 16; // ~10rem
+    const maxPx = 40 * 16; // ~40rem
+    const desired = lineCount * lineHeightPx + 20; // padding allowance
+    return `${Math.min(maxPx, Math.max(minPx, desired))}px`;
+  }, []);
 
   const resetState = useCallback(
     (isRawMode: boolean) => {
@@ -368,19 +374,29 @@ ${exampleRequest}`;
             label="Use HTTPS"
             sx={{ mb: 2, display: 'block' }}
           />
-          <Editor
+          <textarea
             value={selectedTarget.config.request || ''}
-            onValueChange={handleRawRequestChange}
-            highlight={(code) => highlight(code, languages.http)}
-            padding={10}
+            onChange={(e) => handleRawRequestChange(e.target.value)}
+            placeholder={placeholderText}
             style={{
+              width: '100%',
+              height: computeRawTextareaHeight(selectedTarget.config.request || ''),
+              minHeight: '10rem',
+              maxHeight: '40rem',
+              maxWidth: '100%',
+              padding: '10px',
+              border: '1px solid',
+              borderColor: theme.palette.divider,
+              outline: 'none',
+              resize: 'vertical',
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
               backgroundColor: 'transparent',
               color: theme.palette.text.primary,
+              whiteSpace: 'pre',
+              overflowX: 'auto',
+              overflowY: 'auto',
             }}
-            placeholder={placeholderText}
-            className={theme.palette.mode === 'dark' ? 'dark-syntax' : ''}
           />
           {bodyError && (
             <Typography color="error" variant="body2" sx={{ mt: 1 }}>
@@ -464,9 +480,7 @@ ${exampleRequest}`;
                   : requestBody || ''
               }
               onValueChange={handleRequestBodyChange}
-              highlight={(code) =>
-                highlight(code, isJsonContentType ? languages.json : languages.text)
-              }
+              highlight={(code) => code}
               padding={10}
               style={{
                 fontFamily: '"Fira code", "Fira Mono", monospace',
@@ -499,7 +513,7 @@ ${exampleRequest}`;
                 <Editor
                   value={request}
                   onValueChange={(val) => setRequest(val)}
-                  highlight={(code) => highlight(code, languages.http)}
+                  highlight={(code) => code}
                   padding={10}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
@@ -518,7 +532,7 @@ ${exampleRequest}`;
                 <Editor
                   value={response}
                   onValueChange={(val) => setResponse(val)}
-                  highlight={(code) => highlight(code, languages.json)}
+                  highlight={(code) => code}
                   padding={10}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
@@ -553,7 +567,7 @@ ${exampleRequest}`;
                   <Editor
                     value={yaml.dump(generatedConfig.config)}
                     onValueChange={() => {}} // Read-only
-                    highlight={(code) => highlight(code, languages.yaml)}
+                    highlight={(code) => code}
                     padding={10}
                     style={{
                       fontFamily: '"Fira code", "Fira Mono", monospace',

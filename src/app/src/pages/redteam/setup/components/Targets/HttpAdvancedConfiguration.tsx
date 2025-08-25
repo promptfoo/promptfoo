@@ -1,4 +1,16 @@
+import 'prismjs/components/prism-http';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/themes/prism.css';
+
 import React from 'react';
+
+import dedent from 'dedent';
+// @ts-expect-error: No types available
+import { highlight, languages } from 'prismjs/components/prism-core';
+import Editor from 'react-simple-code-editor';
 
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -23,20 +35,12 @@ import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
 import { useTheme } from '@mui/material/styles';
+import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import dedent from 'dedent';
 import type { ProviderOptions } from '@promptfoo/types';
-import 'prismjs/components/prism-clike';
 
-// @ts-expect-error: No types available
-import { highlight, languages } from 'prismjs/components/prism-core';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/themes/prism.css';
-
-import Editor from 'react-simple-code-editor';
 import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 
 interface HttpAdvancedConfigurationProps {
