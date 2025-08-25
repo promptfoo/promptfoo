@@ -3478,6 +3478,10 @@ describe('evaluator defaultTest merging', () => {
 });
 
 describe('Evaluator with external defaultTest', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });

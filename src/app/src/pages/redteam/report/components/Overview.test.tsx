@@ -1,9 +1,12 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import React from 'react';
+
 import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { GridLogicOperator, GridFilterModel } from '@mui/x-data-grid';
+import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Overview from './Overview';
 import { useReportStore } from './store';
-import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 
 vi.mock('./store', () => ({
@@ -14,6 +17,8 @@ describe('Overview', () => {
   const mockedUseReportStore = vi.mocked(useReportStore);
   const defaultTheme = createTheme();
   const darkTheme = createTheme({ palette: { mode: 'dark' } });
+  const mockSetFilterModel = vi.fn<(filterModel: GridFilterModel) => void>();
+  const mockRef: React.MutableRefObject<HTMLDivElement | null> = { current: null };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -32,7 +37,12 @@ describe('Overview', () => {
   ) => {
     return render(
       <ThemeProvider theme={theme}>
-        <Overview categoryStats={categoryStats} plugins={plugins} />
+        <Overview
+          categoryStats={categoryStats}
+          plugins={plugins}
+          vulnerabilitiesDataGridRef={mockRef}
+          setVulnerabilitiesDataGridFilterModel={mockSetFilterModel}
+        />
       </ThemeProvider>,
     );
   };
@@ -207,4 +217,171 @@ describe('Overview', () => {
       });
     },
   );
+
+  it('should handle plugins referencing categories not in categoryStats', () => {
+    mockedUseReportStore.mockReturnValue({
+      pluginPassRateThreshold: 0.5,
+      setPluginPassRateThreshold: vi.fn(),
+      showPercentagesOnRiskCards: false,
+      setShowPercentagesOnRiskCards: vi.fn(),
+    });
+
+    const categoryStats = {
+      'existing-category': { pass: 0, total: 10 },
+    };
+
+    const plugins: RedteamPluginObject[] = [
+      { id: 'existing-category', severity: Severity.Critical },
+      { id: 'missing-category', severity: Severity.High },
+    ];
+
+    renderOverview(categoryStats, plugins);
+
+    expectSeverityCardToHaveCount(Severity.Critical, '1');
+    expectSeverityCardToHaveCount(Severity.High, '0');
+    expectSeverityCardToHaveCount(Severity.Medium, '0');
+    expectSeverityCardToHaveCount(Severity.Low, '0');
+  });
+
+  it('should correctly update the filter when different severity cards are clicked in succession', () => {
+    const categoryStats = {
+      plugin1: { pass: 0, total: 1 },
+      plugin2: { pass: 0, total: 1 },
+      plugin3: { pass: 0, total: 1 },
+    };
+
+    const plugins: RedteamPluginObject[] = [
+      { id: 'plugin1', severity: Severity.Critical },
+      { id: 'plugin2', severity: Severity.High },
+      { id: 'plugin3', severity: Severity.Medium },
+    ];
+
+    const mockElement = document.createElement('div');
+    mockElement.scrollIntoView = vi.fn();
+    mockRef.current = mockElement;
+
+    renderOverview(categoryStats, plugins);
+
+    const criticalCard = screen
+      .getByText(severityDisplayNames[Severity.Critical])
+      .closest('.MuiCardContent-root');
+    const highCard = screen
+      .getByText(severityDisplayNames[Severity.High])
+      .closest('.MuiCardContent-root');
+    const mediumCard = screen
+      .getByText(severityDisplayNames[Severity.Medium])
+      .closest('.MuiCardContent-root');
+
+    fireEvent.click(criticalCard!);
+    expect(mockSetFilterModel).toHaveBeenCalledWith({
+      items: [
+        {
+          field: 'severity',
+          operator: 'is',
+          value: Severity.Critical,
+        },
+      ],
+      logicOperator: GridLogicOperator.Or,
+    });
+
+    fireEvent.click(highCard!);
+    expect(mockSetFilterModel).toHaveBeenCalledWith({
+      items: [
+        {
+          field: 'severity',
+          operator: 'is',
+          value: Severity.High,
+        },
+      ],
+      logicOperator: GridLogicOperator.Or,
+    });
+
+    fireEvent.click(mediumCard!);
+    expect(mockSetFilterModel).toHaveBeenCalledWith({
+      items: [
+        {
+          field: 'severity',
+          operator: 'is',
+          value: Severity.Medium,
+        },
+      ],
+      logicOperator: GridLogicOperator.Or,
+    });
+  });
+
+  it('should call setVulnerabilitiesDataGridFilterModel with correct filter when severity card is clicked and showPercentagesOnRiskCards is true', () => {
+    mockedUseReportStore.mockReturnValue({
+      pluginPassRateThreshold: 0.8,
+      setPluginPassRateThreshold: vi.fn(),
+      showPercentagesOnRiskCards: true,
+      setShowPercentagesOnRiskCards: vi.fn(),
+    });
+
+    const categoryStats = {
+      plugin1: { pass: 1, total: 10 },
+    };
+
+    const plugins: RedteamPluginObject[] = [{ id: 'plugin1', severity: Severity.Critical }];
+
+    // Create a mock element with scrollIntoView
+    const mockElement = document.createElement('div');
+    mockElement.scrollIntoView = vi.fn();
+    mockRef.current = mockElement;
+
+    renderOverview(categoryStats, plugins);
+
+    // Find and click the Critical severity card
+    const criticalCard = screen
+      .getByText(severityDisplayNames[Severity.Critical])
+      .closest('.MuiCardContent-root');
+    fireEvent.click(criticalCard!);
+
+    // Check that setVulnerabilitiesDataGridFilterModel was called with correct filter
+    expect(mockSetFilterModel).toHaveBeenCalledWith({
+      items: [
+        {
+          field: 'severity',
+          operator: 'is',
+          value: Severity.Critical,
+        },
+      ],
+      logicOperator: GridLogicOperator.Or,
+    });
+
+    // Check that scrollIntoView was called
+    expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
+  });
+
+  it('should handle click on severity cards with null ref gracefully', () => {
+    const categoryStats = {
+      plugin1: { pass: 0, total: 1 },
+    };
+
+    const plugins: RedteamPluginObject[] = [{ id: 'plugin1', severity: Severity.High }];
+
+    // Ensure ref is null
+    mockRef.current = null;
+
+    renderOverview(categoryStats, plugins);
+
+    // Find and click the High severity card
+    const highCard = screen
+      .getByText(severityDisplayNames[Severity.High])
+      .closest('.MuiCardContent-root');
+
+    // This should not throw an error even with null ref
+    expect(() => fireEvent.click(highCard!)).not.toThrow();
+
+    // Filter should still be set
+    expect(mockSetFilterModel).toHaveBeenCalledWith({
+      items: [
+        {
+          field: 'severity',
+          operator: 'is',
+          value: Severity.High,
+        },
+      ],
+      logicOperator: GridLogicOperator.Or,
+    });
+  });
 });
