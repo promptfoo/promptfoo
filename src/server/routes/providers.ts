@@ -188,3 +188,120 @@ providersRouter.post(
     }
   },
 );
+
+providersRouter.post('/test-strategy', async (req: Request, res: Response): Promise<void> => {
+  const { provider: providerOptions, strategyId } = req.body;
+
+  // Validate inputs
+  if (!providerOptions || !strategyId) {
+    res.status(400).json({ error: 'Provider configuration and strategy ID are required' });
+    return;
+  }
+
+  try {
+    // Parse provider options
+    const parsedProviderOptions = ProviderOptionsSchema.parse(providerOptions);
+    invariant(parsedProviderOptions.id, 'Provider ID is required');
+
+    // Load the provider
+    const loadedProvider = await loadApiProvider(parsedProviderOptions.id, {
+      options: {
+        ...parsedProviderOptions,
+        config: {
+          ...parsedProviderOptions.config,
+          maxRetries: 1,
+        },
+      },
+    });
+
+    // Prepare test data based on strategy type
+    let testPrompt = 'Hello, how can I help you today?';
+    let testVars: Record<string, any> = {};
+
+    // Check if it's a multi-modal strategy and adjust the test accordingly
+    const multiModalStrategies = ['audio', 'image', 'video'];
+    if (multiModalStrategies.includes(strategyId)) {
+      // For multi-modal strategies, we'll send a test with appropriate content type
+      if (strategyId === 'image') {
+        // Small transparent 1x1 PNG for testing
+        const testImageBase64 =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+        testPrompt = 'Can you analyze this image?';
+        testVars = {
+          image: `data:image/png;base64,${testImageBase64}`,
+        };
+      } else if (strategyId === 'audio') {
+        // Small silent WAV for testing
+        testPrompt = 'Can you transcribe this audio?';
+        testVars = {
+          audio:
+            'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=',
+        };
+      } else if (strategyId === 'video') {
+        testPrompt = 'Can you describe this video?';
+        testVars = {
+          video:
+            'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAAA=',
+        };
+      }
+    }
+
+    // Call the provider with the test prompt
+    const result = await loadedProvider.callApi(testPrompt, {
+      debug: true,
+      prompt: { raw: testPrompt, label: 'Strategy Test' },
+      vars: testVars,
+    });
+
+    // Check if the provider supports the strategy
+    let supportsStrategy = true;
+    let message = `Provider appears to support ${strategyId} strategy`;
+    const suggestions: string[] = [];
+
+    if (result.error) {
+      supportsStrategy = false;
+      message = `Provider may not support ${strategyId} strategy: ${result.error}`;
+
+      // Provide specific suggestions based on the strategy and error
+      if (multiModalStrategies.includes(strategyId)) {
+        suggestions.push(
+          'Ensure your provider supports multi-modal inputs',
+          'Check that your API endpoint accepts image/audio/video data',
+          'Verify your provider model version supports multi-modal features',
+        );
+
+        // Provider-specific suggestions
+        if (parsedProviderOptions.id === 'openai') {
+          suggestions.push(
+            'For OpenAI, use models like gpt-4-vision-preview or gpt-4o for image support',
+          );
+        } else if (parsedProviderOptions.id === 'anthropic') {
+          suggestions.push(
+            'For Anthropic, use Claude 3 models (Opus, Sonnet, Haiku) for multi-modal support',
+          );
+        } else if (parsedProviderOptions.id === 'google') {
+          suggestions.push(
+            'For Google, use Gemini Pro Vision or later models for multi-modal support',
+          );
+        }
+      }
+    }
+
+    res.json({
+      success: supportsStrategy,
+      message,
+      suggestions,
+      strategyId,
+      providerResponse: result,
+    });
+  } catch (error) {
+    logger.error(
+      `Error testing strategy: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to test strategy',
+      strategyId,
+    });
+  }
+});
