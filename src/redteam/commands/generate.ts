@@ -109,23 +109,22 @@ export async function doGenerateRedteam(
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
 
-  // Handle liveRedteamConfig (from cloud)
-  if (options.liveRedteamConfig) {
-    // Write liveRedteamConfig to a temporary file
+  // Write a remote config to a temporary file
+  if (options.configFromCloud) {
+    // Write configFromCloud to a temporary file
     const filename = `redteam-generate-${Date.now()}.yaml`;
-    const tmpDir = options.loadedFromCloud ? '' : path.join(require('os').tmpdir(), 'promptfoo');
-    const tmpFile = path.join(tmpDir, filename);
+    const tmpFile = path.join('', filename);
     fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
-    fs.writeFileSync(tmpFile, yaml.dump(options.liveRedteamConfig));
+    fs.writeFileSync(tmpFile, yaml.dump(options.configFromCloud));
     configPath = tmpFile;
-    logger.debug(`Using live config from ${tmpFile}`);
+    logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
   }
 
   // Check for updates to the config file and decide whether to generate
-  let shouldGenerate = options.force || options.liveRedteamConfig; // Always generate for live configs
+  let shouldGenerate = options.force || options.configFromCloud; // Always generate for live configs
   if (
     !options.force &&
-    !options.liveRedteamConfig &&
+    !options.configFromCloud &&
     fs.existsSync(outputPath) &&
     configPath &&
     fs.existsSync(configPath)
@@ -626,10 +625,10 @@ export function redteamGenerateCommand(
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .action(async (opts: Partial<RedteamCliGenerateOptions>): Promise<void> => {
-      setupEnv(opts.envFile);
-
       // Handle cloud config with target
       if (opts.config && uuidValidate(opts.config)) {
+        // If target is provided, it must be a valid UUID. This check is nested because the target flag is mutually inclusive with a config that's set to a
+        // Cloud-defined config UUID i.e. a cloud target cannot be used with a local config.
         if (opts.target && !uuidValidate(opts.target)) {
           throw new Error('Invalid target ID, it must be a valid UUID');
         }
@@ -643,10 +642,8 @@ export function redteamGenerateCommand(
         ) {
           configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
         }
-        opts.liveRedteamConfig = configObj;
+        opts.configFromCloud = configObj;
         opts.config = undefined;
-
-        opts.loadedFromCloud = true;
       } else if (opts.target) {
         logger.error(
           `Target ID (-t) can only be used when -c is used with a cloud config UUID. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}.`,

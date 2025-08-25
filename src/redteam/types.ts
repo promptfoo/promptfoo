@@ -122,8 +122,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
   progressBar?: boolean;
-  liveRedteamConfig?: any;
-  loadedFromCloud?: boolean;
+  configFromCloud?: any;
 }
 
 export interface RedteamFileConfig extends CommonOptions {

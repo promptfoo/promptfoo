@@ -176,8 +176,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   write: z.boolean().describe('Whether to write the output'),
   burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
   progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
-  liveRedteamConfig: z.any().optional().describe('Live redteam configuration from cloud'),
-  loadedFromCloud: z.boolean().optional().describe('Whether the config was loaded from cloud'),
+  configFromCloud: z.any().optional().describe('A configuration object loaded from cloud'),
 });
 
 /**
