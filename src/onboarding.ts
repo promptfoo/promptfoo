@@ -388,14 +388,14 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     }
 
     const choices: { name: string; value: (string | object)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-4.1-mini', 'openai:gpt-4.1'] },
+      { name: `I'll choose later`, value: ['openai:gpt-5-mini', 'openai:gpt-5'] },
       {
-        name: '[OpenAI] o3, o4, GPT 4.1, ...',
+        name: '[OpenAI] GPT 5, GPT 4.1, ...',
         value:
           action === 'agent'
             ? [
                 {
-                  id: 'openai:gpt-4.1',
+                  id: 'openai:gpt-5',
                   config: {
                     tools: [
                       {
@@ -419,12 +419,13 @@ export async function createDummyFiles(directory: string | null, interactive: bo
                   },
                 },
               ]
-            : ['openai:gpt-4.1-mini', 'openai:gpt-4.1'],
+            : ['openai:gpt-5-mini', 'openai:gpt-5'],
       },
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
           'anthropic:messages:claude-sonnet-4-20250514',
+          'anthropic:messages:claude-opus-4-1-20250805',
           'anthropic:messages:claude-opus-4-20250514',
           'anthropic:messages:claude-3-7-sonnet-20250219',
         ],
@@ -544,8 +545,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         });
       }
     } else {
-      providers.push('openai:gpt-4o-mini');
-      providers.push('openai:gpt-4o');
+      providers.push('openai:gpt-5-mini');
+      providers.push('openai:gpt-5');
     }
 
     if (action === 'compare') {
@@ -583,8 +584,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-4o-mini');
-    providers.push('openai:gpt-4o');
+    providers.push('openai:gpt-5-mini');
+    providers.push('openai:gpt-5');
   }
 
   const nunjucks = getNunjucksEngine();

@@ -58,7 +58,14 @@ import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
 import type Eval from './models/eval';
-import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
+import type {
+  EvalConversations,
+  EvalRegisters,
+  ProviderOptions,
+  ScoringFunction,
+  TokenUsage,
+  Vars,
+} from './types';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -918,9 +925,29 @@ class Evaluator {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
         ...testCase.metadata,
       };
-      testCase.provider =
-        testCase.provider ||
-        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.provider : undefined);
+      // If the test case doesn't have a provider, use the one from defaultTest
+      // Note: defaultTest.provider may be a raw config object that needs to be loaded
+      if (
+        !testCase.provider &&
+        typeof testSuite.defaultTest === 'object' &&
+        testSuite.defaultTest?.provider
+      ) {
+        const defaultProvider = testSuite.defaultTest.provider;
+        if (isApiProvider(defaultProvider)) {
+          // Already loaded
+          testCase.provider = defaultProvider;
+        } else if (typeof defaultProvider === 'object' && defaultProvider.id) {
+          // Raw config object - load it
+          const { loadApiProvider } = await import('./providers');
+          const providerId =
+            typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
+          testCase.provider = await loadApiProvider(providerId, {
+            options: defaultProvider as ProviderOptions,
+          });
+        } else {
+          testCase.provider = defaultProvider;
+        }
+      }
       testCase.assertScoringFunction =
         testCase.assertScoringFunction ||
         (typeof testSuite.defaultTest === 'object'

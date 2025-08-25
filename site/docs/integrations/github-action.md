@@ -112,6 +112,46 @@ Here's an example:
     node .github/scripts/redteam-summary.js --input output.json --out comment.md --print
 ```
 
+> **💡 Tip**: To speed up builds, you can cache promptfoo instead of downloading it every run:
+>
+> **Getting started**: If you don't have a package.json file yet, create one first:
+>
+> ```bash
+> npm init -y
+> ```
+>
+> **With package.json**: Add promptfoo as a dependency, then use setup-node with caching:
+>
+> ```bash
+> npm install --save-dev promptfoo
+> ```
+>
+> ```yaml
+> steps:
+>   - uses: actions/checkout@v5
+>   - uses: actions/setup-node@v4
+>     with:
+>       node-version: '22'
+>       cache: 'npm'
+>   - run: npm ci
+>   - name: Run Promptfoo redteam
+>     run: npx promptfoo redteam run -c config.yaml -o output.json
+> ```
+>
+> **Without package.json**: Cache npx downloads using workflow files as the cache key:
+>
+> ```yaml
+> steps:
+>   - uses: actions/checkout@v5
+>   - uses: actions/setup-node@v4
+>     with:
+>       node-version: '22'
+>       cache: 'npm'
+>       cache-dependency-path: '**/.github/workflows/*.yml'
+>   - name: Run Promptfoo redteam
+>     run: npx promptfoo@latest redteam run -c config.yaml -o output.json
+> ```
+
 In this example, the [redteam-summary.js](https://gist.github.com/MrFlounder/2d9c719873ad9f221db5f87efb13ece9) file parses the red team results and produces a summary:
 
 ![llm red team github action](/img/docs/github-action-redteam.png)

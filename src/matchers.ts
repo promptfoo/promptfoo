@@ -30,6 +30,7 @@ import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
 import { getNunjucksEngine } from './util/templates';
+import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
 import type {
   ApiClassificationProvider,
@@ -45,7 +46,6 @@ import type {
   ProviderTypeMap,
   TokenUsage,
 } from './types';
-import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -500,7 +500,17 @@ export async function matchesLlmRubric(
     defaultProvider,
     'llm-rubric check',
   );
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await finalProvider.callApi(prompt, {
+    prompt: {
+      raw: prompt,
+      label: 'llm-rubric',
+    },
+    vars: {
+      output: tryParse(llmOutput),
+      rubric,
+      ...(vars || {}),
+    },
+  });
   if (resp.error || !resp.output) {
     if (options?.throwOnError) {
       throw new LlmRubricProviderError(resp.error || 'No output');

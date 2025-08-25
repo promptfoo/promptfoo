@@ -6,6 +6,14 @@ import {
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
 import {
+  DefaultGradingProvider as GoogleAiStudioGradingProvider,
+  DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
+  DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
+  DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
+  DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
+} from '../../src/providers/google/ai.studio';
+import { DefaultEmbeddingProvider as GeminiEmbeddingProvider } from '../../src/providers/google/vertex';
+import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
   DefaultGradingProvider as MistralGradingProvider,
@@ -47,6 +55,9 @@ describe('Provider override tests', () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.MISTRAL_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.PALM_API_KEY;
   });
 
   afterEach(() => {
@@ -196,5 +207,112 @@ describe('Provider override tests', () => {
     expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
     expect(providers.suggestionsProvider).not.toBe(MistralSuggestionsProvider);
     expect(providers.synthesizeProvider).not.toBe(MistralSynthesizeProvider);
+  });
+
+  describe('Google AI Studio provider selection', () => {
+    it('should use Google AI Studio providers when GEMINI_API_KEY is set', async () => {
+      process.env.GEMINI_API_KEY = 'test-key';
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
+      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
+      expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
+      expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
+      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+    });
+
+    it('should use Google AI Studio providers when GOOGLE_API_KEY is set', async () => {
+      process.env.GOOGLE_API_KEY = 'test-key';
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
+      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
+      expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
+      expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
+      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+    });
+
+    it('should use Google AI Studio providers when PALM_API_KEY is set', async () => {
+      process.env.PALM_API_KEY = 'test-key';
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
+      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
+      expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
+      expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
+      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+    });
+
+    it('should use Google AI Studio providers when provided via env overrides', async () => {
+      const envOverrides: EnvOverrides = {
+        GEMINI_API_KEY: 'test-key',
+      } as EnvOverrides;
+
+      const providers = await getDefaultProviders(envOverrides);
+
+      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
+      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
+      expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
+      expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
+      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+    });
+
+    it('should not use Google AI Studio providers when OpenAI credentials exist', async () => {
+      process.env.GEMINI_API_KEY = 'test-key';
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider).not.toBe(GoogleAiStudioGradingProvider);
+      expect(providers.gradingJsonProvider).not.toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.suggestionsProvider).not.toBe(GoogleAiStudioSuggestionsProvider);
+      expect(providers.synthesizeProvider).not.toBe(GoogleAiStudioSynthesizeProvider);
+    });
+
+    it('should not use Google AI Studio providers when Anthropic credentials exist', async () => {
+      process.env.GEMINI_API_KEY = 'test-key';
+      process.env.ANTHROPIC_API_KEY = 'test-key';
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider).not.toBe(GoogleAiStudioGradingProvider);
+      expect(providers.gradingJsonProvider).not.toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.suggestionsProvider).not.toBe(GoogleAiStudioSuggestionsProvider);
+      expect(providers.synthesizeProvider).not.toBe(GoogleAiStudioSynthesizeProvider);
+    });
+
+    it('should prefer Google AI Studio over Vertex when both credentials are available', async () => {
+      process.env.GEMINI_API_KEY = 'test-key';
+      // hasGoogleDefaultCredentials is mocked to return false, but in practice
+      // AI Studio should be preferred over Vertex in the provider selection order
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
+      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
+      expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
+    });
+
+    it('should prefer Google AI Studio over Mistral when both credentials are available', async () => {
+      process.env.GEMINI_API_KEY = 'test-key';
+      process.env.MISTRAL_API_KEY = 'test-key';
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
+      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
+      expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
+      expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
+      expect(providers.gradingJsonProvider).not.toBe(MistralGradingJsonProvider);
+    });
   });
 });
