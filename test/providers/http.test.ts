@@ -1,8 +1,8 @@
 import crypto from 'crypto';
+import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 
-import dedent from 'dedent';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -638,6 +638,131 @@ describe('HttpProvider', () => {
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
+    });
+  });
+
+  describe('raw request - templating safety', () => {
+    it('renders when Cookie contains {%22...} and substitutes {{prompt}}', async () => {
+      const rawRequest = dedent`
+        POST /api/faq HTTP/1.1
+        Host: example.com
+        Content-Type: application/json
+        Cookie: kp.directions._dd_location={%22name%22:%22Oakland%20Medical%20Center%22}; other=1
+
+        {"q": "{{prompt}}"}
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'ok' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('find doctors');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/faq',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            'content-type': 'application/json',
+            cookie: expect.stringContaining('{%22name%22:%22Oakland%20Medical%20Center%22}'),
+          }),
+          body: '{"q": "find doctors"}',
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ result: 'ok' });
+    });
+
+    it('supports dotted variables in headers and path while preserving raw blocks', async () => {
+      const rawRequest = dedent`
+        GET /api/users/{{meta.user.id}}/notes HTTP/1.1
+        Host: example.com
+        X-User: {{meta.user.id}}
+        Accept: application/json
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ ok: true }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('ignored', {
+        vars: { meta: { user: { id: 'abc123' } } },
+        prompt: { raw: 'x', label: 'y' },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://example.com/api/users/abc123/notes',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            host: 'example.com',
+            accept: 'application/json',
+            'x-user': 'abc123',
+          }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ ok: true });
+    });
+
+    it('normalizes mixed LF/CRLF line endings and parses correctly', async () => {
+      const mixed = 'GET /api/data HTTP/1.1\nHost: example.com\r\nUser-Agent: Test\n\n';
+      const provider = new HttpProvider('http', {
+        config: {
+          request: mixed,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ ok: true }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('p');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'http://example.com/api/data',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({ host: 'example.com', 'user-agent': 'Test' }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ ok: true });
     });
   });
 
