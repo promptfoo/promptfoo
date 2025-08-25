@@ -511,26 +511,32 @@ export async function createShareableModelAuditUrl(
   logger.debug(`Sharing model audit ${auditRecord.id} to ${url}`);
 
   try {
+    const payload = {
+      scanId: auditRecord.id,
+      createdAt: auditRecord.createdAt,
+      updatedAt: auditRecord.updatedAt,
+      name: auditRecord.name,
+      author: auditRecord.author,
+      modelPath: auditRecord.modelPath,
+      modelType: auditRecord.modelType,
+      results: auditRecord.results,
+      checks: auditRecord.checks,
+      issues: auditRecord.issues,
+      hasErrors: auditRecord.hasErrors,
+      totalChecks: auditRecord.totalChecks,
+      passedChecks: auditRecord.passedChecks,
+      failedChecks: auditRecord.failedChecks,
+      metadata: auditRecord.metadata,
+    };
+
+    // Log payload size for debugging large model audits
+    const payloadSize = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+    logger.debug(`Model audit payload size: ${(payloadSize / 1024 / 1024).toFixed(2)} MB`);
+
     const response = await fetchWithProxy(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        scanId: auditRecord.id,
-        createdAt: auditRecord.createdAt,
-        updatedAt: auditRecord.updatedAt,
-        name: auditRecord.name,
-        author: auditRecord.author,
-        modelPath: auditRecord.modelPath,
-        modelType: auditRecord.modelType,
-        results: auditRecord.results,
-        checks: auditRecord.checks,
-        issues: auditRecord.issues,
-        hasErrors: auditRecord.hasErrors,
-        totalChecks: auditRecord.totalChecks,
-        passedChecks: auditRecord.passedChecks,
-        failedChecks: auditRecord.failedChecks,
-        metadata: auditRecord.metadata,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -545,7 +551,9 @@ export async function createShareableModelAuditUrl(
 
     return getShareableModelAuditUrl(auditRecord, remoteId || auditRecord.id, showAuth);
   } catch (error) {
-    logger.error(`Error sharing model audit: ${error}`);
+    logger.error(
+      `Error sharing model audit: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return null;
   }
 }

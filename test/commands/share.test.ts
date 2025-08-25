@@ -174,7 +174,7 @@ describe('Share Command', () => {
         results: {},
       } as ModelAudit;
 
-      jest.spyOn(ModelAudit, 'findById').mockImplementation().mockResolvedValue(mockAudit);
+      jest.spyOn(ModelAudit, 'findById').mockResolvedValue(mockAudit);
       jest.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
       jest
         .mocked(createShareableModelAuditUrl)
@@ -198,7 +198,7 @@ describe('Share Command', () => {
         config: {},
       } as unknown as Eval;
 
-      jest.spyOn(Eval, 'findById').mockImplementation().mockResolvedValue(mockEval);
+      jest.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
       jest.mocked(isSharingEnabled).mockReturnValue(true);
       jest.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-test-123');
 
@@ -225,8 +225,8 @@ describe('Share Command', () => {
         results: {},
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockImplementation().mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockImplementation().mockResolvedValue(mockAudit);
+      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
       jest.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
       jest
         .mocked(createShareableModelAuditUrl)
@@ -258,8 +258,8 @@ describe('Share Command', () => {
         results: {},
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockImplementation().mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockImplementation().mockResolvedValue(mockAudit);
+      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
       jest.mocked(isSharingEnabled).mockReturnValue(true);
       jest.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-new');
 
@@ -273,7 +273,7 @@ describe('Share Command', () => {
     });
 
     it('should handle scan- prefixed model audit not found', async () => {
-      jest.spyOn(ModelAudit, 'findById').mockImplementation().mockResolvedValue(null);
+      jest.spyOn(ModelAudit, 'findById').mockResolvedValue(null);
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test', 'scan-non-existent']);
@@ -286,8 +286,8 @@ describe('Share Command', () => {
     });
 
     it('should handle no evals or model audits available', async () => {
-      jest.spyOn(Eval, 'latest').mockImplementation().mockResolvedValue(undefined);
-      jest.spyOn(ModelAudit, 'latest').mockImplementation().mockResolvedValue(undefined);
+      jest.spyOn(Eval, 'latest').mockResolvedValue(undefined);
+      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(undefined);
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);
@@ -299,7 +299,7 @@ describe('Share Command', () => {
     });
 
     it('should handle specific eval ID not found', async () => {
-      jest.spyOn(Eval, 'findById').mockImplementation().mockResolvedValue(undefined);
+      jest.spyOn(Eval, 'findById').mockResolvedValue(undefined);
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test', 'eval-non-existent']);
@@ -322,8 +322,8 @@ describe('Share Command', () => {
         createdAt: 1000,
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockImplementation().mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockImplementation().mockResolvedValue(mockAudit);
+      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);
@@ -346,8 +346,8 @@ describe('Share Command', () => {
         createdAt: 1000,
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockImplementation().mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockImplementation().mockResolvedValue(mockAudit);
+      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
       jest.mocked(isSharingEnabled).mockReturnValue(true);
       jest.mocked(createShareableUrl).mockResolvedValue('https://example.com/share');
 

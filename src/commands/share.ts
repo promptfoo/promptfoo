@@ -99,7 +99,7 @@ export function shareCommand(program: Command) {
         let audit: ModelAudit | undefined | null = null;
 
         if (id) {
-          // Determine type based on ID format
+          // Determine type based on ID format (keep original simple logic for compatibility)
           if (id.startsWith('scan-')) {
             audit = await ModelAudit.findById(id);
             if (!audit) {
