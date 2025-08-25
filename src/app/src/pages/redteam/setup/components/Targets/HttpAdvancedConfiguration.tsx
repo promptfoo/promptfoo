@@ -51,7 +51,9 @@ interface HttpAdvancedConfigurationProps {
 const highlightJS = (code: string): string => {
   try {
     const grammar = (Prism as any)?.languages?.javascript;
-    if (!grammar) return code;
+    if (!grammar) {
+      return code;
+    }
     return Prism.highlight(code, grammar, 'javascript');
   } catch {
     return code;
