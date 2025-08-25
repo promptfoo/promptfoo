@@ -97,6 +97,14 @@ export interface CompletionOptions {
   apiVersion?: string; // For Live API: 'v1alpha' or 'v1' (default: v1alpha)
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format
+  /**
+   * Google service account credentials.
+   * Can be:
+   * 1. JSON string containing service account key
+   * 2. File path prefixed with 'file://' to load from external file
+   * 3. Undefined to use default authentication (Application Default Credentials)
+   */
+  credentials?: string;
 
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
