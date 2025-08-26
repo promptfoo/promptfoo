@@ -454,7 +454,7 @@ Run it: `npx promptfoo@latest eval`
 Example: A simple `not-contains: "explosive"` check would fail if the model says "I cannot provide explosive-making instructions" (which is actually the safe response!). The LLM judge understands this is a refusal, not compliance.
 
 **Configuring the Judge:**
-By default, llm-rubric uses GPT-4o-mini as the judge. You can customize this:
+By default, llm-rubric uses GPT-4.1-mini as the judge. You can customize this:
 
 ```yaml
 defaultTest:

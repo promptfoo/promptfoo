@@ -5,7 +5,7 @@ description: Compare Llama 3.1 405B vs GPT-4 performance on custom datasets usin
 
 # Llama 3.1 vs GPT: Benchmark on your own data
 
-This guide describes how to compare three models - Llama 3.1 405B, GPT 4o, and GPT 4o-mini - using the `promptfoo` CLI.
+This guide describes how to compare three models - Llama 3.1 405B, GPT 4o, and GPT gpt-4.1-mini - using the `promptfoo` CLI.
 
 LLM use cases vary widely and there is no one-size-fits-all benchmark. We'll use some dummy test cases from the [Hacker News thread on Llama](https://news.ycombinator.com/item?id=36774627), but you can substitute your own.
 
@@ -107,7 +107,7 @@ providers:
     label: GPT 4o
     prompts: chat_prompt
   - id: openai:gpt-4.1-mini
-    label: GPT 4o-mini
+    label: GPT gpt-4.1-mini
     prompts: chat_prompt
   - id: replicate:meta/meta-llama-3.1-405b-instruct
     label: Llama 3.1 405B
@@ -261,6 +261,6 @@ Which produces a simple spreadsheet containing the eval results (view on [Google
 
 ## Conclusion
 
-In this example we've constructed, GPT-4o scores 100%, GPT-4o-mini scores 75.00%, and Llama 3.1 405B scores 87.50%.
+In this example we've constructed, GPT-4o scores 100%, GPT-4.1-mini scores 75.00%, and Llama 3.1 405B scores 87.50%.
 
 But the key here is that your results may vary based on your LLM needs, so I encourage you to try it out for yourself and choose the model that is best for you.

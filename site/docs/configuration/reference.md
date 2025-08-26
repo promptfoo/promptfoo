@@ -142,7 +142,7 @@ commandLineOptions:
   repeat: 3
   delay: 1000
   verbose: true
-  grader: openai:gpt-4o-mini
+  grader: openai:gpt-4.1-mini
   table: true
   cache: false
   tableCellMaxLength: 100

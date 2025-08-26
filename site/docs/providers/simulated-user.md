@@ -70,7 +70,7 @@ prompts:
   - You are a helpful customer service agent. Answer questions politely and try to resolve issues.
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-4.1-mini
 
 defaultTest:
   provider:

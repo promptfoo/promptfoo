@@ -36,7 +36,7 @@ GitHub Models provides access to industry-leading AI models from various provide
 **Language Models**
 
 - OpenAI GPT-4.1 series (gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
-- OpenAI GPT-4o series (gpt-4o, gpt-4o-mini)
+- OpenAI GPT-4o series (gpt-4o, gpt-4.1-mini)
 - OpenAI reasoning models (o1-preview, o1-mini, o3-mini)
 - Anthropic Claude series (claude-4-opus, claude-4-sonnet, claude-3.7-sonnet, claude-3.5-sonnet, claude-3.5-haiku)
 - Google Gemini series (gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash)

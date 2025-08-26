@@ -5,7 +5,7 @@ description: Compare Mixtral vs GPT-4 performance on custom datasets using autom
 
 # Mixtral vs GPT: Run a benchmark with your own data
 
-In this guide, we'll walk through the steps to compare three large language models (LLMs): Mixtral, GPT-4o-mini, and GPT-4o. We will use `promptfoo`, a command-line interface (CLI) tool, to run evaluations and compare the performance of these models based on a set of prompts and test cases.
+In this guide, we'll walk through the steps to compare three large language models (LLMs): Mixtral, GPT-4.1-mini, and GPT-4o. We will use `promptfoo`, a command-line interface (CLI) tool, to run evaluations and compare the performance of these models based on a set of prompts and test cases.
 
 ![mixtral and gpt comparison](/img/docs/mixtral-vs-gpt.png)
 
@@ -13,7 +13,7 @@ In this guide, we'll walk through the steps to compare three large language mode
 
 - `promptfoo` CLI installed on your system.
 - Access to Replicate for Mixtral.
-- Access to OpenAI for GPT-4o-mini and GPT-4o.
+- Access to OpenAI for GPT-4.1-mini and GPT-4o.
 - API keys for Replicate (`REPLICATE_API_TOKEN`) and OpenAI (`OPENAI_API_KEY`).
 
 ## Step 1: Initial Setup
@@ -26,7 +26,7 @@ npx promptfoo@latest init mixtral-gpt-comparison
 
 ## Step 2: Configure the models
 
-Edit your `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Mixtral, GPT-4o-mini, and GPT-4o:
+Edit your `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Mixtral, GPT-4.1-mini, and GPT-4o:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -161,7 +161,7 @@ npx promptfoo@latest eval -o results.csv
 
 ## Conclusion
 
-The comparison will provide you with a side-by-side performance view of Mixtral, GPT-4o-mini, and GPT-4o based on your test cases. Use this data to make informed decisions about which LLM best suits your application.
+The comparison will provide you with a side-by-side performance view of Mixtral, GPT-4.1-mini, and GPT-4o based on your test cases. Use this data to make informed decisions about which LLM best suits your application.
 
 Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai/) leaderboard:
 

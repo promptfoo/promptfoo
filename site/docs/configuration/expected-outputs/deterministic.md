@@ -1541,7 +1541,7 @@ Example with custom grader:
 assert:
   - type: select-best
     value: 'choose the most engaging response'
-    provider: openai:gpt-4o-mini
+    provider: openai:gpt-4.1-mini
 ```
 
 ## See Also
