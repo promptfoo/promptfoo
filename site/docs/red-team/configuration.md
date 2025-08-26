@@ -35,7 +35,7 @@ The red team configuration uses the following YAML structure:
 
 ```yaml
 targets:
-  - id: openai:gpt-4.1
+  - id: gpt-5.1
     label: customer-service-agent
 
 redteam:
@@ -56,7 +56,7 @@ redteam:
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
-| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1`                |
+| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `gpt-5.1`                |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
 | `language`                   | `string`                  | Language for generated tests                                             | English                         |
@@ -771,7 +771,7 @@ You can set up the provider in several ways:
 
    ```yaml
    redteam:
-     provider: 'openai:gpt-4'
+     provider: 'gpt-5'
    ```
 
 2. As an object with additional configuration:
@@ -779,7 +779,7 @@ You can set up the provider in several ways:
    ```yaml
    redteam:
      provider:
-       id: 'openai:gpt-4'
+       id: 'gpt-5'
        config:
          temperature: 0.7
          max_tokens: 150
@@ -808,7 +808,7 @@ Configuration values can be set in multiple ways, with the following precedence 
 
    ```yaml
    redteam:
-     provider: openai:gpt-4.1
+     provider: gpt-5.1
      numTests: 5
    env:
      OPENAI_API_KEY: your-key-here

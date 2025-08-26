@@ -37,7 +37,7 @@ Inside of the `qwen-benchmark` directory, edit `promptfooconfig.yaml` to include
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - 'openai:gpt-4.1'
+  - 'gpt-5.1'
   - 'openrouter:meta-llama/llama-3-70b-instruct'
   - 'openrouter:qwen/qwen-2-72b-instruct'
 ```
@@ -55,7 +55,7 @@ Customize the behavior of each model by setting parameters such as `temperature`
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4.1
+  - id: gpt-5.1
     config:
       temperature: 0.9
       max_tokens: 512

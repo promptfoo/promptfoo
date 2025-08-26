@@ -48,7 +48,7 @@ prompts:
   - file://prompt.json
 
 providers:
-  - openai:gpt-4.1-mini
+  - gpt-5.1-mini
 
 tests:
   - vars:
@@ -287,7 +287,7 @@ Here's the associated config:
 prompts:
   - file://prompt.json
 providers:
-  - openai:gpt-4.1-mini
+  - gpt-5.1-mini
 tests:
   - vars:
       query: how you doing
@@ -317,7 +317,7 @@ prompts:
   - 'Respond to the user: {{message}}'
 
 providers:
-  - openai:gpt-4.1
+  - gpt-5.1
 
 tests:
   - vars:

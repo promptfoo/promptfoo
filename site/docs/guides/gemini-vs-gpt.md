@@ -37,8 +37,8 @@ Edit the `promptfooconfig.yaml` file to include the `gemini-pro` model from Goog
 ```yaml title="promptfooconfig.yaml"
 providers:
   - vertex:gemini-pro
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - gpt-5.1-mini
+  - gpt-5.1
 ```
 
 ## Step 2: Set up the prompts
@@ -60,10 +60,10 @@ prompts:
 providers:
   - id: vertex:gemini-pro
     prompts: gemini_prompt
-  - id: openai:gpt-4.1-mini
+  - id: gpt-5.1-mini
     prompts:
       - gpt_prompt
-  - id: openai:gpt-4.1
+  - id: gpt-5.1
     prompts:
       - gpt_prompt
 ```

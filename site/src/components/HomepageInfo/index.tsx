@@ -23,7 +23,7 @@ prompts:
 
 # And models...
 providers:
-  - openai:gpt-4o
+  - gpt-5o
   - anthropic:claude-3.5-sonnet
 
 # ... using these tests

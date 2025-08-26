@@ -64,7 +64,7 @@ Override the default grader:
 ```yaml
 assert:
   - type: context-faithfulness
-    provider: openai:gpt-4 # Use a different model for grading
+    provider: gpt-5 # Use a different model for grading
     threshold: 0.9
 ```
 

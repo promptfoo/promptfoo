@@ -31,8 +31,8 @@ Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of mod
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4.1
-  - openai:gpt-4.1-mini
+  - gpt-5.1
+  - gpt-5.1-mini
   - replicate:meta/meta-llama-3.1-405b-instruct
 ```
 
@@ -64,8 +64,8 @@ prompts:
 // highlight-end
 
 providers:
-  - openai:gpt-4.1
-  - openai:gpt-4.1-mini
+  - gpt-5.1
+  - gpt-5.1-mini
   - replicate:meta/meta-llama-3.1-405b-instruct
 ```
 
@@ -103,10 +103,10 @@ prompts:
   file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: openai:gpt-4.1
+  - id: gpt-5.1
     label: GPT 4o
     prompts: chat_prompt
-  - id: openai:gpt-4.1-mini
+  - id: gpt-5.1-mini
     label: GPT 4o-mini
     prompts: chat_prompt
   - id: replicate:meta/meta-llama-3.1-405b-instruct
@@ -200,13 +200,13 @@ Each model has a `config` field where you can specify additional parameters. Let
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4.1
+  - id: gpt-5.1
     // highlight-start
     config:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: openai:gpt-4.1-mini
+  - id: gpt-5.1-mini
     // highlight-start
     config:
       temperature: 0

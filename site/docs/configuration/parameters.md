@@ -156,7 +156,7 @@ prompts:
   - file://prompts/generate_prompt.js
 
 providers:
-  - openai:gpt-4.1-mini
+  - gpt-5.1-mini
   - anthropic:claude-3-haiku
 
 tests:

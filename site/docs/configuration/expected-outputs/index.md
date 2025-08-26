@@ -415,7 +415,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - gpt-5.1-mini
   - localai:chat:vicuna
 tests:
   - vars:

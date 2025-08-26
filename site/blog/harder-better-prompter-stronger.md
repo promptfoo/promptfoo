@@ -92,7 +92,7 @@ prompts:
   - 'You are a {{role}} at Aperture Science. {{input}}'
 
 providers:
-  - 'openai:gpt-4.1'
+  - 'gpt-5.1'
   - 'anthropic:messages:claude-sonnet-4-20250514'
 
 tests:

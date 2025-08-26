@@ -31,7 +31,7 @@ Create a new configuration file `promptfooconfig.yaml`:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: HarmBench evaluation of OpenAI GPT-4o-mini
 targets:
-  - id: openai:gpt-4.1-mini
+  - id: gpt-5.1-mini
     label: OpenAI GPT-4o-mini
 redteam:
   plugins:

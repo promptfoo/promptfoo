@@ -116,7 +116,7 @@ prompts:
   - 'Act as {{act}}. {{prompt}}'
 
 providers:
-  - openai:gpt-4.1-mini
+  - gpt-5.1-mini
 
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train
 ```
@@ -130,7 +130,7 @@ prompts:
   - 'Question: {{question}}\nContext: {{context}}\nAnswer:'
 
 providers:
-  - openai:gpt-4.1-mini
+  - gpt-5.1-mini
 
 tests: huggingface://datasets/rajpurkar/squad?split=validation&limit=100
 

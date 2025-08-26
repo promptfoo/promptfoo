@@ -47,7 +47,7 @@ Like other model-graded assertions, you can override the default GPT-4o evaluato
 assert:
   - type: g-eval
     value: 'Ensure response is factually accurate'
-    provider: openai:gpt-4.1-mini
+    provider: gpt-5.1-mini
 ```
 
 Or globally via test options:
@@ -55,7 +55,7 @@ Or globally via test options:
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-4.1-mini
+    provider: gpt-5.1-mini
 ```
 
 ## Example
@@ -68,7 +68,7 @@ prompts:
     Write a technical explanation of {{topic}} 
     suitable for a beginner audience.
 providers:
-  - openai:gpt-4
+  - gpt-5
 tests:
   - vars:
       topic: 'quantum computing'

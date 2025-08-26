@@ -31,14 +31,14 @@ Edit your `promptfooconfig.yaml` to include the three models:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - 'openai:gpt-4.1'
+  - 'gpt-5.1'
   - 'openai:o3-mini'
   - 'openrouter:meta-llama/llama-3-70b-instruct'
   - 'openrouter:deepseek/deepseek-chat'
 
 # Optional: Configure model parameters
 providers:
-  - id: openai:gpt-4.1
+  - id: gpt-5.1
     config:
       temperature: 0.7
       max_tokens: 1000

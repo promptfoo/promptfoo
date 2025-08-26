@@ -48,7 +48,7 @@ The OpenAI provider supports a handful of [configuration options](https://github
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: gpt-5.1-mini
     config:
       temperature: 0
       max_tokens: 1024
@@ -66,7 +66,7 @@ The `providers` list takes a `config` key that allows you to set parameters like
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: gpt-5.1-mini
     config:
       temperature: 0
       max_tokens: 128
@@ -231,7 +231,7 @@ prompts:
   - file://prompt.json
 
 providers:
-  - openai:gpt-4.1
+  - gpt-5.1
 
 tests:
   - vars:

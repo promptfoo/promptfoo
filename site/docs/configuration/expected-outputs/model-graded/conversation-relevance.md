@@ -81,7 +81,7 @@ prompts:
   - 'Explain {{topic}}'
 
 providers:
-  - openai:gpt-4
+  - gpt-5
 
 tests:
   - vars:
@@ -162,7 +162,7 @@ Like other model-graded assertions, you can override the default grading provide
 assert:
   - type: conversation-relevance
     threshold: 0.8
-    provider: openai:gpt-4o-mini
+    provider: gpt-5o-mini
 ```
 
 Or set it globally:

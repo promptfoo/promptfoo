@@ -36,7 +36,7 @@ Edit `promptfooconfig.yaml` to specify the models to compare:
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: cohere:command-r # or command-r-plus
-  - id: openai:gpt-4.1
+  - id: gpt-5.1
   - id: anthropic:messages:claude-3-5-sonnet-20241022
 ```
 
@@ -55,7 +55,7 @@ providers:
   - id: cohere:command-r
     config:
       temperature: 0
-  - id: openai:gpt-4.1
+  - id: gpt-5.1
     config:
       temperature: 0
   - id: anthropic:messages:claude-3-5-sonnet-20241022

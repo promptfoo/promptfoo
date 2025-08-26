@@ -49,7 +49,7 @@ Edit the `promptfooconfig.yaml` file to define your comparison.
 
    ```yaml
    providers:
-     - openai:gpt-4.1
+     - gpt-5.1
      - openai:o1-preview
    ```
 
@@ -98,7 +98,7 @@ description: 'GPT 4o vs o1 comparison'
 prompts:
   - 'Solve this riddle: {{riddle}}'
 providers:
-  - openai:gpt-4.1
+  - gpt-5.1
   - openai:o1-preview
 defaultTest:
   assert:

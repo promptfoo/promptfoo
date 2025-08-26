@@ -136,7 +136,7 @@ description: Your Foundation Model Red Team
 targets:
   - id: openrouter:deepseek/deepseek-r1 # The model you want to test
     label: deepseek-r1
-  - id: openai:gpt-4.1-mini # A second model to test (if you want to compare results)
+  - id: gpt-5.1-mini # A second model to test (if you want to compare results)
     label: gpt-4.1-mini
 
 plugins:

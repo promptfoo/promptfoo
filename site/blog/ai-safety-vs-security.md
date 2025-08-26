@@ -459,7 +459,7 @@ By default, llm-rubric uses GPT-4o-mini as the judge. You can customize this:
 ```yaml
 defaultTest:
   options:
-    rubricProvider: openai:gpt-4o # Use a more powerful judge
+    rubricProvider: gpt-5o # Use a more powerful judge
     # Or use Claude for evaluation:
     # rubricProvider: anthropic:claude-3-5-sonnet-latest
 ```

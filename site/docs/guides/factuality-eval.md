@@ -109,7 +109,7 @@ To set up a simple factuality evaluation for your LLM outputs:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4.1-mini
+  - gpt-5.1-mini
 prompts:
   - |
     Please answer the following question accurately:
@@ -137,8 +137,8 @@ Factuality evaluation is especially useful for comparing how different models pe
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - gpt-5.1-mini
+  - gpt-5.1
   - anthropic:claude-3-7-sonnet-20250219
   - google:gemini-2.0-flash
 prompts:
@@ -213,7 +213,7 @@ By default, promptfoo uses `gpt-4.1-2025-04-14` for grading. To specify a differ
 defaultTest:
   options:
     # Set the provider for grading factuality
-    provider: openai:gpt-4.1
+    provider: gpt-5.1
 ```
 
 You can also override it per assertion:
@@ -228,7 +228,7 @@ assert:
 Or via the command line:
 
 ```bash
-promptfoo eval --grader openai:gpt-4.1
+promptfoo eval --grader gpt-5.1
 ```
 
 ### Customizing Scoring Weights
