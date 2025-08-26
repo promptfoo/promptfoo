@@ -1,7 +1,9 @@
-import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { evaluate } from '../src/evaluator';
+import Eval from '../src/models/eval';
 import { transform } from '../src/util/transform';
-import type { TestSuite, ApiProvider } from '../src/types';
+
+import type { ApiProvider, TestSuite } from '../src/types';
 
 // Mock the transform function to track calls
 jest.mock('../src/util/transform');
@@ -19,10 +21,10 @@ describe('Parallel transformation integration', () => {
   it('should apply test.options.transform and assert.contextTransform in parallel from provider output', async () => {
     // Track the transformation sequence
     const transformCalls: { expression: string; input: any }[] = [];
-    
+
     mockTransform.mockImplementation(async (expression, input) => {
       transformCalls.push({ expression, input });
-      
+
       if (expression === 'output.toUpperCase()') {
         // Provider transform
         return 'PROVIDER TRANSFORMED';
@@ -37,6 +39,7 @@ describe('Parallel transformation integration', () => {
     });
 
     const testSuite: TestSuite = {
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
       providers: [
         {
           id: () => 'mock-provider',
@@ -70,46 +73,60 @@ describe('Parallel transformation integration', () => {
       ],
     };
 
-    const results = await evaluate(testSuite, {});
-    
+    const evalRecord = new Eval({});
+    const results = await evaluate(testSuite, evalRecord, {});
+
     // Check that both test transform and context transform received provider output
-    const testTransformCall = transformCalls.find(c => c.expression === 'output + " - test transformed"');
-    const contextTransformCall = transformCalls.find(c => c.expression === 'output.split(" ")[0]');
-    
+    const testTransformCall = transformCalls.find(
+      (c) => c.expression === 'output + " - test transformed"',
+    );
+    const contextTransformCall = transformCalls.find(
+      (c) => c.expression === 'output.split(" ")[0]',
+    );
+
     expect(testTransformCall?.input).toBe('PROVIDER TRANSFORMED');
     expect(contextTransformCall?.input).toBe('PROVIDER TRANSFORMED');
-    
+
     // The final output should have the test transform applied
     expect(results.results[0].response?.output).toBe('PROVIDER TRANSFORMED - test transformed');
-    
+
     // Context transform should have extracted first word from provider output
     expect(contextTransformCall?.input).toBe('PROVIDER TRANSFORMED');
   });
 
   it('should handle multiple context transforms in parallel', async () => {
     const transformCalls: { expression: string; input: any; timestamp: number }[] = [];
-    
+
     mockTransform.mockImplementation(async (expression, input) => {
       transformCalls.push({ expression, input, timestamp: Date.now() });
-      
+
       if (expression === 'JSON.stringify({provider: output})') {
         // Provider transform
         return JSON.stringify({ provider: input });
       } else if (expression === 'JSON.parse(output).provider.toLowerCase()') {
         // Test transform
-        const parsed = JSON.parse(input);
+        const parsed = typeof input === 'string' ? JSON.parse(input) : input;
         return parsed.provider.toLowerCase();
       } else if (expression.startsWith('JSON.parse(output)')) {
         // Context transforms - all should receive provider output
-        const parsed = JSON.parse(input);
-        if (expression.includes('context1')) return 'context1 from provider';
-        if (expression.includes('context2')) return 'context2 from provider';
-        if (expression.includes('context3')) return 'context3 from provider';
+        if (typeof input === 'string') {
+          JSON.parse(input); // Validate that input is valid JSON
+        }
+        if (expression.includes('context1')) {
+          return 'context1 from provider';
+        }
+        if (expression.includes('context2')) {
+          return 'context2 from provider';
+        }
+        if (expression.includes('context3')) {
+          return 'context3 from provider';
+        }
       }
       return input;
     });
 
     const testSuite: TestSuite = {
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
       providers: [
         {
           id: () => 'mock-provider',
@@ -131,7 +148,7 @@ describe('Parallel transformation integration', () => {
               contextTransform: 'JSON.parse(output).context1',
             },
             {
-              type: 'context-recall',  
+              type: 'context-recall',
               contextTransform: 'JSON.parse(output).context2',
             },
             {
@@ -146,22 +163,24 @@ describe('Parallel transformation integration', () => {
       ],
     };
 
-    await evaluate(testSuite, {});
-    
+    const evalRecord = new Eval({});
+    await evaluate(testSuite, evalRecord, {});
+
     // All context transforms should receive the same provider-transformed output
-    const contextTransforms = transformCalls.filter(c => 
-      c.expression.includes('context1') || 
-      c.expression.includes('context2') || 
-      c.expression.includes('context3')
+    const contextTransforms = transformCalls.filter(
+      (c) =>
+        c.expression.includes('context1') ||
+        c.expression.includes('context2') ||
+        c.expression.includes('context3'),
     );
-    
+
     // All should have received the JSON stringified provider output
-    contextTransforms.forEach(call => {
+    contextTransforms.forEach((call) => {
       expect(call.input).toBe('{"provider":"ORIGINAL"}');
     });
-    
+
     // Test transform should also receive provider output
-    const testTransform = transformCalls.find(c => c.expression.includes('toLowerCase'));
+    const testTransform = transformCalls.find((c) => c.expression.includes('toLowerCase'));
     expect(testTransform?.input).toBe('{"provider":"ORIGINAL"}');
   });
 
@@ -174,6 +193,7 @@ describe('Parallel transformation integration', () => {
     });
 
     const testSuite: TestSuite = {
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
       providers: [
         {
           id: () => 'mock-provider',
@@ -196,7 +216,8 @@ describe('Parallel transformation integration', () => {
       ],
     };
 
-    const results = await evaluate(testSuite, {});
+    const evalRecord = new Eval({});
+    const results = await evaluate(testSuite, evalRecord, {});
     expect(results.results[0].response?.output).toBe('SPACED OUTPUT');
   });
 
@@ -210,6 +231,7 @@ describe('Parallel transformation integration', () => {
     });
 
     const testSuite: TestSuite = {
+      prompts: [{ raw: 'Test prompt', label: 'Test' }],
       providers: [
         {
           id: () => 'mock-provider',
@@ -232,16 +254,17 @@ describe('Parallel transformation integration', () => {
       ],
     };
 
-    await evaluate(testSuite, {});
-    
+    const evalRecord = new Eval({});
+    await evaluate(testSuite, evalRecord, {});
+
     const contextTransformCall = (mockTransform as jest.Mock).mock.calls.find(
-      call => call[0] === 'output.metadata'
+      (call) => call[0] === 'output.metadata',
     );
-    
+
     // Should receive the raw provider output
-    expect(contextTransformCall?.[1]).toEqual({ 
-      data: 'test', 
-      metadata: { extracted: 'metadata' } 
+    expect(contextTransformCall?.[1]).toEqual({
+      data: 'test',
+      metadata: { extracted: 'metadata' },
     });
   });
 });

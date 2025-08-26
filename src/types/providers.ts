@@ -134,6 +134,7 @@ export interface ProviderResponse {
   };
   raw?: string | any;
   output?: string | any;
+  providerTransformedOutput?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
   sessionId?: string;
