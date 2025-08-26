@@ -435,23 +435,34 @@ interface GuardrailResponse {
 
 ## Transformation Pipeline
 
-Understanding the transformation pipeline is crucial for complex evaluations, especially for RAG systems. Here's how transforms are applied:
+Understanding the transformation pipeline is crucial for complex evaluations, especially for RAG systems which require [context-based assertions](/docs/configuration/expected-outputs/model-graded). Here's how transforms are applied:
 
 ### Execution Flow
 
 ```mermaid
 graph LR
+    subgraph Provider
+      A
+      B
+    end
+
+    subgraph Test Cases
+      D
+      E
+      F
+      G
+    end
+
     A[API Response] --> B[Provider transformResponse]
-    B --> C{Parallel Execution}
-    C --> D[Test options.transform]
-    C --> E[Assert contextTransform]
+    B --> D[options.transform]
+    B --> E[Assert contextTransform]
     D --> F[Test Assertions]
     E --> G[Context Assertions]
 ```
 
 ### Complete Example: RAG System Evaluation
 
-This example demonstrates how different transforms work together in a RAG evaluation:
+This example demonstrates how different transforms work together in a RAG evaluation :
 
 ```yaml
 providers:
