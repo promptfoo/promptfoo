@@ -256,7 +256,7 @@ class MCPClient {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.config.debug) {
-        console.error(`Error calling tool ${toolName}:`, error);
+        console.error(`Error calling tool ${toolName}:`, errorMessage);
       }
       throw error;
     }

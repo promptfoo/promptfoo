@@ -2,28 +2,23 @@ import { faker } from '@faker-js/faker';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import {
-  addProduct,
   addCustomer,
   addOrder,
-  updateInventory,
-  findProductById,
+  addProduct,
   findCustomerById,
-  findOrderById,
-  getProductsByCategory,
-  getOrdersByCustomer,
-  getInventoryStatus,
-  getEmployeesByDepartment,
-  mockProducts,
-  mockCustomers,
-  mockOrders,
-  mockInventory,
+  findProductById,
   mockEmployees,
+  mockInventory,
+  mockOrders,
+  mockProducts,
 } from '../data/mockData.js';
 
 const createProductSchema = z.object({
   name: z.string().describe('Product name'),
   sku: z.string().describe('Stock Keeping Unit'),
-  category: z.enum(['electronics', 'furniture', 'office-supplies', 'software', 'services']).describe('Product category'),
+  category: z
+    .enum(['electronics', 'furniture', 'office-supplies', 'software', 'services'])
+    .describe('Product category'),
   price: z.number().positive().describe('Product price'),
   description: z.string().describe('Product description'),
   supplier: z.string().describe('Supplier name'),
@@ -48,26 +43,38 @@ const createCustomerSchema = z.object({
 
 const createOrderSchema = z.object({
   customerId: z.string().describe('Customer ID'),
-  items: z.array(z.object({
-    productId: z.string().describe('Product ID'),
-    quantity: z.number().positive().describe('Quantity'),
-    unitPrice: z.number().positive().describe('Unit price'),
-    discount: z.number().min(0).max(100).default(0).describe('Discount percentage'),
-  })).describe('Order items'),
-  shippingAddress: z.object({
-    street: z.string().describe('Street address'),
-    city: z.string().describe('City'),
-    state: z.string().describe('State/Province'),
-    zipCode: z.string().describe('ZIP/Postal code'),
-    country: z.string().describe('Country'),
-  }).optional().describe('Shipping address (optional, defaults to customer address)'),
-  priority: z.enum(['low', 'normal', 'high', 'urgent']).default('normal').describe('Order priority'),
+  items: z
+    .array(
+      z.object({
+        productId: z.string().describe('Product ID'),
+        quantity: z.number().positive().describe('Quantity'),
+        unitPrice: z.number().positive().describe('Unit price'),
+        discount: z.number().min(0).max(100).default(0).describe('Discount percentage'),
+      }),
+    )
+    .describe('Order items'),
+  shippingAddress: z
+    .object({
+      street: z.string().describe('Street address'),
+      city: z.string().describe('City'),
+      state: z.string().describe('State/Province'),
+      zipCode: z.string().describe('ZIP/Postal code'),
+      country: z.string().describe('Country'),
+    })
+    .optional()
+    .describe('Shipping address (optional, defaults to customer address)'),
+  priority: z
+    .enum(['low', 'normal', 'high', 'urgent'])
+    .default('normal')
+    .describe('Order priority'),
 });
 
 const updateInventorySchema = z.object({
   productId: z.string().describe('Product ID'),
   adjustment: z.number().describe('Quantity adjustment (+/- value)'),
-  reason: z.enum(['purchase', 'sale', 'return', 'damage', 'theft', 'correction']).describe('Reason for adjustment'),
+  reason: z
+    .enum(['purchase', 'sale', 'return', 'damage', 'theft', 'correction'])
+    .describe('Reason for adjustment'),
   notes: z.string().optional().describe('Additional notes'),
 });
 
@@ -80,7 +87,10 @@ const queryInventorySchema = z.object({
 
 const queryOrdersSchema = z.object({
   customerId: z.string().optional().describe('Filter by customer ID'),
-  status: z.enum(['pending', 'processing', 'shipped', 'delivered', 'cancelled']).optional().describe('Filter by status'),
+  status: z
+    .enum(['pending', 'processing', 'shipped', 'delivered', 'cancelled'])
+    .optional()
+    .describe('Filter by status'),
   startDate: z.string().optional().describe('Start date for filtering (ISO 8601)'),
   endDate: z.string().optional().describe('End date for filtering (ISO 8601)'),
   limit: z.number().min(1).max(100).default(10).describe('Number of results to return'),
@@ -96,15 +106,15 @@ const queryEmployeesSchema = z.object({
 // Helper function to generate mock orders for any customer
 function generateMockOrders(customerId, count = 5) {
   const orders = [];
-  
+
   // Set a seed for consistent data for the same customer ID
   faker.seed(customerId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0));
-  
+
   for (let i = 0; i < count; i++) {
     const itemCount = faker.number.int({ min: 1, max: 5 });
     const items = [];
     let totalAmount = 0;
-    
+
     for (let j = 0; j < itemCount; j++) {
       const product = faker.helpers.arrayElement(mockProducts);
       const quantity = faker.number.int({ min: 1, max: 20 });
@@ -115,7 +125,7 @@ function generateMockOrders(customerId, count = 5) {
       ]);
       const unitPrice = product.price;
       const lineTotal = quantity * unitPrice * (1 - discount / 100);
-      
+
       items.push({
         productId: product.id,
         productName: product.name,
@@ -124,10 +134,10 @@ function generateMockOrders(customerId, count = 5) {
         discount,
         lineTotal,
       });
-      
+
       totalAmount += lineTotal;
     }
-    
+
     const order = {
       id: `ORD-${Date.now()}-${faker.string.alphanumeric(6).toUpperCase()}`,
       customerId: customerId,
@@ -156,13 +166,13 @@ function generateMockOrders(customerId, count = 5) {
         { value: 'urgent', weight: 1 },
       ]),
     };
-    
+
     orders.push(order);
   }
-  
+
   // Reset faker seed to avoid affecting other operations
   faker.seed();
-  
+
   return orders.sort((a, b) => b.orderDate.localeCompare(a.orderDate));
 }
 
@@ -208,7 +218,7 @@ export async function handleErpTool(name, args) {
   switch (name) {
     case 'create_product': {
       const input = createProductSchema.parse(args);
-      
+
       const product = addProduct({
         name: input.name,
         sku: input.sku,
@@ -220,11 +230,15 @@ export async function handleErpTool(name, args) {
         status: 'active',
         createdDate: new Date().toISOString(),
       });
-      
+
       // Create initial inventory record
-      const warehouse = faker.helpers.arrayElement(['main-warehouse', 'east-warehouse', 'west-warehouse']);
+      const warehouse = faker.helpers.arrayElement([
+        'main-warehouse',
+        'east-warehouse',
+        'west-warehouse',
+      ]);
       const initialQuantity = faker.number.int({ min: 100, max: 1000 });
-      
+
       mockInventory.push({
         id: `INV-${product.id}`,
         productId: product.id,
@@ -234,7 +248,7 @@ export async function handleErpTool(name, args) {
         reorderQuantity: Math.floor(initialQuantity * 0.5),
         lastRestocked: new Date().toISOString(),
       });
-      
+
       return {
         success: true,
         product,
@@ -246,10 +260,10 @@ export async function handleErpTool(name, args) {
         },
       };
     }
-    
+
     case 'create_customer': {
       const input = createCustomerSchema.parse(args);
-      
+
       const customer = addCustomer({
         companyName: input.companyName,
         contactName: input.contactName,
@@ -262,37 +276,39 @@ export async function handleErpTool(name, args) {
         status: 'active',
         createdDate: new Date().toISOString(),
       });
-      
+
       return {
         success: true,
         customer,
         message: `Customer ${customer.companyName} created successfully`,
       };
     }
-    
+
     case 'create_order': {
       const input = createOrderSchema.parse(args);
-      
+
       const customer = findCustomerById(input.customerId);
       if (!customer) {
         throw new Error(`Customer with ID ${input.customerId} not found`);
       }
-      
+
       // Validate products and check inventory
       const validatedItems = [];
       let subtotal = 0;
-      
+
       for (const item of input.items) {
         const product = findProductById(item.productId);
         if (!product) {
           throw new Error(`Product with ID ${item.productId} not found`);
         }
-        
-        const inventory = mockInventory.find(inv => inv.productId === item.productId);
+
+        const inventory = mockInventory.find((inv) => inv.productId === item.productId);
         if (!inventory || inventory.quantity < item.quantity) {
-          throw new Error(`Insufficient inventory for product ${product.name}. Available: ${inventory?.quantity || 0}, Requested: ${item.quantity}`);
+          throw new Error(
+            `Insufficient inventory for product ${product.name}. Available: ${inventory?.quantity || 0}, Requested: ${item.quantity}`,
+          );
         }
-        
+
         const lineTotal = item.quantity * item.unitPrice * (1 - item.discount / 100);
         validatedItems.push({
           productId: item.productId,
@@ -302,16 +318,16 @@ export async function handleErpTool(name, args) {
           discount: item.discount,
           lineTotal,
         });
-        
+
         subtotal += lineTotal;
-        
+
         // Update inventory
         inventory.quantity -= item.quantity;
       }
-      
+
       const tax = subtotal * 0.08; // 8% tax
       const shipping = faker.number.float({ min: 10, max: 50, fractionDigits: 2 });
-      
+
       const order = addOrder({
         customerId: input.customerId,
         orderDate: new Date().toISOString(),
@@ -324,7 +340,7 @@ export async function handleErpTool(name, args) {
         shippingAddress: input.shippingAddress || customer.address,
         priority: input.priority,
       });
-      
+
       return {
         success: true,
         order,
@@ -336,32 +352,34 @@ export async function handleErpTool(name, args) {
         },
       };
     }
-    
+
     case 'update_inventory': {
       const input = updateInventorySchema.parse(args);
-      
+
       const product = findProductById(input.productId);
       if (!product) {
         throw new Error(`Product with ID ${input.productId} not found`);
       }
-      
-      const inventory = mockInventory.find(inv => inv.productId === input.productId);
+
+      const inventory = mockInventory.find((inv) => inv.productId === input.productId);
       if (!inventory) {
         throw new Error(`No inventory record found for product ${product.name}`);
       }
-      
+
       const previousQuantity = inventory.quantity;
       inventory.quantity += input.adjustment;
-      
+
       if (inventory.quantity < 0) {
-        throw new Error(`Cannot adjust inventory below zero. Current: ${previousQuantity}, Adjustment: ${input.adjustment}`);
+        throw new Error(
+          `Cannot adjust inventory below zero. Current: ${previousQuantity}, Adjustment: ${input.adjustment}`,
+        );
       }
-      
+
       // Update last restocked if it's a purchase
       if (input.reason === 'purchase' && input.adjustment > 0) {
         inventory.lastRestocked = new Date().toISOString();
       }
-      
+
       return {
         success: true,
         inventory: {
@@ -376,32 +394,32 @@ export async function handleErpTool(name, args) {
         message: `Inventory updated successfully for ${product.name}`,
       };
     }
-    
+
     case 'query_inventory': {
       const input = queryInventorySchema.parse(args);
-      
+
       let results = [...mockInventory];
-      
+
       if (input.productId) {
-        results = results.filter(inv => inv.productId === input.productId);
+        results = results.filter((inv) => inv.productId === input.productId);
       }
-      
+
       if (input.warehouse) {
-        results = results.filter(inv => inv.warehouse === input.warehouse);
+        results = results.filter((inv) => inv.warehouse === input.warehouse);
       }
-      
+
       if (input.belowReorderPoint) {
-        results = results.filter(inv => inv.quantity < inv.reorderPoint);
+        results = results.filter((inv) => inv.quantity < inv.reorderPoint);
       }
-      
+
       if (input.category) {
-        const categoryProducts = mockProducts.filter(p => p.category === input.category);
-        const productIds = categoryProducts.map(p => p.id);
-        results = results.filter(inv => productIds.includes(inv.productId));
+        const categoryProducts = mockProducts.filter((p) => p.category === input.category);
+        const productIds = categoryProducts.map((p) => p.id);
+        results = results.filter((inv) => productIds.includes(inv.productId));
       }
-      
+
       // Enrich with product information
-      const enrichedResults = results.map(inv => {
+      const enrichedResults = results.map((inv) => {
         const product = findProductById(inv.productId);
         return {
           ...inv,
@@ -412,56 +430,56 @@ export async function handleErpTool(name, args) {
           needsReorder: inv.quantity < inv.reorderPoint,
         };
       });
-      
+
       return {
         inventory: enrichedResults,
         count: enrichedResults.length,
         summary: {
           totalItems: enrichedResults.length,
-          itemsBelowReorderPoint: enrichedResults.filter(i => i.needsReorder).length,
+          itemsBelowReorderPoint: enrichedResults.filter((i) => i.needsReorder).length,
           totalStockValue: enrichedResults.reduce((sum, i) => sum + i.stockValue, 0),
-          warehouses: [...new Set(enrichedResults.map(i => i.warehouse))],
+          warehouses: [...new Set(enrichedResults.map((i) => i.warehouse))],
         },
       };
     }
-    
+
     case 'query_orders': {
       const input = queryOrdersSchema.parse(args);
-      
+
       let results = [...mockOrders];
-      
+
       // If a specific customer ID is provided and no orders exist, generate some
       if (input.customerId) {
-        const customerOrders = results.filter(o => o.customerId === input.customerId);
-        
+        const customerOrders = results.filter((o) => o.customerId === input.customerId);
+
         if (customerOrders.length === 0) {
           const generatedOrders = generateMockOrders(input.customerId, 10);
           mockOrders.push(...generatedOrders);
           results = [...mockOrders];
         }
-        
-        results = results.filter(o => o.customerId === input.customerId);
+
+        results = results.filter((o) => o.customerId === input.customerId);
       }
-      
+
       if (input.status) {
-        results = results.filter(o => o.status === input.status);
+        results = results.filter((o) => o.status === input.status);
       }
-      
+
       if (input.startDate) {
-        results = results.filter(o => o.orderDate >= input.startDate);
+        results = results.filter((o) => o.orderDate >= input.startDate);
       }
-      
+
       if (input.endDate) {
-        results = results.filter(o => o.orderDate <= input.endDate);
+        results = results.filter((o) => o.orderDate <= input.endDate);
       }
-      
+
       // Sort by date (newest first) and limit
       results = results
         .sort((a, b) => b.orderDate.localeCompare(a.orderDate))
         .slice(0, input.limit);
-      
+
       // Enrich with customer information
-      const enrichedResults = results.map(order => {
+      const enrichedResults = results.map((order) => {
         const customer = findCustomerById(order.customerId);
         return {
           ...order,
@@ -469,48 +487,53 @@ export async function handleErpTool(name, args) {
           customerEmail: customer?.email || 'Unknown',
         };
       });
-      
+
       return {
         orders: enrichedResults,
         count: enrichedResults.length,
         summary: {
           totalOrders: enrichedResults.length,
           totalRevenue: enrichedResults.reduce((sum, o) => sum + o.totalAmount, 0),
-          averageOrderValue: enrichedResults.length > 0 
-            ? enrichedResults.reduce((sum, o) => sum + o.totalAmount, 0) / enrichedResults.length 
-            : 0,
+          averageOrderValue:
+            enrichedResults.length > 0
+              ? enrichedResults.reduce((sum, o) => sum + o.totalAmount, 0) / enrichedResults.length
+              : 0,
           statusBreakdown: {
-            pending: enrichedResults.filter(o => o.status === 'pending').length,
-            processing: enrichedResults.filter(o => o.status === 'processing').length,
-            shipped: enrichedResults.filter(o => o.status === 'shipped').length,
-            delivered: enrichedResults.filter(o => o.status === 'delivered').length,
-            cancelled: enrichedResults.filter(o => o.status === 'cancelled').length,
+            pending: enrichedResults.filter((o) => o.status === 'pending').length,
+            processing: enrichedResults.filter((o) => o.status === 'processing').length,
+            shipped: enrichedResults.filter((o) => o.status === 'shipped').length,
+            delivered: enrichedResults.filter((o) => o.status === 'delivered').length,
+            cancelled: enrichedResults.filter((o) => o.status === 'cancelled').length,
           },
         },
       };
     }
-    
+
     case 'query_employees': {
       const input = queryEmployeesSchema.parse(args);
-      
+
       let results = [...mockEmployees];
-      
+
       if (input.department) {
-        results = results.filter(e => e.department.toLowerCase() === input.department.toLowerCase());
+        results = results.filter(
+          (e) => e.department.toLowerCase() === input.department.toLowerCase(),
+        );
       }
-      
+
       if (input.role) {
-        results = results.filter(e => e.role.toLowerCase().includes(input.role.toLowerCase()));
+        results = results.filter((e) => e.role.toLowerCase().includes(input.role.toLowerCase()));
       }
-      
+
       if (input.location) {
-        results = results.filter(e => e.location.toLowerCase().includes(input.location.toLowerCase()));
+        results = results.filter((e) =>
+          e.location.toLowerCase().includes(input.location.toLowerCase()),
+        );
       }
-      
+
       if (input.status) {
-        results = results.filter(e => e.status === input.status);
+        results = results.filter((e) => e.status === input.status);
       }
-      
+
       return {
         employees: results,
         count: results.length,
@@ -521,17 +544,16 @@ export async function handleErpTool(name, args) {
             return acc;
           }, {}),
           byStatus: {
-            active: results.filter(e => e.status === 'active').length,
-            onLeave: results.filter(e => e.status === 'on-leave').length,
-            terminated: results.filter(e => e.status === 'terminated').length,
+            active: results.filter((e) => e.status === 'active').length,
+            onLeave: results.filter((e) => e.status === 'on-leave').length,
+            terminated: results.filter((e) => e.status === 'terminated').length,
           },
-          averageSalary: results.length > 0
-            ? results.reduce((sum, e) => sum + e.salary, 0) / results.length
-            : 0,
+          averageSalary:
+            results.length > 0 ? results.reduce((sum, e) => sum + e.salary, 0) / results.length : 0,
         },
       };
     }
-    
+
     default:
       throw new Error(`Unknown ERP tool: ${name}`);
   }

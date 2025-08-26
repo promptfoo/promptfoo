@@ -7,7 +7,6 @@ const generateCustomerId = () =>
   `CUST-${faker.string.alphanumeric(6).toUpperCase()}`;
 const generateOrderId = () =>
   `ORD-${Date.now()}-${faker.string.alphanumeric(6).toUpperCase()}`;
-const generateEmployeeId = () => `EMP-${faker.string.numeric(6)}`;
 
 // Mock Data Arrays
 export const mockProducts = [
