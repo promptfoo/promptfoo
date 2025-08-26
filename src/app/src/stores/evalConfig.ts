@@ -2,9 +2,34 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types';
+<<<<<<< HEAD
 
 export interface EvalConfigState {
   config: Partial<UnifiedConfig>;
+=======
+import {
+  transformResultsConfigToSetupConfig,
+  validateConfigCompleteness,
+  createMinimalValidConfig,
+  hasMinimumRequiredFields,
+} from '../utils/configTransformation';
+
+export interface EvalConfigState {
+  config: Partial<UnifiedConfig>;
+  /** Source of the current config (fresh, results, user-edited) */
+  configSource: 'fresh' | 'results' | 'user-edited';
+  /** Original config from results (for comparison/restoration) */
+  originalResultsConfig: Partial<UnifiedConfig> | null;
+  /** Loading state for config operations */
+  isLoading: boolean;
+  /** Validation state */
+  validationStatus: {
+    isValid: boolean;
+    errors: string[];
+    hasMinimumFields: boolean;
+  };
+
+>>>>>>> 1dc3ab500 (fix(webui): improve edit and re-run functionality with better data handling and UX)
   /** Replace the entire config */
   setConfig: (config: Partial<UnifiedConfig>) => void;
   /** Merge updates into the existing config */
@@ -33,14 +58,97 @@ export const useStore = create<EvalConfigState>()(
     (set, get) => ({
       config: { ...DEFAULT_CONFIG },
 
+<<<<<<< HEAD
       setConfig: (config) => set({ config }),
+=======
+      setConfig: (config) =>
+        set({
+          config,
+          configSource: 'user-edited',
+        }),
+>>>>>>> 1dc3ab500 (fix(webui): improve edit and re-run functionality with better data handling and UX)
 
       updateConfig: (updates) =>
         set((state) => ({
           config: { ...state.config, ...updates },
         })),
 
+<<<<<<< HEAD
       reset: () => set({ config: { ...DEFAULT_CONFIG } }),
+=======
+      setConfigFromResults: async (resultsConfig) => {
+        set({ isLoading: true });
+
+        try {
+          // Transform the results config for use in setup
+          const transformedConfig = transformResultsConfigToSetupConfig(resultsConfig);
+
+          // Create a minimal valid config if the transformed one is incomplete
+          const setupConfig = hasMinimumRequiredFields(transformedConfig)
+            ? transformedConfig
+            : createMinimalValidConfig(transformedConfig);
+
+          set({
+            config: setupConfig,
+            originalResultsConfig: resultsConfig,
+            configSource: 'results',
+            isLoading: false,
+          });
+
+          // Validate the new config
+          const { validateCurrentConfig } = get();
+          validateCurrentConfig();
+        } catch (error) {
+          console.error('Error transforming results config:', error);
+          // Fall back to minimal config
+          set({
+            config: createMinimalValidConfig(resultsConfig),
+            originalResultsConfig: resultsConfig,
+            configSource: 'results',
+            isLoading: false,
+          });
+        }
+      },
+
+      reset: () =>
+        set({
+          config: { ...DEFAULT_CONFIG },
+          configSource: 'fresh',
+          originalResultsConfig: null,
+          validationStatus: {
+            isValid: true,
+            errors: [],
+            hasMinimumFields: false,
+          },
+        }),
+
+      restoreOriginal: () => {
+        const { originalResultsConfig } = get();
+        if (originalResultsConfig) {
+          const transformedConfig = transformResultsConfigToSetupConfig(originalResultsConfig);
+          set({
+            config: transformedConfig,
+            configSource: 'results',
+          });
+          const { validateCurrentConfig } = get();
+          validateCurrentConfig();
+        }
+      },
+
+      validateCurrentConfig: () => {
+        const { config } = get();
+        const validation = validateConfigCompleteness(config);
+        const hasMinFields = hasMinimumRequiredFields(config);
+
+        set({
+          validationStatus: {
+            isValid: validation.isValid,
+            errors: validation.errors.map((e) => e.message),
+            hasMinimumFields: hasMinFields,
+          },
+        });
+      },
+>>>>>>> 1dc3ab500 (fix(webui): improve edit and re-run functionality with better data handling and UX)
 
       getTestSuite: () => {
         const { config } = get();

@@ -40,7 +40,21 @@ function ErrorFallback({
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
+<<<<<<< HEAD
   const { config, updateConfig, reset } = useStore();
+=======
+  const {
+    config,
+    updateConfig,
+    reset,
+    configSource,
+    originalResultsConfig,
+    isLoading,
+    validationStatus,
+    restoreOriginal,
+    validateCurrentConfig,
+  } = useStore();
+>>>>>>> 1dc3ab500 (fix(webui): improve edit and re-run functionality with better data handling and UX)
   const { providers = [], prompts = [] } = config;
 
   // Ensure providers is always an array of ProviderOptions
@@ -103,8 +117,79 @@ const EvaluateTestSuiteCreator: React.FC = () => {
 
   return (
     <Container maxWidth="lg" sx={{ marginTop: '2rem' }}>
+<<<<<<< HEAD
       <Stack direction="row" spacing={2} justifyContent="space-between">
         <Typography variant="h4">Set up an evaluation</Typography>
+=======
+      {/* Loading State */}
+      {isLoading && (
+        <Box sx={{ width: '100%', mb: 2 }}>
+          <LinearProgress />
+        </Box>
+      )}
+
+      {/* Config Status */}
+      {configSource !== 'fresh' && (
+        <Box sx={{ mb: 3 }}>
+          <Alert
+            severity={validationStatus.hasMinimumFields ? 'success' : 'warning'}
+            action={
+              originalResultsConfig && (
+                <Button color="inherit" size="small" onClick={restoreOriginal} sx={{ mr: 1 }}>
+                  Restore Original
+                </Button>
+              )
+            }
+          >
+            <AlertTitle>
+              Configuration loaded from{' '}
+              {configSource === 'results' ? 'evaluation results' : 'previous edits'}
+            </AlertTitle>
+            {configSource === 'results' &&
+              'This configuration was automatically created from your evaluation results. You can modify it and run a new evaluation.'}
+            {!validationStatus.hasMinimumFields && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="body2" color="warning.main">
+                  ⚠️ This configuration may be incomplete. Please review providers and prompts.
+                </Typography>
+              </Box>
+            )}
+          </Alert>
+        </Box>
+      )}
+
+      {/* Validation Errors */}
+      {validationStatus.errors.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Alert severity="error">
+            <AlertTitle>Configuration Issues</AlertTitle>
+            <Stack spacing={1}>
+              {validationStatus.errors.map((error, index) => (
+                <Typography key={index} variant="body2">
+                  • {error}
+                </Typography>
+              ))}
+            </Stack>
+          </Alert>
+        </Box>
+      )}
+
+      <Stack direction="row" spacing={2} justifyContent="space-between">
+        <Box>
+          <Typography variant="h4">Set up an evaluation</Typography>
+          {/* Config source indicator */}
+          {configSource !== 'fresh' && (
+            <Box sx={{ mt: 1 }}>
+              <Chip
+                size="small"
+                label={configSource === 'results' ? 'From Results' : 'User Edited'}
+                color={configSource === 'results' ? 'primary' : 'secondary'}
+                variant="outlined"
+              />
+            </Box>
+          )}
+        </Box>
+>>>>>>> 1dc3ab500 (fix(webui): improve edit and re-run functionality with better data handling and UX)
         <Stack direction="row" spacing={2}>
           <RunTestSuiteButton />
           <ConfigureEnvButton />
