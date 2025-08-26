@@ -421,9 +421,11 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 
 ## Provider-related types
 
-### Guardrails
+### GuardrailsResponse
 
-GuardrailResponse is an object that represents the GuardrailResponse from a provider. It includes flags indicating if prompt or output failed guardrails.
+- **Type**: object. 
+- Represents the GuardrailResponse from a provider.
+- Includes flags indicating if a prompt or output failed guardrails.
 
 ```typescript
 interface GuardrailResponse {
@@ -435,7 +437,8 @@ interface GuardrailResponse {
 
 ### ProviderFunction
 
-A ProviderFunction is a function that takes a prompt as an argument and returns a Promise that resolves to a ProviderResponse. It allows you to define custom logic for calling an API.
+- **Type**: function.
+- ProviderFunction takes a prompt as an argument and returns a Promise that resolves to a ProviderResponse. It allows you to define custom logic for calling an API.
 
 ```typescript
 type ProviderFunction = (
@@ -446,7 +449,9 @@ type ProviderFunction = (
 
 ### ProviderOptions
 
-ProviderOptions is an object that includes the `id` of the provider and an optional `config` object that can be used to pass provider-specific configurations.
+- **Type**: object.
+- ProviderOptions includes the `id` of the provider.
+- Optional: ProviderOptions includes a `config` object to pass provider-specific configurations.
 
 ```typescript
 interface ProviderOptions {
@@ -470,7 +475,9 @@ interface ProviderOptions {
 
 ### ProviderResponse
 
-ProviderResponse is an object that represents the response from a provider. It includes the output from the provider, any error that occurred, information about token usage, and a flag indicating whether the response was cached.
+- **Type**: object.
+- ProviderResponse represents the response from a provider. 
+- It includes the output from the provider, any error that occurred, information about token usage, and a flag indicating whether the response was cached.
 
 ```typescript
 interface ProviderResponse {
@@ -493,7 +500,9 @@ interface ProviderResponse {
 
 ### ProviderEmbeddingResponse
 
-ProviderEmbeddingResponse is an object that represents the response from a provider's embedding API. It includes the embedding from the provider, any error that occurred, and information about token usage.
+- **Type**: object.
+- ProviderEmbeddingResponse represents the response from a provider's embedding API.
+- It includes the embedding from the provider, any error that occurred, and information about token usage.
 
 ```typescript
 interface ProviderEmbeddingResponse {
