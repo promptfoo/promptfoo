@@ -466,20 +466,39 @@ export function formatCandidateContents(candidate: Candidate) {
   }
 
   if (candidate.content?.parts) {
-    let output = '';
-    let is_text = true;
+    let textOutput = '';
+    const outputParts: string[] = [];
+    let hasImages = false;
+    
     for (const part of candidate.content.parts) {
       if ('text' in part) {
-        output += part.text;
+        textOutput += part.text;
+        outputParts.push(part.text!);
+      } else if ('inlineData' in part && part.inlineData) {
+        hasImages = true;
+        const mimeType = part.inlineData.mimeType || 'image/png';
+        const base64Data = part.inlineData.data;
+        // Return as markdown image with data URL
+        const imageMarkdown = `![Generated Image](data:${mimeType};base64,${base64Data})`;
+        outputParts.push(imageMarkdown);
       } else {
-        is_text = false;
+        // For other non-text parts, return the full parts array
+        return candidate.content.parts;
       }
     }
-    if (is_text) {
-      return output;
-    } else {
-      return candidate.content.parts;
+    
+    // If we have images, return the combined output with images
+    if (hasImages) {
+      return outputParts.join('\n\n');
     }
+    
+    // If only text, return the text string
+    if (textOutput) {
+      return textOutput;
+    }
+    
+    // If no text and no images but other parts, return parts array
+    return candidate.content.parts;
   } else {
     throw new Error(`No output found in response: ${JSON.stringify(candidate)}`);
   }

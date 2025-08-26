@@ -69,6 +69,13 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   const truncateText = (node: React.ReactNode, length: number = 0): React.ReactNode => {
     if (typeof node === 'string' || typeof node === 'number') {
       const nodeAsString = node.toString();
+      
+      // Don't truncate if this string contains base64 image data
+      // This preserves the integrity of markdown images with large base64 data
+      if (nodeAsString.includes('![') && nodeAsString.includes('data:image') && nodeAsString.includes('base64,')) {
+        return nodeAsString;
+      }
+      
       return nodeAsString.slice(0, maxLength - length);
     }
     if (Array.isArray(node)) {
