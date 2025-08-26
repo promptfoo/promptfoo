@@ -481,6 +481,8 @@ const App: React.FC = () => {
           vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
           vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
           setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
         />
         <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
       </Stack>

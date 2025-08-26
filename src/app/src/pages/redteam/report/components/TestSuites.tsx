@@ -26,6 +26,7 @@ import {
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
 import { getSeverityColor } from './FrameworkComplianceUtils';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
@@ -38,6 +39,8 @@ interface TestSuitesProps {
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
   vulnerabilitiesDataGridFilterModel: any;
   setVulnerabilitiesDataGridFilterModel: (filterModel: any) => void;
+  failuresByPlugin?: Record<string, any[]>;
+  passesByPlugin?: Record<string, any[]>;
 }
 
 const getRiskScoreColor = (riskScore: number, theme: any): string => {
@@ -55,6 +58,8 @@ const getRiskScoreColor = (riskScore: number, theme: any): string => {
 const getSubCategoryStats = (
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>,
   plugins: RedteamPluginObject[],
+  failuresByPlugin?: any[],
+  passesByPlugin?: any[],
 ) => {
   const subCategoryStats = [];
   for (const subCategories of Object.values(riskCategories)) {
@@ -68,6 +73,43 @@ const getSubCategoryStats = (
         : 'N/A';
 
       const severity = getRiskCategorySeverityMap(plugins)[subCategory as Plugin] || 'Unknown';
+
+      // Calculate risk score with details
+      const riskDetails = (() => {
+        // If no detailed strategy data, use basic calculation
+        if (!failuresByPlugin || !passesByPlugin) {
+          const successes = categoryStats[subCategory]
+            ? categoryStats[subCategory].total - categoryStats[subCategory].pass
+            : 0;
+          const attempts = categoryStats[subCategory]?.total || 0;
+
+          return RiskScoreService.calculateWithDetails({
+            severity,
+            successes,
+            attempts,
+            strategy: 'basic',
+          });
+        }
+
+        // Aggregate strategy stats and calculate risk score
+        // Flatten all test arrays from the plugin-keyed objects
+        const allFailureTests = Object.values(failuresByPlugin).flat();
+        const allPassTests = Object.values(passesByPlugin).flat();
+
+        const strategyStats = RiskScoreService.aggregatePluginStrategyStats({
+          pluginId: subCategory,
+          failureTests: allFailureTests,
+          passTests: allPassTests,
+          getPluginIdFromResult,
+          getStrategyIdFromTest,
+        });
+
+        return RiskScoreService.calculatePluginRiskScoreWithDetails({
+          severity,
+          strategyStats,
+        });
+      })();
+
       subCategoryStats.push({
         pluginName: subCategory,
         type: categoryAliases[subCategory as keyof typeof categoryAliases] || subCategory,
@@ -85,13 +127,9 @@ const getSubCategoryStats = (
             ).toFixed(1) + '%'
           : 'N/A',
         severity,
-        riskScore: RiskScoreService.calculate(
-          severity,
-          categoryStats[subCategory]
-            ? categoryStats[subCategory].total - categoryStats[subCategory].pass
-            : 0,
-          categoryStats[subCategory]?.total,
-        ),
+        riskScore: riskDetails.score,
+        exploitabilityScore: riskDetails.exploitabilityScore,
+        exploitabilityReason: riskDetails.exploitabilityReason,
         attackSuccessRate,
       });
     }
@@ -114,12 +152,17 @@ const TestSuites: React.FC<TestSuitesProps> = ({
   vulnerabilitiesDataGridRef,
   vulnerabilitiesDataGridFilterModel,
   setVulnerabilitiesDataGridFilterModel,
+  failuresByPlugin,
+  passesByPlugin,
 }) => {
   const navigate = useNavigate();
   const theme = useTheme();
-  const subCategoryStats = getSubCategoryStats(categoryStats, plugins).filter(
-    (subCategory) => subCategory.passRate !== 'N/A',
-  );
+  const subCategoryStats = getSubCategoryStats(
+    categoryStats,
+    plugins,
+    failuresByPlugin,
+    passesByPlugin,
+  ).filter((subCategory) => subCategory.passRate !== 'N/A');
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(25);
   const [order, setOrder] = React.useState<'asc' | 'desc'>('desc');
@@ -144,7 +187,14 @@ const TestSuites: React.FC<TestSuitesProps> = ({
 
   const exportToCSV = React.useCallback(() => {
     // Format data for CSV
-    const headers = ['Type', 'Risk Score', 'Severity', 'Attack Success Rate', 'Description'];
+    const headers = [
+      'Type',
+      'Risk Score',
+      'Exploitability Score',
+      'Severity',
+      'Attack Success Rate',
+      'Description',
+    ];
 
     // Get the sorted data based on current sort model
     const sortedData = [...subCategoryStats].sort((a, b) => {
@@ -197,6 +247,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
       displayNameOverrides[subCategory.pluginName as keyof typeof displayNameOverrides] ||
         subCategory.type,
       subCategory.riskScore,
+      subCategory.exploitabilityScore,
       subCategory.severity,
       subCategory.attackSuccessRate,
       subCategory.description,
@@ -257,6 +308,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
                   Risk Score
                 </TableSortLabel>
               </TableCell>
+              <TableCell>Exploitability</TableCell>
               <TableCell>
                 <TableSortLabel
                   active={orderBy === 'severity'}
@@ -352,22 +404,25 @@ const TestSuites: React.FC<TestSuitesProps> = ({
                         title={
                           <Box>
                             <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                              Risk Score Calculation
+                              CVSS-Style Risk Score
                             </Typography>
                             <Typography variant="caption" component="div">
-                              Risk Score = Base Severity + (Attack Success Rate × Escalation Factor)
+                              Risk Score = (Exploitability × 40%) + (Impact × 60%)
                             </Typography>
                             <Box sx={{ mt: 1 }}>
                               <Typography variant="caption" component="div">
-                                • Base Severity: {subCategory.severity} (
-                                {severityRiskScores[subCategory.severity as Severity] || 'N/A'})
+                                • Impact Score: {subCategory.severity} (
+                                {severityRiskScores[subCategory.severity as Severity] || 'N/A'}/10)
+                              </Typography>
+                              <Typography variant="caption" component="div">
+                                • Exploitability Score: {subCategory.exploitabilityScore}/10
                               </Typography>
                               <Typography variant="caption" component="div">
                                 • Attack Success Rate: {subCategory.attackSuccessRate}
                               </Typography>
-                              <Typography variant="caption" component="div">
-                                • Higher severity vulnerabilities escalate faster with successful
-                                attacks
+                              <Typography variant="caption" component="div" sx={{ mt: 1 }}>
+                                Industry-standard scoring: 60% weight on impact severity, 40% on
+                                exploitability
                               </Typography>
                             </Box>
                           </Box>
@@ -385,6 +440,85 @@ const TestSuites: React.FC<TestSuitesProps> = ({
                             }}
                           />
                           {subCategory.riskScore}
+                        </Box>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell>
+                      <Tooltip
+                        title={
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                              CVSS-Style Exploitability Score
+                            </Typography>
+                            <Typography variant="caption" component="div" sx={{ mb: 1 }}>
+                              {subCategory.exploitabilityReason}
+                            </Typography>
+                            <Box sx={{ mt: 1 }}>
+                              <Typography
+                                variant="caption"
+                                component="div"
+                                sx={{ fontWeight: 'bold' }}
+                              >
+                                Components (Equal Weight):
+                              </Typography>
+                              <Typography variant="caption" component="div">
+                                • Attack Vector: How the attack is delivered
+                              </Typography>
+                              <Typography variant="caption" component="div">
+                                • Attack Complexity: Conditions required for success
+                              </Typography>
+                              <Typography variant="caption" component="div">
+                                • Success Rate: Empirical test results
+                              </Typography>
+                              <Box sx={{ mt: 1 }}>
+                                <Typography
+                                  variant="caption"
+                                  component="div"
+                                  sx={{ fontWeight: 'bold' }}
+                                >
+                                  Score Interpretation:
+                                </Typography>
+                                <Typography variant="caption" component="div">
+                                  • 0-3: Very Low - Difficult to exploit
+                                </Typography>
+                                <Typography variant="caption" component="div">
+                                  • 3-5: Low - Requires effort to exploit
+                                </Typography>
+                                <Typography variant="caption" component="div">
+                                  • 5-7: Moderate - Reasonably exploitable
+                                </Typography>
+                                <Typography variant="caption" component="div">
+                                  • 7-10: High - Easily exploitable
+                                </Typography>
+                              </Box>
+                            </Box>
+                          </Box>
+                        }
+                        placement="top"
+                        arrow
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'help' }}>
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: '50%',
+                              backgroundColor: (() => {
+                                const score = subCategory.exploitabilityScore;
+                                if (score >= 8) {
+                                  return getSeverityColor(Severity.Critical, theme);
+                                }
+                                if (score >= 5.5) {
+                                  return getSeverityColor(Severity.High, theme);
+                                }
+                                if (score >= 3.5) {
+                                  return getSeverityColor(Severity.Medium, theme);
+                                }
+                                return getSeverityColor(Severity.Low, theme);
+                              })(),
+                            }}
+                          />
+                          {subCategory.exploitabilityScore}/10
                         </Box>
                       </Tooltip>
                     </TableCell>
