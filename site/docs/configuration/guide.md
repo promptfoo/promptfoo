@@ -30,7 +30,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -58,7 +58,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -82,7 +82,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -122,7 +122,7 @@ providers:
 Where the provider file looks like this:
 
 ```yaml
-id: gpt-5.1-mini
+id: openai:gpt-4.1-mini
 label: Foo bar
 config:
   temperature: 0.9
@@ -134,7 +134,7 @@ The `tests` config property takes a list of paths to files or directories. For e
 
 ```yaml
 prompts: file://prompts.txt
-providers: gpt-5.1-mini
+providers: openai:gpt-4.1-mini
 
 # Load & runs all test cases matching these filepaths
 tests:
@@ -282,7 +282,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-start
 defaultTest:
@@ -312,7 +312,7 @@ You can also use `defaultTest` to override the model used for each test. This ca
 ```yaml
 defaultTest:
   options:
-    provider: gpt-5.1-mini-0613
+    provider: openai:gpt-4.1-mini-0613
 ```
 
 ### Default variables
@@ -348,7 +348,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -387,7 +387,7 @@ For example:
 ```yaml
 prompts: file://prompts.txt
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - gpt-5
 tests:
   - vars:
@@ -836,7 +836,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: file://tests.csv
@@ -849,7 +849,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing

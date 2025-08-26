@@ -31,7 +31,7 @@ Edit your `promptfooconfig.yaml` to include the three models:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - 'gpt-5.1'
+  - 'openai:gpt-4.1
   - 'openai:o3-mini'
   - 'openrouter:meta-llama/llama-3-70b-instruct'
   - 'openrouter:deepseek/deepseek-chat'

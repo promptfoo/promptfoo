@@ -113,7 +113,7 @@ import promptfoo from 'promptfoo';
 const results = await promptfoo.evaluate(
   {
     prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
-    providers: ['gpt-5.1-mini'],
+    providers: ['openai:gpt-4.1-mini'],
     tests: [
       {
         vars: {
@@ -152,7 +152,7 @@ import promptfoo from 'promptfoo';
       },
     ],
     providers: [
-      'gpt-5.1-mini',
+      'openai:gpt-4.1-mini',
       (prompt, context) => {
         // Call LLM here...
         console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);

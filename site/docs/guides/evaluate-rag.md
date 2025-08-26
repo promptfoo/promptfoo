@@ -142,7 +142,7 @@ Now that we've constructed a prompt, let's set up some test cases. In this examp
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [gpt-5.1-mini]
+providers: [openai:gpt-4.1-mini]
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -263,7 +263,7 @@ Imagine we're exploring budget and want to compare the performance of GPT-4 vs L
 
 ```yaml
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - gpt-5.1
   - anthropic:messages:claude-3-5-sonnet-20241022
   - ollama:chat:llama3.3
@@ -282,7 +282,7 @@ Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [gpt-5.1-mini, gpt-5.1, ollama:chat:llama3.3]
+providers: [openai:gpt-4.1-mini, openai:gpt-4.1 ollama:chat:llama3.3]
 defaultTest:
   assert:
     - type: python

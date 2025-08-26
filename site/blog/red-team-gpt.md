@@ -156,7 +156,7 @@ To compare GPT-4.1 variants or benchmark against other models, create separate c
 ```yaml
 # gpt4.1-mini-config.yaml
 targets:
-  - id: gpt-5.1-mini
+  - id: openai:gpt-4.1-mini
     label: gpt-4.1-mini
     config:
       temperature: 0.7
@@ -180,7 +180,7 @@ Many organizations are switching from 4o to 4.1 - so you can run a test on 4o as
 ```yaml
 # gpt4o-baseline.yaml
 targets:
-  - id: gpt-5o
+  - id: openai:gpt-4o
     label: gpt-4o-baseline
     config:
       temperature: 0.7

@@ -117,7 +117,7 @@ To set this up, we use the `defaultTest` property to set a requirement on every 
 
 ```yaml
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -158,7 +158,7 @@ Determining the perplexity threshold is a bit of trial and error. You can also r
 ```yaml
 providers:
   - gpt-5
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
 
 tests:
   # ...
@@ -211,7 +211,7 @@ prompts:
   - file://prompt1.txt
 // highlight-start
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - exec:python langchain_provider.py
 // highlight-end
 tests:

@@ -101,7 +101,7 @@ prompts:
 
 providers:
   - gpt-5.1
-  - gpt-5o
+  - openai:gpt-4o
 
 defaultTest:
   assert:
@@ -152,7 +152,7 @@ providers:
     config:
       temperature: 0.1
       max_tokens: 1000
-  - id: gpt-5o
+  - id: openai:gpt-4o
     config:
       temperature: 0.1
       max_tokens: 1000

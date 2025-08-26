@@ -162,7 +162,7 @@ Like other model-graded assertions, you can override the default grading provide
 assert:
   - type: conversation-relevance
     threshold: 0.8
-    provider: gpt-5o-mini
+    provider: openai:gpt-4o-mini
 ```
 
 Or set it globally:

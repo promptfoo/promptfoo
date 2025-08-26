@@ -47,7 +47,7 @@ defaultTest: file://configs/default-test.yaml
 ```yaml title="configs/providers.yaml"
 # Providers configuration
 - id: gpt-4o-mini
-  provider: gpt-5o-mini
+  provider: openai:gpt-4o-mini
   config:
     temperature: 0.7
     max_tokens: 1000
@@ -192,7 +192,7 @@ Use JavaScript configurations for complex logic:
 const baseConfig = {
   description: 'Dynamic configuration example',
   prompts: ['file://prompts/base-prompt.txt'],
-  providers: ['gpt-5o-mini', 'anthropic:claude-3-5-sonnet-20241022'],
+  providers: ['openai:gpt-4o-mini', 'anthropic:claude-3-5-sonnet-20241022'],
 };
 
 // Generate test cases programmatically
@@ -251,7 +251,7 @@ if (isQuickTest) {
   module.exports = {
     ...baseConfig,
     providers: [
-      'gpt-5o-mini', // Faster for quick testing
+      'openai:gpt-4o-mini', // Faster for quick testing
     ],
     tests: 'file://tests/quick/', // Smaller test suite
     env: {
@@ -264,7 +264,7 @@ if (isQuickTest) {
 if (isComprehensive) {
   module.exports = {
     ...baseConfig,
-    providers: ['gpt-5o-mini', 'anthropic:claude-3-5-sonnet-20241022', 'gpt-5o'],
+    providers: ['openai:gpt-4o-mini', 'anthropic:claude-3-5-sonnet-20241022', 'openai:gpt-4o'],
     tests: 'file://tests/comprehensive/', // Full test suite
     env: {
       LOG_LEVEL: 'info',

@@ -58,7 +58,7 @@ redteam:
     - donotanswer
 
 targets:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
 ```
 
 Run with:

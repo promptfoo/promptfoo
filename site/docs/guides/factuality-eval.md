@@ -109,7 +109,7 @@ To set up a simple factuality evaluation for your LLM outputs:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
 prompts:
   - |
     Please answer the following question accurately:
@@ -137,7 +137,7 @@ Factuality evaluation is especially useful for comparing how different models pe
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - gpt-5.1
   - anthropic:claude-3-7-sonnet-20250219
   - google:gemini-2.0-flash

@@ -283,7 +283,7 @@ Create a configuration file named `promptfooconfig.unsafebench.yaml`:
 description: UnsafeBench Multi-Modal Model Evaluation
 
 targets:
-  - id: gpt-5.1-mini
+  - id: openai:gpt-4.1-mini
     label: multimodal-model
 
 prompts:

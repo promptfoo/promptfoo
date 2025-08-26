@@ -75,7 +75,7 @@ You can use test `vars` in the LLM rubric. This example uses the `question` vari
 
 ```yaml
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -152,7 +152,7 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
 1. Using the `--grader` CLI option:
 
    ```
-   promptfoo eval --grader gpt-5.1-mini
+   promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
 2. Using `test.options` or `defaultTest.options` on a per-test or testsuite basis:
@@ -160,7 +160,7 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
    ```yaml
    defaultTest:
      options:
-       provider: gpt-5.1-mini
+       provider: openai:gpt-4.1-mini
    tests:
      - description: Use LLM to evaluate output
        assert:
@@ -176,14 +176,14 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
        assert:
          - type: llm-rubric
            value: Is spoken like a pirate
-           provider: gpt-5.1-mini
+           provider: openai:gpt-4.1-mini
    ```
 
 Use the `provider.config` field to set custom parameters:
 
 ```yaml
 provider:
-  - id: gpt-5.1-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
 ```
@@ -254,7 +254,7 @@ See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples
 
 ### Image-based rubric prompts
 
-`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `gpt-5.1`.
+`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-4.1.
 
 ```yaml
 defaultTest:

@@ -32,7 +32,7 @@ Edit `promptfooconfig.yaml` to include both models:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - gpt-5o-mini
+  - openai:gpt-4o-mini
   - gpt-5
 ```
 
@@ -128,7 +128,7 @@ Finally, we'll use `defaultTest` to clean things up a bit and apply global `late
 
 ```yaml
 providers:
-  - gpt-5o-mini
+  - openai:gpt-4o-mini
   - gpt-5
 
 prompts:

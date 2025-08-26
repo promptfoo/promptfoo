@@ -37,7 +37,7 @@ Inside of the `qwen-benchmark` directory, edit `promptfooconfig.yaml` to include
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - 'gpt-5.1'
+  - 'openai:gpt-4.1
   - 'openrouter:meta-llama/llama-3-70b-instruct'
   - 'openrouter:qwen/qwen-2-72b-instruct'
 ```

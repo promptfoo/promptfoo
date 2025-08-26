@@ -31,7 +31,7 @@ Edit your `promptfooconfig.yaml` to include the models you want to compare. Here
 ```yaml title="promptfooconfig.yaml"
 providers:
   - replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - gpt-5.1
 ```
 
@@ -61,7 +61,7 @@ Customize the behavior of each model by setting parameters such as `temperature`
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: gpt-5.1-mini
+  - id: openai:gpt-4.1-mini
     // highlight-start
     config:
       temperature: 0

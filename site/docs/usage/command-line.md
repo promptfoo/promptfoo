@@ -487,7 +487,7 @@ prompts:
   - 'Act as a trip planner and help the user plan their trip'
 
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - gpt-5.1
 ```
 

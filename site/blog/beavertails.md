@@ -96,7 +96,7 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - gpt-5.1-mini
+  - openai:gpt-4.1-mini
   - ollama:chat:llama3.3
   # Add other providers as needed
 

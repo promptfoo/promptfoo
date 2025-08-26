@@ -79,7 +79,7 @@ prompts:
   - 'langfuse://chat-prompt:2:chat' # Numeric → version 2
 
 providers:
-  - gpt-5o-mini
+  - openai:gpt-4o-mini
 
 tests:
   - vars:

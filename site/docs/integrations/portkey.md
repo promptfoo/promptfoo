@@ -18,7 +18,7 @@ To reference prompts in Portkey:
      - 'portkey://pp-test-promp-669f48'
 
    providers:
-     - gpt-5.1-mini
+     - openai:gpt-4.1-mini
 
    tests:
      - vars:

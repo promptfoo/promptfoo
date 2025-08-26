@@ -127,7 +127,7 @@ prompts:
   - 'Write a documented Python function to {{task}}'
 
 providers:
-  - gpt-5o-mini
+  - openai:gpt-4o-mini
 
 tests:
   - vars:

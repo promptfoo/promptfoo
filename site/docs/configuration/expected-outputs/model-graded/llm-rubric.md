@@ -88,7 +88,7 @@ By default, `llm-rubric` uses `gpt-4.1-2025-04-14` for grading. You can override
 1. Using the `--grader` CLI option:
 
    ```sh
-   promptfoo eval --grader gpt-5.1-mini
+   promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
 2. Using `test.options` or `defaultTest.options`:
@@ -97,7 +97,7 @@ By default, `llm-rubric` uses `gpt-4.1-2025-04-14` for grading. You can override
    defaultTest:
      // highlight-start
      options:
-       provider: gpt-5.1-mini
+       provider: openai:gpt-4.1-mini
      // highlight-end
      assert:
        - description: Evaluate output using LLM
@@ -115,7 +115,7 @@ By default, `llm-rubric` uses `gpt-4.1-2025-04-14` for grading. You can override
          - type: llm-rubric
            value: Is written in a professional tone
            // highlight-start
-           provider: gpt-5.1-mini
+           provider: openai:gpt-4.1-mini
            // highlight-end
    ```
 

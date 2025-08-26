@@ -93,7 +93,7 @@ To configure your evaluation:
    ```
 
    Each provider is specified using a simple format: `provider_name:model_name`. For example:
-   - `gpt-5.1` for GPT-4.1
+   - `openai:gpt-4.1 for GPT-4.1
    - `openai:o4-mini` for OpenAI's o4-mini
    - `anthropic:messages:claude-sonnet-4-20250514` for Anthropic's Claude
    - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
@@ -390,17 +390,17 @@ A simple `npx promptfoo@latest eval` will run the example. Also note that you ca
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     <CodeBlock language="bash">
-      npx promptfoo@latest eval -p prompts.txt -r openai:o4-mini gpt-5.1 -o output.html
+      npx promptfoo@latest eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1-o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="npm" label="npm">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:o4-mini gpt-5.1 -o output.html
+      promptfoo eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1-o output.html
     </CodeBlock>
   </TabItem>
   <TabItem value="brew" label="brew">
     <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:o4-mini gpt-5.1 -o output.html
+      promptfoo eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1-o output.html
     </CodeBlock>
   </TabItem>
 </Tabs>

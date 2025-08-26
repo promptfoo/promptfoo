@@ -34,8 +34,8 @@ Edit `promptfooconfig.yaml` to include GPT-4o and GPT-4o-mini:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - gpt-5o
-  - gpt-5o-mini
+  - openai:gpt-4o
+  - openai:gpt-4o-mini
 ```
 
 ## Step 2: Crafting the Prompts
@@ -46,8 +46,8 @@ First, adjust your `promptfooconfig.yaml` to include the prompts and test cases 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - gpt-5o
-  - gpt-5o-mini
+  - openai:gpt-4o
+  - openai:gpt-4o-mini
 
 prompts:
   - |

@@ -24,7 +24,7 @@ providers:
 
 | API Providers                                       | Description                                               | Syntax & Example                                                          |
 | --------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [OpenAI](./openai.md)                               | GPT models including GPT-4.1 and reasoning models         | `gpt-5.1` or `openai:o4-mini`                                      |
+| [OpenAI](./openai.md)                               | GPT models including GPT-4.1 and reasoning models         | `openai:gpt-4.1 or `openai:o4-mini`                                      |
 | [Anthropic](./anthropic.md)                         | Claude models                                             | `anthropic:messages:claude-sonnet-4-20250514`                             |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                              | `https://api.example.com/v1/chat/completions`                             |
 | [Javascript](./custom-api.md)                       | Custom - JavaScript file                                  | `file://path/to/custom_provider.js`                                       |
@@ -34,7 +34,7 @@ providers:
 | [AI/ML API](./aimlapi.md)                           | Tap into 300+ cutting-edge AI models with a single API    | `aimlapi:chat:deepseek-r1`                                                |
 | [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers                  | `bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0`                      |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints                    | `sagemaker:my-endpoint-name`                                              |
-| [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                                | `azuregpt-5o-custom-deployment-name`                               |
+| [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                                | `azureopenai:gpt-4o-custom-deployment-name`                               |
 | [Cerebras](./cerebras.md)                           | High-performance inference API for Llama models           | `cerebras:llama-4-scout-17b-16e-instruct`                                 |
 | [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers                  | Compatible with OpenAI syntax                                             |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's OpenAI-compatible AI platform                | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`              |
@@ -92,7 +92,7 @@ Providers are specified using various syntax options:
    provider_name:model_name
    ```
 
-   Example: `gpt-5.1` or `anthropic:claude-sonnet-4-20250514`
+   Example: `openai:gpt-4.1 or `anthropic:claude-sonnet-4-20250514`
 
 2. Object format with configuration:
 

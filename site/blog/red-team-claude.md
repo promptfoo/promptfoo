@@ -182,7 +182,7 @@ Test multiple models simultaneously:
 targets:
   - anthropic:messages:claude-sonnet-4-20250514
   - anthropic:messages:claude-opus-4-20250514
-  - gpt-5o # Compare with competitors
+  - openai:gpt-4o # Compare with competitors
 ```
 
 ## Advanced: Custom Test Cases
