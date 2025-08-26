@@ -309,6 +309,14 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
+    // Enable image generation for Gemini 2.5 Flash Image models
+    if (this.modelName.includes('gemini-2.5-flash-image')) {
+      // Allow both text and image responses for image generation models
+      body.generationConfig.responseModalities = ['IMAGE', 'TEXT'];
+    }
+
+    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
+
     let data;
     let cached = false;
     try {
