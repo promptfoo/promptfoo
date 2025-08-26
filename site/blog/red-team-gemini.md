@@ -220,7 +220,7 @@ Run side-by-side with GPT 4.1:
 # Compare with GPT-4.1 and Claude
 targets:
   - id: gpt-5.1
-    label: gpt-4.1
+    label: gpt-5
 
   # Or Claude
   - id: anthropic:messages:claude-sonnet-4-20250514

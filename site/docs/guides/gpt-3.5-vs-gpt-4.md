@@ -32,7 +32,7 @@ Edit `promptfooconfig.yaml` to include GPT-3.5 and GPT-4:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - gpt-5.1
 ```
 
@@ -126,7 +126,7 @@ Finally, we'll use `defaultTest` to clean things up a bit and apply global `late
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - gpt-5.1
 
 prompts:

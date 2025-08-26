@@ -53,7 +53,7 @@ Note: In case of `azureopenai` the `<model_name>` is the name of your Azure Open
 
 Examples:
 
-- `adaline:openai:chat:gpt-4.1-mini`
+- `adaline:openai:chat:gpt-5-mini`
 - `adaline:azureopenai:chat:my-gpt-4o-deployment`
 - `adaline:google:chat:gemini-1.5-flash`
 - `adaline:togetherai:chat:meta-llama/Meta-Llama-3-8B-Instruct-Turbo`
@@ -71,7 +71,7 @@ adaline provider uses API keys set using standard Promptfoo env variables such a
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: adaline:openai:chat:gpt-4.1-mini
+  - id: adaline:openai:chat:gpt-5-mini
     config:
       apiKey: sk-random-openai-api-key
 ```
@@ -84,7 +84,7 @@ LLM parameters can be set in `config`, example:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: adaline:openai:chat:gpt-4.1-mini
+  - id: adaline:openai:chat:gpt-5-mini
     config:
       temperature: 0.8
       maxTokens: 300
@@ -360,7 +360,7 @@ prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: adaline:openai:chat:gpt-4.1-mini
+  - id: adaline:openai:chat:gpt-5-mini
     config:
       tools:
         [
@@ -497,7 +497,7 @@ tests:
 prompts:
   - file://prompt.json
 providers:
-  - id: adaline:openai:chat:gpt-4.1
+  - id: adaline:openai:chat:gpt-5
   - id: adaline:anthropic:chat:claude-3-opus-20240229
   - id: adaline:google:chat:gemini-1.5-pro
 
@@ -545,7 +545,7 @@ prompts:
   - 'Analyze the following customer support query: "{{query}}"'
 
 providers:
-  - id: adaline:openai:chat:gpt-4.1-mini
+  - id: adaline:openai:chat:gpt-5-mini
     config:
       seed: 322431
       responseFormat: json_schema
@@ -707,7 +707,7 @@ derivedMetrics:
 prompts:
   - file://prompt.json
 providers:
-  - id: adaline:openai:chat:gpt-4.1
+  - id: adaline:openai:chat:gpt-5
 
 tests:
   - vars:

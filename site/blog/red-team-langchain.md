@@ -86,7 +86,7 @@ def call_api(prompt, options, context):
     # Initialize your LangChain components
     llm = ChatOpenAI(
         temperature=0.7,
-        model_name="gpt-4.1-mini"
+        model_name="gpt-5-mini"
     )
 
     # Create your chain

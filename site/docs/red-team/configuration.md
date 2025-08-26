@@ -56,7 +56,7 @@ redteam:
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
-| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1                |
+| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-5                |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
 | `language`                   | `string`                  | Language for generated tests                                             | English                         |
@@ -566,10 +566,10 @@ Custom plugins and strategies require an OpenAI key or your own provider configu
 
 ### Changing the model
 
-To use the `openai:chat:gpt-4.1-mini` model, you can override the provider on the command line:
+To use the `openai:chat:gpt-5-mini` model, you can override the provider on the command line:
 
 ```sh
-npx promptfoo@latest redteam generate --provider openai:chat:gpt-4.1-mini
+npx promptfoo@latest redteam generate --provider openai:chat:gpt-5-mini
 ```
 
 Or in the config:
@@ -577,7 +577,7 @@ Or in the config:
 ```yaml
 redteam:
   provider:
-    id: openai:chat:gpt-4.1-mini
+    id: openai:chat:gpt-5-mini
     # Optional config
     config:
       temperature: 0.5
@@ -851,7 +851,7 @@ redteam:
 redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
-  provider: 'openai:chat:gpt-4.1'
+  provider: 'openai:chat:gpt-5'
   language: 'French'
   numTests: 20
   testGenerationInstructions: |

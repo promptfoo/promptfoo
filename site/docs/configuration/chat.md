@@ -48,7 +48,7 @@ prompts:
   - file://prompt.json
 
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 
 tests:
   - vars:
@@ -287,7 +287,7 @@ Here's the associated config:
 prompts:
   - file://prompt.json
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 tests:
   - vars:
       query: how you doing

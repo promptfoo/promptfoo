@@ -5,7 +5,7 @@ description: Compare GPT-4o vs GPT-4.1-mini performance on your custom datasets 
 
 # GPT-4o vs GPT-4.1-mini: Benchmark on Your Own Data
 
-OpenAI released [gpt-4.1-mini](https://openai.com/index/gpt-4.1-mini-advancing-cost-efficient-intelligence/), a highly cost-efficient small model designed to expand the range of applications built with AI by making intelligence more affordable. GPT-4o mini surpasses GPT-3.5 Turbo in performance and affordability, and while it is more cost-effective than GPT-4o, it maintains strong capabilities in both textual intelligence and multimodal reasoning.
+OpenAI released [gpt-5-mini](https://openai.com/index/gpt-5-mini-advancing-cost-efficient-intelligence/), a highly cost-efficient small model designed to expand the range of applications built with AI by making intelligence more affordable. GPT-4o mini surpasses GPT-3.5 Turbo in performance and affordability, and while it is more cost-effective than GPT-4o, it maintains strong capabilities in both textual intelligence and multimodal reasoning.
 
 This guide will walk you through how to compare OpenAI's GPT-4o and GPT-4.1-mini using promptfoo. This testing framework will give you the chance to test the models' reasoning capabilities, cost, and latency.
 
@@ -13,7 +13,7 @@ Generic benchmarks are for generic use cases. If you're building an LLM app, you
 
 The end result will be a side-by-side comparison that looks like this:
 
-![gpt-4o vs gpt-4.1-mini](/img/docs/gpt-4o-vs-gpt-4.1-mini.png)
+![gpt-4o vs gpt-5-mini](/img/docs/gpt-4o-vs-gpt-5-mini.png)
 
 ## Prerequisites
 
@@ -35,7 +35,7 @@ Edit `promptfooconfig.yaml` to include GPT-4o and GPT-4.1-mini:
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 ```
 
 ## Step 2: Crafting the Prompts
@@ -47,7 +47,7 @@ First, adjust your `promptfooconfig.yaml` to include the prompts and test cases 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 
 prompts:
   - |

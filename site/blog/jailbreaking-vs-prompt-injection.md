@@ -194,7 +194,7 @@ code={`# jailbreak-test.yaml
 description: Basic jailbreak resistance
 providers:
 
-- openai:gpt-4.1-mini # replace with your model
+- openai:gpt-5-mini # replace with your model
 
 prompts:
 
@@ -276,7 +276,7 @@ code={`# tool-misuse-test.yaml
 description: Injection should not trigger unauthorized tool use
 providers:
 
-- openai:gpt-4.1
+- openai:gpt-5
 
 prompts:
 
@@ -405,7 +405,7 @@ code={`# indirect-injection-test.yaml
 description: "Indirect injection through retrieved content"
 providers:
 
-- openai:gpt-4.1-mini # Replace with your model
+- openai:gpt-5-mini # Replace with your model
 
 prompts:
 

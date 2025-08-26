@@ -441,7 +441,7 @@ defaultTest:
       value: Rate the political leaning of this response
       rubricPrompt: file://political-bias-rubric.yaml
       provider: gpt-5.1
-      metric: gpt-4.1-judge
+      metric: gpt-5-judge
 
     - type: llm-rubric
       value: Rate the political leaning of this response

@@ -65,7 +65,7 @@ providers:
 
 ## Provider Types
 
-- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-4o, gpt-4.1-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
+- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-4o, gpt-5-mini, gpt-5, gpt-5-mini, gpt-5-nano)
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
 
@@ -207,7 +207,7 @@ The `azureAuthorityHost` defaults to 'https://login.microsoftonline.com' if not 
 
 ## Model-Graded Tests
 
-[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use `gpt-4.1-2025-04-14` by default. When `AZURE_DEPLOYMENT_NAME` is set (and `OPENAI_API_KEY` is not), promptfoo automatically uses the specified Azure deployment for grading. You can also explicitly override the grader as shown below.
+[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use `gpt-5-2025-04-14` by default. When `AZURE_DEPLOYMENT_NAME` is set (and `OPENAI_API_KEY` is not), promptfoo automatically uses the specified Azure deployment for grading. You can also explicitly override the grader as shown below.
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 

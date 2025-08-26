@@ -142,7 +142,7 @@ commandLineOptions:
   repeat: 3
   delay: 1000
   verbose: true
-  grader: openai:gpt-4.1-mini
+  grader: openai:gpt-5-mini
   table: true
   cache: false
   tableCellMaxLength: 100
@@ -512,7 +512,7 @@ interface TestSuiteConfig {
   // Optional description of what you're trying to test
   description?: string;
 
-  // One or more LLM APIs to use, for example: openai:gpt-4.1-mini, openai:gpt-4.1 localai:chat:vicuna
+  // One or more LLM APIs to use, for example: openai:gpt-5-mini, openai:gpt-5 localai:chat:vicuna
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompts

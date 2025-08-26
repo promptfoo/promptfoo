@@ -11,7 +11,7 @@ New model releases often score well on benchmarks. But generic benchmarks are fo
 
 The end result will be a side-by-side comparison that looks like this:
 
-![gpt gpt-4.1-mini vs gpt 4o](/img/docs/gpt-4.1-mini-vs-gpt-4o.png)
+![gpt gpt-5-mini vs gpt 4o](/img/docs/gpt-5-mini-vs-gpt-4o.png)
 
 ## Prerequisites
 
@@ -32,7 +32,7 @@ Edit `promptfooconfig.yaml` to include both models:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - gpt-5
 ```
 
@@ -128,7 +128,7 @@ Finally, we'll use `defaultTest` to clean things up a bit and apply global `late
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - gpt-5
 
 prompts:
@@ -169,9 +169,9 @@ For more info on setting up the config, see the [configuration guide](/docs/conf
 
 In the end, you will see a result like this:
 
-![gpt gpt-4.1-mini vs gpt 4o](/img/docs/gpt-4.1-mini-vs-gpt-4o.png)
+![gpt gpt-5-mini vs gpt 4o](/img/docs/gpt-5-mini-vs-gpt-4o.png)
 
-In this particular eval, the models performed very similarly in terms of answers, but it looks like GPT-4.1-mini exceeded our maximum latency. Notably, 4o was about 35x more expensive compared to gpt-4.1-mini.
+In this particular eval, the models performed very similarly in terms of answers, but it looks like GPT-4.1-mini exceeded our maximum latency. Notably, 4o was about 35x more expensive compared to gpt-5-mini.
 
 Of course, this is a limited example test set. The tradeoff between cost, latency, and accuracy is going to be tailored for each application. That's why it's important to run your own eval.
 
