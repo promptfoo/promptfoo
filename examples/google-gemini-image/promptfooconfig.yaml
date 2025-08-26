@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Gemini 2.5 Flash Image Generation Example
+
+prompts:
+  # Basic image generation
+  - "Generate an image of {{subject}}"
+  
+  # Artistic style prompt
+  - "Create a {{style}} image of {{subject}}"
+  
+  # Character prompt
+  - "Generate an image of a {{character}} robot in {{setting}}"
+
+providers:
+  # Gemini 2.5 Flash Image model optimized for image generation
+  - id: google:gemini-2.5-flash-image-preview
+    config:
+      # API key will be loaded from GEMINI_API_KEY environment variable
+      # or you can specify it here: apiKey: your_api_key_here
+      
+      # Image generation specific configuration
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 1024
+        # Enable both image and text responses for multimodal output
+        responseModalities: 
+          - IMAGE
+          - TEXT
+
+defaultTest:
+  # Default assertions for all tests
+  assert:
+    - type: not-empty
+    - type: cost
+      threshold: 0.50  # Reasonable cost threshold for image generation
+
+tests:
+  # Basic image generation tests
+  - description: "Simple sunset generation"
+    vars:
+      subject: "a beautiful sunset over mountains"
+    assert:
+      - type: contains
+        value: "![Generated Image]"
+
+  # Artistic style test
+  - description: "Watercolor style landscape"
+    vars:
+      style: "watercolor"
+      subject: "a peaceful lake"
+    assert:
+      - type: contains
+        value: "data:image"
+
+  # Character test
+  - description: "Robot character"
+    vars:
+      character: "friendly blue"
+      setting: "futuristic lab"
+    assert:
+      - type: contains
+        value: "![Generated Image]"
+
+  # Additional simple tests with basic validation
+  - description: "Cyberpunk cityscape"
+    vars:
+      subject: "a cyberpunk cityscape"
+      
+  - description: "Cozy coffee shop"
+    vars:
+      subject: "a cozy coffee shop"
+      
+  - description: "Digital art space station"
+    vars:
+      style: "digital art"
+      subject: "space station"
