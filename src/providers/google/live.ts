@@ -108,6 +108,7 @@ export class GoogleLiveProvider implements ApiProvider {
       prompt,
       context?.vars,
       this.config.systemInstruction,
+      { useAssistantRole: this.config.useAssistantRole },
     );
     let contentIndex = 0;
 
