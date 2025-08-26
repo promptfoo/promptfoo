@@ -465,28 +465,28 @@ providers:
 
 tests:
   - vars:
-      query: "What is the refund policy?"
-    
+      query: 'What is the refund policy?'
+
     options:
       # Step 2a: Test transform - extract answer for general assertions
       # Receives output from transformResponse: { answer: "...", sources: [...] }
       transform: 'output.answer'
-    
+
     assert:
       # Regular assertion uses test-transformed output (just the answer string)
       - type: contains
-        value: "30 days"
-      
+        value: '30 days'
+
       # Context assertions use contextTransform
       - type: context-faithfulness
         # Step 2b: Context transform - extract sources (runs in parallel with Step 2a)
         # Also receives output from transformResponse: { answer: "...", sources: [...] }
         contextTransform: 'output.sources.map(s => s.content).join("\n")'
         threshold: 0.9
-      
+
       # Another assertion can have its own transform
       - type: equals
-        value: "confident"
+        value: 'confident'
         # Step 3: Assertion-level transform (applied after test transform)
         # Receives: "30-day refund policy" (the test-transformed output)
         transform: |
@@ -496,7 +496,7 @@ tests:
 ### Key Points
 
 1. **Provider Transform** (`transformResponse`): Applied first to normalize provider responses
-2. **Parallel Transforms**: 
+2. **Parallel Transforms**:
    - `options.transform`: Modifies output for regular assertions
    - `contextTransform`: Extracts context for context-based assertions
    - Both receive the provider-transformed output directly

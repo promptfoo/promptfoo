@@ -536,18 +536,18 @@ providers:
     config:
       url: 'https://example.com/api'
       # Step 1: Provider transform normalizes API response
-      transformResponse: 'json.data'  # Extract data field
+      transformResponse: 'json.data' # Extract data field
 
 tests:
   - vars:
-      query: "What is the weather?"
+      query: 'What is the weather?'
     options:
       # Step 2a: Test transform for assertions (receives provider transform output)
       transform: 'output.answer'
     assert:
       - type: contains
-        value: "sunny"
-      
+        value: 'sunny'
+
       # Step 2b: Context transform for RAG assertions (also receives provider transform output)
       # Runs in parallel with test transform, not sequentially
       - type: context-faithfulness

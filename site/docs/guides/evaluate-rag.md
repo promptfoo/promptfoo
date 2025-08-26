@@ -384,13 +384,15 @@ assert:
 The `contextTransform` runs in parallel with `options.transform`, both receiving the provider's output directly. This ensures that context extraction works reliably even when the main output is transformed for other assertions.
 
 For example, if you have:
+
 ```yaml
 options:
-  transform: 'output.answer'  # Extract just the answer for assertions
+  transform: 'output.answer' # Extract just the answer for assertions
 assert:
   - type: context-faithfulness
-    contextTransform: 'output.documents'  # Still has access to documents
+    contextTransform: 'output.documents' # Still has access to documents
 ```
+
 Both transforms receive the full response object, allowing independent extraction of answer and context.
 :::
 
