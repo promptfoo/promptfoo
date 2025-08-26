@@ -1,6 +1,7 @@
-import type { Plugin } from '../../src/redteam/constants';
 import { Severity } from '../../src/redteam/constants';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
+
+import type { Plugin } from '../../src/redteam/constants';
 import type { SavedRedteamConfig } from '../../src/redteam/types';
 
 describe('getRiskCategorySeverityMap', () => {
@@ -124,11 +125,9 @@ describe('getUnifiedConfig', () => {
     };
 
     const result = getUnifiedConfig(configWithMaxConcurrency);
-    // @ts-expect-error property may not exist in type
     expect(result.redteam.maxConcurrency).toBe(5);
 
     const configWithoutMaxConcurrency = getUnifiedConfig(baseConfig);
-    // @ts-expect-error property may not exist in type
     expect(configWithoutMaxConcurrency.redteam.maxConcurrency).toBeUndefined();
   });
 

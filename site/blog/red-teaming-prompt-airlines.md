@@ -14,6 +14,7 @@ keywords:
   ]
 date: 2024-09-26
 authors: [vanessa]
+tags: [technical-guide, case-study, red-teaming]
 ---
 
 # Jailbreaking Black-Box LLMs Using Promptfoo: A Walkthrough

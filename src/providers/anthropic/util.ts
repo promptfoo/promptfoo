@@ -1,11 +1,17 @@
-import type Anthropic from '@anthropic-ai/sdk';
-import type { TokenUsage } from '../../types';
 import { calculateCost as calculateCostBase } from '../shared';
+import type Anthropic from '@anthropic-ai/sdk';
+
+import type { TokenUsage } from '../../types';
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 4 models - Latest generation
-  ...['claude-opus-4-20250514', 'claude-opus-4-0', 'claude-opus-4-latest'].map((model) => ({
+  ...[
+    'claude-opus-4-1-20250805',
+    'claude-opus-4-20250514',
+    'claude-opus-4-0',
+    'claude-opus-4-latest',
+  ].map((model) => ({
     id: model,
     cost: {
       input: 15 / 1e6, // $15 / MTok
@@ -57,9 +63,6 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   ...[
-    // NOTE: claude-3-sonnet-20240229 is deprecated and will be retired on July 21, 2025
-    'claude-3-sonnet-20240229',
-    'claude-3-sonnet-latest',
     'claude-3-5-sonnet-20240620',
     'claude-3-5-sonnet-20241022',
     'claude-3-5-sonnet-latest',

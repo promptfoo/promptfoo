@@ -1,144 +1,85 @@
 ---
-sidebar_label: Context Faithfulness
+sidebar_position: 50
+description: 'Measure LLM faithfulness to source context by detecting unsupported claims in responses.'
 ---
 
 # Context faithfulness
 
-The `context-faithfulness` assertion evaluates whether the AI's response is faithful to the provided context, checking for hallucinations or unsupported claims.
+Checks if the LLM's response only makes claims that are supported by the provided context.
+
+**Use when**: You need to ensure the LLM isn't adding information beyond what was retrieved.
+
+**How it works**: Extracts factual claims from the response, then verifies each against the context. Score = supported claims / total claims.
+
+**Example**:
+
+```text
+Context: "Paris is the capital of France."
+Response: "Paris, with 2.2 million residents, is France's capital."
+Score: 0.5 (capital ✓, population ✗)
+```
 
 ## Configuration
 
 ```yaml
 assert:
   - type: context-faithfulness
-    threshold: 0.8 # Score from 0 to 1
+    threshold: 0.9 # Require 90% of claims to be supported
 ```
 
-Note: This assertion requires `query`, `context`, and the LLM's output to evaluate faithfulness.
+### Required fields
 
-## Providing context
+- `query` - User's question (in test vars)
+- `context` - Reference text (in vars or via `contextTransform`)
+- `threshold` - Minimum score 0-1 (default: 0)
 
-You can provide context in two ways:
-
-### Using context variables
-
-Include the context as a variable in your test case:
+### Full example
 
 ```yaml
 tests:
   - vars:
       query: 'What is the capital of France?'
-      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
+      context: 'Paris is the capital and largest city of France.'
     assert:
       - type: context-faithfulness
-        threshold: 0.8
+        threshold: 0.9
 ```
 
-### Extracting from provider responses
+### Dynamic context extraction
 
-If your provider returns context within the response, use `contextTransform`:
+For RAG systems that return context with their response:
+
+```yaml
+# Provider returns { answer: "...", context: "..." }
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.context' # Extract context field
+    threshold: 0.9
+```
+
+### Custom grading
+
+Override the default grader:
 
 ```yaml
 assert:
   - type: context-faithfulness
-    contextTransform: 'output.context'
-    threshold: 0.8
+    provider: openai:gpt-4 # Use a different model for grading
+    threshold: 0.9
 ```
 
-For complex response structures:
+## Limitations
 
-```yaml
-assert:
-  - type: context-faithfulness
-    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
-    threshold: 0.8
-```
+- Depends on judge LLM quality
+- May miss implicit claims
+- Performance degrades with very long contexts
 
-### How it works
+## Related metrics
 
-The context faithfulness checker:
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - Is retrieved context relevant?
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - Does context support the expected answer?
 
-1. Analyzes the relationship between the provided context and the AI's response
-2. Identifies claims in the response that are not supported by the context
-3. Returns a score from 0 to 1, where 1 means the response is completely faithful to the context
+## Further reading
 
-### Example
-
-```yaml
-tests:
-  - vars:
-      query: 'What is the capital of France?'
-      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
-    assert:
-      - type: context-faithfulness
-        threshold: 0.8
-```
-
-The assertion will pass if the AI's response about France's capital is faithful to the provided context and doesn't include unsupported information.
-
-### Troubleshooting
-
-**Error: "contextTransform must return a string"**
-Your expression returned `undefined` or `null`. Add a fallback:
-
-```yaml
-contextTransform: 'output.context || "No context found"'
-```
-
-**Error: "Context is required for context-based assertions"**
-Your contextTransform returned an empty string. Check your provider response structure or add debugging:
-
-```yaml
-contextTransform: 'JSON.stringify(output, null, 2)' # Temporary: see full response
-```
-
-### Overriding the Grader
-
-Like other model-graded assertions, you can override the default grader:
-
-1. Using the CLI:
-
-   ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
-   ```
-
-2. Using test options:
-
-   ```yaml
-   defaultTest:
-     options:
-       provider: openai:gpt-4.1-mini
-   ```
-
-3. Using assertion-level override:
-   ```yaml
-   assert:
-     - type: context-faithfulness
-       threshold: 0.9
-       provider: openai:gpt-4.1-mini
-   ```
-
-### Customizing the Prompt
-
-Context faithfulness uses two prompts: one for extracting claims and another for verifying them. You can customize both using the `rubricPrompt` property:
-
-```yaml
-defaultTest:
-  options:
-    rubricPrompt:
-      - |
-        Question: {{question}}
-        Answer: {{answer}}
-
-        Extract all factual claims from the answer, one per line.
-      - |
-        Context: {{context}}
-        Statements: {{statements}}
-
-        For each statement, determine if it is supported by the context.
-        Answer YES if the statement is fully supported, NO if not.
-```
-
-# Further reading
-
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- [Defining context in test cases](/docs/configuration/expected-outputs/model-graded#defining-context)
+- [RAG Evaluation Guide](/docs/guides/evaluate-rag)

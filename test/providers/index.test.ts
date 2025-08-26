@@ -1,9 +1,10 @@
-import chalk from 'chalk';
 import child_process from 'child_process';
-import dedent from 'dedent';
 import * as fs from 'fs';
 import * as path from 'path';
 import Stream from 'stream';
+
+import chalk from 'chalk';
+import dedent from 'dedent';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
@@ -14,9 +15,9 @@ import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
-  HuggingfaceTextGenerationProvider,
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
+  HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
 import { LlamaProvider } from '../../src/providers/llama';
 import {
@@ -41,7 +42,8 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
-import type { ProviderOptionsMap, ProviderFunction } from '../../src/types';
+
+import type { ProviderFunction, ProviderOptionsMap } from '../../src/types';
 
 jest.mock('fs');
 
@@ -238,7 +240,8 @@ describe('call provider apis', () => {
   it('OllamaCompletionProvider callApi', async () => {
     const mockResponse = {
       ...defaultMockResponse,
-      text: jest.fn()
+      text: jest
+        .fn()
         .mockResolvedValue(`{"model":"llama2:13b","created_at":"2023-08-08T21:50:34.898068Z","response":"Gre","done":false}
 {"model":"llama2:13b","created_at":"2023-08-08T21:50:34.929199Z","response":"at","done":false}
 {"model":"llama2:13b","created_at":"2023-08-08T21:50:34.959989Z","response":" question","done":false}
@@ -261,7 +264,8 @@ describe('call provider apis', () => {
   it('OllamaChatProvider callApi', async () => {
     const mockResponse = {
       ...defaultMockResponse,
-      text: jest.fn()
+      text: jest
+        .fn()
         .mockResolvedValue(`{"model":"orca-mini","created_at":"2023-12-16T01:46:19.263682972Z","message":{"role":"assistant","content":" Because","images":null},"done":false}
 {"model":"orca-mini","created_at":"2023-12-16T01:46:19.275143974Z","message":{"role":"assistant","content":" of","images":null},"done":false}
 {"model":"orca-mini","created_at":"2023-12-16T01:46:19.288137727Z","message":{"role":"assistant","content":" Ray","images":null},"done":false}
@@ -446,7 +450,7 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('file://path/to/mock-provider-file.yaml');
     expect(provider.id()).toBe('openai:gpt-4');
     expect(mockReadFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.yaml/),
+      expect.stringMatching(/path[\\/]to[\\/]mock-provider-file\.yaml/),
       'utf8',
     );
   });
@@ -463,7 +467,7 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('file://path/to/mock-provider-file.json');
     expect(provider.id()).toBe('openai:gpt-4');
     expect(fs.readFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/path[\\\/]to[\\\/]mock-provider-file\.json/),
+      expect.stringMatching(/path[\\/]to[\\/]mock-provider-file\.json/),
       'utf8',
     );
   });
@@ -519,32 +523,32 @@ describe('loadApiProvider', () => {
     expect(provider).toBeInstanceOf(AnthropicCompletionProvider);
   });
 
-  it('loadApiProvider with ollama:modelName', async () => {
-    const provider = await loadApiProvider('ollama:llama2:13b');
+  it('should load Ollama completion provider', async () => {
+    const provider = await loadApiProvider('ollama:llama3.3:8b');
     expect(provider).toBeInstanceOf(OllamaCompletionProvider);
-    expect(provider.id()).toBe('ollama:completion:llama2:13b');
+    expect(provider.id()).toBe('ollama:completion:llama3.3:8b');
   });
 
-  it('loadApiProvider with ollama:completion:modelName', async () => {
-    const provider = await loadApiProvider('ollama:completion:llama2:13b');
+  it('should load Ollama completion provider with explicit type', async () => {
+    const provider = await loadApiProvider('ollama:completion:llama3.3:8b');
     expect(provider).toBeInstanceOf(OllamaCompletionProvider);
-    expect(provider.id()).toBe('ollama:completion:llama2:13b');
+    expect(provider.id()).toBe('ollama:completion:llama3.3:8b');
   });
 
-  it('loadApiProvider with ollama:embedding:modelName', async () => {
-    const provider = await loadApiProvider('ollama:embedding:llama2:13b');
+  it('should load Ollama embedding provider', async () => {
+    const provider = await loadApiProvider('ollama:embedding:llama3.3:8b');
     expect(provider).toBeInstanceOf(OllamaEmbeddingProvider);
   });
 
-  it('loadApiProvider with ollama:embeddings:modelName', async () => {
-    const provider = await loadApiProvider('ollama:embeddings:llama2:13b');
+  it('should load Ollama embeddings provider (alias)', async () => {
+    const provider = await loadApiProvider('ollama:embeddings:llama3.3:8b');
     expect(provider).toBeInstanceOf(OllamaEmbeddingProvider);
   });
 
-  it('loadApiProvider with ollama:chat:modelName', async () => {
-    const provider = await loadApiProvider('ollama:chat:llama2:13b');
+  it('should load Ollama chat provider', async () => {
+    const provider = await loadApiProvider('ollama:chat:llama3.3:8b');
     expect(provider).toBeInstanceOf(OllamaChatProvider);
-    expect(provider.id()).toBe('ollama:chat:llama2:13b');
+    expect(provider.id()).toBe('ollama:chat:llama3.3:8b');
   });
 
   it('loadApiProvider with llama:modelName', async () => {
@@ -585,8 +589,8 @@ describe('loadApiProvider', () => {
   it('loadApiProvider with openrouter', async () => {
     const provider = await loadApiProvider('openrouter:mistralai/mistral-medium');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-    // Intentionally openai, because it's just a wrapper around openai
-    expect(provider.id()).toBe('mistralai/mistral-medium');
+    // OpenRouter provider now returns id with prefix
+    expect(provider.id()).toBe('openrouter:mistralai/mistral-medium');
   });
 
   it('loadApiProvider with github', async () => {
@@ -610,6 +614,40 @@ describe('loadApiProvider', () => {
     );
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     expect(provider.id()).toBe('meta/meta-llama/Meta-Llama-3-8B-Instruct');
+  });
+
+  it('loadApiProvider with litellm default (chat)', async () => {
+    const provider = await loadApiProvider('litellm:gpt-4');
+    expect(provider.id()).toBe('litellm:gpt-4');
+    expect(provider.toString()).toBe('[LiteLLM Provider gpt-4]');
+    expect(provider.config.apiBaseUrl).toBe('http://0.0.0.0:4000');
+    expect(provider.config.apiKeyEnvar).toBe('LITELLM_API_KEY');
+  });
+
+  it('loadApiProvider with litellm:chat', async () => {
+    const provider = await loadApiProvider('litellm:chat:gpt-4');
+    expect(provider.id()).toBe('litellm:gpt-4');
+    expect(provider.toString()).toBe('[LiteLLM Provider gpt-4]');
+  });
+
+  it('loadApiProvider with litellm:completion', async () => {
+    const provider = await loadApiProvider('litellm:completion:gpt-3.5-turbo-instruct');
+    expect(provider.id()).toBe('litellm:completion:gpt-3.5-turbo-instruct');
+    expect(provider.toString()).toBe('[LiteLLM Provider completion gpt-3.5-turbo-instruct]');
+  });
+
+  it('loadApiProvider with litellm:embedding', async () => {
+    const provider = await loadApiProvider('litellm:embedding:text-embedding-3-small');
+    expect(provider.id()).toBe('litellm:embedding:text-embedding-3-small');
+    expect(provider.toString()).toBe('[LiteLLM Provider embedding text-embedding-3-small]');
+    expect('callEmbeddingApi' in provider).toBe(true);
+  });
+
+  it('loadApiProvider with litellm:embeddings (alias)', async () => {
+    const provider = await loadApiProvider('litellm:embeddings:text-embedding-3-small');
+    expect(provider.id()).toBe('litellm:embedding:text-embedding-3-small');
+    expect(provider.toString()).toBe('[LiteLLM Provider embedding text-embedding-3-small]');
+    expect('callEmbeddingApi' in provider).toBe(true);
   });
 
   it('loadApiProvider with voyage', async () => {
@@ -865,7 +903,7 @@ describe('loadApiProvider', () => {
     expect(providers[0].id()).toBe('openai:gpt-4o-mini');
     expect(providers[1].id()).toBe('anthropic:messages:claude-3-5-sonnet-20241022');
     expect(mockReadFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/path[\\\/]to[\\\/]mock-providers-file\.yaml/),
+      expect.stringMatching(/path[\\/]to[\\/]mock-providers-file\.yaml/),
       'utf8',
     );
   });

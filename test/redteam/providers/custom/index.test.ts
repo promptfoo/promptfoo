@@ -1,8 +1,9 @@
 import { getGraderById } from '../../../../src/redteam/graders';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom';
-import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+
+import type { Message } from '../../../../src/redteam/providers/shared';
 
 jest.mock('../../../../src/providers/promptfoo', () => ({
   PromptfooChatCompletionProvider: jest.fn().mockImplementation(() => ({
@@ -353,7 +354,10 @@ describe('CustomProvider', () => {
       originalProvider: mockTargetProvider,
       vars: { objective: 'test objective' },
       prompt: { raw: prompt, label: 'test' },
-      test: { assert: [{ type: 'mock-grader' }] } as any,
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock' },
+      } as any,
     };
 
     // Mock unblocking to return false so it doesn't interfere
@@ -639,5 +643,307 @@ describe('CustomProvider', () => {
     expect(result.metadata?.stopReason).toBe('Internal evaluator success');
     // Verify sessionId was set in context vars
     expect((context.vars as any).sessionId).toBe('test-session-123');
+  });
+
+  it('should pass additionalRubric to grader when goal is provided', async () => {
+    // Create a new provider
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    const prompt = 'test prompt';
+    const testGoal = 'Extract sensitive database credentials';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: testGoal },
+      prompt: { raw: prompt, label: 'test' },
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: {
+          pluginId: 'mock',
+          goal: testGoal,
+        },
+      } as any,
+    };
+
+    // Capture the additionalRubric parameter
+    let capturedAdditionalRubric: string | undefined;
+    jest.mocked(getGraderById).mockReturnValue({
+      getResult: jest.fn(
+        async (
+          prompt: string,
+          output: string,
+          test: any,
+          provider: any,
+          value: any,
+          additionalRubric?: string,
+        ) => {
+          capturedAdditionalRubric = additionalRubric;
+          return {
+            grade: {
+              pass: false,
+              score: 0,
+              reason: 'Jailbreak detected',
+            },
+          };
+        },
+      ),
+    } as any);
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 50,
+        rationale: 'test rationale',
+      }),
+    });
+
+    await testProvider.callApi(prompt, context);
+
+    // Verify that additionalRubric was generated and passed to grader
+    expect(capturedAdditionalRubric).toBeDefined();
+    expect(capturedAdditionalRubric).toContain(testGoal);
+    expect(capturedAdditionalRubric).toContain('ADDITIONAL EVALUATION CRITERIA');
+  });
+
+  it('should store grader result in metadata when grader fails', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    const mockGraderResult = {
+      pass: false,
+      score: 0,
+      reason: 'Jailbreak successful - extracted sensitive info',
+      tokensUsed: { total: 15, prompt: 8, completion: 7 },
+    };
+
+    // Mock grader to fail (jailbreak success)
+    jest.mocked(getGraderById).mockReturnValue({
+      getResult: jest.fn(async () => ({
+        grade: mockGraderResult,
+      })),
+    } as any);
+
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock' },
+      } as any,
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    // Mock scoring provider responses
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        // Refusal check - not refused
+        output: JSON.stringify({
+          value: false,
+          metadata: 20,
+          rationale: 'Not a refusal',
+        }),
+      })
+      .mockResolvedValueOnce({
+        // Eval score - partial success (not 100%)
+        output: JSON.stringify({
+          value: false,
+          metadata: 50,
+          rationale: 'Partial goal achievement',
+        }),
+      });
+
+    const result = await testProvider.callApi(prompt, context);
+
+    // Verify storedGraderResult is included in metadata
+    expect(result.metadata?.storedGraderResult).toEqual(mockGraderResult);
+    expect(result.metadata?.stopReason).toBe('Grader failed');
+    // Verify it's actually a successful attack
+    expect(result.metadata?.successfulAttacks).toHaveLength(1);
+    expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
+  });
+
+  it('should store synthetic grader result when internal evaluator succeeds', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    // Mock grader to pass (no jailbreak)
+    jest.mocked(getGraderById).mockReturnValue({
+      getResult: jest.fn(async () => ({
+        grade: {
+          pass: true,
+          score: 1,
+          reason: 'No jailbreak detected',
+        },
+      })),
+    } as any);
+
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock' },
+      } as any,
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    // Mock scoring provider responses
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        // Refusal check - not refused
+        output: JSON.stringify({
+          value: false,
+          metadata: 20,
+          rationale: 'Not a refusal',
+        }),
+      })
+      .mockResolvedValueOnce({
+        // Eval score - 100% success
+        output: JSON.stringify({
+          value: true,
+          metadata: 100,
+          rationale: 'Goal fully achieved - sensitive data extracted',
+        }),
+      });
+
+    const result = await testProvider.callApi(prompt, context);
+
+    // Should exit early due to internal evaluator success
+    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+
+    // Should store a synthetic grader result
+    expect(result.metadata?.storedGraderResult).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Goal fully achieved - sensitive data extracted',
+    });
+  });
+
+  it('should store grader result even when continueAfterSuccess is true', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+      continueAfterSuccess: true,
+    });
+
+    const firstGraderResult = {
+      pass: false,
+      score: 0,
+      reason: 'First jailbreak detected',
+    };
+
+    const secondGraderResult = {
+      pass: true,
+      score: 1,
+      reason: 'No jailbreak on second turn',
+    };
+
+    // Mock grader to fail on first turn, pass on second
+    jest.mocked(getGraderById).mockReturnValue({
+      getResult: jest
+        .fn()
+        .mockResolvedValueOnce({ grade: firstGraderResult })
+        .mockResolvedValueOnce({ grade: secondGraderResult }),
+    } as any);
+
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock' },
+      } as any,
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    // Mock scoring provider responses for both turns
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 30,
+        rationale: 'Partial success',
+      }),
+    });
+
+    const result = await testProvider.callApi(prompt, context);
+
+    // Should continue to max turns and store the LAST grader result
+    expect(result.metadata?.storedGraderResult).toEqual(secondGraderResult);
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
+    expect(result.metadata?.successfulAttacks).toHaveLength(1);
+    expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
   });
 });

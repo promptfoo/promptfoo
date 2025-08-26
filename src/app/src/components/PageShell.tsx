@@ -1,9 +1,11 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import UpdateBanner from '@app/components/UpdateBanner';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import { Outlet } from 'react-router-dom';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
 const createAppTheme = (darkMode: boolean) =>
@@ -276,6 +278,7 @@ export default function PageShell() {
       <PostHogProvider>
         <Layout>
           <Navigation darkMode={darkMode} onToggleDarkMode={toggleDarkMode} />
+          <UpdateBanner />
           <Outlet />
           <PostHogPageViewTracker />
         </Layout>

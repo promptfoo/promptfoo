@@ -79,6 +79,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'jailbreak:tree': 'Tree-based search for optimal safety bypass vectors',
   leetspeak: 'Tests handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests handling of mathematical notation-based attacks',
+  'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse: 'Tests handling of content encoded in Morse code to potentially bypass filters',
   multilingual: 'Tests handling of attacks across multiple languages',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
@@ -132,11 +133,13 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
+  'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
   bias: 'Bias detection across protected characteristics',
+  medical: 'Medical AI safety testing across healthcare vulnerabilities',
 };
 
 // These names are displayed in risk cards and in the table
@@ -171,7 +174,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient',
   mcp: 'Model Context Protocol',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
-  'medical:hallucination': 'MedicalHallucination',
+  'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
   'medical:prioritization-error': 'Medical Prioritization Error',
   'medical:sycophancy': 'Medical Sycophancy',
@@ -182,7 +185,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:sycophancy': 'Financial Sycophancy',
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
-  'guardrails-eval': 'GuardrailsEvaluation',
+  'guardrails-eval': 'Guardrails Evaluation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
   harmful: 'Malicious Content Suite',
@@ -191,6 +194,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'bias:gender': 'Gender Bias',
   'bias:race': 'Race Bias',
   bias: 'Bias Detection',
+  medical: 'Medical Safety Suite',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -250,6 +254,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
+  'mischievous-user': 'Mischievous User',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
@@ -259,6 +264,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'system-prompt-override': 'System Prompt Override',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
+  'unverifiable-claims': 'Unverifiable Claims',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
 };
@@ -322,6 +328,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'bias:gender': Severity.Low,
   'bias:race': Severity.Low,
   bias: Severity.Low,
+  medical: Severity.High,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -372,6 +379,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
   unsafebench: Severity.Medium,
+  'unverifiable-claims': Severity.Medium,
   xstest: Severity.Low,
 };
 
@@ -407,11 +415,6 @@ export const riskCategories: Record<string, Plugin[]> = {
 
   'Compliance & Legal': [
     'contracts',
-    'financial:calculation-error',
-    'financial:compliance-violation',
-    'financial:data-leakage',
-    'financial:hallucination',
-    'financial:sycophancy',
     'harmful:chemical-biological-weapons',
     'harmful:copyright-violations',
     'harmful:cybercrime:malicious-code',
@@ -443,11 +446,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
-    'medical:hallucination',
-    'medical:anchoring-bias',
-    'medical:incorrect-knowledge',
-    'medical:prioritization-error',
-    'medical:sycophancy',
   ],
 
   Brand: [
@@ -462,6 +460,19 @@ export const riskCategories: Record<string, Plugin[]> = {
     'policy',
     'politics',
     'religion',
+  ],
+
+  'Domain-Specific Risks': [
+    'financial:calculation-error',
+    'financial:compliance-violation',
+    'financial:data-leakage',
+    'financial:hallucination',
+    'financial:sycophancy',
+    'medical:hallucination',
+    'medical:anchoring-bias',
+    'medical:incorrect-knowledge',
+    'medical:prioritization-error',
+    'medical:sycophancy',
   ],
 
   Datasets: [
@@ -483,6 +494,7 @@ export const categoryDescriptions = {
   'Trust & Safety': 'Harmful, inappropriate, or offensive content generation risks.',
   Brand: 'Output reliability, accuracy, and brand reputation risks.',
   Datasets: 'Pre-defined test cases from research datasets.',
+  'Domain-Specific Risks': 'Specialized risks and failure modes.',
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
@@ -541,6 +553,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'bias:gender': 'Gender Bias',
   'bias:race': 'Race Bias',
   bias: 'Bias Detection',
+  medical: 'Medical Safety',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -592,6 +605,7 @@ export const categoryAliases: Record<Plugin, string> = {
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
+  'unverifiable-claims': 'Unverifiable Claims',
   xstest: 'XSTest',
 };
 
@@ -637,6 +651,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'bias:gender': 'Tests handling of gender bias in responses, stereotypes, and discrimination',
   'bias:race': 'Tests handling of race bias in responses, stereotypes, and discrimination',
   bias: 'Unified bias detection across protected characteristics including age, disability, gender, and race',
+  medical:
+    'Comprehensive medical AI safety testing for healthcare-specific vulnerabilities including hallucination, anchoring bias, incorrect knowledge, prioritization errors, and sycophancy',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -685,9 +701,9 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'financial:hallucination':
     'Tests for fabricated market data, non-existent financial instruments, fictional company financials, or invented market events',
   'financial:sycophancy':
-    'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes at the expense of sound financial guidance',
+    'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
   'off-topic':
-    'Tests whether AI systems can be manipulated to go off-topic from their intended purpose by performing tasks completely outside their domain',
+    'Tests whether AI systems can be manipulated to go off-topic by performing tasks outside their domain',
   'indirect-prompt-injection':
     'Evaluates vulnerability to injection attacks via untrusted variables',
   intent: 'Tests system resilience against specific manipulation attempts',
@@ -705,7 +721,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'rag-poisoning': 'Tests resistance against poisoning attacks on RAG retrieval systems',
   rbac: 'Tests implementation of role-based access control mechanisms',
   'reasoning-dos':
-    'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+    'Tests for computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
@@ -713,10 +729,11 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
+  'unverifiable-claims':
+    'Tests whether an AI system makes claims that cannot be verified, including future predictions, unsourced statistics, and unknowable information',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
-  'guardrails-eval':
-    'Comprehensive testing suite for evaluating guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage',
+  'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
@@ -724,8 +741,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
   basic: 'Equivalent to no strategy. Always included. Can be disabled in configuration.',
   'best-of-n': 'Jailbreak technique published by Anthropic and Stanford',
-  camelcase:
-    'Tests detection and handling of text transformed into camelCase format to potentially bypass content filters',
+  camelcase: 'Tests detection and handling of text transformed into camelCase',
   emoji: 'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
   citation: 'Exploits academic authority bias to circumvent content filtering mechanisms',
   crescendo: 'Executes progressive multi-turn attacks with escalating malicious intent',
@@ -743,15 +759,13 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'jailbreak:tree': 'Implements tree-based search for optimal attack paths',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
-  morse:
-    'Tests detection and handling of text encoded in Morse code where letters are converted to dots and dashes to potentially bypass content filters',
+  'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
+  morse: 'Tests detection and handling of text encoded in Morse code',
   multilingual: 'Evaluates cross-language attack vector handling',
   'other-encodings':
-    'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
-  pandamonium:
-    "Promptfoo's exclusive dynamic jailbreak strategy currently in development. Note: This is an expensive jailbreak strategy with no limit on probes.",
-  piglatin:
-    'Tests detection and handling of text transformed into Pig Latin, a language game where initial consonant clusters are moved to the end of words with "ay" added',
+    'Collection of alternative text transformation strategies for testing evasion techniques',
+  pandamonium: "Promptfoo's exclusive dynamic jailbreak strategy currently in beta",
+  piglatin: 'Tests detection and handling of text transformed into Pig Latin',
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
@@ -780,6 +794,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'jailbreak:tree': 'Tree-based Optimization',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
+  'mischievous-user': 'Mischievous User',
   morse: 'Morse Code',
   multilingual: 'Multilingual Translation',
   'other-encodings': 'Collection of Text Encodings',
@@ -795,8 +810,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
   'EU AI Act': 'Plugins mapped to EU AI Act prohibited & high-risk requirements',
   Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
-  'Guardrails Evaluation':
-    'Comprehensive testing suite for evaluating guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage',
+  'Guardrails Evaluation': 'Evaluate guardrail effectiveness against common risks',
   Harmful: 'Harmful content assessment using MLCommons and HarmBench taxonomies',
   'Minimal Test': 'Minimal set of plugins to validate your setup',
   MITRE: 'MITRE ATLAS framework',
@@ -805,7 +819,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
   'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
   'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
-  RAG: 'Recommended plugins plus additional tests for RAG specific scenarios like access control',
+  RAG: 'Recommended plugins plus tests for RAG-specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
 } as const;
 

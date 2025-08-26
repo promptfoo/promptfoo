@@ -11,7 +11,7 @@ export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
-export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'custom'] as const;
+export const MULTI_TURN_STRATEGIES = ['crescendo', 'goat', 'custom', 'mischievous-user'] as const;
 
 // Helper function to check if a strategy is a custom variant
 export const isCustomStrategy = (strategyId: string): boolean => {
@@ -28,6 +28,7 @@ export const AGENTIC_STRATEGIES = [
   'custom',
   'jailbreak',
   'jailbreak:tree',
+  'mischievous-user',
   'pandamonium',
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
@@ -63,6 +64,7 @@ export const ADDITIONAL_STRATEGIES = [
   'jailbreak:tree',
   'leetspeak',
   'math-prompt',
+  'mischievous-user',
   'morse',
   'multilingual',
   'pandamonium',
@@ -89,3 +91,19 @@ const _ALL_STRATEGIES = [
 ] as const;
 export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
+
+export const CONFIGURABLE_STRATEGIES = [
+  'multilingual',
+  'best-of-n',
+  'goat',
+  'crescendo',
+  'pandamonium',
+  'jailbreak',
+  'jailbreak:tree',
+  'gcg',
+  'citation',
+  'custom',
+  'mischievous-user',
+] as const;
+
+export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];

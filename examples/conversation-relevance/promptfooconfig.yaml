@@ -1,0 +1,88 @@
+# Example configuration for testing conversation relevance
+# This metric evaluates whether chatbot responses remain relevant throughout a conversation
+
+description: 'Conversation Relevance Example'
+
+prompts:
+  - |
+    You are a helpful travel assistant specializing in European destinations.
+    Respond to the user's query: {{message}}
+
+providers:
+  - openai:gpt-3.5-turbo
+  - openai:gpt-4o-mini
+
+# Example with single turn evaluation
+tests:
+  - description: 'Single-turn travel question'
+    vars:
+      message: "What's the best time to visit Paris?"
+    assert:
+      - type: conversation-relevance
+        threshold: 0.9
+
+  - description: 'Multi-turn travel conversation'
+    vars:
+      _conversation:
+        - input: "I'm planning a trip to Europe"
+          output: 'That sounds exciting! Which countries are you thinking of visiting?'
+        - input: 'France and Italy'
+          output: 'Great choices! France and Italy offer amazing culture, food, and history. When are you planning to travel?'
+        - input: 'Next summer, probably July'
+          output: 'July is peak season with warm weather but also crowds. Consider booking accommodations early.'
+        - input: 'What about the weather?'
+          output: 'In July, expect warm to hot weather. France averages 20-25°C (68-77°F), Italy can be hotter at 25-30°C (77-86°F).'
+    assert:
+      - type: conversation-relevance
+        threshold: 0.9
+        config:
+          windowSize: 3
+
+  - description: 'Conversation with irrelevant response'
+    vars:
+      _conversation:
+        - input: 'I need help planning my wedding'
+          output: "Congratulations! I'd be happy to help plan your wedding. What's your vision?"
+        - input: 'We want an outdoor ceremony'
+          output: 'Outdoor ceremonies can be beautiful! Consider the season and have a backup plan for weather.'
+        - input: 'What about flowers?'
+          output: 'The stock market has been volatile lately with tech stocks leading the decline.' # Irrelevant
+        - input: 'I meant wedding flowers'
+          output: 'Oh, for wedding flowers, popular choices include roses, peonies, and hydrangeas. Consider seasonal blooms for better prices.'
+    assert:
+      - type: conversation-relevance
+        threshold: 0.7 # Lower threshold as we expect one irrelevant response
+
+  - description: 'Technical support conversation'
+    vars:
+      _conversation:
+        - input: "My computer won't start"
+          output: "I'm sorry to hear that. Let's troubleshoot. What happens when you press the power button?"
+        - input: 'Nothing, no lights or sounds'
+          output: 'This suggests a power issue. First, check if the power cable is properly connected to both the computer and wall outlet.'
+        - input: "I checked, it's plugged in"
+          output: 'Try a different power outlet to rule out outlet issues. Also, check if the power supply switch (usually on the back) is in the ON position.'
+        - input: 'Still nothing'
+          output: "The power supply might have failed. If it's a laptop, try removing the battery and running on AC power only. For desktops, you may need a technician to test the PSU."
+    assert:
+      - type: conversation-relevance
+        threshold: 0.95 # High threshold for technical support
+        config:
+          windowSize: 4
+
+# Example with custom provider for grading
+defaultTest:
+  options:
+    provider: openai:gpt-4 # Use GPT-4 for more accurate relevance assessment
+
+# You can also test with different configurations
+# tests:
+#   - description: 'Test with smaller window size'
+#     vars:
+#       _conversation: [...]
+#     assert:
+#       - type: conversation-relevance
+#         threshold: 0.8
+#         config:
+#           windowSize: 2  # Only look at 2 messages at a time
+

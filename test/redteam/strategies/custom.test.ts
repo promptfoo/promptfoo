@@ -1,4 +1,5 @@
 import { addCustom } from '../../../src/redteam/strategies/custom';
+
 import type { TestCase } from '../../../src/types';
 
 describe('addCustom', () => {

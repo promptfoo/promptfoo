@@ -1,9 +1,10 @@
 import { fetchWithCache } from '../../src/cache';
 import {
-  OllamaCompletionProvider,
   OllamaChatProvider,
+  OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
+
 import type { CallApiContextParams } from '../../src/types';
 
 jest.mock('../../src/cache');
@@ -14,11 +15,11 @@ describe('OllamaCompletionProvider', () => {
   });
 
   it('should construct with model name and options', () => {
-    const provider = new OllamaCompletionProvider('llama2', {
+    const provider = new OllamaCompletionProvider('llama3.3', {
       id: 'custom-id',
       config: { temperature: 0.7 },
     });
-    expect(provider.modelName).toBe('llama2');
+    expect(provider.modelName).toBe('llama3.3');
     expect(provider.config.temperature).toBe(0.7);
     expect(provider.id()).toBe('custom-id');
   });
@@ -34,7 +35,7 @@ describe('OllamaCompletionProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaCompletionProvider('llama2');
+    const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
@@ -53,7 +54,7 @@ describe('OllamaCompletionProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaCompletionProvider('llama2');
+    const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
@@ -64,7 +65,7 @@ describe('OllamaCompletionProvider', () => {
   it('should handle API errors', async () => {
     jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
-    const provider = new OllamaCompletionProvider('llama2');
+    const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toContain('API call error: Error: API error');
@@ -81,7 +82,7 @@ describe('OllamaCompletionProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaCompletionProvider('llama2');
+    const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toBe('Ollama error: some error occurred');
@@ -98,20 +99,111 @@ describe('OllamaCompletionProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaCompletionProvider('llama2');
+    const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toContain('Ollama API response error:');
   });
 
   it('should use default id when not provided', () => {
-    const provider = new OllamaCompletionProvider('llama2');
-    expect(provider.id()).toBe('ollama:completion:llama2');
+    const provider = new OllamaCompletionProvider('llama3.3');
+    expect(provider.id()).toBe('ollama:completion:llama3.3');
   });
 
   it('should handle toString method', () => {
-    const provider = new OllamaCompletionProvider('llama2');
-    expect(provider.toString()).toBe('[Ollama Completion Provider llama2]');
+    const provider = new OllamaCompletionProvider('llama3.3');
+    expect(provider.toString()).toBe('[Ollama Completion Provider llama3.3]');
+  });
+
+  it('should extract token usage from response', async () => {
+    const mockResponse = {
+      data: '{"response":"test response","done":false,"prompt_eval_count":26}\n{"response":" more","done":true,"prompt_eval_count":26,"eval_count":259}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response more',
+      tokenUsage: {
+        prompt: 26,
+        completion: 259,
+        total: 285,
+      },
+    });
+  });
+
+  it('should handle missing token usage gracefully', async () => {
+    const mockResponse = {
+      data: '{"response":"test response","done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+    });
+  });
+
+  it('should handle partial token usage (only prompt_eval_count)', async () => {
+    const mockResponse = {
+      data: '{"response":"test response","done":true,"prompt_eval_count":26}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+      tokenUsage: {
+        prompt: 26,
+        completion: 0,
+        total: 26,
+      },
+    });
+  });
+
+  it('should handle partial token usage (only eval_count)', async () => {
+    const mockResponse = {
+      data: '{"response":"test response","done":true,"eval_count":259}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaCompletionProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+      tokenUsage: {
+        prompt: 0,
+        completion: 259,
+        total: 259,
+      },
+    });
   });
 });
 
@@ -121,11 +213,11 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should construct with model name and options', () => {
-    const provider = new OllamaChatProvider('llama2', {
+    const provider = new OllamaChatProvider('llama3.3', {
       id: 'custom-id',
       config: { temperature: 0.7 },
     });
-    expect(provider.modelName).toBe('llama2');
+    expect(provider.modelName).toBe('llama3.3');
     expect(provider.config.temperature).toBe(0.7);
     expect(provider.id()).toBe('custom-id');
   });
@@ -141,7 +233,7 @@ describe('OllamaChatProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaChatProvider('llama2');
+    const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
@@ -160,7 +252,7 @@ describe('OllamaChatProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaChatProvider('llama2');
+    const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
     expect(result).toEqual({
@@ -171,7 +263,7 @@ describe('OllamaChatProvider', () => {
   it('should handle chat API errors', async () => {
     jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
-    const provider = new OllamaChatProvider('llama2');
+    const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toContain('API call error: Error: API error');
@@ -188,7 +280,7 @@ describe('OllamaChatProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaChatProvider('llama2');
+    const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toBe('Ollama error: chat error occurred');
@@ -205,24 +297,24 @@ describe('OllamaChatProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaChatProvider('llama2');
+    const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toContain('Ollama API response error:');
   });
 
   it('should use default id when not provided', () => {
-    const provider = new OllamaChatProvider('llama2');
-    expect(provider.id()).toBe('ollama:chat:llama2');
+    const provider = new OllamaChatProvider('llama3.3');
+    expect(provider.id()).toBe('ollama:chat:llama3.3');
   });
 
   it('should handle toString method', () => {
-    const provider = new OllamaChatProvider('llama2');
-    expect(provider.toString()).toBe('[Ollama Chat Provider llama2]');
+    const provider = new OllamaChatProvider('llama3.3');
+    expect(provider.toString()).toBe('[Ollama Chat Provider llama3.3]');
   });
 
   it('should handle tools configuration', async () => {
-    const provider = new OllamaChatProvider('llama2', {
+    const provider = new OllamaChatProvider('llama3.3', {
       config: {
         tools: [{ name: 'test-tool' }],
       },
@@ -254,7 +346,7 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should handle context bustCache parameter', async () => {
-    const provider = new OllamaChatProvider('llama2');
+    const provider = new OllamaChatProvider('llama3.3');
     const mockResponse = {
       data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
       cached: false,
@@ -277,6 +369,97 @@ describe('OllamaChatProvider', () => {
     const call = jest.mocked(fetchWithCache).mock.calls[0] as any;
     expect(call[4]).toBe(true);
   });
+
+  it('should extract token usage from chat response', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":false,"prompt_eval_count":26}\n{"message":{"role":"assistant","content":" more","images":null},"done":true,"prompt_eval_count":26,"eval_count":259}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response more',
+      tokenUsage: {
+        prompt: 26,
+        completion: 259,
+        total: 285,
+      },
+    });
+  });
+
+  it('should handle missing token usage gracefully in chat', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+    });
+  });
+
+  it('should handle partial token usage in chat (only prompt_eval_count)', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true,"prompt_eval_count":26}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+      tokenUsage: {
+        prompt: 26,
+        completion: 0,
+        total: 26,
+      },
+    });
+  });
+
+  it('should handle partial token usage in chat (only eval_count)', async () => {
+    const mockResponse = {
+      data: '{"message":{"role":"assistant","content":"test response","images":null},"done":true,"eval_count":259}\n',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    };
+
+    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new OllamaChatProvider('llama3.3');
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test response',
+      tokenUsage: {
+        prompt: 0,
+        completion: 259,
+        total: 259,
+      },
+    });
+  });
 });
 
 describe('OllamaEmbeddingProvider', () => {
@@ -297,7 +480,7 @@ describe('OllamaEmbeddingProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaEmbeddingProvider('llama2');
+    const provider = new OllamaEmbeddingProvider('llama3.3');
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result).toEqual({
@@ -308,7 +491,7 @@ describe('OllamaEmbeddingProvider', () => {
   it('should handle embeddings API errors', async () => {
     jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
-    const provider = new OllamaEmbeddingProvider('llama2');
+    const provider = new OllamaEmbeddingProvider('llama3.3');
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result.error).toBe('API call error: Error: API error');
@@ -325,7 +508,7 @@ describe('OllamaEmbeddingProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaEmbeddingProvider('llama2');
+    const provider = new OllamaEmbeddingProvider('llama3.3');
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result.error).toContain('No embedding found in Ollama embeddings API response');
@@ -342,7 +525,7 @@ describe('OllamaEmbeddingProvider', () => {
 
     jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new OllamaEmbeddingProvider('llama2');
+    const provider = new OllamaEmbeddingProvider('llama3.3');
     const result = await provider.callEmbeddingApi('test text');
 
     expect(result.error).toContain('API response error:');

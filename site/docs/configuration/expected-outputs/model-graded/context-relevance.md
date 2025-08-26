@@ -1,65 +1,84 @@
 ---
-sidebar_label: Context Relevance
+sidebar_position: 50
+description: 'Assess RAG retrieval quality by evaluating context relevance, precision, and usefulness for answering queries.'
 ---
 
 # Context relevance
 
-The `context-relevance` assertion evaluates whether the provided context is relevant to answering the given query or question.
+Measures what fraction of retrieved context is minimally needed to answer the query.
+
+**Use when**: You want to check if your retrieval is returning too much irrelevant content.
+
+**How it works**: Extracts only the sentences absolutely required to answer the query. Score = required sentences / total sentences.
+
+:::warning
+This metric finds the MINIMUM needed, not all relevant content. A low score might mean good retrieval (found answer plus supporting context) or bad retrieval (lots of irrelevant content).
+:::
+
+**Example**:
+
+```text
+Query: "What is the capital of France?"
+Context: "Paris is the capital. France has great wine. The Eiffel Tower is in Paris."
+Score: 0.33 (only first sentence required)
+```
 
 ## Configuration
 
 ```yaml
 assert:
   - type: context-relevance
-    threshold: 0.8 # Score from 0 to 1
+    threshold: 0.3 # At least 30% should be essential
 ```
 
-## Providing context
+### Required fields
 
-You can provide context in two ways:
+- `query` - User's question (in test vars)
+- `context` - Retrieved text (in vars or via `contextTransform`)
+- `threshold` - Minimum score 0-1 (default: 0)
 
-### Using context variables
-
-Include both query and context as variables in your test case:
+### Full example
 
 ```yaml
 tests:
   - vars:
       query: 'What is the capital of France?'
-      context: 'France is a country in Europe. Paris is the capital and largest city of France.'
+      context: 'Paris is the capital of France.'
     assert:
       - type: context-relevance
-        threshold: 0.8
+        threshold: 0.8 # Most content should be essential
 ```
 
-### Extracting from provider responses
+### Dynamic context extraction
 
-If your provider returns context within the response, use `contextTransform`:
+For RAG systems that return context with their response:
 
 ```yaml
+# Provider returns { answer: "...", context: "..." }
 assert:
   - type: context-relevance
-    contextTransform: 'output.context'
-    threshold: 0.8
+    contextTransform: 'output.context' # Extract context field
+    threshold: 0.3
 ```
 
-For complex response structures:
+## Score interpretation
 
-```yaml
-assert:
-  - type: context-relevance
-    contextTransform: 'output.retrieved_docs.map(d => d.content).join("\n")'
-    threshold: 0.8
-```
+- **0.8-1.0**: Almost all content is essential (very focused or minimal retrieval)
+- **0.3-0.7**: Mixed essential and supporting content (often ideal)
+- **0.0-0.3**: Mostly non-essential content (may indicate poor retrieval)
 
-### How it works
+## Limitations
 
-The context relevance checker:
+- Only identifies minimum sufficient content
+- Sentence-level granularity
+- Score interpretation varies by use case
 
-1. Analyzes the relationship between the user's query and the provided context
-2. Evaluates whether the context contains information that helps answer the query
-3. Returns a score from 0 to 1, where 1 means the context is highly relevant to the query
+## Related metrics
 
-# Further reading
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - Does output stay faithful to context?
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - Does context support expected answer?
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options and the [RAG Evaluation Guide](/docs/guides/evaluate-rag) for complete examples.
+## Further reading
+
+- [Defining context in test cases](/docs/configuration/expected-outputs/model-graded#defining-context)
+- [RAG Evaluation Guide](/docs/guides/evaluate-rag)

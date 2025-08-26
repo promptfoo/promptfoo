@@ -15,6 +15,7 @@ keywords:
   ]
 date: 2024-12-21
 authors: [ian]
+tags: [research-analysis, meta]
 ---
 
 # How to run CyberSecEval
@@ -116,7 +117,7 @@ Then configure Promptfoo to use it:
 
 ```yaml
 targets:
-  - ollama:chat:llama3.1
+  - ollama:chat:llama3.3
     config:
       temperature: 0.7
       max_tokens: 150

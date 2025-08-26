@@ -1,11 +1,13 @@
 import fs from 'fs';
+
 import yaml from 'js-yaml';
 import { disableCache } from '../../../src/cache';
 import { doGenerateDataset } from '../../../src/commands/generate/dataset';
 import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
-import type { TestSuite, VarMapping } from '../../../src/types';
 import { resolveConfigs } from '../../../src/util/config/load';
+
+import type { TestSuite, VarMapping } from '../../../src/types';
 
 jest.mock('fs');
 jest.mock('js-yaml');

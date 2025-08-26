@@ -1,7 +1,7 @@
 ---
 title: Contributing to promptfoo
 sidebar_label: Contributing
-description: Learn how to contribute code, documentation, and providers to the promptfoo
+description: Contribute to promptfoo by submitting code, documentation, providers, and features following our development guidelines
 ---
 
 We welcome contributions from the community to help make promptfoo better. This guide will help you get started. If you have any questions, please reach out to us on [Discord](https://discord.gg/promptfoo) or through a [GitHub issue](https://github.com/promptfoo/promptfoo/issues/new).
@@ -175,7 +175,7 @@ When writing tests, please:
 
 ## Linting and Formatting
 
-We use ESLint and Prettier for code linting and formatting. Before submitting a pull request, please run:
+We use Biome for JavaScript/TypeScript linting and formatting, and Prettier for CSS/HTML/Markdown. Before submitting a pull request, please run:
 
 ```bash
 npm run format

@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useState } from 'react';
+
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { Container } from '@mui/material';
+import Container from '@mui/material/Container';
+import { useNavigate } from 'react-router-dom';
 import EvalsDataGrid from './components/EvalsDataGrid';
 
 export default function EvalsIndexPage() {
@@ -24,8 +25,8 @@ export default function EvalsIndexPage() {
       maxWidth="xl"
       style={{
         height: offsetTop > 0 ? `calc(100vh - ${offsetTop}px)` : '100%',
-        paddingBottom: '16px',
       }}
+      sx={{ py: 2 }}
       ref={containerRef}
     >
       <EvalsDataGrid onEvalSelected={(evalId) => navigate(`/eval/${evalId}`)} showUtilityButtons />

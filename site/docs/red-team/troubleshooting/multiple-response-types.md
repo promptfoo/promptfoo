@@ -1,5 +1,6 @@
 ---
 sidebar_label: Handling Multiple Response Types like Guardrails
+description: Red team LLM guardrail bypasses by testing multiple response type handling to protect AI systems from evasion attacks and policy violations
 ---
 
 # Handling Multiple Response Types

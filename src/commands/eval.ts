@@ -6,6 +6,7 @@ import fs from 'fs';
 import * as path from 'path';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
+
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
@@ -27,17 +28,16 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types';
-import { OutputFileExtension, TestSuiteSchema } from '../types';
-import { CommandLineOptionsSchema } from '../types';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
 import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx } from '../util';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import invariant from '../util/invariant';
 import { TokenUsageTracker } from '../util/tokenUsage';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
 import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
@@ -177,12 +177,14 @@ export async function doEval(
       Array.isArray(config.providers) &&
       config.providers.length > 0 &&
       typeof config.providers[0] === 'object' &&
-      config.providers[0].id === 'http' &&
-      config.providers[0].config.url.includes('promptfoo.app')
+      config.providers[0].id === 'http'
     ) {
-      telemetry.record('feature_used', {
-        feature: 'redteam_run_with_example',
-      });
+      const maybeUrl: unknown = (config.providers[0] as any)?.config?.url;
+      if (typeof maybeUrl === 'string' && maybeUrl.includes('promptfoo.app')) {
+        telemetry.record('feature_used', {
+          feature: 'redteam_run_with_example',
+        });
+      }
     }
 
     // Ensure evaluateOptions from the config file are applied
@@ -233,7 +235,7 @@ export async function doEval(
 
     const options: EvaluateOptions = {
       ...evaluateOptions,
-      showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
+      showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
@@ -305,29 +307,7 @@ export async function doEval(
     let successes = 0;
     let failures = 0;
     let errors = 0;
-    const tokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      numRequests: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-      assertions: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      },
-    };
+    const tokenUsage = createEmptyTokenUsage();
 
     // Calculate our total successes and failures
     for (const prompt of evalRecord.prompts) {
@@ -340,34 +320,7 @@ export async function doEval(
       if (prompt.metrics?.testErrorCount) {
         errors += prompt.metrics.testErrorCount;
       }
-      tokenUsage.total += prompt.metrics?.tokenUsage?.total || 0;
-      tokenUsage.prompt += prompt.metrics?.tokenUsage?.prompt || 0;
-      tokenUsage.completion += prompt.metrics?.tokenUsage?.completion || 0;
-      tokenUsage.cached += prompt.metrics?.tokenUsage?.cached || 0;
-      tokenUsage.numRequests += prompt.metrics?.tokenUsage?.numRequests || 0;
-      if (prompt.metrics?.tokenUsage?.completionDetails) {
-        tokenUsage.completionDetails.reasoning +=
-          prompt.metrics.tokenUsage.completionDetails.reasoning || 0;
-        tokenUsage.completionDetails.acceptedPrediction +=
-          prompt.metrics.tokenUsage.completionDetails.acceptedPrediction || 0;
-        tokenUsage.completionDetails.rejectedPrediction +=
-          prompt.metrics.tokenUsage.completionDetails.rejectedPrediction || 0;
-      }
-      if (prompt.metrics?.tokenUsage?.assertions) {
-        tokenUsage.assertions.total += prompt.metrics.tokenUsage.assertions.total || 0;
-        tokenUsage.assertions.prompt += prompt.metrics.tokenUsage.assertions.prompt || 0;
-        tokenUsage.assertions.completion += prompt.metrics.tokenUsage.assertions.completion || 0;
-        tokenUsage.assertions.cached += prompt.metrics.tokenUsage.assertions.cached || 0;
-
-        if (prompt.metrics.tokenUsage.assertions.completionDetails) {
-          tokenUsage.assertions.completionDetails.reasoning +=
-            prompt.metrics.tokenUsage.assertions.completionDetails.reasoning || 0;
-          tokenUsage.assertions.completionDetails.acceptedPrediction +=
-            prompt.metrics.tokenUsage.assertions.completionDetails.acceptedPrediction || 0;
-          tokenUsage.assertions.completionDetails.rejectedPrediction +=
-            prompt.metrics.tokenUsage.assertions.completionDetails.rejectedPrediction || 0;
-        }
-      }
+      accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
     }
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
@@ -481,7 +434,7 @@ export async function doEval(
           `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
         );
       }
-      if (evalTokens.completionDetails.reasoning > 0) {
+      if (evalTokens.completionDetails?.reasoning && evalTokens.completionDetails.reasoning > 0) {
         logger.info(
           `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
         );
@@ -531,23 +484,30 @@ export async function doEval(
       }
 
       // Grading tokens
-      if (tokenUsage.assertions.total > 0) {
+      if (tokenUsage.assertions && tokenUsage.assertions.total && tokenUsage.assertions.total > 0) {
         logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
         logger.info(
           `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
         );
-        logger.info(
-          `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
-        );
-        logger.info(
-          `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
-        );
-        if (tokenUsage.assertions.cached > 0) {
+        if (tokenUsage.assertions.prompt) {
+          logger.info(
+            `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
+          );
+        }
+        if (tokenUsage.assertions.completion) {
+          logger.info(
+            `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
+          );
+        }
+        if (tokenUsage.assertions.cached && tokenUsage.assertions.cached > 0) {
           logger.info(
             `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
           );
         }
-        if (tokenUsage.assertions.completionDetails?.reasoning > 0) {
+        if (
+          tokenUsage.assertions.completionDetails?.reasoning &&
+          tokenUsage.assertions.completionDetails.reasoning > 0
+        ) {
           logger.info(
             `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
           );
@@ -847,6 +807,10 @@ export function evalCommand(
         return;
       }
       if (command.args.length > 0) {
+        if (command.args[0] === 'help') {
+          evalCmd.help();
+          return;
+        }
         logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
       }
 
@@ -893,3 +857,5 @@ export function evalCommand(
 
   return evalCmd;
 }
+
+export { EvalCommandSchema };

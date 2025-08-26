@@ -1,5 +1,6 @@
-import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types/providers';
 import { sleep } from '../util/time';
+
+import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types/providers';
 
 export class EchoProvider implements ApiProvider {
   private options: ProviderOptions;

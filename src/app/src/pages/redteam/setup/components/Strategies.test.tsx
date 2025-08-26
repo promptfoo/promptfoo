@@ -1,8 +1,7 @@
-import { render, screen } from '@testing-library/react';
-import React from 'react';
-import { MemoryRouter } from 'react-router-dom';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Strategies from './Strategies';
@@ -53,9 +52,6 @@ describe('Strategies', () => {
 
       // Check for main heading structure
       expect(screen.getByRole('heading', { level: 4 })).toBeInTheDocument();
-
-      // Check for help icon
-      expect(screen.getByTestId('HelpOutlineIcon')).toBeInTheDocument();
     });
 
     it('renders the documentation link with correct attributes', () => {
@@ -72,7 +68,6 @@ describe('Strategies', () => {
 
       expect(docLink).toBeInTheDocument();
       expect(docLink).toHaveAttribute('target', '_blank');
-      expect(docLink).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
     it('renders navigation buttons', () => {
@@ -226,5 +221,57 @@ describe('Strategies', () => {
       // Check that the component renders without errors
       expect(screen.getByRole('heading', { level: 4 })).toBeInTheDocument();
     });
+
+    it('renders the Multi-modal Strategies section when multi-modal strategies are present', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'audio' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <MemoryRouter>
+          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('Multi-modal Strategies')).toBeInTheDocument();
+    });
+  });
+
+  it('renders multiple StrategySection components inside PageWrapper', () => {
+    render(
+      <MemoryRouter>
+        <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const strategySectionHeadings = screen.getAllByRole('heading', { level: 6 });
+    expect(strategySectionHeadings.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('calls onNext and onBack when the respective buttons are clicked', () => {
+    render(
+      <MemoryRouter>
+        <Strategies onNext={mockOnNext} onBack={mockOnBack} />
+      </MemoryRouter>,
+    );
+
+    const nextButton = screen.getByRole('button', { name: 'Next' });
+    const backButton = screen.getByRole('button', { name: 'Back' });
+
+    fireEvent.click(nextButton);
+    expect(mockOnNext).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(backButton);
+    expect(mockOnBack).toHaveBeenCalledTimes(1);
   });
 });

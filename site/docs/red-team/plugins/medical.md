@@ -1,7 +1,7 @@
 ---
 sidebar_label: Medical Plugins
 title: Medical Red-Teaming Plugins - AI Security for Healthcare
-description: Comprehensive guide to medical red-teaming plugins for testing AI systems in healthcare contexts. Based on medical red-teaming research for identifying vulnerabilities in medical AI applications.
+description: Medical red-teaming plugins for testing AI systems in healthcare contexts to identify vulnerabilities in medical AI apps
 ---
 
 # Medical Red-Teaming Plugins
@@ -155,6 +155,15 @@ These plugins are based on a comprehensive red-teaming workshop with 46 particip
 ## Configuration
 
 Add medical plugins to your promptfoo configuration:
+
+```yaml
+redteam:
+  plugins:
+    # Use the medical collection to include all medical plugins
+    - medical
+```
+
+Or specify individual medical plugins:
 
 ```yaml
 redteam:

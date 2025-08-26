@@ -5,10 +5,10 @@ import {
   DATASET_PLUGINS,
   DEFAULT_STRATEGIES,
   FRAMEWORK_COMPLIANCE_IDS,
+  isCustomStrategy,
   MULTI_TURN_STRATEGIES,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
-  isCustomStrategy,
 } from '../../../src/redteam/constants/strategies';
 
 describe('strategies constants', () => {
@@ -27,7 +27,7 @@ describe('strategies constants', () => {
   });
 
   it('should have correct multi-turn strategies', () => {
-    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat', 'custom']);
+    expect(MULTI_TURN_STRATEGIES).toEqual(['crescendo', 'goat', 'custom', 'mischievous-user']);
   });
 
   it('should have correct agentic strategies', () => {
@@ -37,6 +37,7 @@ describe('strategies constants', () => {
       'custom',
       'jailbreak',
       'jailbreak:tree',
+      'mischievous-user',
       'pandamonium',
     ]);
   });
@@ -74,6 +75,7 @@ describe('strategies constants', () => {
       'jailbreak:tree',
       'leetspeak',
       'math-prompt',
+      'mischievous-user',
       'morse',
       'multilingual',
       'pandamonium',

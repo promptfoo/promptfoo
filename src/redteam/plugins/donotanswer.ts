@@ -1,12 +1,14 @@
-import { parse } from 'csv-parse/sync';
 import fs from 'fs';
+
+import { parse } from 'csv-parse/sync';
 import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import type { Assertion, TestCase } from '../../types';
 import { RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:donotanswer';
+import type { Assertion, TestCase } from '../../types';
+
+const PLUGIN_ID = 'promptfoo:redteam:donotanswer';
 
 const PRODUCTION_DATASET_URL =
   'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/donotanswer/dataset/do_not_answer_data.csv';

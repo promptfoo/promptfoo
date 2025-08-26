@@ -31,9 +31,7 @@ describe('plugins constants', () => {
   });
 
   it('should define LLAMA_GUARD_REPLICATE_PROVIDER', () => {
-    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe(
-      'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
-    );
+    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe('replicate:moderation:meta/llama-guard-4-12b');
   });
 
   it('should define LLAMA_GUARD_ENABLED_CATEGORIES', () => {
@@ -74,6 +72,7 @@ describe('plugins constants', () => {
       'harmful',
       'pii',
       'bias',
+      'medical',
       'guardrails-eval',
     ]);
   });

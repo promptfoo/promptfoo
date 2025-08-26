@@ -1,5 +1,6 @@
 ---
 sidebar_label: Using LangChain PromptTemplate with Promptfoo
+description: Learn how to test LangChain PromptTemplate outputs systematically with Promptfoo's evaluation tools to validate prompt formatting and variable injection
 ---
 
 # Using LangChain PromptTemplate with Promptfoo

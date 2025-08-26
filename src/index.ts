@@ -4,7 +4,7 @@ import { evaluate as doEvaluate } from './evaluator';
 import guardrails from './guardrails';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { readProviderPromptMap, processPrompts } from './prompts';
+import { processPrompts, readProviderPromptMap } from './prompts';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
 import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
@@ -12,18 +12,18 @@ import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
 import { Plugins } from './redteam/plugins';
-import { RedteamPluginBase, RedteamGraderBase } from './redteam/plugins/base';
+import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
 import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies';
-import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
-import type { ApiProvider } from './types/providers';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util';
 import { maybeLoadFromExternalFile } from './util/file';
 import { readTests } from './util/testCaseReader';
 
-export * from './types';
+import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
+import type { ApiProvider } from './types/providers';
 
 export { generateTable } from './table';
+export * from './types';
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {
@@ -61,15 +61,23 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   };
 
   // Resolve nested providers
-  if (
-    typeof constructedTestSuite.defaultTest === 'object' &&
-    constructedTestSuite.defaultTest?.options?.provider
-  ) {
-    constructedTestSuite.defaultTest.options.provider = await resolveProvider(
-      constructedTestSuite.defaultTest.options.provider,
-      providerMap,
-      { env: testSuite.env },
-    );
+  if (typeof constructedTestSuite.defaultTest === 'object') {
+    // Resolve defaultTest.provider
+    if (constructedTestSuite.defaultTest?.provider) {
+      constructedTestSuite.defaultTest.provider = await resolveProvider(
+        constructedTestSuite.defaultTest.provider,
+        providerMap,
+        { env: testSuite.env },
+      );
+    }
+    // Resolve defaultTest.options.provider
+    if (constructedTestSuite.defaultTest?.options?.provider) {
+      constructedTestSuite.defaultTest.options.provider = await resolveProvider(
+        constructedTestSuite.defaultTest.options.provider,
+        providerMap,
+        { env: testSuite.env },
+      );
+    }
   }
 
   for (const test of constructedTestSuite.tests || []) {

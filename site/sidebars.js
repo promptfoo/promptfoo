@@ -85,6 +85,7 @@ const redTeamSidebar = [
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
           'red-team/plugins/harmful',
+          'red-team/plugins/malicious-code',
           'red-team/plugins/pliny',
           'red-team/plugins/politics',
           'red-team/plugins/religion',
@@ -158,6 +159,7 @@ const redTeamSidebar = [
           'red-team/strategies/multi-turn',
           'red-team/strategies/goat',
           'red-team/strategies/pandamonium',
+          'red-team/strategies/mischievous-user',
         ],
       },
       {
@@ -251,8 +253,13 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
-        label: 'Agentic Red Teaming',
+        label: 'Agent Red Teaming',
         id: 'red-team/agents',
+      },
+      {
+        type: 'doc',
+        label: 'MCP Security',
+        id: 'red-team/mcp-security-testing',
       },
       {
         type: 'doc',
@@ -399,7 +406,15 @@ const sidebars = {
     },
     {
       type: 'doc',
+      id: 'write-for-promptfoo',
+    },
+    {
+      type: 'doc',
       id: 'faq',
+    },
+    {
+      type: 'doc',
+      id: 'releases',
     },
   ],
   // Within enterprise docs, show only the following sidebar

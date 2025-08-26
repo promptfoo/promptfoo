@@ -1,8 +1,10 @@
 import path from 'path';
+
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { loadStrategy, validateStrategies } from '../../../src/redteam/strategies';
+
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types';
 
 jest.mock('../../../src/cliState');
@@ -24,6 +26,7 @@ describe('validateStrategies', () => {
       { id: 'piglatin' },
       { id: 'camelcase' },
       { id: 'emoji' },
+      { id: 'mischievous-user' },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -125,6 +128,29 @@ describe('loadStrategy', () => {
     await strategy.action(testCases, injectVar, config);
 
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding emoji encoding'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
+  it('should load mischievous user strategy', async () => {
+    const strategy = await loadStrategy('mischievous-user');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('mischievous-user');
+    expect(typeof strategy.action).toBe('function');
+  });
+
+  it('should call mischievous user strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('mischievous-user');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = {};
+
+    await strategy.action(testCases, injectVar, config);
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Adding mischievous user test cases'),
+    );
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 

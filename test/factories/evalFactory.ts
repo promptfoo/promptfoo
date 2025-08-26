@@ -1,12 +1,14 @@
 import { randomUUID } from 'crypto';
+
 import { ResultFailureReason } from '../../src';
 import { getDb } from '../../src/database';
 import { evalsTable } from '../../src/database/tables';
 import Eval from '../../src/models/eval';
-import type { EvaluateResult } from '../../src/types';
 import { oldStyleEval } from './data/eval/database_records';
 
-export interface CreateEvalOptions {
+import type { EvaluateResult } from '../../src/types';
+
+interface CreateEvalOptions {
   numResults?: number;
   resultTypes?: Array<'success' | 'error' | 'failure'>;
   withHighlights?: boolean;

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Policy
+description: Red team AI policy compliance by testing custom rule adherence and policy boundaries to detect unauthorized deviations and protect against guideline violations
 ---
 
 # Policy Plugin

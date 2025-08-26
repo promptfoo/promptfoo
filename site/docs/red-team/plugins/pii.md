@@ -1,5 +1,6 @@
 ---
 sidebar_label: PII Leak
+description: Red team PII data leakage by simulating direct disclosure, session leaks, and social engineering attacks to protect sensitive personal information in AI systems
 ---
 
 # PII Plugin

@@ -1,10 +1,11 @@
 import { randomUUID } from 'crypto';
+
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
-import { POSTHOG_KEY } from './generated-constants';
+import { POSTHOG_KEY } from './constants/build';
 import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
 
@@ -22,13 +23,14 @@ export const TelemetryEventSchema = z.object({
   packageVersion: z.string().optional().default(VERSION),
   properties: z.record(z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
 });
-export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
+type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
 
 const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
 const KA_ENDPOINT = 'https://ka.promptfoo.app/';
+const R_ENDPOINT = 'https://r.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
 
@@ -41,6 +43,10 @@ function getPostHogClient(): PostHog | null {
     try {
       posthogClient = new PostHog(POSTHOG_KEY, {
         host: EVENTS_ENDPOINT,
+      });
+
+      posthogClient.on('error', (error) => {
+        logger.debug(`PostHog error: ${error}`);
       });
     } catch {
       posthogClient = null;
@@ -163,6 +169,24 @@ export class Telemetry {
         'User-Agent': `promptfoo/${VERSION}`,
       },
       body: JSON.stringify(kaBody),
+    }).catch(() => {
+      // pass
+    });
+
+    fetch(R_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        event: eventName,
+        environment: process.env.NODE_ENV ?? 'development',
+        email: this.email,
+        meta: {
+          user_id: this.id,
+          ...propertiesWithMetadata,
+        },
+      }),
     }).catch(() => {
       // pass
     });

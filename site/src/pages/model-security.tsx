@@ -11,7 +11,7 @@ import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
-import styles from './llm-vulnerability-scanner.module.css';
+import styles from './landing-page.module.css';
 
 function HeroSection() {
   return (
@@ -24,7 +24,7 @@ function HeroSection() {
         />
         <div className={styles.logoSection}>
           Promptfoo is trusted by teams at...
-          <LogoContainer noBackground noBorder />
+          <LogoContainer className={styles.heroLogos} noBackground noBorder />
         </div>
         <h2>Secure your AI model ecosystem</h2>
         <p>

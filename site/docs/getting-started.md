@@ -87,7 +87,7 @@ To configure your evaluation:
      - openai:gpt-4.1
      - openai:o4-mini
      - anthropic:messages:claude-sonnet-4-20250514
-     - vertex:gemini-2.5-pro-exp-03-25
+     - vertex:gemini-2.5-pro
      # Or use your own custom provider
      - file://path/to/custom/provider.py
    ```

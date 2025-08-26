@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -10,6 +11,12 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import {
+  MULTI_TURN_STRATEGIES,
+  type MultiTurnStrategy,
+} from '@promptfoo/redteam/constants/strategies';
+
+import type { StrategyCardData } from './strategies/types';
 
 const DEFAULT_LANGUAGES: Record<string, string> = {
   bn: 'Bengali',
@@ -23,6 +30,7 @@ interface StrategyConfigDialogProps {
   config: Record<string, any>;
   onClose: () => void;
   onSave: (strategy: string, config: Record<string, any>) => void;
+  strategyData: StrategyCardData | null;
 }
 
 export default function StrategyConfigDialog({
@@ -31,6 +39,7 @@ export default function StrategyConfigDialog({
   config,
   onClose,
   onSave,
+  strategyData,
 }: StrategyConfigDialogProps) {
   const [localConfig, setLocalConfig] = React.useState<Record<string, any>>(config || {});
   const [languages, setLanguages] = React.useState<string[]>(
@@ -93,7 +102,8 @@ export default function StrategyConfigDialog({
       strategy === 'custom' ||
       strategy === 'pandamonium' ||
       strategy === 'gcg' ||
-      strategy === 'citation'
+      strategy === 'citation' ||
+      strategy === 'mischievous-user'
     ) {
       if (!isCustomStrategyValid()) {
         return;
@@ -286,12 +296,11 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
-    } else if (strategy === 'goat' || strategy === 'crescendo') {
+    } else if (strategy && MULTI_TURN_STRATEGIES.includes(strategy as MultiTurnStrategy)) {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Configure the {strategy === 'goat' ? 'GOAT' : 'Crescendo'} multi-turn strategy
-            parameters.
+            Configure the multi-turn strategy parameters.
           </Typography>
 
           <TextField
@@ -614,7 +623,7 @@ export default function StrategyConfigDialog({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Configure {strategy}</DialogTitle>
+      <DialogTitle>Configure {strategyData?.name ?? strategy}</DialogTitle>
       <DialogContent>{renderStrategyConfig()}</DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>

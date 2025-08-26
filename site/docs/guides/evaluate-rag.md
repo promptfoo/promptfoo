@@ -1,5 +1,6 @@
 ---
 sidebar_position: 2
+description: Benchmark RAG pipeline performance by evaluating document retrieval accuracy and LLM output quality with factuality and context adherence metrics for 2-step analysis
 ---
 
 # Evaluating RAG pipelines
@@ -264,7 +265,8 @@ Imagine we're exploring budget and want to compare the performance of GPT-4 vs L
 providers:
   - openai:gpt-4.1-mini
   - openai:gpt-4.1
-  - ollama:llama3.1
+  - anthropic:messages:claude-3-5-sonnet-20241022
+  - ollama:chat:llama3.3
 ```
 
 Let's also add a heuristic that prefers shorter outputs. Using the `defaultTest` directive, we apply this to all RAG tests:
@@ -280,7 +282,7 @@ Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-4.1-mini, openai:gpt-4.1, ollama:llama3.1]
+providers: [openai:gpt-4.1-mini, openai:gpt-4.1, ollama:chat:llama3.3]
 defaultTest:
   assert:
     - type: python

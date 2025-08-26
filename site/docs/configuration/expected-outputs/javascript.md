@@ -1,6 +1,7 @@
 ---
 sidebar_position: 50
 sidebar_label: Javascript
+description: Build sophisticated JavaScript validators for LLM outputs with async operations, scoring logic, and comprehensive error handling
 ---
 
 # Javascript assertions
@@ -384,10 +385,14 @@ Additional examples:
 
 ```js
 // Check span hierarchy depth
+const MAX_ALLOWED_DEPTH = 1000;
 const maxDepth = (spans, parentId = null, depth = 0) => {
-  const children = spans.filter(s => s.parentSpanId === parentId);
+  if (depth > MAX_ALLOWED_DEPTH) {
+    throw new Error('Span hierarchy too deep');
+  }
+  const children = spans.filter((s) => s.parentSpanId === parentId);
   if (children.length === 0) return depth;
-  return Math.max(...children.map(c => maxDepth(spans, c.spanId, depth + 1)));
+  return Math.max(...children.map((c) => maxDepth(spans, c.spanId, depth + 1)));
 };
 
 if (context.trace && maxDepth(context.trace.spans) > 5) {
