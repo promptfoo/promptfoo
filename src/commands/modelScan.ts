@@ -316,7 +316,7 @@ export function modelScanCommand(program: Command): void {
               console.log('\n' + chalk.bold('Model Audit Summary'));
               console.log('=' + '='.repeat(50));
 
-              if (results.has_errors) {
+              if (results.has_errors || (results.failed_checks ?? 0) > 0) {
                 console.log(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
 
                 // Show issues grouped by severity

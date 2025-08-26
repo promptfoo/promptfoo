@@ -61,15 +61,23 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   };
 
   // Resolve nested providers
-  if (
-    typeof constructedTestSuite.defaultTest === 'object' &&
-    constructedTestSuite.defaultTest?.options?.provider
-  ) {
-    constructedTestSuite.defaultTest.options.provider = await resolveProvider(
-      constructedTestSuite.defaultTest.options.provider,
-      providerMap,
-      { env: testSuite.env },
-    );
+  if (typeof constructedTestSuite.defaultTest === 'object') {
+    // Resolve defaultTest.provider
+    if (constructedTestSuite.defaultTest?.provider) {
+      constructedTestSuite.defaultTest.provider = await resolveProvider(
+        constructedTestSuite.defaultTest.provider,
+        providerMap,
+        { env: testSuite.env },
+      );
+    }
+    // Resolve defaultTest.options.provider
+    if (constructedTestSuite.defaultTest?.options?.provider) {
+      constructedTestSuite.defaultTest.options.provider = await resolveProvider(
+        constructedTestSuite.defaultTest.options.provider,
+        providerMap,
+        { env: testSuite.env },
+      );
+    }
   }
 
   for (const test of constructedTestSuite.tests || []) {

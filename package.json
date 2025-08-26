@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.117.9",
+  "version": "0.117.10",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
@@ -77,7 +77,7 @@
     "uri-js": "npm:uri-js-replace",
     "chokidar": "4.0.3",
     "whatwg-url": "14.1.0",
-    "esbuild": "0.25.5",
+    "esbuild": "0.25.9",
     "*": {
       "whatwg-url": "14.1.0",
       "chokidar": "4.0.3",

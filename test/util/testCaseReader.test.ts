@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as path from 'path';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -1408,54 +1407,6 @@ describe('loadTestsFromGlob', () => {
 
     expect(mockMaybeLoadConfig).toHaveBeenCalledWith(yamlContentWithRefs);
     expect(result).toEqual(resolvedContent);
-  });
-
-  it.skip('should recursively resolve file:// references in JSON test files', async () => {
-    const jsonContentWithRefs = [
-      {
-        description: 'JSON test with file refs',
-        vars: {
-          systemPrompt: 'file://system.md',
-          context: 'file://context.json',
-        },
-        assert: ['file://validations.json'],
-      },
-    ];
-
-    const resolvedContent = [
-      {
-        description: 'JSON test with file refs',
-        vars: {
-          systemPrompt: 'You are a helpful assistant.',
-          context: { documents: ['doc1', 'doc2'] },
-        },
-        assert: [
-          { type: 'contains', value: 'helpful' },
-          { type: 'not-contains', value: 'error' },
-        ],
-      },
-    ];
-
-    jest.mocked(globSync).mockReturnValue(['tests.json']);
-
-    // Mock fs.readFileSync to return JSON content
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(jsonContentWithRefs));
-
-    // Mock the require function to return the parsed JSON
-    jest.doMock(path.resolve('tests.json'), () => jsonContentWithRefs, { virtual: true });
-
-    // Mock maybeLoadConfigFromExternalFile to resolve file:// references
-    const mockMaybeLoadConfig =
-      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
-    mockMaybeLoadConfig.mockReturnValue(resolvedContent);
-
-    const result = await loadTestsFromGlob('tests.json');
-
-    expect(mockMaybeLoadConfig).toHaveBeenCalledWith(jsonContentWithRefs);
-    expect(result).toEqual(resolvedContent);
-
-    // Clean up the mock
-    jest.dontMock(path.resolve('tests.json'));
   });
 
   it('should handle nested file:// references in complex test structures', async () => {
