@@ -136,5 +136,5 @@ Yes. The documentation website follows the [LLMs.txt specification](https://llms
 
 - [General Troubleshooting Guide](/docs/usage/troubleshooting) - Memory optimization, API keys, timeouts, and debugging
 - [Red Team Troubleshooting Guide](/docs/red-team/troubleshooting/overview) - Common issues with LLM red teaming
-- [Configuration Guide](/docs/configuration/guide)
+- [Configuration overview](/docs/configuration/overview)
 - [LLM Red Teaming Guide](/docs/guides/llm-redteaming)

@@ -78,7 +78,7 @@ prompts:
   - 'You are a helpful customer support chatbot for Acme, Inc. You respond concisely in 1 or 2 sentences. Customer query: {{query}}'
 ```
 
-If desired, you can test multiple prompts or different prompts for each model (see more in [Configuration](/docs/configuration/guide)).
+If desired, you can test multiple prompts or different prompts for each model (see more in [Configuration](/docs/configuration/overview)).
 
 ## Step 4: Add Test Cases
 

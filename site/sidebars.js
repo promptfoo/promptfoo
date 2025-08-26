@@ -303,7 +303,7 @@ const sidebars = {
         type: 'generated-index',
       },
       items: [
-        { type: 'doc', id: 'configuration/guide' },
+        { type: 'doc', id: 'configuration/overview' },
         { type: 'doc', id: 'configuration/reference' },
         // Page still exists for backwards compatibility, but we don't put it in the sidebar
         // { type: 'doc', id: 'configuration/parameters' },

@@ -19,7 +19,7 @@ This page explains how to test an LLM chain. At a high level, you have these opt
 
 ## Unit testing LLM chains
 
-As mentioned above, the easiest way to test is one prompt at a time. This can be done pretty easily with a basic promptfoo [configuration](/docs/configuration/guide).
+As mentioned above, the easiest way to test is one prompt at a time. This can be done pretty easily with a basic promptfoo [configuration](/docs/configuration/overview).
 
 Run `npx promptfoo@latest init chain_step_X` to create the test harness for the first step of your chain. After configuring test cases for that step, create a new set of test cases for step 2 and so on.
 
@@ -81,7 +81,7 @@ tests:
       question: What is the fourth root of 1296?
 ```
 
-For an in-depth look at configuration, see the [guide](/docs/configuration/guide). Note the following:
+For an in-depth look at configuration, see the [guide](/docs/configuration/overview). Note the following:
 
 - **prompts**: `prompt.txt` is just a file that contains `{{question}}`, since we're passing the question directly through to the provider.
 - **providers**: We list GPT-4 in order to compare its outputs with LangChain's LLMMathChain. We also use the `exec` directive to make promptfoo run the Python script in its eval.

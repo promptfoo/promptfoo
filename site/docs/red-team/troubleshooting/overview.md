@@ -20,4 +20,4 @@ Common issues encountered when red teaming LLM applications with promptfoo.
 ## Related Documentation
 
 - [Red Team Quickstart](/docs/red-team/quickstart/)
-- [Configuration Guide](/docs/configuration/guide/)
+- [Configuration overview](/docs/configuration/overview/)

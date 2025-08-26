@@ -185,4 +185,4 @@ To further explore promptfoo's capabilities, consider:
 - Modify your prompt
 - Expanding the range of coding problems and test cases
 
-For more information, refer to the official [guide](/docs/configuration/guide). You can also explore [continuous integration](/docs/integrations/ci-cd/) and integrations with other tools.
+For more information, refer to the official [configuration overview](/docs/configuration/overview). You can also explore [continuous integration](/docs/integrations/ci-cd/) and integrations with other tools.

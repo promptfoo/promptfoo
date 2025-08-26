@@ -1,8 +1,8 @@
 ---
 sidebar_position: 1
-sidebar_label: Guide
-title: Configuration Guide - Getting Started with Promptfoo
-description: Complete guide to configuring promptfoo for LLM evaluation. Learn prompts, providers, test cases, assertions, and advanced features with examples.
+sidebar_label: Overview
+title: Configuration overview - getting Started with Promptfoo
+description: General overview to configuring promptfoo for LLM evaluation. Learn prompts, providers, test cases, assertions, and advanced features with examples.
 keywords:
   [
     promptfoo configuration,
@@ -15,7 +15,7 @@ keywords:
 pagination_next: configuration/reference
 ---
 
-# Configuration
+# Configuration overview
 
 The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assertions").
 

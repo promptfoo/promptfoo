@@ -18,7 +18,7 @@ import type { EnvOverrides } from './types/env';
 
 const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/overview
 
 description: "My eval"
 
@@ -191,7 +191,7 @@ echo "This is the LLM output"
 php my_script.php
 `;
 
-const PYTHON_VAR = `# Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/guide/#import-vars-from-separate-files
+const PYTHON_VAR = `# Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/overview/#import-vars-from-separate-files
 def get_var(var_name, prompt, other_vars):
     # This is where you can fetch documents from a database, call an API, etc.
     # ...
@@ -209,7 +209,7 @@ def get_var(var_name, prompt, other_vars):
     # return { 'error': 'Error message' }
 `;
 
-const JAVASCRIPT_VAR = `// Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/guide/#import-vars-from-separate-files
+const JAVASCRIPT_VAR = `// Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/overview/#import-vars-from-separate-files
 module.exports = function (varName, prompt, otherVars) {
   // This is where you can fetch documents from a database, call an API, etc.
   // ...

@@ -115,7 +115,7 @@ tests:
 
 ### Extracting specific JSON fields for testing
 
-For [model-graded assertions](/docs/configuration/expected-outputs/model-graded) such as similarity and rubric-based evaluations, preprocess the output to extract the desired field before running the check. The [`transform` directive](/docs/configuration/guide/#transforming-outputs) can be used for this purpose, and it applies to the entire test case.
+For [model-graded assertions](/docs/configuration/expected-outputs/model-graded) such as similarity and rubric-based evaluations, preprocess the output to extract the desired field before running the check. The [`transform` directive](/docs/configuration/overview/#transforming-outputs) can be used for this purpose, and it applies to the entire test case.
 
 Here's how you can use `transform` to assert the similarity of `location` to a given value:
 

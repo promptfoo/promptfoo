@@ -52,7 +52,7 @@ If you cannot get network access to our remote generation service, you can:
 2. Set up your own generation service
 3. Use manual prompt creation
 
-See our [configuration guide](/docs/configuration/guide/) for more details on these options.
+See our [configuration overview](/docs/configuration/overview/) for more details on these options.
 
 ## Getting Help
 

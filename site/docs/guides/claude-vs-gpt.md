@@ -202,4 +202,4 @@ By running this type of targeted evaluation, you can gain valuable insights into
 
 The end goal: choose the best foundation model for your use case with empirical data.
 
-To learn more about `promptfoo`, check out the [getting started guide](/docs/getting-started) and [configuration reference](/docs/configuration/guide).
+To learn more about `promptfoo`, check out the [getting started guide](/docs/getting-started) and [configuration reference](/docs/configuration/overview).

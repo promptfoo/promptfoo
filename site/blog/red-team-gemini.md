@@ -361,6 +361,6 @@ Now that you've red teamed Gemini, consider:
 - [Gemini 2.5 Pro Security Report](https://promptfoo.dev/models/reports/gemini-2.5-pro)
 - [Promptfoo Red Team Documentation](/docs/red-team/quickstart/)
 - [LLM Vulnerability Types](/docs/red-team/llm-vulnerability-types/)
-- [Red Team Configuration Guide](/docs/red-team/configuration/)
+- [Red team configuration overview](/docs/red-team/configuration/)
 - [Google AI Studio Documentation](https://ai.google.dev/gemini-api/docs)
 - [Vertex AI Gemini Documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini)

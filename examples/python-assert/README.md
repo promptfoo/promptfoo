@@ -106,5 +106,5 @@ def get_assert(output, context):
 ## Learn More
 
 - [Python Assertions Documentation](https://www.promptfoo.dev/docs/configuration/expected-outputs/python/)
-- [promptfoo Configuration Guide](https://www.promptfoo.dev/docs/configuration/guide/)
+- [Promptfoo configuration overview](https://www.promptfoo.dev/docs/configuration/overview/)
 - [Assertion Types](https://www.promptfoo.dev/docs/configuration/expected-outputs/)

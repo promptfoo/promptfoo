@@ -161,7 +161,7 @@ tests:
         value: darkness
 ```
 
-For more info on setting up the config, see the [configuration guide](/docs/configuration/guide).
+For more info on setting up the config, see the [configuration overview](/docs/configuration/overview).
 
 ## Conclusion
 

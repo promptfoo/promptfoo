@@ -156,7 +156,7 @@ The evaluation engine processes target responses through:
 
 ### Configuration
 
-Configuration ties the components together via `promptfooconfig.yaml`. See [configuration guide](/docs/red-team/configuration) for details.
+Configuration ties the components together via `promptfooconfig.yaml`. See [configuration overview](/docs/red-team/configuration) for details.
 
 The configuration defines:
 

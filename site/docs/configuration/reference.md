@@ -12,7 +12,7 @@ keywords:
     test configuration,
     assertion types,
   ]
-pagination_prev: configuration/guide
+pagination_prev: configuration/overview
 pagination_next: configuration/parameters
 ---
 

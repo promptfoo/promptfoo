@@ -544,7 +544,7 @@ redteam:
 
 The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_.
 
-Note that this is separate from the "target" model(s), which are set in the top-level [`providers` configuration](/docs/configuration/guide/).
+Note that this is separate from the "target" model(s), which are set in the top-level [`providers` configuration](/docs/configuration/overview/).
 
 A common use case is to use an alternative platform like [Azure](/docs/providers/azure/), [Bedrock](/docs/providers/aws-bedrock), or [HuggingFace](/docs/providers/huggingface/).
 
@@ -890,7 +890,7 @@ The `redteam.yaml` file contains a metadata section with a configHash value at t
 
 ### Loading custom tests from CSV
 
-Promptfoo supports loading tests from CSV as well as Google Sheets. See [CSV loading](/docs/configuration/guide/#loading-tests-from-csv) and [Google Sheets](/docs/integrations/google-sheets/) for more info.
+Promptfoo supports loading tests from CSV as well as Google Sheets. See [CSV loading](/docs/configuration/overview/#loading-tests-from-csv) and [Google Sheets](/docs/integrations/google-sheets/) for more info.
 
 ### Loading tests from HuggingFace datasets
 

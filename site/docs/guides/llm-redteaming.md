@@ -68,7 +68,7 @@ It will create a `promptfooconfig.yaml` config file where we’ll do most of our
 
 ## Getting started
 
-Edit `my-redteam-project/promptfooconfig.yaml` to set up the prompt and the LLM you want to test. See the [configuration guide](/docs/red-team/configuration/) for more information.
+Edit `my-redteam-project/promptfooconfig.yaml` to set up the prompt and the LLM you want to test. See the [configuration overview](/docs/red-team/configuration/) for more information.
 
 Run the eval:
 

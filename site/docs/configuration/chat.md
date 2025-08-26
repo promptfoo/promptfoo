@@ -355,12 +355,12 @@ tests:
       message: 'Write a snarky 2 sentence rebuttal to this argument for loving {{favoriteFruit}}: \"{{reason}}\"'
 ```
 
-Transforms can be Javascript snippets or they can be entire separate Python or Javascript files. See [docs on transform](/docs/configuration/guide/#transforming-outputs).
+Transforms can be Javascript snippets or they can be entire separate Python or Javascript files. See [docs on transform](/docs/configuration/overview/#transforming-outputs).
 
 ## See Also
 
 - [Prompt Parameters](/docs/configuration/parameters) - Learn about different ways to define prompts
-- [Test Configuration](/docs/configuration/guide) - Complete guide to setting up test configurations
-- [Transformer Functions](/docs/configuration/guide/#transforming-outputs) - How to transform outputs between test cases
+- [Test Configuration](/docs/configuration/overview) - Complete guide to setting up test configurations
+- [Transformer Functions](/docs/configuration/overview/#transforming-outputs) - How to transform outputs between test cases
 - [Nunjucks Templates](https://mozilla.github.io/nunjucks/templating.html) - Documentation for the template language used in prompt files
 - [Multi-turn Conversation Example](https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-turn-conversation) - Complete example of multi-turn conversations

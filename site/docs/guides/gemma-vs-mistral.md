@@ -241,4 +241,4 @@ Here's what we noticed from our small riddle test set:
 
 When constructing your own test set, think about edge cases and unusual criteria that are specific to your app and may not be in model training data. Ideally, it's best to set up a feedback loop where real users of your app can flag failure cases. Use this to build your test set over time.
 
-To learn more about setting up promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [Configuration Guide](/docs/configuration/guide).
+To learn more about setting up promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [configuration overview](/docs/configuration/overview).

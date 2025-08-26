@@ -211,4 +211,4 @@ After running the evaluation, you'll have a dataset that compares the responses 
 
 Consider the implications of these results for your specific application or use case. Although Gemma outperforms Llama on generic test sets, you must create your own test set in order to really pick a winner!
 
-To learn more about setting up promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [Configuration Guide](/docs/configuration/guide).
+To learn more about setting up promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [configuration overview](/docs/configuration/overview).

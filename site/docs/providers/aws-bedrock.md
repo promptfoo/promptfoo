@@ -374,7 +374,7 @@ Because of how model-graded evals are implemented, **the LLM grading models must
 
 :::
 
-To set this for all your test cases, add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
+To set this for all your test cases, add the [`defaultTest`](/docs/configuration/overview/#default-test-cases) property to your config:
 
 ```yaml title="promptfooconfig.yaml"
 defaultTest:

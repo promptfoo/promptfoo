@@ -228,7 +228,7 @@ const YamlEditorComponent: React.FC<YamlEditorProps> = ({
             the promptfoo CLI.
           </Typography>
           <Typography variant="body2" sx={{ mt: 1 }}>
-            <StyledLink target="_blank" to="https://promptfoo.dev/docs/configuration/guide">
+            <StyledLink target="_blank" to="https://promptfoo.dev/docs/configuration/overview">
               View documentation →
             </StyledLink>
           </Typography>

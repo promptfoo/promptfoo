@@ -127,7 +127,7 @@ To configure your evaluation:
 
    When writing test cases, think of core use cases and potential failures that you want to make sure your prompts handle correctly.
 
-   [&raquo; More information on setting up tests](/docs/configuration/guide)
+   [&raquo; More information on setting up tests](/docs/configuration/overview)
 
 4. **Run the evaluation**: Make sure you're in the directory containing `promptfooconfig.yaml`, then run:
 
@@ -180,7 +180,7 @@ The YAML configuration format runs each prompt through a series of example input
 Asserts are _optional_. Many people get value out of reviewing outputs manually, and the web UI helps facilitate this.
 
 :::tip
-See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
+See the [Configuration docs](/docs/configuration/overview) for a detailed guide.
 :::
 
 <details>
@@ -419,7 +419,7 @@ A similar approach can be used to run other model comparisons. For example, you 
 
 ## Additional Resources
 
-- [&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions
+- [&raquo; Configuration guide](/docs/configuration/overview) for detailed setup instructions
 - [&raquo; Providers documentation](/docs/providers) for all supported AI models and services
 - [&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically assessing outputs
 

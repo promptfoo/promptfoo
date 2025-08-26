@@ -516,7 +516,7 @@ LOG_LEVEL=debug npx promptfoo@latest eval -c config.yaml
 
 ### Configuration & Testing
 
-- [Configuration Guide](/docs/configuration/guide) - Complete setup instructions
+- [Configuration overview](/docs/configuration/overview) - Complete setup instructions
 - [Test Cases](/docs/configuration/test-cases) - Writing effective tests
 - [Assertions & Metrics](/docs/configuration/expected-outputs) - Validation strategies
 - [Python Assertions](/docs/configuration/expected-outputs/python) - Custom Python validators
