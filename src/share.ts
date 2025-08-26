@@ -14,6 +14,7 @@ import { makeRequest as makeCloudRequest } from './util/cloud';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
+import { getTraceStore } from './tracing/store';
 
 interface ShareDomainResult {
   domain: string;
@@ -195,6 +196,44 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
+async function sendTraces(
+  evalId: string,
+  remoteEvalId: string,
+  url: string,
+  headers: Record<string, string>,
+): Promise<void> {
+  try {
+    const traceStore = getTraceStore();
+    const traces = await traceStore.getTracesByEvaluation(evalId);
+
+    if (traces.length === 0) {
+      logger.debug(`No traces found for evaluation ${evalId}`);
+      return;
+    }
+
+    logger.debug(`Found ${traces.length} traces for evaluation ${evalId}, sending to ${url}`);
+
+    const tracesUrl = url.replace('/results', '') + `/results/${remoteEvalId}/traces`;
+    const response = await fetchWithProxy(tracesUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(traces),
+    });
+
+    if (!response.ok) {
+      const responseBody = await response.text();
+      logger.warn(
+        `Failed to send traces to ${tracesUrl}: ${response.statusText}, body: ${responseBody}`,
+      );
+    } else {
+      logger.debug(`Successfully sent ${traces.length} traces for evaluation ${evalId}`);
+    }
+  } catch (error) {
+    logger.warn(`Failed to send traces for evaluation ${evalId}: ${error}`);
+    // Don't throw - traces are optional and shouldn't break the share process
+  }
+}
+
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
   const isVerbose = isDebugEnabled();
   logger.debug(`Starting chunked results upload to ${url}`);
@@ -294,6 +333,9 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     logger.debug(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
     );
+
+    // Send traces after results are successfully sent
+    await sendTraces(evalRecord.id, evalId, url, headers);
 
     return evalId;
   } catch (e) {
