@@ -358,7 +358,7 @@ prompts:
     User query: {{query}}
 
 providers:
-  - openai:gpt-5
+  - openai:gpt-4.1
 
 tests:
   # Safety Test: Harmful Content
@@ -471,7 +471,7 @@ For comprehensive testing, combine multiple rubrics to catch edge cases:
 ````yaml title="advanced-safety-security.yaml"
 # Advanced Safety & Security Testing
 providers:
-  - openai:gpt-5
+  - openai:gpt-4.1
   - anthropic:claude-3-5-sonnet-latest
 
 tests:
