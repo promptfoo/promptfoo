@@ -1,15 +1,17 @@
-const MCPClient = require("./mcp-client");
-const ReactAgent = require("./react-agent");
-require("dotenv").config();
+const MCPClient = require('./mcp-client');
+const ReactAgent = require('./react-agent');
+require('dotenv').config();
 
 class OpenAIAgentProvider {
   constructor(options = {}) {
-    this.providerId = options.id || "openai-react-agent";
+    this.providerId = options.id || 'openai-react-agent';
     this.apiKey = options.config?.apiKey || process.env.OPENAI_API_KEY;
-    this.apiBaseUrl = options.config?.apiBaseUrl || "https://api.openai.com/v1";
+    this.apiBaseUrl = options.config?.apiBaseUrl || 'https://api.openai.com/v1';
     this.mcpServers = options.config?.mcpServers || [];
-    this.model = options.config?.model || "gpt-4o";
-    this.systemPrompt = options.config?.systemPrompt || `You are a helpful AI assistant with access to various tools. Use the ReAct pattern:
+    this.model = options.config?.model || 'gpt-4o';
+    this.systemPrompt =
+      options.config?.systemPrompt ||
+      `You are a helpful AI assistant with access to various tools. Use the ReAct pattern:
 1. Thought: Think about what you need to do
 2. Action: Choose and execute a tool if needed
 3. Observation: Observe the result
@@ -31,18 +33,18 @@ class OpenAIAgentProvider {
     if (this.initializationState === 'initialized') {
       return;
     }
-    
+
     // If currently initializing, wait for the existing initialization to complete
     if (this.initializationState === 'initializing' && this.initializationPromise) {
       return this.initializationPromise;
     }
-    
+
     // Start new initialization
     this.initializationState = 'initializing';
-    
+
     // Store the initialization promise to prevent concurrent attempts
     this.initializationPromise = this._doInitialize();
-    
+
     try {
       await this.initializationPromise;
     } finally {
@@ -50,18 +52,18 @@ class OpenAIAgentProvider {
       this.initializationPromise = null;
     }
   }
-  
+
   async _doInitialize() {
     try {
       if (!this.apiKey) {
         throw new Error(
-          "OpenAI API key is required. Set OPENAI_API_KEY environment variable or provide it in config."
+          'OpenAI API key is required. Set OPENAI_API_KEY environment variable or provide it in config.',
         );
       }
 
       // Clear any existing clients before initializing (without changing state)
       await this._cleanupClients();
-      
+
       const connectedClients = [];
       const failedServers = [];
 
@@ -73,7 +75,7 @@ class OpenAIAgentProvider {
         } catch (error) {
           console.error(
             `Failed to connect to MCP server ${server.command || server.path || server.url}:`,
-            error
+            error,
           );
           failedServers.push(server);
         }
@@ -82,18 +84,24 @@ class OpenAIAgentProvider {
       // Only proceed if at least one server connected successfully
       if (connectedClients.length === 0 && this.mcpServers.length > 0) {
         this.initializationState = 'failed';
-        throw new Error("Failed to connect to any MCP servers");
+        throw new Error('Failed to connect to any MCP servers');
       }
 
       // Store successfully connected clients
       this.mcpClients = connectedClients;
-      
+
       // Create the agent with connected clients
-      this.agent = new ReactAgent(this.apiKey, this.apiBaseUrl, this.mcpClients, this.model, this.systemPrompt);
-      
+      this.agent = new ReactAgent(
+        this.apiKey,
+        this.apiBaseUrl,
+        this.mcpClients,
+        this.model,
+        this.systemPrompt,
+      );
+
       // Mark as initialized
       this.initializationState = 'initialized';
-      
+
       // Log warning if some servers failed
       if (failedServers.length > 0) {
         console.warn(`Warning: ${failedServers.length} MCP server(s) failed to connect`);
@@ -111,13 +119,11 @@ class OpenAIAgentProvider {
       await this.initialize();
 
       const enhancedPrompt =
-        typeof prompt === "string"
-          ? prompt
-          : prompt.raw || prompt.label || JSON.stringify(prompt);
+        typeof prompt === 'string' ? prompt : prompt.raw || prompt.label || JSON.stringify(prompt);
 
       const vars = context.vars || {};
       const fullPrompt = Object.keys(vars).reduce((p, key) => {
-        return p.replace(new RegExp(`{{${key}}}`, "g"), vars[key]);
+        return p.replace(new RegExp(`{{${key}}}`, 'g'), vars[key]);
       }, enhancedPrompt);
 
       const startTime = Date.now();
@@ -133,17 +139,17 @@ class OpenAIAgentProvider {
       return {
         output:
           result.response +
-          "\n\n Called Tools: " +
+          '\n\n Called Tools: ' +
           result.toolCalls
             .map(
               (tool) =>
                 `Tool called ${tool.function.name} with args \n${JSON.stringify(
                   tool.function.arguments,
                   null,
-                  2
-                )}`
+                  2,
+                )}`,
             )
-            .join("\n\n"),
+            .join('\n\n'),
         tokenUsage: tokenUsage,
         cost: tokenUsage.total * 0.00002,
         cached: false,
@@ -166,10 +172,10 @@ class OpenAIAgentProvider {
     // Internal cleanup that doesn't change initialization state
     for (const client of this.mcpClients) {
       try {
-        console.log("Disconnecting MCP client");
+        console.log('Disconnecting MCP client');
         await client.disconnect();
       } catch (error) {
-        console.error("Error disconnecting MCP client:", error);
+        console.error('Error disconnecting MCP client:', error);
       }
     }
     this.mcpClients = [];

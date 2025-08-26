@@ -1,12 +1,14 @@
-const OpenAI = require("openai");
+const OpenAI = require('openai');
 
 class ReactAgent {
-  constructor(apiKey, apiBaseUrl, mcpClients = [], model = "gpt-4o", systemPrompt = null) {
+  constructor(apiKey, apiBaseUrl, mcpClients = [], model = 'gpt-4o', systemPrompt = null) {
     this.openai = new OpenAI({ apiKey, baseURL: apiBaseUrl });
     this.mcpClients = mcpClients;
     this.maxIterations = 10;
     this.model = model;
-    this.systemPrompt = systemPrompt || `You are a helpful AI assistant with access to various tools. Use the ReAct pattern:
+    this.systemPrompt =
+      systemPrompt ||
+      `You are a helpful AI assistant with access to various tools. Use the ReAct pattern:
 1. Thought: Think about what you need to do
 2. Action: Choose and execute a tool if needed
 3. Observation: Observe the result
@@ -24,12 +26,12 @@ class ReactAgent {
         const clientTools = await client.listTools();
         clientTools.forEach((tool) => {
           tools.push({
-            type: "function",
+            type: 'function',
             function: {
               name: `mcp_${i}_${tool.name}`,
               description: tool.description || `Tool from MCP server ${i}`,
               parameters: tool.inputSchema || {
-                type: "object",
+                type: 'object',
                 properties: {},
                 required: [],
               },
@@ -47,16 +49,16 @@ class ReactAgent {
   async executeTool(toolCall) {
     const { name, arguments: args } = toolCall.function;
 
-    if (name.startsWith("mcp_")) {
-      const parts = name.split("_");
+    if (name.startsWith('mcp_')) {
+      const parts = name.split('_');
       const clientIndex = parseInt(parts[1]);
-      const toolName = parts.slice(2).join("_");
+      const toolName = parts.slice(2).join('_');
 
       if (clientIndex >= 0 && clientIndex < this.mcpClients.length) {
         try {
           const result = await this.mcpClients[clientIndex].callTool(
             toolName,
-            typeof args === "string" ? JSON.parse(args) : args
+            typeof args === 'string' ? JSON.parse(args) : args,
           );
           return JSON.stringify(result);
         } catch (error) {
@@ -73,11 +75,11 @@ class ReactAgent {
 
     const messages = [
       {
-        role: "system",
+        role: 'system',
         content: this.systemPrompt,
       },
       {
-        role: "user",
+        role: 'user',
         content: prompt,
       },
     ];
@@ -92,7 +94,7 @@ class ReactAgent {
           model: this.model,
           messages: messages,
           tools: tools.length > 0 ? tools : undefined,
-          tool_choice: tools.length > 0 ? "auto" : undefined,
+          tool_choice: tools.length > 0 ? 'auto' : undefined,
           temperature: 0.7,
           max_tokens: 2000,
         });
@@ -106,7 +108,7 @@ class ReactAgent {
             const result = await this.executeTool(toolCall);
 
             messages.push({
-              role: "tool",
+              role: 'tool',
               tool_call_id: toolCall.id,
               content: result,
             });
@@ -118,14 +120,14 @@ class ReactAgent {
 
         iterations++;
       } catch (error) {
-        console.error("Error in ReAct loop:", error);
+        console.error('Error in ReAct loop:', error);
         throw error;
       }
     }
 
     if (!finalResponse && iterations >= this.maxIterations) {
       finalResponse =
-        "I reached the maximum number of iterations while trying to answer your question.";
+        'I reached the maximum number of iterations while trying to answer your question.';
     }
 
     return {

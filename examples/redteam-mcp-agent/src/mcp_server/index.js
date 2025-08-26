@@ -1,23 +1,21 @@
 #!/usr/bin/env node
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-import { analyticsTools, handleAnalyticsTool } from "./tools/analyticsTools.js";
-import { erpTools, handleErpTool } from "./tools/erpTools.js";
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+
+import { analyticsTools, handleAnalyticsTool } from './tools/analyticsTools.js';
+import { erpTools, handleErpTool } from './tools/erpTools.js';
 
 const server = new Server(
   {
-    name: "erp-mcp",
-    version: "1.0.0",
+    name: 'erp-mcp',
+    version: '1.0.0',
   },
   {
     capabilities: {
       tools: {},
     },
-  }
+  },
 );
 
 // List all available tools
@@ -38,7 +36,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(result, null, 2),
           },
         ],
@@ -51,7 +49,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: JSON.stringify(result, null, 2),
           },
         ],
@@ -64,7 +62,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return {
       content: [
         {
-          type: "text",
+          type: 'text',
           text: `Error: ${errorMessage}`,
         },
       ],
@@ -78,10 +76,10 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.error("ERP MCP Server running on stdio");
+  console.error('ERP MCP Server running on stdio');
 }
 
 main().catch((error) => {
-  console.error("Fatal error:", error);
+  console.error('Fatal error:', error);
   process.exit(1);
 });
