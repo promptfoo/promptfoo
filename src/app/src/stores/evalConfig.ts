@@ -2,11 +2,6 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types';
-<<<<<<< HEAD
-
-export interface EvalConfigState {
-  config: Partial<UnifiedConfig>;
-=======
 import {
   transformResultsConfigToSetupConfig,
   validateConfigCompleteness,
@@ -28,14 +23,18 @@ export interface EvalConfigState {
     errors: string[];
     hasMinimumFields: boolean;
   };
-
->>>>>>> 1dc3ab500 (fix(webui): improve edit and re-run functionality with better data handling and UX)
   /** Replace the entire config */
   setConfig: (config: Partial<UnifiedConfig>) => void;
+  /** Set config from results with async transformation */
+  setConfigFromResults: (resultsConfig: Partial<UnifiedConfig>) => Promise<void>;
   /** Merge updates into the existing config */
   updateConfig: (updates: Partial<UnifiedConfig>) => void;
   /** Reset config to defaults */
   reset: () => void;
+  /** Restore original results config */
+  restoreOriginal: () => void;
+  /** Validate current config */
+  validateCurrentConfig: () => void;
   /** Get the test suite in the expected format */
   getTestSuite: () => EvaluateTestSuiteWithEvaluateOptions;
 }
@@ -57,25 +56,27 @@ export const useStore = create<EvalConfigState>()(
   persist(
     (set, get) => ({
       config: { ...DEFAULT_CONFIG },
+      configSource: 'fresh' as const,
+      originalResultsConfig: null,
+      isLoading: false,
+      validationStatus: {
+        isValid: true,
+        errors: [],
+        hasMinimumFields: false,
+      },
 
-<<<<<<< HEAD
-      setConfig: (config) => set({ config }),
-=======
       setConfig: (config) =>
         set({
           config,
           configSource: 'user-edited',
         }),
->>>>>>> 1dc3ab500 (fix(webui): improve edit and re-run functionality with better data handling and UX)
 
       updateConfig: (updates) =>
         set((state) => ({
           config: { ...state.config, ...updates },
+          configSource: state.configSource === 'fresh' ? 'user-edited' : state.configSource,
         })),
 
-<<<<<<< HEAD
-      reset: () => set({ config: { ...DEFAULT_CONFIG } }),
-=======
       setConfigFromResults: async (resultsConfig) => {
         set({ isLoading: true });
 
@@ -148,7 +149,6 @@ export const useStore = create<EvalConfigState>()(
           },
         });
       },
->>>>>>> 1dc3ab500 (fix(webui): improve edit and re-run functionality with better data handling and UX)
 
       getTestSuite: () => {
         const { config } = get();

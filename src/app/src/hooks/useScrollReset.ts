@@ -1,86 +1,49 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
-/**
- * Hook to automatically reset scroll position when navigating to specific routes
- * This prevents layout issues when moving between different page structures
- */
-export function useScrollReset(options?: {
-  /**
-   * Routes that should trigger a scroll reset
-   * If not provided, resets on all route changes
-   */
+interface UseScrollResetOptions {
+  /** Routes that should trigger scroll reset */
   resetOnRoutes?: string[];
-
-  /**
-   * Whether to reset scroll position immediately or with a slight delay
-   * Delay can help with complex layouts that need time to render
-   */
+  /** Whether to use a delay before scrolling */
   useDelay?: boolean;
-
-  /**
-   * Custom delay in milliseconds (default: 100ms)
-   */
+  /** Delay in milliseconds (default: 100) */
   delayMs?: number;
-}) {
+}
+
+/**
+ * Custom hook to reset scroll position on route changes
+ */
+export function useScrollReset(options: UseScrollResetOptions = {}) {
   const location = useLocation();
-  const { resetOnRoutes, useDelay = true, delayMs = 100 } = options || {};
+  const { resetOnRoutes, useDelay = false, delayMs = 100 } = options;
 
   useEffect(() => {
-    // Check if we should reset scroll for this route
-    const shouldReset = !resetOnRoutes || resetOnRoutes.includes(location.pathname);
-
-    if (!shouldReset) {
+    // If resetOnRoutes is specified, only reset on those routes
+    if (resetOnRoutes && !resetOnRoutes.includes(location.pathname)) {
       return;
     }
 
-    const resetScroll = () => {
-      // Reset main window scroll
-      window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-
-      // Reset any other scroll containers that might be present
-      const scrollContainers = document.querySelectorAll('[data-scroll-container]');
-      scrollContainers.forEach((container) => {
-        if (container.scrollTo) {
-          container.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-        }
-      });
-
-      // Reset results table container specifically if it exists
-      const resultsTableContainer = document.getElementById('results-table-container');
-      if (resultsTableContainer) {
-        resultsTableContainer.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-      }
+    const scrollToTop = () => {
+      window.scrollTo(0, 0);
     };
 
     if (useDelay) {
-      // Use a small delay to allow the new page to render before resetting scroll
-      const timeoutId = setTimeout(resetScroll, delayMs);
+      // Use a small delay to ensure DOM is updated
+      const timeoutId = setTimeout(scrollToTop, delayMs);
       return () => clearTimeout(timeoutId);
     } else {
-      resetScroll();
+      scrollToTop();
     }
   }, [location.pathname, resetOnRoutes, useDelay, delayMs]);
 }
 
 /**
- * Hook specifically for edit and re-run navigation
- * Resets scroll when navigating from results to setup page
+ * Pre-configured hook for edit-and-rerun scroll reset
  */
 export function useEditAndRerunScrollReset() {
   return useScrollReset({
     resetOnRoutes: ['/setup'],
     useDelay: true,
-    delayMs: 150, // Slightly longer delay for setup page complexity
+    delayMs: 150,
   });
-}
-
-/**
- * Utility function to mark scroll containers for automatic reset
- * Add data-scroll-container attribute to containers that should be reset
- */
-export function markAsScrollContainer(element: HTMLElement | null) {
-  if (element) {
-    element.setAttribute('data-scroll-container', 'true');
-  }
 }

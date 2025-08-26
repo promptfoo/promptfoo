@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
 
+import { useEditAndRerunScrollReset } from '@app/hooks/useScrollReset';
 import { useStore } from '@app/stores/evalConfig';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import LinearProgress from '@mui/material/LinearProgress';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { ErrorBoundary } from 'react-error-boundary';
@@ -39,10 +44,8 @@ function ErrorFallback({
 
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  useEditAndRerunScrollReset();
 
-<<<<<<< HEAD
-  const { config, updateConfig, reset } = useStore();
-=======
   const {
     config,
     updateConfig,
@@ -52,9 +55,7 @@ const EvaluateTestSuiteCreator: React.FC = () => {
     isLoading,
     validationStatus,
     restoreOriginal,
-    validateCurrentConfig,
   } = useStore();
->>>>>>> 1dc3ab500 (fix(webui): improve edit and re-run functionality with better data handling and UX)
   const { providers = [], prompts = [] } = config;
 
   // Ensure providers is always an array of ProviderOptions
@@ -117,10 +118,6 @@ const EvaluateTestSuiteCreator: React.FC = () => {
 
   return (
     <Container maxWidth="lg" sx={{ marginTop: '2rem' }}>
-<<<<<<< HEAD
-      <Stack direction="row" spacing={2} justifyContent="space-between">
-        <Typography variant="h4">Set up an evaluation</Typography>
-=======
       {/* Loading State */}
       {isLoading && (
         <Box sx={{ width: '100%', mb: 2 }}>
@@ -189,7 +186,6 @@ const EvaluateTestSuiteCreator: React.FC = () => {
             </Box>
           )}
         </Box>
->>>>>>> 1dc3ab500 (fix(webui): improve edit and re-run functionality with better data handling and UX)
         <Stack direction="row" spacing={2}>
           <RunTestSuiteButton />
           <ConfigureEnvButton />

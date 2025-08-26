@@ -1,178 +1,191 @@
-import { UnifiedConfigSchema } from '../../../types';
 import type { UnifiedConfig } from '../../../types';
 
 /**
- * Transforms a results config (from table store) into a setup config (for eval config store)
- * Ensures all required fields are properly mapped and validated
+ * Validation error interface
+ */
+interface ValidationError {
+  field: string;
+  message: string;
+}
+
+/**
+ * Validation result interface
+ */
+interface ValidationResult {
+  isValid: boolean;
+  errors: ValidationError[];
+}
+
+/**
+ * Safely transforms a results config to a setup config, handling potential data loss.
+ * This ensures that the edit-and-rerun functionality maintains data integrity.
  */
 export function transformResultsConfigToSetupConfig(
   resultsConfig: Partial<UnifiedConfig>,
 ): Partial<UnifiedConfig> {
   // Create a clean copy of the config
   const setupConfig: Partial<UnifiedConfig> = {
-    // Core required fields
     description: resultsConfig.description || '',
-
-    // Providers - ensure it's an array of proper provider objects
     providers: Array.isArray(resultsConfig.providers)
       ? resultsConfig.providers.filter((provider) => provider !== null && provider !== undefined)
       : [],
-
-    // Prompts - handle various prompt formats
     prompts: Array.isArray(resultsConfig.prompts)
       ? resultsConfig.prompts.filter((prompt) => prompt !== null && prompt !== undefined)
       : [],
-
-    // Tests/testCases - ensure proper format
     tests: Array.isArray(resultsConfig.tests)
       ? resultsConfig.tests.filter((test) => test !== null && test !== undefined)
       : [],
-
-    // Optional fields with defaults
     defaultTest: resultsConfig.defaultTest || {},
-    derivedMetrics: resultsConfig.derivedMetrics || [],
+    derivedMetrics: Array.isArray(resultsConfig.derivedMetrics)
+      ? resultsConfig.derivedMetrics.filter((metric) => metric !== null && metric !== undefined)
+      : [],
     env: resultsConfig.env || {},
     evaluateOptions: resultsConfig.evaluateOptions || {},
-    scenarios: resultsConfig.scenarios || [],
-    extensions: resultsConfig.extensions || [],
-
-    // Preserve additional metadata
-    tags: resultsConfig.tags,
-    sharing: resultsConfig.sharing,
-    redteam: resultsConfig.redteam,
-    metadata: resultsConfig.metadata,
+    scenarios: Array.isArray(resultsConfig.scenarios)
+      ? resultsConfig.scenarios.filter((scenario) => scenario !== null && scenario !== undefined)
+      : [],
+    extensions: Array.isArray(resultsConfig.extensions)
+      ? resultsConfig.extensions.filter(
+          (extension) => extension !== null && extension !== undefined,
+        )
+      : [],
   };
-
-  // Remove undefined fields to keep the config clean
-  Object.keys(setupConfig).forEach((key) => {
-    if (setupConfig[key as keyof typeof setupConfig] === undefined) {
-      delete setupConfig[key as keyof typeof setupConfig];
-    }
-  });
 
   return setupConfig;
 }
 
 /**
- * Validates a config object against the UnifiedConfig schema
- * Returns validation result with success flag and any errors
+ * Validates a config for completeness and correctness
  */
-export function validateConfigCompleteness(config: Partial<UnifiedConfig>) {
-  const validation = UnifiedConfigSchema.safeParse(config);
+export function validateConfigCompleteness(config: Partial<UnifiedConfig>): ValidationResult {
+  const errors: ValidationError[] = [];
+
+  // Check for required fields
+  if (!config.providers || !Array.isArray(config.providers) || config.providers.length === 0) {
+    errors.push({
+      field: 'providers',
+      message: 'At least one provider must be configured',
+    });
+  }
+
+  if (!config.prompts || !Array.isArray(config.prompts) || config.prompts.length === 0) {
+    errors.push({
+      field: 'prompts',
+      message: 'At least one prompt must be configured',
+    });
+  }
+
+  // Validate provider structure
+  if (config.providers && Array.isArray(config.providers)) {
+    config.providers.forEach((provider, index) => {
+      if (typeof provider === 'object' && provider !== null) {
+        // Basic validation for provider objects
+        if (!('id' in provider) && !('name' in provider)) {
+          errors.push({
+            field: `providers[${index}]`,
+            message: 'Provider must have either an id or name',
+          });
+        }
+      } else if (typeof provider === 'string') {
+        // String providers are valid
+      } else {
+        errors.push({
+          field: `providers[${index}]`,
+          message: 'Provider must be a string or object',
+        });
+      }
+    });
+  }
+
+  // Validate prompts structure
+  if (config.prompts && Array.isArray(config.prompts)) {
+    config.prompts.forEach((prompt, index) => {
+      if (typeof prompt === 'string') {
+        if (prompt.trim().length === 0) {
+          errors.push({
+            field: `prompts[${index}]`,
+            message: 'Prompt cannot be empty',
+          });
+        }
+      } else if (typeof prompt === 'object' && prompt !== null) {
+        // Object prompts need validation
+        if (!('raw' in prompt) && !('content' in prompt)) {
+          errors.push({
+            field: `prompts[${index}]`,
+            message: 'Prompt object must have either raw or content field',
+          });
+        }
+      } else {
+        errors.push({
+          field: `prompts[${index}]`,
+          message: 'Prompt must be a string or object',
+        });
+      }
+    });
+  }
 
   return {
-    isValid: validation.success,
-    errors: validation.success ? [] : validation.error.errors,
-    data: validation.success ? validation.data : null,
+    isValid: errors.length === 0,
+    errors,
   };
 }
 
 /**
- * Merges user changes from the setup config back with the original results config
- * Preserves important metadata while allowing user modifications
- */
-export function mergeConfigChanges(
-  originalConfig: Partial<UnifiedConfig>,
-  userConfig: Partial<UnifiedConfig>,
-): Partial<UnifiedConfig> {
-  // Start with the user's changes as the base
-  const merged = { ...userConfig };
-
-  // Preserve important metadata from the original that users shouldn't lose
-  if (originalConfig.tags && !merged.tags) {
-    merged.tags = originalConfig.tags;
-  }
-
-  if (originalConfig.metadata && !merged.metadata) {
-    merged.metadata = originalConfig.metadata;
-  }
-
-  // Preserve evaluation options if user didn't modify them
-  if (originalConfig.evaluateOptions && !merged.evaluateOptions) {
-    merged.evaluateOptions = originalConfig.evaluateOptions;
-  }
-
-  return merged;
-}
-
-/**
- * Creates a minimal valid config for cases where the results config is incomplete
- */
-export function createMinimalValidConfig(
-  baseConfig?: Partial<UnifiedConfig>,
-): Partial<UnifiedConfig> {
-  return {
-    description: baseConfig?.description || 'Evaluation Configuration',
-    providers: baseConfig?.providers || [],
-    prompts: baseConfig?.prompts || [],
-    tests: baseConfig?.tests || [],
-    defaultTest: baseConfig?.defaultTest || {},
-    derivedMetrics: baseConfig?.derivedMetrics || [],
-    env: baseConfig?.env || {},
-    evaluateOptions: baseConfig?.evaluateOptions || {},
-    scenarios: baseConfig?.scenarios || [],
-    extensions: baseConfig?.extensions || [],
-    ...baseConfig,
-  };
-}
-
-/**
- * Checks if a config has the minimum required fields to be useful in the setup page
+ * Checks if a config has the minimum required fields for a valid evaluation
  */
 export function hasMinimumRequiredFields(config: Partial<UnifiedConfig>): boolean {
-  return Boolean(
-    config &&
-      ((Array.isArray(config.providers) && config.providers.length > 0) ||
-        (Array.isArray(config.prompts) && config.prompts.length > 0)),
+  return (
+    Boolean(config.providers) &&
+    Array.isArray(config.providers) &&
+    config.providers.length > 0 &&
+    Boolean(config.prompts) &&
+    Array.isArray(config.prompts) &&
+    config.prompts.length > 0
   );
 }
 
 /**
- * Extracts the configuration differences between two configs
- * Useful for showing users what changed during edit and re-run
+ * Creates a minimal valid config from a potentially incomplete one
  */
-export function getConfigDifferences(
-  originalConfig: Partial<UnifiedConfig>,
-  newConfig: Partial<UnifiedConfig>,
-): {
-  added: string[];
-  modified: string[];
-  removed: string[];
-} {
-  const differences = {
-    added: [] as string[],
-    modified: [] as string[],
-    removed: [] as string[],
+export function createMinimalValidConfig(
+  baseConfig: Partial<UnifiedConfig>,
+): Partial<UnifiedConfig> {
+  const minimal: Partial<UnifiedConfig> = {
+    description: baseConfig.description || 'Imported configuration',
+    providers: [],
+    prompts: [],
+    tests: baseConfig.tests || [],
+    defaultTest: baseConfig.defaultTest || {},
+    derivedMetrics: baseConfig.derivedMetrics || [],
+    env: baseConfig.env || {},
+    evaluateOptions: baseConfig.evaluateOptions || {},
+    scenarios: baseConfig.scenarios || [],
+    extensions: baseConfig.extensions || [],
   };
 
-  const originalKeys = new Set(Object.keys(originalConfig));
-  const newKeys = new Set(Object.keys(newConfig));
-
-  // Find added keys
-  for (const key of newKeys) {
-    if (!originalKeys.has(key)) {
-      differences.added.push(key);
-    }
+  // Try to preserve valid providers
+  if (baseConfig.providers && Array.isArray(baseConfig.providers)) {
+    minimal.providers = baseConfig.providers.filter(
+      (provider) => provider !== null && provider !== undefined,
+    );
   }
 
-  // Find removed keys
-  for (const key of originalKeys) {
-    if (!newKeys.has(key)) {
-      differences.removed.push(key);
-    }
+  // Try to preserve valid prompts
+  if (baseConfig.prompts && Array.isArray(baseConfig.prompts)) {
+    minimal.prompts = baseConfig.prompts.filter(
+      (prompt) => prompt !== null && prompt !== undefined,
+    );
   }
 
-  // Find modified keys
-  for (const key of originalKeys) {
-    if (newKeys.has(key)) {
-      const originalValue = originalConfig[key as keyof UnifiedConfig];
-      const newValue = newConfig[key as keyof UnifiedConfig];
-
-      if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
-        differences.modified.push(key);
-      }
-    }
+  // If no valid providers, add a placeholder
+  if (minimal.providers && minimal.providers.length === 0) {
+    minimal.providers = ['openai:gpt-3.5-turbo'];
   }
 
-  return differences;
+  // If no valid prompts, add a placeholder
+  if (minimal.prompts && minimal.prompts.length === 0) {
+    minimal.prompts = ['Please respond to: {{input}}'];
+  }
+
+  return minimal;
 }
