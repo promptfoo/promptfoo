@@ -20,6 +20,14 @@ pagination_next: configuration/prompts
 
 Configure how promptfoo evaluates your LLM applications.
 
+:::tip Detailed Documentation
+For comprehensive guides, see the dedicated pages:
+
+- **[Prompts](/docs/configuration/prompts)** - Configure what you send to LLMs
+- **[Test Cases](/docs/configuration/test-cases)** - Set up evaluation scenarios
+- **[Output Formats](/docs/configuration/outputs)** - Save and analyze results
+  :::
+
 ## Quick Start
 
 ```yaml title="promptfooconfig.yaml"
@@ -182,15 +190,15 @@ outputPath: evaluations/customer_service_results.html
 
 | Format               | Prompts | Tests | Use Case                            |
 | -------------------- | ------- | ----- | ----------------------------------- |
-| `.txt`               | ✅       | ❌     | Simple text prompts                 |
-| `.json`              | ✅       | ✅     | Chat conversations, structured data |
-| `.yaml`              | ✅       | ✅     | Complex configurations              |
-| `.csv`               | ✅       | ✅     | Bulk data, multiple variants        |
-| `.js`/`.ts`          | ✅       | ✅     | Dynamic generation with logic       |
-| `.py`                | ✅       | ✅     | Python-based generation             |
-| `.md`                | ✅       | ❌     | Markdown-formatted prompts          |
-| `.j2`                | ✅       | ❌     | Jinja2 templates                    |
-| HuggingFace datasets | ❌       | ✅     | Import from existing datasets       |
+| `.txt`               | ✅      | ❌    | Simple text prompts                 |
+| `.json`              | ✅      | ✅    | Chat conversations, structured data |
+| `.yaml`              | ✅      | ✅    | Complex configurations              |
+| `.csv`               | ✅      | ✅    | Bulk data, multiple variants        |
+| `.js`/`.ts`          | ✅      | ✅    | Dynamic generation with logic       |
+| `.py`                | ✅      | ✅    | Python-based generation             |
+| `.md`                | ✅      | ❌    | Markdown-formatted prompts          |
+| `.j2`                | ✅      | ❌    | Jinja2 templates                    |
+| HuggingFace datasets | ❌      | ✅    | Import from existing datasets       |
 
 ### Variable Syntax
 
