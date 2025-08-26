@@ -18,27 +18,6 @@ pagination_next: configuration/prompts
 
 # Prompts, tests, and outputs
 
-<head>
-  <meta name="robots" content="noindex, nofollow" />
-</head>
-
-import DocCardList from '@theme/DocCardList';
-import Admonition from '@theme/Admonition';
-
-<Admonition type="info" title="Legacy Page Notice">
-  <p>
-    This page has been reorganized for better clarity. The content has been split into three dedicated sections:
-  </p>
-  <ul>
-    <li><strong><a href="/docs/configuration/prompts">Prompts</a></strong> - Define what you send to your LLMs</li>
-    <li><strong><a href="/docs/configuration/test-cases">Test Cases</a></strong> - Configure evaluation scenarios</li>
-    <li><strong><a href="/docs/configuration/outputs">Output Formats</a></strong> - Save and analyze results</li>
-  </ul>
-  <p>
-    This overview page is maintained for users with existing bookmarks. Please update your bookmarks to the new pages above.
-  </p>
-</Admonition>
-
 Configure how promptfoo evaluates your LLM applications.
 
 ## Quick Start
@@ -61,27 +40,6 @@ tests:
 ```
 
 ## Core Concepts
-
-<DocCardList items={[
-  {
-    type: 'link',
-    label: '📝 Prompts',
-    href: '/docs/configuration/prompts',
-    description: 'Define what you send to your LLMs - from simple strings to complex conversations.'
-  },
-  {
-    type: 'link', 
-    label: '🧪 Test Cases',
-    href: '/docs/configuration/test-cases',
-    description: 'Configure evaluation scenarios with variables and assertions.'
-  },
-  {
-    type: 'link',
-    label: '📊 Output Formats', 
-    href: '/docs/configuration/outputs',
-    description: 'Save and analyze your evaluation results.'
-  }
-]} />
 
 ### 📝 [Prompts](/docs/configuration/prompts)
 
