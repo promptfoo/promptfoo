@@ -526,6 +526,36 @@ providers:
         }
 ```
 
+### Interaction with Test Transforms
+
+The `transformResponse` output becomes the input for test-level transforms. Understanding this pipeline is important for complex evaluations:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      # Step 1: Provider transform normalizes API response
+      transformResponse: 'json.data'  # Extract data field
+
+tests:
+  - vars:
+      query: "What is the weather?"
+    options:
+      # Step 2a: Test transform for assertions (receives provider transform output)
+      transform: 'output.answer'
+    assert:
+      - type: contains
+        value: "sunny"
+      
+      # Step 2b: Context transform for RAG assertions (also receives provider transform output)
+      # Runs in parallel with test transform, not sequentially
+      - type: context-faithfulness
+        contextTransform: 'output.sources.join(" ")'
+```
+
+**Key point:** Both `options.transform` and `contextTransform` receive the output from `transformResponse` directly, running in parallel. This ensures context extraction works reliably even when the test transform heavily modifies the output.
+
 ## Token Estimation
 
 By default, the HTTP provider does not provide token usage statistics since it's designed for general HTTP APIs that may not return token information. However, you can enable optional token estimation to get approximate token counts for cost tracking and analysis. Token estimation is automatically enabled when running redteam scans so you can track approximate costs without additional configuration.

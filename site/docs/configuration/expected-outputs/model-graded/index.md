@@ -529,7 +529,11 @@ tests:
         threshold: 0.85
 ```
 
-**Processing order:** API call → `transformResponse` → `transform` → `contextTransform` → context assertion
+**Processing order:** API call → `transformResponse` → (`transform` and `contextTransform` in parallel) → assertion
+
+:::note
+Both `transform` and `contextTransform` receive the output from `transformResponse` directly. This parallel execution ensures that `contextTransform` can access the original provider response structure, even if `transform` modifies it for assertion purposes.
+:::
 
 ## Other assertion types
 
