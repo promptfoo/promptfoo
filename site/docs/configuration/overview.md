@@ -426,11 +426,13 @@ Vars can also be imported from globbed filepaths. They are automatically expande
 
 ## Using nunjucks templates
 
-Use Nunjucks templates to exert additional control over your prompt templates, including loops, conditionals, and more.
+Use [Nunjucks](https://mozilla.github.io/nunjucks/) templates to exert additional control over your prompt templates, including loops, conditionals, and more.
 
 ### Manipulating objects
 
-In the above examples, `vars` values are strings. But `vars` can be any JSON or YAML entity, including nested objects. You can manipulate these objects in the prompt, which are [nunjucks](https://mozilla.github.io/nunjucks/) templates:
+In the above examples, `vars` values are strings. But `vars` can be any JSON or YAML entity, including nested objects. Manipulating these objects allows you to create more sophisticated test scenarios and loop through specific interests.
+
+You can manipulate the objects in the prompt, which are [nunjucks](https://mozilla.github.io/nunjucks/) templates:
 
 promptfooconfig.yaml:
 
