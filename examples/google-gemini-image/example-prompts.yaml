@@ -1,0 +1,80 @@
+# Example prompts showcasing different capabilities of Gemini 2.5 Flash Image
+
+# Basic image generation prompts
+basic:
+  - "Generate a realistic photo of a golden retriever playing in a sunny park"
+  - "Create an image of a modern kitchen with marble countertops and stainless steel appliances"
+  - "Generate a beautiful landscape showing a mountain lake at sunrise"
+  - "Create an image of a cozy bookstore with warm lighting and comfortable reading nooks"
+
+# Artistic style prompts
+artistic_styles:
+  - "Generate a watercolor painting of a cherry blossom tree in full bloom"
+  - "Create a digital art piece showing a cyberpunk city with neon lights"
+  - "Generate an oil painting style image of a still life with fruits and flowers"
+  - "Create a minimalist illustration of a geometric mountain landscape"
+  - "Generate a vintage poster style image advertising a jazz club"
+
+# Character consistency prompts
+character_consistency:
+  - "Generate an image of Maya, a young scientist with curly brown hair, wearing a white lab coat, working in a modern laboratory"
+  - "Create an image of Captain Rex, a space explorer with a red uniform and silver helmet, standing on an alien planet"
+  - "Generate an image of Whiskers, a orange tabby cat with white paws, sitting by a window with sunlight streaming in"
+  - "Create an image of Professor Oak, an elderly man with a grey beard and tweed jacket, teaching in a classroom"
+
+# Creative transformation prompts
+transformations:
+  - "Show the transformation of a caterpillar into a butterfly in a magical, ethereal style"
+  - "Create an image showing the same tree through all four seasons in a split composition"
+  - "Generate an image that morphs from day to night, showing the same cityscape at different times"
+  - "Create an artistic representation of music turning into visual colors and shapes"
+  - "Show the transformation from sketch to finished artwork"
+
+# Complex scene prompts
+complex_scenes:
+  - "Generate an image of a bustling medieval marketplace with merchants, customers, and various goods displayed"
+  - "Create a scene showing a family dinner during the holidays with warm lighting and festive decorations"
+  - "Generate an image of a underwater coral reef teeming with colorful fish and marine life"
+  - "Create a fantasy scene with a dragon flying over a castle on a mountaintop"
+  - "Generate an image of a space station interior with astronauts floating in zero gravity"
+
+# Abstract and conceptual prompts
+abstract_concepts:
+  - "Create an abstract representation of the concept of time, using flowing forms and gradients"
+  - "Generate an image that visualizes the feeling of nostalgia using warm colors and soft edges"
+  - "Create an artistic interpretation of the sound of rain using visual elements"
+  - "Generate an image that represents the connection between technology and nature"
+  - "Create a visual metaphor for growth and transformation"
+
+# Mood and atmosphere prompts
+mood_atmosphere:
+  - "Generate a mysterious forest scene with fog, dramatic lighting, and an sense of adventure"
+  - "Create a peaceful zen garden with perfect symmetry and tranquil water features"
+  - "Generate a cozy winter cabin scene with snow falling and warm light from the windows"
+  - "Create an energetic sports scene capturing the excitement of a basketball game"
+  - "Generate a romantic Parisian street at sunset with soft, golden lighting"
+
+# Technical and detailed prompts
+technical_detailed:
+  - |
+    Generate a highly detailed architectural rendering of a sustainable eco-house featuring:
+    - Solar panels on the roof
+    - Large windows with natural lighting
+    - Green walls with climbing plants
+    - Modern minimalist design
+    - Integration with the natural landscape
+  
+  - |
+    Create a detailed cutaway illustration of a steampunk airship showing:
+    - Multiple decks with different functions
+    - Steam engines and mechanical components
+    - Victorian-era interior design elements
+    - Crew members in period clothing
+    - Intricate brass and copper details
+
+  - |
+    Generate a scientific illustration style image of a cross-section through a rainforest showing:
+    - Different layers from forest floor to canopy
+    - Various plant and animal species at each level
+    - Root systems and soil composition
+    - Interaction between different ecosystem components
