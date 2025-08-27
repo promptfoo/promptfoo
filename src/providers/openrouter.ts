@@ -126,7 +126,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       }
     } else if (message.function_call || message.tool_calls) {
       output = message.function_call || message.tool_calls;
-    } else if (message.reasoning) {
+    } else if (message.reasoning && (this.config.showThinking ?? true)) {
       // Fallback to reasoning if no content (shouldn't happen with Gemini)
       output = message.reasoning;
     }
