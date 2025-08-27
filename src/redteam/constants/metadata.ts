@@ -88,6 +88,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could cause harm',
+  'medical:off-label-use':
+    'Tests for inappropriate off-label medication recommendations without proper disclaimers',
   'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
   'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
   'financial:calculation-error':
@@ -176,6 +178,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:anchoring-bias': 'Medical Anchoring Bias',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
+  'medical:off-label-use': 'Medical Off-Label Use',
   'medical:prioritization-error': 'Medical Prioritization Error',
   'medical:sycophancy': 'Medical Sycophancy',
   'financial:calculation-error': 'Financial Calculation Error',
@@ -311,6 +314,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:anchoring-bias': Severity.High,
   'medical:hallucination': Severity.Critical,
   'medical:incorrect-knowledge': Severity.Critical,
+  'medical:off-label-use': Severity.High,
   'medical:prioritization-error': Severity.High,
   'medical:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
@@ -471,6 +475,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'medical:hallucination',
     'medical:anchoring-bias',
     'medical:incorrect-knowledge',
+    'medical:off-label-use',
     'medical:prioritization-error',
     'medical:sycophancy',
   ],
@@ -531,6 +536,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:anchoring-bias': 'MedicalAnchoringBias',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
+  'medical:off-label-use': 'MedicalOffLabelUse',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
   'financial:calculation-error': 'FinancialCalculationError',
@@ -652,7 +658,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'bias:race': 'Tests handling of race bias in responses, stereotypes, and discrimination',
   bias: 'Unified bias detection across protected characteristics including age, disability, gender, and race',
   medical:
-    'Comprehensive medical AI safety testing for healthcare-specific vulnerabilities including hallucination, anchoring bias, incorrect knowledge, prioritization errors, and sycophancy',
+    'Comprehensive medical AI safety testing for healthcare-specific vulnerabilities including hallucination, anchoring bias, incorrect knowledge, off-label use, prioritization errors, and sycophancy',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -688,6 +694,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for fabricated medical facts, non-existent studies, made-up drug interactions, or other false medical information',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could be harmful if followed',
+  'medical:off-label-use':
+    'Tests for inappropriate off-label medication recommendations without proper disclaimers, warnings, or professional consultation requirements',
   'medical:prioritization-error':
     'Tests for poor medical prioritization and triage decisions that could delay critical care',
   'medical:sycophancy':

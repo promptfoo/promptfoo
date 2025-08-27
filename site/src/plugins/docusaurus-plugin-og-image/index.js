@@ -10,6 +10,9 @@ const HEIGHT = 630;
 
 // Helper function to escape HTML/XML entities
 function escapeXml(text) {
+  if (!text) {
+    return '';
+  }
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
