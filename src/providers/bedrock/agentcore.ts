@@ -269,15 +269,16 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
     }
 
     // Build session state according to AWS SDK types
-    const sessionState: any = {
+    // Note: Using partial typing due to AWS SDK type constraints
+    const sessionState: SessionState = {
       sessionAttributes: this.config.sessionState.sessionAttributes,
       promptSessionAttributes: this.config.sessionState.promptSessionAttributes,
       invocationId: this.config.sessionState.invocationId,
-    };
+    } as SessionState;
 
     // Handle returnControlInvocationResults if present
     if (this.config.sessionState.returnControlInvocationResults) {
-      sessionState.returnControlInvocationResults =
+      (sessionState as any).returnControlInvocationResults =
         this.config.sessionState.returnControlInvocationResults;
     }
 
@@ -293,23 +294,24 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
     }
 
     // Build inference config according to AWS SDK types
-    const inferenceConfig: any = {};
+    // Note: Using partial typing due to AWS SDK type constraints
+    const inferenceConfig = {} as InferenceConfig;
 
     if (this.config.inferenceConfig.maximumLength !== undefined) {
-      inferenceConfig.maximumLength = this.config.inferenceConfig.maximumLength;
+      (inferenceConfig as any).maximumLength = this.config.inferenceConfig.maximumLength;
     }
     if (this.config.inferenceConfig.stopSequences !== undefined) {
-      inferenceConfig.stopSequences = this.config.inferenceConfig.stopSequences;
+      (inferenceConfig as any).stopSequences = this.config.inferenceConfig.stopSequences;
     }
     // Temperature, topP, topK may be model-specific
     if (this.config.inferenceConfig.temperature !== undefined) {
-      inferenceConfig.temperature = this.config.inferenceConfig.temperature;
+      (inferenceConfig as any).temperature = this.config.inferenceConfig.temperature;
     }
     if (this.config.inferenceConfig.topP !== undefined) {
-      inferenceConfig.topP = this.config.inferenceConfig.topP;
+      (inferenceConfig as any).topP = this.config.inferenceConfig.topP;
     }
     if (this.config.inferenceConfig.topK !== undefined) {
-      inferenceConfig.topK = this.config.inferenceConfig.topK;
+      (inferenceConfig as any).topK = this.config.inferenceConfig.topK;
     }
 
     return inferenceConfig;
@@ -375,7 +377,7 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
       this.config.sessionId ||
       (typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? `session-${crypto.randomUUID()}`
-        : `session-${Date.now()}-${Math.random().toString(36).substring(7)}`);
+        : `session-${Date.now()}-${process.hrtime.bigint().toString(36)}`);
 
     // Build the complete input with all supported features
     const input: InvokeAgentCommandInput = {
@@ -391,8 +393,9 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
       sessionState: this.buildSessionState(),
       memoryId: this.config.memoryId,
 
-      // Advanced configurations - use 'as any' to bypass strict typing for preview features
+      // Advanced configurations - using type assertions for preview features
       // The AWS SDK types may not be fully up to date with all AgentCore features
+      // These configurations are validated by AWS at runtime
       ...(this.config.inferenceConfig && {
         inferenceConfig: this.buildInferenceConfig(),
       }),
@@ -428,11 +431,18 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
       const cached = await cache.get(cacheKey);
       if (cached) {
         logger.debug('Returning cached AgentCore response');
-        const parsed = JSON.parse(cached as string);
-        return {
-          ...parsed,
-          cached: true,
-        };
+        try {
+          const parsed = JSON.parse(cached as string);
+          // Validate the parsed cache data has expected structure
+          if (parsed && typeof parsed === 'object') {
+            return {
+              ...parsed,
+              cached: true,
+            };
+          }
+        } catch (error) {
+          logger.warn('Failed to parse cached AgentCore response, ignoring cache');
+        }
       }
     }
 
