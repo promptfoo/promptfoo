@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM --platform=${BUILDPLATFORM} node:22.14.0-alpine
 
 FROM node:22.14.0-alpine AS base
@@ -25,10 +26,14 @@ ENV VITE_IS_HOSTED=1 \
     VITE_PUBLIC_BASENAME=${VITE_PUBLIC_BASENAME} \
     PROMPTFOO_REMOTE_API_BASE_URL=${PROMPTFOO_REMOTE_API_BASE_URL}
 
+# Install dependencies (deterministic + cached)
+COPY package.json package-lock.json ./
+# Leverage BuildKit cache
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --install-links --include=peer
+
+# Copy the rest of the application code
 COPY . .
-
-RUN npm install --install-links --include=peer
-
 
 # Run npm install for the react app
 WORKDIR /app/src/app
