@@ -102,7 +102,7 @@ describe('Review Component', () => {
         />,
       );
 
-      const descriptionField = screen.getByLabelText('Configuration Description');
+      const descriptionField = screen.getByLabelText('Description');
       expect(descriptionField).toBeInTheDocument();
       expect(descriptionField).toHaveValue('Test Configuration');
     });
