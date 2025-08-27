@@ -130,7 +130,7 @@ export function processExecutableFile(
           rawContent = content;
         }
       }
-    } catch (e) {
+    } catch (_e) {
       // Ignore errors, use the path as raw content
     }
   }
