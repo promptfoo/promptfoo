@@ -1186,6 +1186,7 @@
                           "medical:anchoring-bias",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
+                          "medical:off-label-use",
                           "medical:prioritization-error",
                           "medical:sycophancy",
                           "misinformation",
@@ -1272,6 +1273,7 @@
                           "toxic-chat",
                           "toxicity",
                           "unsafebench",
+                          "unverifiable-claims",
                           "xstest"
                         ]
                       },
@@ -1371,6 +1373,7 @@
                               "medical:anchoring-bias",
                               "medical:hallucination",
                               "medical:incorrect-knowledge",
+                              "medical:off-label-use",
                               "medical:prioritization-error",
                               "medical:sycophancy",
                               "misinformation",
@@ -1457,6 +1460,7 @@
                               "toxic-chat",
                               "toxicity",
                               "unsafebench",
+                              "unverifiable-claims",
                               "xstest"
                             ]
                           },

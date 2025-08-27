@@ -449,15 +449,11 @@ export default function Review({
   }, [pollInterval]);
 
   return (
-    <PageWrapper
-      title="Review & Run"
-      description="Review your configuration and run the red-team evaluation to identify potential vulnerabilities."
-      onBack={onBack}
-    >
+    <PageWrapper title="Review & Run" onBack={onBack}>
       <Box>
         <TextField
           fullWidth
-          label="Configuration Description"
+          label="Description"
           placeholder="My Red Team Configuration"
           value={config.description}
           onChange={handleDescriptionChange}
@@ -502,7 +498,7 @@ export default function Review({
                 <>
                   <Alert severity="warning" sx={{ mt: 2 }}>
                     You haven't selected any plugins. Plugins are the vulnerabilities that the red
-                    team will test for. Go to the Plugins section and add a plugin.{' '}
+                    team will search for.
                   </Alert>
                   <Button onClick={navigateToPlugins} sx={{ mt: 2 }} variant="contained">
                     Add a plugin
@@ -543,9 +539,8 @@ export default function Review({
                 (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
                 <>
                   <Alert severity="warning" sx={{ mt: 2 }}>
-                    The basic strategy is great for getting started however to get full coverage we
-                    recommend adding more strategies. Go to the Strategies section and add a
-                    strategy.{' '}
+                    The basic strategy is great for an end-to-end setup test, but don't expect any
+                    findings. Once you've verified that the setup is working, add another strategy.
                   </Alert>
                   <Button onClick={navigateToStrategies} sx={{ mt: 2 }} variant="contained">
                     Add more strategies

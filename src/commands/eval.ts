@@ -6,6 +6,7 @@ import fs from 'fs';
 import * as path from 'path';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
+
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
@@ -27,11 +28,9 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types';
-import { OutputFileExtension, TestSuiteSchema } from '../types';
-import { CommandLineOptionsSchema } from '../types';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
 import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx } from '../util';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -178,12 +177,14 @@ export async function doEval(
       Array.isArray(config.providers) &&
       config.providers.length > 0 &&
       typeof config.providers[0] === 'object' &&
-      config.providers[0].id === 'http' &&
-      config.providers[0].config.url.includes('promptfoo.app')
+      config.providers[0].id === 'http'
     ) {
-      telemetry.record('feature_used', {
-        feature: 'redteam_run_with_example',
-      });
+      const maybeUrl: unknown = (config.providers[0] as any)?.config?.url;
+      if (typeof maybeUrl === 'string' && maybeUrl.includes('promptfoo.app')) {
+        telemetry.record('feature_used', {
+          feature: 'redteam_run_with_example',
+        });
+      }
     }
 
     // Ensure evaluateOptions from the config file are applied

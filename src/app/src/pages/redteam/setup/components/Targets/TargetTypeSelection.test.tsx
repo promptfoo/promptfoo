@@ -209,10 +209,9 @@ describe('TargetTypeSelection', () => {
 
     fireEvent.change(nameInput, { target: { value: '' } });
 
-    // The button should remain enabled because the target still has a valid ID ('http')
-    // The component allows valid selections with either a valid ID or a custom provider with label
+    // The button should be disabled because the target name is now empty
     await waitFor(() => {
-      expect(footerNextButton).toBeEnabled();
+      expect(footerNextButton).toBeDisabled();
     });
   });
 
@@ -242,9 +241,9 @@ describe('TargetTypeSelection', () => {
 
     fireEvent.change(nameInput, { target: { value: '' } });
 
-    // The button should remain enabled because the target still has a valid ID ('http')
+    // The button should be disabled because the target name is now empty
     await waitFor(() => {
-      expect(footerNextButton).toBeEnabled();
+      expect(footerNextButton).toBeDisabled();
     });
   });
 
