@@ -45,10 +45,12 @@ export async function discoverRateLimit(
 
     const rateLimitDetection = detectRateLimitHeaders(lowerHeaders);
     if (rateLimitDetection.detected) {
-      logger.debug(`[RateLimit] Rate limits detected: ${JSON.stringify(rateLimitDetection, null, 2)}`);
+      logger.debug(
+        `[RateLimit] Rate limits detected: ${JSON.stringify(rateLimitDetection, null, 2)}`,
+      );
       return rateLimitDetection;
     }
-    
+
     return { detected: false, detectionMethod: 'headers', confidence: 'high' };
   }
 
@@ -193,7 +195,7 @@ function parseRateLimitHeaders(headers: Record<string, string>, warnings: string
     if (parsedLimit !== null) {
       // Determine time window - default to per-minute if not specified
       const timeWindow = headers.window || headers.reset || 'unknown';
-      
+
       // Parse numeric values first, then fall back to symbolic windows
       const seconds = Number(timeWindow);
       const isNumber = !Number.isNaN(seconds);

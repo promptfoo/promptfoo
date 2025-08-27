@@ -1,5 +1,5 @@
 import { discoverRateLimit } from '../../../src/redteam/extraction/rateLimit';
-import type { ApiProvider, ProviderResponse } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types';
 
 describe('Rate Limit Discovery (Fixed Implementation)', () => {
   afterEach(() => {
