@@ -39,6 +39,61 @@ function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
 }
 
 /**
+ * Sanitizes configuration objects by redacting sensitive fields before logging.
+ * Prevents passwords and other secrets from appearing in debug logs.
+ */
+function sanitizeConfigForLogging(config: any): any {
+  if (!config || typeof config !== 'object') {
+    return config;
+  }
+
+  const sanitized = { ...config };
+
+  // Sanitize signature authentication credentials
+  if (sanitized.signatureAuth) {
+    sanitized.signatureAuth = { ...sanitized.signatureAuth };
+    
+    // Redact sensitive fields
+    if (sanitized.signatureAuth.pfxPassword) {
+      sanitized.signatureAuth.pfxPassword = '[REDACTED]';
+    }
+    if (sanitized.signatureAuth.keystorePassword) {
+      sanitized.signatureAuth.keystorePassword = '[REDACTED]';
+    }
+    if (sanitized.signatureAuth.privateKey) {
+      sanitized.signatureAuth.privateKey = '[REDACTED]';
+    }
+  }
+
+  // Sanitize other potential sensitive fields
+  if (sanitized.password) {
+    sanitized.password = '[REDACTED]';
+  }
+  if (sanitized.apiKey) {
+    sanitized.apiKey = '[REDACTED]';
+  }
+  if (sanitized.token) {
+    sanitized.token = '[REDACTED]';
+  }
+
+  // Sanitize headers that might contain sensitive information
+  if (sanitized.headers) {
+    sanitized.headers = { ...sanitized.headers };
+    for (const [key, value] of Object.entries(sanitized.headers)) {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey.includes('authorization') || 
+          lowerKey.includes('api-key') || 
+          lowerKey.includes('token') ||
+          lowerKey.includes('password')) {
+        sanitized.headers[key] = '[REDACTED]';
+      }
+    }
+  }
+
+  return sanitized;
+}
+
+/**
  * Renders a JSON template string with proper escaping for JSON context.
  *
  * When template substitution would create invalid JSON (due to unescaped newlines,
@@ -1125,7 +1180,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     logger.debug(
-      `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(renderedConfig)}`,
+      `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(sanitizeConfigForLogging(renderedConfig))}`,
     );
 
     const response = await fetchWithCache(
@@ -1231,7 +1286,7 @@ export class HttpProvider implements ApiProvider {
     delete parsedRequest.headers['content-length'];
 
     logger.debug(
-      `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(parsedRequest.headers)}`,
+      `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(sanitizeConfigForLogging({ headers: parsedRequest.headers }).headers)}`,
     );
     const response = await fetchWithCache(
       url,
