@@ -31,7 +31,8 @@ describe('processExecutableFile', () => {
 
   // Cross-platform tests
   it('should process a script with exec: prefix', () => {
-    const scriptPath = process.platform === 'win32' ? 'cmd.exe /c echo "test"' : '/usr/bin/echo "test"';
+    const scriptPath =
+      process.platform === 'win32' ? 'cmd.exe /c echo "test"' : '/usr/bin/echo "test"';
     const prompts = processExecutableFile(scriptPath, {});
 
     expect(prompts).toHaveLength(1);
@@ -48,7 +49,8 @@ describe('processExecutableFile', () => {
   });
 
   it('should handle binary executables', () => {
-    const scriptPath = process.platform === 'win32' ? 'C:\\Windows\\System32\\cmd.exe' : '/usr/bin/ls';
+    const scriptPath =
+      process.platform === 'win32' ? 'C:\\Windows\\System32\\cmd.exe' : '/usr/bin/ls';
     const prompts = processExecutableFile(scriptPath, {});
 
     expect(prompts).toHaveLength(1);
