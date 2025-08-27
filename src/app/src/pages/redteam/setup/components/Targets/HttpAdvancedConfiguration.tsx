@@ -1,4 +1,15 @@
+import 'prismjs/components/prism-http';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/themes/prism.css';
+
 import React from 'react';
+
+import dedent from 'dedent';
+import Prism from 'prismjs';
+import Editor from 'react-simple-code-editor';
 
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -23,20 +34,12 @@ import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
 import { useTheme } from '@mui/material/styles';
+import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import dedent from 'dedent';
 import type { ProviderOptions } from '@promptfoo/types';
-import 'prismjs/components/prism-clike';
 
-// @ts-expect-error: No types available
-import { highlight, languages } from 'prismjs/components/prism-core';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/themes/prism.css';
-
-import Editor from 'react-simple-code-editor';
 import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 
 interface HttpAdvancedConfigurationProps {
@@ -44,6 +47,18 @@ interface HttpAdvancedConfigurationProps {
   updateCustomTarget: (field: string, value: any) => void;
   defaultRequestTransform?: string;
 }
+
+const highlightJS = (code: string): string => {
+  try {
+    const grammar = (Prism as any)?.languages?.javascript;
+    if (!grammar) {
+      return code;
+    }
+    return Prism.highlight(code, grammar, 'javascript');
+  } catch {
+    return code;
+  }
+};
 
 const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
   selectedTarget,
@@ -102,7 +117,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <Editor
                 value={selectedTarget.config.transformRequest || defaultRequestTransform || ''}
                 onValueChange={(code) => updateCustomTarget('transformRequest', code)}
-                highlight={(code) => highlight(code, languages.javascript)}
+                highlight={highlightJS}
                 padding={10}
                 placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API. Format as:
 
@@ -150,7 +165,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <Editor
                 value={selectedTarget.config.transformResponse || ''}
                 onValueChange={(code) => updateCustomTarget('transformResponse', code)}
-                highlight={(code) => highlight(code, languages.javascript)}
+                highlight={highlightJS}
                 padding={10}
                 placeholder={dedent`Optional: Transform the API response before using it. Format as either:
 
@@ -978,7 +993,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               <Editor
                 value={selectedTarget.config.validateStatus || ''}
                 onValueChange={(code) => updateCustomTarget('validateStatus', code)}
-                highlight={(code) => highlight(code, languages.javascript)}
+                highlight={highlightJS}
                 padding={10}
                 placeholder={dedent`Customize HTTP status code validation. Examples:
 
