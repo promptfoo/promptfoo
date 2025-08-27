@@ -4,6 +4,7 @@ import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Box from '@mui/material/Box';
 import { green, orange, red } from '@mui/material/colors';
 import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
 import IconButton from '@mui/material/IconButton';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
@@ -403,7 +404,9 @@ export default function CustomMetricsDialog({
 }) {
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <MetricsTable onClose={onClose} />
+      <DialogContent>
+        <MetricsTable onClose={onClose} />
+      </DialogContent>
     </Dialog>
   );
 }
