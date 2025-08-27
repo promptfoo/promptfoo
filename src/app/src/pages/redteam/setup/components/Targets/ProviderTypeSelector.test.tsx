@@ -1,10 +1,10 @@
 import React from 'react';
 
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ProviderTypeSelector from './ProviderTypeSelector';
-import { useTelemetry } from '@app/hooks/useTelemetry';
 
 import type { ProviderOptions } from '../../types';
 
@@ -268,7 +268,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByPlaceholderText('Search providers...')).toBeVisible();
     expect(screen.getByText('OpenAI')).toBeVisible();
     expect(screen.getByText('Anthropic')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'All Categories' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'All Tags' })).toBeVisible();
   });
 
   it("should call setProvider with the correct Go provider configuration when the 'Go Provider' card is selected", () => {
@@ -550,8 +550,8 @@ describe('ProviderTypeSelector', () => {
     fireEvent.click(agentsCategoryChip);
 
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
-      feature: 'redteam_provider_category_filtered',
-      category: 'agents',
+      feature: 'redteam_provider_tag_filtered',
+      tag: 'agents',
     });
 
     const langchainProviderCard = screen
@@ -565,7 +565,7 @@ describe('ProviderTypeSelector', () => {
       feature: 'redteam_provider_type_selected',
       provider_type: 'langchain',
       provider_label: 'LangChain',
-      provider_category: 'agents',
+      provider_tag: 'agents',
     });
   });
 

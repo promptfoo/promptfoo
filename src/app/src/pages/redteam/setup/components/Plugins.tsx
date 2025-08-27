@@ -898,6 +898,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         e.stopPropagation();
                         handlePluginToggle(plugin);
                       }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
                       color="primary"
                       size="small"
                       aria-label={displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
