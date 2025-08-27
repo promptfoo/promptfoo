@@ -296,6 +296,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       prompt,
       context?.vars,
       config.systemInstruction,
+      { useAssistantRole: config.useAssistantRole },
     );
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
