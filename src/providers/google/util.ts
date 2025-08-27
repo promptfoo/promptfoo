@@ -197,20 +197,37 @@ export function maybeCoerceToGeminiFormat(
     contents.every((item) => typeof item.content === 'string')
   ) {
     // This looks like an OpenAI chat format
-    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
-    coercedContents = contents.map((item) => ({
-      role: (item.role === 'assistant' ? targetRole : item.role) as 'user' | 'model' | undefined,
-      parts: [{ text: item.content }],
-    }));
+    // Map 'assistant' to 'model' for Gemini API compatibility
+    // The useAssistantRole flag is deprecated - we always map to 'model' now
+    coercedContents = contents.map((item) => {
+      let mappedRole: 'user' | 'model' | 'system' | undefined;
+      if (item.role === 'assistant') {
+        // Always map assistant to model (Gemini API only accepts 'user' or 'model')
+        mappedRole = 'model';
+      } else if (item.role === 'user' || item.role === 'model' || item.role === 'system') {
+        mappedRole = item.role as 'user' | 'model' | 'system';
+      } else {
+        mappedRole = undefined;
+      }
+      return {
+        role: mappedRole as 'user' | 'model' | undefined,
+        parts: [{ text: item.content }],
+      };
+    });
     coerced = true;
   } else if (Array.isArray(contents) && contents.every((item) => item.role && item.content)) {
     // This looks like an OpenAI chat format with content that might be an array or object
-    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
     coercedContents = contents.map((item) => {
-      const mappedRole = (item.role === 'assistant' ? targetRole : item.role) as
-        | 'user'
-        | 'model'
-        | undefined;
+      // Always map 'assistant' to 'model' for Gemini API compatibility
+      let mappedRole: 'user' | 'model' | 'system' | undefined;
+      if (item.role === 'assistant') {
+        // Always map assistant to model (Gemini API only accepts 'user' or 'model')
+        mappedRole = 'model';
+      } else if (item.role === 'user' || item.role === 'model' || item.role === 'system') {
+        mappedRole = item.role as 'user' | 'model' | 'system';
+      } else {
+        mappedRole = undefined;
+      }
       if (Array.isArray(item.content)) {
         // Handle array content
         const parts = item.content.map((contentItem: any) => {
@@ -224,19 +241,19 @@ export function maybeCoerceToGeminiFormat(
           }
         });
         return {
-          role: mappedRole,
+          role: mappedRole as 'user' | 'model' | undefined,
           parts,
         };
       } else if (typeof item.content === 'object') {
         // Handle object content
         return {
-          role: mappedRole,
+          role: mappedRole as 'user' | 'model' | undefined,
           parts: [item.content],
         };
       } else {
         // Handle string content
         return {
-          role: mappedRole,
+          role: mappedRole as 'user' | 'model' | undefined,
           parts: [{ text: item.content }],
         };
       }
