@@ -270,7 +270,7 @@ describe('util', () => {
       });
     });
 
-    it('should map assistant role to model even when useAssistantRole is true (Gemini API constraint)', () => {
+    it('should preserve assistant role when useAssistantRole is true', () => {
       const input = [
         { role: 'user', content: 'What is the capital of France?' },
         { role: 'assistant', content: 'The capital of France is Paris.' },
@@ -280,7 +280,7 @@ describe('util', () => {
       expect(result).toEqual({
         contents: [
           { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
-          { role: 'model', parts: [{ text: 'The capital of France is Paris.' }] }, // Always maps to model
+          { role: 'assistant', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant preserved
           { role: 'user', parts: [{ text: 'What is its population?' }] },
         ],
         coerced: true,
@@ -324,17 +324,17 @@ describe('util', () => {
       });
     });
 
-    it('should always map assistant to model regardless of useAssistantRole flag (Gemini API constraint)', () => {
+    it('should respect useAssistantRole flag with array content', () => {
       const input = [
         { role: 'user', content: [{ type: 'text', text: 'Question' }] },
         { role: 'assistant', content: [{ type: 'text', text: 'Answer' }] },
       ];
 
-      // Test with useAssistantRole: true - should still map to model
+      // Test with useAssistantRole: true
       const resultWithAssistant = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
-      expect(resultWithAssistant.contents[1].role).toBe('model');
+      expect(resultWithAssistant.contents[1].role).toBe('assistant');
 
-      // Test with useAssistantRole: false (default) - should also map to model
+      // Test with useAssistantRole: false (default)
       const resultWithModel = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
       expect(resultWithModel.contents[1].role).toBe('model');
     });
