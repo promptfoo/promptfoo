@@ -87,7 +87,13 @@ export function validateConfigCompleteness(config: Partial<UnifiedConfig>): Vali
           });
         }
       } else if (typeof provider === 'string') {
-        // String providers are valid
+        // String providers must contain a colon for format validation
+        if (!provider.includes(':')) {
+          errors.push({
+            field: `providers[${index}]`,
+            message: 'Provider string must contain a colon',
+          });
+        }
       } else {
         errors.push({
           field: `providers[${index}]`,
@@ -108,8 +114,15 @@ export function validateConfigCompleteness(config: Partial<UnifiedConfig>): Vali
           });
         }
       } else if (typeof prompt === 'object' && prompt !== null) {
-        // Object prompts need validation
-        if (!('raw' in prompt) && !('content' in prompt)) {
+        // Object prompts need validation - check for non-empty raw or content
+        const hasRaw =
+          'raw' in prompt && typeof prompt.raw === 'string' && prompt.raw.trim().length > 0;
+        const hasContent =
+          'content' in prompt &&
+          typeof prompt.content === 'string' &&
+          prompt.content.trim().length > 0;
+
+        if (!hasRaw && !hasContent) {
           errors.push({
             field: `prompts[${index}]`,
             message: 'Prompt object must have either raw or content field',
@@ -134,14 +147,41 @@ export function validateConfigCompleteness(config: Partial<UnifiedConfig>): Vali
  * Checks if a config has the minimum required fields for a valid evaluation
  */
 export function hasMinimumRequiredFields(config: Partial<UnifiedConfig>): boolean {
-  return (
+  // Check if providers array exists and has valid entries
+  const hasValidProviders =
     Boolean(config.providers) &&
     Array.isArray(config.providers) &&
     config.providers.length > 0 &&
+    config.providers.some((provider) => {
+      if (typeof provider === 'string') {
+        return provider.trim().length > 0;
+      } else if (typeof provider === 'object' && provider !== null) {
+        return ('id' in provider && provider.id) || ('name' in provider && provider.name);
+      }
+      return false;
+    });
+
+  // Check if prompts array exists and has valid entries
+  const hasValidPrompts =
     Boolean(config.prompts) &&
     Array.isArray(config.prompts) &&
-    config.prompts.length > 0
-  );
+    config.prompts.length > 0 &&
+    config.prompts.some((prompt) => {
+      if (typeof prompt === 'string') {
+        return prompt.trim().length > 0;
+      } else if (typeof prompt === 'object' && prompt !== null) {
+        const hasRaw =
+          'raw' in prompt && typeof prompt.raw === 'string' && prompt.raw.trim().length > 0;
+        const hasContent =
+          'content' in prompt &&
+          typeof prompt.content === 'string' &&
+          prompt.content.trim().length > 0;
+        return hasRaw || hasContent;
+      }
+      return false;
+    });
+
+  return hasValidProviders && hasValidPrompts;
 }
 
 /**
@@ -151,7 +191,8 @@ export function createMinimalValidConfig(
   baseConfig: Partial<UnifiedConfig>,
 ): Partial<UnifiedConfig> {
   const minimal: Partial<UnifiedConfig> = {
-    description: baseConfig.description || 'Imported configuration',
+    description:
+      (baseConfig.description && baseConfig.description.trim()) || 'Imported configuration',
     providers: [],
     prompts: [],
     tests: baseConfig.tests || [],

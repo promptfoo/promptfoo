@@ -72,10 +72,15 @@ export const useStore = create<EvalConfigState>()(
         }),
 
       updateConfig: (updates) =>
-        set((state) => ({
-          config: { ...state.config, ...updates },
-          configSource: state.configSource === 'fresh' ? 'user-edited' : state.configSource,
-        })),
+        set((state) => {
+          // Only change configSource if there are actual updates
+          const hasUpdates = Object.keys(updates).length > 0;
+          return {
+            config: { ...state.config, ...updates },
+            configSource:
+              hasUpdates && state.configSource === 'fresh' ? 'user-edited' : state.configSource,
+          };
+        }),
 
       setConfigFromResults: async (resultsConfig) => {
         set({ isLoading: true });
