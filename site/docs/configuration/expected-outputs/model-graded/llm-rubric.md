@@ -28,7 +28,8 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 
 - **OpenAI API key**: `gpt-4.1-2025-04-14`
 - **Anthropic API key**: `claude-sonnet-4-20250514`
-- **Google credentials**: `gemini-1.5-pro`
+- **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
+- **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
 - **Mistral API key**: `mistral-large-latest`
 - **GitHub token**: `openai/gpt-4.1`
 - **Azure credentials**: Your configured Azure GPT deployment

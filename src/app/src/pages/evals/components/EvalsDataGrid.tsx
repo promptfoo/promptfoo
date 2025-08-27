@@ -250,7 +250,7 @@ export default function EvalsDataGrid({
                 flex: 0.5,
                 type: 'singleSelect',
                 valueOptions: [
-                  { value: true, label: 'Redteam' },
+                  { value: true, label: 'Red Team' },
                   { value: false, label: 'Eval' },
                 ],
                 valueGetter: (value: Eval['isRedteam'], row: Eval) => value === 1,

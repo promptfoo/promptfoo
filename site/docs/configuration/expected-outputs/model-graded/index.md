@@ -470,7 +470,8 @@ providers:
 tests:
   - vars:
       prompt: '{"answer": "Paris is the capital of France", "confidence": 0.95}'
-      context: 'France is a country in Europe. Its capital city is Paris, which has over 2 million residents.'
+      context: 'France is a country in Europe. Paris is the capital of France. Paris has over 2 million residents.'
+      query: 'What is the capital of France?'
     assert:
       - type: context-faithfulness
         transform: 'JSON.parse(output).answer' # Grade only the answer field
@@ -479,7 +480,7 @@ tests:
       - type: context-recall
         transform: 'JSON.parse(output).answer' # Check if answer appears in context
         value: 'Paris is the capital of France'
-        threshold: 0.8
+        threshold: 0.1
 ```
 
 ### Context transform: Extract context from provider response
@@ -495,11 +496,11 @@ tests:
     assert:
       - type: context-faithfulness
         transform: 'JSON.parse(output).answer'
-        contextTransform: 'JSON.parse(output).sources.join(". ")' # Extract sources as context
+        contextTransform: 'JSON.parse(context.vars.prompt).sources.join(". ")' # Extract sources as context
         threshold: 0.9
 
       - type: context-relevance
-        contextTransform: 'JSON.parse(output).sources.join(". ")' # Check if context is relevant to query
+        contextTransform: 'JSON.parse(context.vars.prompt).sources.join(". ")' # Check if context is relevant to query
         threshold: 0.8
 ```
 
