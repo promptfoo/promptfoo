@@ -5,31 +5,31 @@ description: 'Comprehensive overview of model-graded evaluation techniques lever
 
 # Model-graded metrics
 
-promptfoo supports several types of model-graded assertions:
+Promptfoo supports several types of model-graded assertions:
 
-Output-based:
+## Output-based
 
-- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - checks if the LLM output matches given requirements, using a language model to grade the output based on the rubric.
-- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - similar to the above, a "criteria-checking" eval that ensures the answer meets a specific requirement. Uses an OpenAI-authored prompt from their public evals.
-- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - a factual consistency eval which, given a completion `A` and reference answer `B` evaluates whether A is a subset of B, A is a superset of B, A and B are equivalent, A and B disagree, or A and B differ, but that the difference doesn't matter from the perspective of factuality. It uses the prompt from OpenAI's public evals.
-- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - evaluates outputs using chain-of-thought prompting based on custom criteria, following the G-Eval framework.
-- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - ensure that LLM output is related to original query
-- [`similar`](/docs/configuration/expected-outputs/similar) - checks that the output is semantically similar to the expected value (uses embedding model)
-- [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - an alternative scoring approach that uses a dedicated model for evaluating inputs/outputs against criteria.
-- [`classifier`](/docs/configuration/expected-outputs/classifier) - see classifier grading docs.
-- [`moderation`](/docs/configuration/expected-outputs/moderation) - see moderation grading docs.
-- [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - compare outputs from multiple test cases and choose a winner
-- [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - select the output with the highest aggregate score from other assertions
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - Promptfoo's general-purpose grader; uses an LLM to evaluate outputs against custom criteria or rubrics.
+- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Checks if LLM answers meet specific requirements using OpenAI's public evals prompts.
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Evaluates factual consistency between LLM output and a reference statement. Uses OpenAI's public evals prompt to determine if the output is factually consistent with the reference.
+- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Uses chain-of-thought prompting to evaluate outputs against custom criteria following the G-Eval framework.
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Evaluates whether LLM output is directly related to the original query.
+- [`similar`](/docs/configuration/expected-outputs/similar) - Checks semantic similarity between output and expected value using embedding models.
+- [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - Alternative scoring approach using a dedicated evaluation model to score inputs/outputs against criteria.
+- [`classifier`](/docs/configuration/expected-outputs/classifier) - Runs LLM output through HuggingFace text classifiers for detection of tone, bias, toxicity, and other properties. See [classifier grading docs](/docs/configuration/expected-outputs/classifier).
+- [`moderation`](/docs/configuration/expected-outputs/moderation) - Uses OpenAI's moderation API to ensure LLM outputs are safe and comply with usage policies. See [moderation grading docs](/docs/configuration/expected-outputs/moderation).
+- [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - Compares multiple outputs from different prompts/providers and selects the best one based on custom criteria.
+- [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - Selects the output with the highest aggregate score based on other assertion results.
 
-Context-based:
+## Context-based
 
-- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
-- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - Evaluates whether retrieved context contains the information needed to answer a given question or support a ground truth fact.
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - Evaluates whether retrieved context is relevant and useful for answering the original query.
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - Evaluates whether the LLM output is factually supported by and consistent with the provided context.
 
-Conversational:
+## Conversational
 
-- [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - ensure that responses remain relevant throughout a conversation
+- [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - Evaluates whether responses remain relevant and contextually appropriate throughout multi-turn conversations.
 
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
@@ -151,7 +151,7 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
 
 1. Using the `--grader` CLI option:
 
-   ```
+   ```bash
    promptfoo eval --grader openai:gpt-4.1-mini
    ```
 
@@ -283,19 +283,11 @@ Classifiers can be used to detect tone, bias, toxicity, helpfulness, and much mo
 
 ---
 
-## Context-based
-
-Context-based assertions are a special class of model-graded assertions that evaluate whether the LLM's output is supported by context provided at inference time. They are particularly useful for evaluating RAG systems.
-
-- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
-- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
-
-### Defining context
+## Defining context for context-based assertions
 
 Context can be defined in one of two ways: statically using test case variables or dynamically from the provider's response.
 
-#### Statically via test variables
+### Statically via test variables
 
 Set `context` as a variable in your test case:
 
@@ -309,7 +301,7 @@ tests:
         threshold: 0.8
 ```
 
-#### Dynamically via Context Transform
+### Dynamically via Context Transform
 
 Defining `contextTransform` allows you to construct context from provider responses. This is particularly useful for RAG systems.
 
@@ -478,7 +470,8 @@ providers:
 tests:
   - vars:
       prompt: '{"answer": "Paris is the capital of France", "confidence": 0.95}'
-      context: 'France is a country in Europe. Its capital city is Paris, which has over 2 million residents.'
+      context: 'France is a country in Europe. Paris is the capital of France. Paris has over 2 million residents.'
+      query: 'What is the capital of France?'
     assert:
       - type: context-faithfulness
         transform: 'JSON.parse(output).answer' # Grade only the answer field
@@ -487,7 +480,7 @@ tests:
       - type: context-recall
         transform: 'JSON.parse(output).answer' # Check if answer appears in context
         value: 'Paris is the capital of France'
-        threshold: 0.8
+        threshold: 0.1
 ```
 
 ### Context transform: Extract context from provider response
@@ -503,11 +496,11 @@ tests:
     assert:
       - type: context-faithfulness
         transform: 'JSON.parse(output).answer'
-        contextTransform: 'JSON.parse(output).sources.join(". ")' # Extract sources as context
+        contextTransform: 'JSON.parse(context.vars.prompt).sources.join(". ")' # Extract sources as context
         threshold: 0.9
 
       - type: context-relevance
-        contextTransform: 'JSON.parse(output).sources.join(". ")' # Check if context is relevant to query
+        contextTransform: 'JSON.parse(context.vars.prompt).sources.join(". ")' # Check if context is relevant to query
         threshold: 0.8
 ```
 
