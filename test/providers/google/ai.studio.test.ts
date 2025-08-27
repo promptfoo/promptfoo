@@ -217,8 +217,7 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('test prompt');
       expect(response.error).toContain('No candidates returned in API response');
-      expect(response.error).toContain('Common causes:');
-      expect(response.error).toContain('Safety filters blocking content');
+      expect(response.error).toContain('Got response:');
     });
 
     it('should handle malformed API responses', async () => {
@@ -292,7 +291,9 @@ describe('AIStudioChatProvider', () => {
       const response = await provider.callGemini('test prompt');
       expect(response.error).toContain('Response blocked: PROHIBITED_CONTENT');
       expect(response.error).toContain('HARM_CATEGORY_HATE_SPEECH: HIGH');
-      expect(response.error).not.toContain('HARM_CATEGORY_HARASSMENT'); // NEGLIGIBLE should be filtered out
+      // NEGLIGIBLE should be filtered out from the safety ratings summary
+      expect(response.error).toMatch(/Safety ratings: HARM_CATEGORY_HATE_SPEECH: HIGH\)/);
+      expect(response.error).not.toMatch(/Safety ratings:.*HARM_CATEGORY_HARASSMENT.*HIGH/); // Only check it's not in the summary with HIGH
     });
 
     it('should handle candidates blocked with finish reason', async () => {
