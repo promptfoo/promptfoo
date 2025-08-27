@@ -41,21 +41,24 @@ interface SystemError extends Error {
 export function sanitizeUrl(url: string): string {
   try {
     const parsedUrl = new URL(url);
-    if (parsedUrl.username || parsedUrl.password) {
-      parsedUrl.username = '***';
-      parsedUrl.password = '***';
+    // Create a copy for sanitization to avoid modifying the original URL
+    const sanitizedUrl = new URL(parsedUrl.toString());
+
+    if (sanitizedUrl.username || sanitizedUrl.password) {
+      sanitizedUrl.username = '***';
+      sanitizedUrl.password = '***';
     }
 
     // Sanitize query parameters that might contain sensitive data
     const sensitiveParams =
       /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
-    for (const key of Array.from(parsedUrl.searchParams.keys())) {
+    for (const key of Array.from(sanitizedUrl.searchParams.keys())) {
       if (sensitiveParams.test(key)) {
-        parsedUrl.searchParams.set(key, '[REDACTED]');
+        sanitizedUrl.searchParams.set(key, '[REDACTED]');
       }
     }
 
-    return parsedUrl.toString();
+    return sanitizedUrl.toString();
   } catch {
     return url;
   }
