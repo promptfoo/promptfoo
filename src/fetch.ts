@@ -45,6 +45,16 @@ export function sanitizeUrl(url: string): string {
       parsedUrl.username = '***';
       parsedUrl.password = '***';
     }
+
+    // Sanitize query parameters that might contain sensitive data
+    const sensitiveParams =
+      /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
+    for (const key of Array.from(parsedUrl.searchParams.keys())) {
+      if (sensitiveParams.test(key)) {
+        parsedUrl.searchParams.set(key, '[REDACTED]');
+      }
+    }
+
     return parsedUrl.toString();
   } catch {
     return url;

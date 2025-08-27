@@ -9,6 +9,7 @@ import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
+import { sanitizeUrl } from '../fetch';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -52,7 +53,7 @@ function sanitizeConfigForLogging(config: any): any {
   // Sanitize signature authentication credentials
   if (sanitized.signatureAuth) {
     sanitized.signatureAuth = { ...sanitized.signatureAuth };
-    
+
     // Redact sensitive fields
     if (sanitized.signatureAuth.pfxPassword) {
       sanitized.signatureAuth.pfxPassword = '[REDACTED]';
@@ -81,10 +82,12 @@ function sanitizeConfigForLogging(config: any): any {
     sanitized.headers = { ...sanitized.headers };
     for (const [key, _value] of Object.entries(sanitized.headers)) {
       const lowerKey = key.toLowerCase();
-      if (lowerKey.includes('authorization') || 
-          lowerKey.includes('api-key') || 
-          lowerKey.includes('token') ||
-          lowerKey.includes('password')) {
+      if (
+        lowerKey.includes('authorization') ||
+        lowerKey.includes('api-key') ||
+        lowerKey.includes('token') ||
+        lowerKey.includes('password')
+      ) {
         sanitized.headers[key] = '[REDACTED]';
       }
     }
@@ -1180,7 +1183,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     logger.debug(
-      `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(sanitizeConfigForLogging(renderedConfig))}`,
+      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with config: ${safeJsonStringify(sanitizeConfigForLogging(renderedConfig))}`,
     );
 
     const response = await fetchWithCache(
@@ -1286,7 +1289,7 @@ export class HttpProvider implements ApiProvider {
     delete parsedRequest.headers['content-length'];
 
     logger.debug(
-      `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(sanitizeConfigForLogging({ headers: parsedRequest.headers }).headers)}`,
+      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(sanitizeConfigForLogging({ headers: parsedRequest.headers }).headers)}`,
     );
     const response = await fetchWithCache(
       url,
