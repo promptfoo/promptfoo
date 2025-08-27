@@ -112,6 +112,7 @@ The LLM rubric evaluation process:
 1. **Sends your rubric and output** to a grading LLM (GPT-4o by default)
 2. **LLM analyzes the output** against your criteria
 3. **Returns structured feedback**:
+
    ```json
    {
      "reason": "Clear analysis of strengths and weaknesses",
