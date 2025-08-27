@@ -40,9 +40,16 @@ interface SystemError extends Error {
 
 export function sanitizeUrl(url: string): string {
   try {
+    // Ensure url is a string and handle edge cases
+    if (typeof url !== 'string' || !url.trim()) {
+      return url;
+    }
+
     const parsedUrl = new URL(url);
+    
     // Create a copy for sanitization to avoid modifying the original URL
-    const sanitizedUrl = new URL(parsedUrl.toString());
+    // Use href instead of toString() for better cross-platform compatibility
+    const sanitizedUrl = new URL(parsedUrl.href);
 
     if (sanitizedUrl.username || sanitizedUrl.password) {
       sanitizedUrl.username = '***';
@@ -52,14 +59,21 @@ export function sanitizeUrl(url: string): string {
     // Sanitize query parameters that might contain sensitive data
     const sensitiveParams =
       /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
-    for (const key of Array.from(sanitizedUrl.searchParams.keys())) {
-      if (sensitiveParams.test(key)) {
-        sanitizedUrl.searchParams.set(key, '[REDACTED]');
+    
+    try {
+      for (const key of Array.from(sanitizedUrl.searchParams.keys())) {
+        if (sensitiveParams.test(key)) {
+          sanitizedUrl.searchParams.set(key, '[REDACTED]');
+        }
       }
+    } catch (paramError) {
+      // If search params handling fails, continue without sanitizing them
+      logger.debug(`Failed to sanitize URL parameters: ${paramError}`);
     }
 
     return sanitizedUrl.toString();
-  } catch {
+  } catch (error) {
+    logger.debug(`Failed to sanitize URL: ${error}`);
     return url;
   }
 }
