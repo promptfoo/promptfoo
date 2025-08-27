@@ -22,7 +22,10 @@ describe('configTransformation', () => {
 
       expect(result.description).toBe('Test evaluation');
       expect(result.providers).toEqual(['openai:gpt-4', { id: 'custom', name: 'Custom Provider' }]);
-      expect(result.prompts).toEqual(['Hello {{name}}', { id: 'prompt2', raw: 'Goodbye {{name}}' }]);
+      expect(result.prompts).toEqual([
+        'Hello {{name}}',
+        { id: 'prompt2', raw: 'Goodbye {{name}}' },
+      ]);
       expect(result.tests).toEqual([{ vars: { name: 'world' } }]);
       expect(result.env).toEqual({ API_KEY: 'test' });
     });
@@ -54,6 +57,37 @@ describe('configTransformation', () => {
       expect(result.providers).toEqual(['openai:gpt-4', 'anthropic:claude-3']);
       expect(result.prompts).toEqual(['Hello', 'World']);
       expect(result.tests).toEqual([{ vars: {} }]);
+    });
+
+    it('should correctly copy and filter optional array and object fields', () => {
+      const input: Partial<UnifiedConfig> = {
+        derivedMetrics: [{ formula: 'x + y', name: 'metric1' }] as any,
+        scenarios: [{ description: 'Test scenario', name: 'scenario1' }] as any,
+        extensions: ['path/to/extension'],
+        evaluateOptions: { timeoutMs: 60 },
+      };
+
+      const result = transformResultsConfigToSetupConfig(input);
+
+      expect(result.derivedMetrics).toEqual([{ formula: 'x + y', name: 'metric1' }]);
+      expect(result.scenarios).toEqual([{ description: 'Test scenario', name: 'scenario1' }]);
+      expect(result.extensions).toEqual(['path/to/extension']);
+      expect(result.evaluateOptions).toEqual({ timeoutMs: 60 });
+    });
+
+    it('should ignore extra fields in the resultsConfig', () => {
+      const input: any = {
+        description: 'Test evaluation',
+        providers: ['openai:gpt-4'],
+        prompts: ['Hello {{name}}'],
+        extraField: 'This should be ignored',
+      };
+
+      const result = transformResultsConfigToSetupConfig(input);
+
+      expect(result.description).toBe('Test evaluation');
+      expect(result.providers).toEqual(['openai:gpt-4']);
+      expect(result.prompts).toEqual(['Hello {{name}}']);
     });
   });
 
@@ -128,6 +162,109 @@ describe('configTransformation', () => {
       expect(result.errors[0].field).toBe('prompts[0]');
       expect(result.errors[1].field).toBe('prompts[1]');
     });
+
+    it("should validate a config as valid when providers is an array of strings and prompts is an array of objects each with a 'raw' or 'content' field", () => {
+      const config: Partial<UnifiedConfig> = {
+        providers: ['openai:gpt-4'],
+        prompts: [
+          { raw: 'Hello world', id: '1' },
+          { raw: 'Goodbye world', id: '2' },
+        ],
+      };
+
+      const result = validateConfigCompleteness(config);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("should validate a config as valid when providers is an array of objects each with an 'id' or 'name' field and prompts is an array of valid strings", () => {
+      const config: Partial<UnifiedConfig> = {
+        providers: [{ id: 'customProvider' }, { id: 'anotherProvider' }],
+        prompts: ['Hello world', 'Another prompt'],
+      };
+
+      const result = validateConfigCompleteness(config);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should handle providers or prompts arrays containing values of unexpected types', () => {
+      const config: Partial<UnifiedConfig> = {
+        providers: ['openai:gpt-4', 123 as any, true as any],
+        prompts: ['Hello world', false as any, 456 as any],
+      };
+
+      const result = validateConfigCompleteness(config);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toHaveLength(4);
+      expect(result.errors).toContainEqual({
+        field: 'providers[1]',
+        message: 'Provider must be a string or object',
+      });
+      expect(result.errors).toContainEqual({
+        field: 'providers[2]',
+        message: 'Provider must be a string or object',
+      });
+      expect(result.errors).toContainEqual({
+        field: 'prompts[1]',
+        message: 'Prompt must be a string or object',
+      });
+      expect(result.errors).toContainEqual({
+        field: 'prompts[2]',
+        message: 'Prompt must be a string or object',
+      });
+    });
+
+    // [Tusk] FAILING TEST
+    it('should identify invalid provider string format', () => {
+      const config: Partial<UnifiedConfig> = {
+        providers: ['invalid-format'],
+        prompts: ['Hello world'],
+      };
+
+      const result = validateConfigCompleteness(config);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContainEqual({
+        field: 'providers[0]',
+        message: 'Provider string must contain a colon',
+      });
+    });
+
+    // [Tusk] FAILING TEST
+    it('should identify prompt objects with empty raw property as invalid', () => {
+      const config: Partial<UnifiedConfig> = {
+        providers: ['openai:gpt-4'],
+        prompts: [{ id: '1', raw: '' }],
+      };
+
+      const result = validateConfigCompleteness(config);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContainEqual({
+        field: 'prompts[0]',
+        message: 'Prompt object must have either raw or content field',
+      });
+    });
+
+    // [Tusk] FAILING TEST
+    it('should identify prompt objects with empty content property as invalid', () => {
+      const config: Partial<UnifiedConfig> = {
+        providers: ['openai:gpt-4'],
+        prompts: [{ id: '1', label: 'test', raw: '' }],
+      };
+
+      const result = validateConfigCompleteness(config);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContainEqual({
+        field: 'prompts[0]',
+        message: 'Prompt object must have either raw or content field',
+      });
+    });
   });
 
   describe('hasMinimumRequiredFields', () => {
@@ -162,6 +299,26 @@ describe('configTransformation', () => {
       const config: Partial<UnifiedConfig> = {
         providers: undefined,
         prompts: undefined,
+      };
+
+      expect(hasMinimumRequiredFields(config)).toBe(false);
+    });
+
+    // [Tusk] FAILING TEST
+    it('should return false when providers and prompts contain only empty strings', () => {
+      const config: Partial<UnifiedConfig> = {
+        providers: [''],
+        prompts: [''],
+      };
+
+      expect(hasMinimumRequiredFields(config)).toBe(false);
+    });
+
+    // [Tusk] FAILING TEST
+    it('should return false when providers and prompts contain invalid objects', () => {
+      const config: Partial<UnifiedConfig> = {
+        providers: [{ invalid: 'provider' } as any],
+        prompts: [{ invalid: 'prompt' } as any],
       };
 
       expect(hasMinimumRequiredFields(config)).toBe(false);
@@ -219,6 +376,76 @@ describe('configTransformation', () => {
 
       expect(result.providers).toEqual(['valid-provider']);
       expect(result.prompts).toEqual(['valid-prompt']);
+    });
+
+    it('should preserve valid tests, derivedMetrics, scenarios, and extensions', () => {
+      const input: Partial<UnifiedConfig> = {
+        tests: [{ description: 'test1' }],
+      };
+
+      const result = createMinimalValidConfig(input);
+
+      expect(result.tests).toEqual([{ description: 'test1' }]);
+    });
+
+    it('should preserve defaultTest and evaluateOptions fields', () => {
+      const input: Partial<UnifiedConfig> = {
+        defaultTest: { assert: [{ type: 'contains', value: 'hello' }] },
+        evaluateOptions: {
+          maxConcurrency: 5,
+        },
+      };
+
+      const result = createMinimalValidConfig(input);
+
+      expect(result.defaultTest).toEqual({ assert: [{ type: 'contains', value: 'hello' }] });
+      expect(result.evaluateOptions).toEqual({
+        maxConcurrency: 5,
+      });
+    });
+
+    it('should handle providers array with only null and undefined values', () => {
+      const input: Partial<UnifiedConfig> = {
+        providers: [null as any, undefined as any],
+      };
+
+      const result = createMinimalValidConfig(input);
+
+      expect(result.providers).toEqual(['openai:gpt-3.5-turbo']);
+    });
+
+    it('should preserve providers and prompts with invalid structures', () => {
+      const input: Partial<UnifiedConfig> = {
+        providers: [{ invalid: 'provider' } as any],
+        prompts: [{ notRaw: 'prompt' } as any],
+      };
+
+      const result = createMinimalValidConfig(input);
+
+      expect(result.providers).toEqual([{ invalid: 'provider' }]);
+      expect(result.prompts).toEqual([{ notRaw: 'prompt' }]);
+    });
+
+    // [Tusk] FAILING TEST
+    it('should use default description when description is an empty string', () => {
+      const input: Partial<UnifiedConfig> = {
+        description: '',
+      };
+
+      const result = createMinimalValidConfig(input);
+
+      expect(result.description).toBe('Imported configuration');
+    });
+
+    // [Tusk] FAILING TEST
+    it('should use default description when description contains only whitespace', () => {
+      const input: Partial<UnifiedConfig> = {
+        description: '   ',
+      };
+
+      const result = createMinimalValidConfig(input);
+
+      expect(result.description).toBe('Imported configuration');
     });
   });
 });
