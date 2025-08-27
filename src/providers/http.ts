@@ -79,7 +79,7 @@ function sanitizeConfigForLogging(config: any): any {
   // Sanitize headers that might contain sensitive information
   if (sanitized.headers) {
     sanitized.headers = { ...sanitized.headers };
-    for (const [key, value] of Object.entries(sanitized.headers)) {
+    for (const [key, _value] of Object.entries(sanitized.headers)) {
       const lowerKey = key.toLowerCase();
       if (lowerKey.includes('authorization') || 
           lowerKey.includes('api-key') || 
