@@ -18,7 +18,6 @@ import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { calculateAzureCost } from './azure/util';
 import { AIStudioChatProvider } from './google/ai.studio';
-import { getGoogleClient } from './google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
 import { GroqProvider } from './groq';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -211,8 +210,12 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         });
       } else if (this.providerName === 'vertex') {
         const provider = new GatewayVertex();
-        const parentClass = new VertexEmbeddingProvider(this.modelName, this.providerOptions);
-        const { client, projectId } = await getGoogleClient();
+        const parentClass = new VertexEmbeddingProvider(this.modelName, {
+          config: this.config,
+          env: this.env,
+        });
+        const client = await parentClass.getClientWithCredentials();
+        const projectId = await parentClass.getProjectId();
         const token = await client.getAccessToken();
         gatewayEmbeddingModel = provider.embeddingModel({
           modelName: this.modelName,
@@ -448,8 +451,12 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           gatewayConfig.presencePenalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0);
       } else if (this.providerName === 'vertex') {
         const provider = new GatewayVertex();
-        const parentClass = new VertexChatProvider(this.modelName, this.providerOptions);
-        const { client, projectId } = await getGoogleClient();
+        const parentClass = new VertexChatProvider(this.modelName, {
+          config: this.config as any,
+          env: this.env,
+        });
+        const client = await parentClass.getClientWithCredentials();
+        const projectId = await parentClass.getProjectId();
         const token = await client.getAccessToken();
         if (token === null) {
           throw new Error('Vertex API token is not set. Please configure the Google Cloud SDK');

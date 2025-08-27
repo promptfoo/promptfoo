@@ -48,6 +48,8 @@ interface OllamaCompletionOptions {
   stop?: string[];
   num_thread?: number;
   tools?: any[]; // Support for function calling/tools
+  think?: boolean; // Top-level parameter for thinking/reasoning
+  passthrough?: Record<string, any>; // Pass arbitrary fields to the API
 }
 
 const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
@@ -151,15 +153,15 @@ export class OllamaCompletionProvider implements ApiProvider {
       options: Object.keys(this.config).reduce(
         (options, key) => {
           const optionName = key as keyof OllamaCompletionOptions;
-          if (OllamaCompletionOptionKeys.has(optionName)) {
+          if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
             options[optionName] = this.config[optionName];
           }
           return options;
         },
-        {} as Partial<
-          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
-        >,
+        {} as Record<string, any>,
       ),
+      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      ...(this.config.passthrough || {}),
     };
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
@@ -270,10 +272,10 @@ export class OllamaChatProvider implements ApiProvider {
           }
           return options;
         },
-        {} as Partial<
-          Record<keyof OllamaCompletionOptions, number | boolean | string[] | undefined>
-        >,
+        {} as Record<string, any>,
       ),
+      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      ...(this.config.passthrough || {}),
     };
 
     // Handle tools if configured

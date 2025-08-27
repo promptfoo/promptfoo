@@ -5,6 +5,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import {
   type Plugin as PluginType,
   Severity,
@@ -18,6 +19,8 @@ import './Overview.css';
 interface OverviewProps {
   categoryStats: Record<PluginType, { pass: number; total: number }>;
   plugins: RedteamPluginObject[];
+  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
+  setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
 
 const PRIMARY_TEXT_COLORS = {
@@ -55,7 +58,12 @@ const DARK_MODE_SECONDARY_TEXT_COLORS = {
   [Severity.Low]: '#00e676',
 };
 
-const Overview: React.FC<OverviewProps> = ({ categoryStats, plugins }) => {
+const Overview: React.FC<OverviewProps> = ({
+  categoryStats,
+  plugins,
+  vulnerabilitiesDataGridRef,
+  setVulnerabilitiesDataGridFilterModel,
+}) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const severityCounts = Object.values(Severity).reduce(
@@ -76,13 +84,27 @@ const Overview: React.FC<OverviewProps> = ({ categoryStats, plugins }) => {
     {} as Record<Severity, number>,
   );
 
+  const handleNavigateToVulnerabilities = ({ severity }: { severity: Severity }) => {
+    setVulnerabilitiesDataGridFilterModel({
+      items: [
+        {
+          field: 'severity',
+          operator: 'is',
+          value: severity,
+        },
+      ],
+      logicOperator: GridLogicOperator.Or,
+    });
+    vulnerabilitiesDataGridRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   return (
     <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
       {Object.values(Severity).map((severity) => (
         <Box key={severity} flex={1}>
           <Card className={`severity-card card-${severity.toLowerCase()}`}>
             <CardContent
-              onClick={() => (window.location.hash = '#table')}
+              onClick={() => handleNavigateToVulnerabilities({ severity })}
               sx={[
                 {
                   backgroundColor: BACKGROUND_COLORS[severity],

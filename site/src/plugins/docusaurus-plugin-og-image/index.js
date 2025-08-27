@@ -10,6 +10,9 @@ const HEIGHT = 630;
 
 // Helper function to escape HTML/XML entities
 function escapeXml(text) {
+  if (!text) {
+    return '';
+  }
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -45,6 +48,19 @@ function wrapText(text, maxWidth, fontSize) {
   }
 
   return lines;
+}
+
+// Helper function to truncate text with ellipsis
+function truncateText(text, maxLength) {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength - 3) + '...';
+}
+
+// Calculate font size based on text length for classic design
+function calculateFontSize(text, baseSize = 64, minSize = 40) {
+  const lengthFactor = Math.max(1, text.length / 40);
+  const fontSize = Math.max(minSize, Math.floor(baseSize / Math.sqrt(lengthFactor)));
+  return fontSize;
 }
 
 // Dynamic font sizing - much more aggressive scaling
@@ -167,27 +183,16 @@ async function getImageAsBase64(imagePath, maxWidth = 520, maxHeight = 430) {
   }
 }
 
-// Get page type label - simplified
+// Get page type label
 function getPageTypeLabel(routePath) {
-  if (routePath.includes('/blog/')) {
-    return 'Blog';
-  }
-  if (routePath.includes('/guides/')) {
-    return 'Guide';
-  }
-  if (routePath.includes('/red-team')) {
-    return 'Security';
-  }
-  if (routePath.includes('/providers/')) {
-    return 'Provider';
-  }
-  if (routePath.includes('/integrations/')) {
-    return 'Integration';
-  }
-  if (routePath.includes('/api-reference/')) {
-    return 'API';
-  }
-  return null; // Don't show generic "Documentation"
+  if (routePath.includes('/blog/')) return 'Posts';
+  if (routePath.includes('/guides/')) return 'Guide';
+  if (routePath.includes('/red-team')) return 'Security';
+  if (routePath.includes('/providers/')) return 'Provider';
+  if (routePath.includes('/integrations/')) return 'Integration';
+  if (routePath.includes('/enterprise/')) return 'Enterprise';
+  if (routePath.includes('/api-reference/')) return 'API Reference';
+  return 'Documentation';
 }
 
 // Helper function to convert font to base64
@@ -202,7 +207,7 @@ async function getFontAsBase64() {
   }
 }
 
-// COMPLETELY REDESIGNED OG IMAGE TEMPLATE
+// Generate SVG template for OG image with rich design
 async function generateSvgTemplate(metadata = {}) {
   const {
     title = 'Promptfoo',
@@ -223,8 +228,8 @@ async function generateSvgTemplate(metadata = {}) {
   const displayTitle = ogTitle || title;
   const displayDescription = ogDescription || description;
 
-  // NO TRUNCATION
-  const escapedTitle = escapeXml(displayTitle);
+  // Truncate for cleaner display
+  const escapedTitle = escapeXml(truncateText(displayTitle || 'Promptfoo Documentation', 70));
   const escapedDescription = escapeXml(displayDescription);
 
   // Check if we have a valid image
@@ -243,182 +248,65 @@ async function generateSvgTemplate(metadata = {}) {
 
   // Get page type
   const pageType = getPageTypeLabel(routePath);
+  const fontSize = calculateFontSize(escapedTitle, 56, 36);
 
-  // Format date
-  const formattedDate = date
-    ? new Date(date).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    : null;
+  // Format breadcrumbs - limit to 2 levels for cleaner look
+  const breadcrumbText =
+    breadcrumbs.length > 0 ? escapeXml(breadcrumbs.slice(0, 2).join(' › ')) : pageType;
 
-  // Format author - FULL NAME(S)
-  const authorDisplay = author || '';
-  const metadataLine = [formattedDate, authorDisplay].filter(Boolean).join(' • ');
+  // Split title into multiple lines if needed
+  const words = escapedTitle.split(' ');
+  const titleLines = [];
+  let currentLine = '';
+  const maxLineWidth = WIDTH - 240; // More padding for better layout
+  const charWidth = fontSize * 0.5;
 
-  // Calculate layout based on content
-  let contentLayout = '';
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (testLine.length * charWidth > maxLineWidth && currentLine) {
+      titleLines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine) {
+    titleLines.push(currentLine);
+  }
 
+  // Limit to 3 lines max
+  if (titleLines.length > 3) {
+    titleLines.length = 3;
+    titleLines[2] = titleLines[2].substring(0, titleLines[2].length - 3) + '...';
+  }
+
+  // For images, keep existing layout
+  let imageContent = '';
   if (hasValidImage) {
-    // WITH IMAGE LAYOUT - Adaptive sizing, no background container
-    const maxImageWidth = 520;
-    const maxImageHeight = HEIGHT - 200; // More room for header/footer
-    const imageX = 60;
-    const contentStartX = maxImageWidth + 100;
-    const maxTextWidth = WIDTH - contentStartX - 60;
+    const maxImageWidth = 400;
+    const maxImageHeight = HEIGHT - 240;
+    const imageX = WIDTH - maxImageWidth - 80;
+    const imageY = 140;
 
-    // Calculate font sizes
-    const titleFontSize = calculateOptimalFontSize(escapedTitle, true, true);
-    const descFontSize = calculateOptimalFontSize(escapedDescription, true, false);
-
-    // Wrap text
-    const titleLines = wrapText(escapedTitle, maxTextWidth, titleFontSize);
-    const descriptionLines = escapedDescription
-      ? wrapText(escapedDescription, maxTextWidth, descFontSize)
-      : [];
-
-    // Calculate vertical positioning for text
-    const totalTextHeight =
-      titleLines.length * titleFontSize * 1.2 +
-      (descriptionLines.length > 0 ? 20 + descriptionLines.length * descFontSize * 1.4 : 0);
-    const textStartY = (HEIGHT - totalTextHeight) / 2;
-
-    // Image positioning - aligned with footer content
-    const imageY = 100; // Increased top spacing for better balance
-
-    contentLayout = `
-      <!-- Container for image and metadata - same alignment -->
+    // Simple image display on the right
+    imageContent = `
       <g>
-        <!-- Featured image - NO BACKGROUND, just the image -->
         <clipPath id="imageClip">
           <rect x="${imageX}" y="${imageY}" width="${maxImageWidth}" height="${maxImageHeight}" rx="12"/>
         </clipPath>
-        <!-- NO BACKGROUND RECT - just show the image directly -->
+        <rect x="${imageX}" y="${imageY}" width="${maxImageWidth}" height="${maxImageHeight}" 
+              rx="12" fill="rgba(255,255,255,0.03)"/>
         <image href="${imageBase64}" 
                x="${imageX}" y="${imageY}" 
                width="${maxImageWidth}" height="${maxImageHeight}" 
                preserveAspectRatio="xMidYMid meet"
                clip-path="url(#imageClip)"
-               opacity="0.95"/>
-      </g>
-      
-      <!-- Text content on right -->
-      <g transform="translate(${contentStartX}, ${textStartY})">
-        <!-- Title -->
-        ${titleLines
-          .map(
-            (line, index) => `
-        <text x="0" y="${index * titleFontSize * 1.2}" 
-              font-family="${fontBase64 ? 'InterSemiBold' : 'system-ui, -apple-system, sans-serif'}" 
-              font-size="${titleFontSize}" 
-              font-weight="700" 
-              fill="white">
-          ${line}
-        </text>`,
-          )
-          .join('')}
-        
-        ${
-          descriptionLines.length > 0
-            ? `
-        <!-- Description -->
-        ${descriptionLines
-          .map(
-            (line, index) => `
-        <text x="0" y="${titleLines.length * titleFontSize * 1.2 + 20 + index * descFontSize * 1.4}" 
-              font-family="${fontBase64 ? 'InterSemiBold' : 'system-ui, -apple-system, sans-serif'}" 
-              font-size="${descFontSize}" 
-              font-weight="400" 
-              fill="#94a3b8">
-          ${line}
-        </text>`,
-          )
-          .join('')}
-        `
-            : ''
-        }
-      </g>
-    `;
-  } else {
-    // NO IMAGE LAYOUT - Center everything, make it BIG
-    const maxTextWidth = WIDTH - 240;
-
-    // Much larger fonts when no image
-    const titleFontSize = calculateOptimalFontSize(escapedTitle, false, true);
-    const descFontSize = calculateOptimalFontSize(escapedDescription, false, false);
-
-    // Wrap text
-    const titleLines = wrapText(escapedTitle, maxTextWidth, titleFontSize);
-    const descriptionLines = escapedDescription
-      ? wrapText(escapedDescription, maxTextWidth, descFontSize)
-      : [];
-    const breadcrumbLines =
-      !escapedDescription && breadcrumbs.length > 0 ? [breadcrumbs.join(' › ')] : [];
-
-    // Calculate total height for centering
-    const totalHeight =
-      titleLines.length * titleFontSize * 1.2 +
-      (descriptionLines.length > 0 ? 30 + descriptionLines.length * descFontSize * 1.4 : 0) +
-      (breadcrumbLines.length > 0 ? 30 + breadcrumbLines.length * 24 : 0);
-
-    const startY = (HEIGHT - totalHeight) / 2;
-
-    contentLayout = `
-      <!-- Centered content -->
-      <g transform="translate(${WIDTH / 2}, ${startY})">
-        <!-- Title - CENTERED -->
-        ${titleLines
-          .map(
-            (line, index) => `
-        <text x="0" y="${index * titleFontSize * 1.2}" 
-              text-anchor="middle"
-              font-family="${fontBase64 ? 'InterSemiBold' : 'system-ui, -apple-system, sans-serif'}" 
-              font-size="${titleFontSize}" 
-              font-weight="700" 
-              fill="white">
-          ${line}
-        </text>`,
-          )
-          .join('')}
-        
-        ${
-          descriptionLines.length > 0
-            ? `
-        <!-- Description - CENTERED -->
-        ${descriptionLines
-          .map(
-            (line, index) => `
-        <text x="0" y="${titleLines.length * titleFontSize * 1.2 + 30 + index * descFontSize * 1.4}" 
-              text-anchor="middle"
-              font-family="${fontBase64 ? 'InterSemiBold' : 'system-ui, -apple-system, sans-serif'}" 
-              font-size="${descFontSize}" 
-              font-weight="400" 
-              fill="#94a3b8">
-          ${line}
-        </text>`,
-          )
-          .join('')}
-        `
-            : breadcrumbLines.length > 0
-              ? `
-        <!-- Breadcrumbs - CENTERED -->
-        <text x="0" y="${titleLines.length * titleFontSize * 1.2 + 30}" 
-              text-anchor="middle"
-              font-family="${fontBase64 ? 'InterSemiBold' : 'system-ui, -apple-system, sans-serif'}" 
-              font-size="24" 
-              font-weight="400" 
-              fill="#64748b">
-          ${escapeXml(breadcrumbLines[0])}
-        </text>
-        `
-              : ''
-        }
+               opacity="0.9"/>
       </g>
     `;
   }
 
-  // SIMPLIFIED, CLEAN DESIGN
+  // RICH DESIGN WITH DECORATIVE ELEMENTS
   const svg = `
 <svg width="${WIDTH}" height="${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -436,92 +324,102 @@ async function generateSvgTemplate(metadata = {}) {
     `
         : ''
     }
-  </defs>
-  
-  <!-- Simple dark background - no distracting gradients -->
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="#0f172a"/>
-  
-  <!-- Very subtle gradient overlay for depth -->
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#subtleGradient)" opacity="0.5"/>
-  <defs>
-    <linearGradient id="subtleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1e293b;stop-opacity:0.3" />
-      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:0" />
+    <!-- Brand gradient using Promptfoo colors -->
+    <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10191c;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#17252b;stop-opacity:1" />
     </linearGradient>
+    
+    <!-- Red accent gradient -->
+    <linearGradient id="redGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e53a3a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#cb3434;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Subtle pattern -->
+    <pattern id="dotPattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="rgba(255,255,255,0.02)"/>
+      <circle cx="22" cy="22" r="1" fill="rgba(255,255,255,0.02)"/>
+    </pattern>
   </defs>
   
-  ${contentLayout}
+  <!-- Background with gradient -->
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#backgroundGradient)"/>
   
-  <!-- Header: Clean branding -->
-  <g transform="translate(${WIDTH - 180}, 50)">
-    ${
-      logoBase64
-        ? `
-    <image href="${logoBase64}" x="0" y="0" width="28" height="28" opacity="0.9"/>
-    <text x="36" y="18" 
-          font-family="${fontBase64 ? 'InterSemiBold' : 'system-ui, -apple-system, sans-serif'}" 
-          font-size="18" 
-          font-weight="600" 
-          fill="#ef4444">promptfoo</text>
-    `
-        : `
-    <text x="0" y="18" 
-          font-family="${fontBase64 ? 'InterSemiBold' : 'system-ui, -apple-system, sans-serif'}" 
-          font-size="18" 
-          font-weight="600" 
-          fill="#ef4444">promptfoo</text>
-    `
-    }
-  </g>
+  <!-- Dot pattern -->
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#dotPattern)"/>
   
-  <!-- Footer: Metadata aligned with image container -->
-  ${
-    pageType || metadataLine
-      ? `
-  <g transform="translate(60, ${HEIGHT - 45})">
-    ${
-      pageType
-        ? `
-    <!-- Page type indicator aligned with image x position -->
-    <text x="0" y="0" 
-          font-family="${fontBase64 ? 'InterSemiBold' : 'system-ui, -apple-system, sans-serif'}" 
-          font-size="14" 
-          font-weight="500" 
-          fill="#ef4444">
-      ${pageType}
-    </text>
-    `
-        : ''
-    }
+  <!-- Top accent bar -->
+  <rect x="0" y="0" width="${WIDTH}" height="4" fill="url(#redGradient)"/>
+  
+  <!-- Content card background with subtle gradient -->
+  <rect x="40" y="40" width="${WIDTH - 80}" height="${HEIGHT - 80}" rx="12" fill="rgba(255,255,255,0.02)"/>
+  <rect x="40" y="40" width="${WIDTH - 80}" height="${HEIGHT - 80}" rx="12" fill="rgba(23,37,43,0.4)"/>
+  
+  <!-- Left accent stripe -->
+  <rect x="40" y="40" width="6" height="${HEIGHT - 80}" rx="3" fill="url(#redGradient)"/>
+  
+  <!-- Top highlight -->
+  <rect x="46" y="40" width="${WIDTH - 86}" height="1" fill="rgba(255,255,255,0.08)"/>
+  
+  <!-- Header section -->
+  <g transform="translate(80, 80)">
+    <!-- Logo -->
+    ${logoBase64 ? `<image href="${logoBase64}" width="64" height="64" opacity="0.9"/>` : ''}
     
-    ${
-      metadataLine
-        ? `
-    <!-- Metadata inline with page type -->
-    <text x="${pageType ? 60 : 0}" y="0" 
-          font-family="${fontBase64 ? 'InterSemiBold' : 'system-ui, -apple-system, sans-serif'}" 
-          font-size="14" 
-          font-weight="400" 
-          fill="#64748b">
-      ${escapeXml(metadataLine)}
-    </text>
-    `
-        : ''
-    }
+    <!-- Brand name -->
+    <text x="80" y="32" font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="28" font-weight="600" fill="#ff7a7a">promptfoo</text>
+    
+    <!-- Page type badge -->
+    <rect x="250" y="8" width="${pageType.length * 10 + 20}" height="32" rx="16" fill="rgba(229, 58, 58, 0.15)" stroke="#e53a3a" stroke-width="1"/>
+    <text x="${250 + (pageType.length * 10 + 20) / 2}" y="28" text-anchor="middle" font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="14" font-weight="600" fill="#ff7a7a">${pageType}</text>
   </g>
-  `
-      : ''
-  }
   
-  <!-- URL - much better contrast -->
-  <text x="${WIDTH - 60}" y="${HEIGHT - 35}" 
-        text-anchor="end"
-        font-family="${fontBase64 ? 'InterSemiBold' : 'system-ui, -apple-system, sans-serif'}" 
-        font-size="16" 
-        font-weight="600" 
-        fill="#94a3b8">
-    promptfoo.dev
-  </text>
+  <!-- Breadcrumbs with better styling -->
+  <g transform="translate(80, 180)">
+    <text font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="20" fill="rgba(255,255,255,0.5)" letter-spacing="0.5">${breadcrumbText}</text>
+  </g>
+  
+  <!-- Main title with better positioning -->
+  <g transform="translate(80, ${240})">
+    ${titleLines
+      .map(
+        (line, index) => `
+    <text x="0" y="${index * (fontSize * 1.3)}" font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="${fontSize}" font-weight="600" fill="white">${line}</text>`,
+      )
+      .join('')}
+  </g>
+  
+  ${hasValidImage ? imageContent : ''}
+  
+  <!-- Bottom section with call-to-action -->
+  <g transform="translate(80, ${HEIGHT - 100})">
+    <text font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="18" fill="rgba(255,255,255,0.6)">Secure and reliable LLM applications</text>
+    <text x="0" y="30" font-family="${fontBase64 ? 'InterSemiBold' : 'sans-serif'}" font-size="16" fill="rgba(255,122,122,0.8)">promptfoo.dev</text>
+  </g>
+  
+  <!-- Decorative elements -->
+  <circle cx="${WIDTH - 120}" cy="120" r="180" fill="rgba(229, 58, 58, 0.03)"/>
+  <circle cx="${WIDTH - 80}" cy="160" r="100" fill="rgba(229, 58, 58, 0.02)"/>
+  <circle cx="${WIDTH - 160}" cy="100" r="60" fill="rgba(255, 122, 122, 0.02)"/>
+  
+  <!-- Grid decoration in bottom right -->
+  <g transform="translate(${WIDTH - 200}, ${HEIGHT - 200})" opacity="0.08">
+    ${Array.from({ length: 4 }, (_, i) =>
+      Array.from({ length: 4 }, (_, j) => {
+        const size = i === 3 && j === 3 ? 35 : 30;
+        const opacity = 1 - (i + j) * 0.1;
+        return `<rect x="${i * 40}" y="${j * 40}" width="${size}" height="${size}" fill="#e53a3a" rx="4" opacity="${opacity}"/>`;
+      }).join(''),
+    ).join('')}
+  </g>
+  
+  <!-- Additional decorative lines -->
+  <line x1="${WIDTH - 400}" y1="${HEIGHT - 40}" x2="${WIDTH - 200}" y2="${HEIGHT - 40}" stroke="#e53a3a" stroke-width="1" opacity="0.1"/>
+  <line x1="${WIDTH - 40}" y1="${HEIGHT - 400}" x2="${WIDTH - 40}" y2="${HEIGHT - 200}" stroke="#e53a3a" stroke-width="1" opacity="0.1"/>
+  
+  <!-- Bottom accent -->
+  <rect x="40" y="${HEIGHT - 44}" width="${WIDTH - 80}" height="4" rx="2" fill="url(#redGradient)" opacity="0.4"/>
 </svg>`;
 
   return svg;
@@ -559,7 +457,7 @@ async function generateOgImage(metadata, outputPath) {
 
     return true;
   } catch (error) {
-    console.error(`Failed to generate OG image for "${title}":`, error);
+    console.error(`Failed to generate OG image for "${metadata.title || 'untitled'}":`, error);
     return false;
   }
 }

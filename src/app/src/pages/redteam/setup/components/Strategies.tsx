@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
@@ -355,6 +357,14 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies],
   );
 
+  // Check if user has selected all or most strategies
+  const hasSelectedMostStrategies = useMemo(() => {
+    const totalAvailable = availableStrategies.length;
+    const totalSelected = selectedStrategyIds.length;
+    // Show warning if more than 80% of strategies are selected or all strategies are selected
+    return totalSelected >= totalAvailable * 0.8 || totalSelected === totalAvailable;
+  }, [selectedStrategyIds, availableStrategies]);
+
   const showSystemConfig = config.strategies.some((s) =>
     ['goat', 'crescendo'].includes(getStrategyId(s)),
   );
@@ -395,6 +405,38 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       onNext={onNext}
       onBack={onBack}
     >
+      {/* Warning banner when all/most strategies are selected - full width sticky */}
+      {hasSelectedMostStrategies && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon />}
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 9,
+            margin: -3,
+            marginBottom: 3,
+            padding: theme.spacing(2, 3),
+            borderRadius: 0,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            '& .MuiAlert-message': {
+              width: '100%',
+            },
+          }}
+        >
+          <Box>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Performance Warning: Too Many Strategies Selected
+            </Typography>
+            <Typography variant="body2">
+              Selecting many strategies is usually not efficient and will significantly increase
+              evaluation time and cost. It's recommended to use the preset configurations or select
+              only the strategies specifically needed for your use case.
+            </Typography>
+          </Box>
+        </Alert>
+      )}
+
       <Box>
         <Box
           sx={{
