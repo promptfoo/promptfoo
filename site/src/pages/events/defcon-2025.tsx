@@ -240,7 +240,7 @@ export default function Defcon2025(): JSX.Element {
             <h2 className={styles.sectionTitle}>Join the Movement</h2>
             <div className={styles.statsGrid}>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>100K+</div>
+                <div className={styles.statNumber}>150K+</div>
                 <div className={styles.statLabel}>Open Source Users</div>
               </div>
               <div className={styles.stat}>
