@@ -283,13 +283,32 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   // RENDERING ===================================================================
   // =============================================================================
 
+  const getNextButtonTooltip = () => {
+    if (testMode === 'application' && !isPurposePresent) {
+      return 'Please enter the application purpose to continue';
+    }
+    return undefined;
+  };
+
   return (
     <PageWrapper
       title="Application Details"
-      description="Define your application's purpose and constraints to help tailor the red team test generation and evaluation."
+      description={(() => {
+        switch (testMode) {
+          case 'application':
+            return 'Describe your application so we can generate targeted security tests.';
+          case 'model':
+            return 'Describe the foundation model so we can generate targeted tests.';
+          default:
+            return '';
+        }
+      })()}
       onNext={onNext}
       onBack={onBack}
       nextDisabled={testMode === 'application' && !isPurposePresent}
+      warningMessage={
+        testMode === 'application' && !isPurposePresent ? getNextButtonTooltip() : undefined
+      }
     >
       <Box sx={{ width: '100%', px: 3 }}>
         <Stack direction="column" spacing={4}>
@@ -386,26 +405,24 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     {isDiscovering ? 'Discovering...' : 'Discover'}
                   </Button>
                   {isDiscovering && showSlowDiscoveryMessage && (
-                    <Alert severity="info" sx={{ border: 0 }}>
+                    <Alert severity="info">
                       Discovery is taking a little while. This is normal for complex applications.
                     </Alert>
                   )}
                   {!hasTargetConfigured && (
-                    <Alert severity="warning" sx={{ border: 0 }}>
+                    <Alert severity="warning">
                       You must configure a target to run auto-discovery.
                     </Alert>
                   )}
                   {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
-                    <Alert severity="error" sx={{ border: 0 }}>
+                    <Alert severity="error">
                       Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
                       connection.
                     </Alert>
                   )}
                   {discoveryError && (
                     <>
-                      <Alert severity="error" sx={{ border: 0 }}>
-                        {discoveryError}
-                      </Alert>
+                      <Alert severity="error">{discoveryError}</Alert>
                       <Box
                         sx={{
                           p: 2,

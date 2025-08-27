@@ -124,13 +124,12 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       if (message.reasoning && (this.config.showThinking ?? true)) {
         output = `Thinking: ${message.reasoning}\n\n${output}`;
       }
-    } else if (message.reasoning) {
-      // Fallback to reasoning if no content (shouldn't happen with Gemini)
-      output = message.reasoning;
     } else if (message.function_call || message.tool_calls) {
       output = message.function_call || message.tool_calls;
+    } else if (message.reasoning && (this.config.showThinking ?? true)) {
+      // Fallback to reasoning if no content (shouldn't happen with Gemini)
+      output = message.reasoning;
     }
-
     // Handle structured output
     if (config.response_format?.type === 'json_schema') {
       // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON

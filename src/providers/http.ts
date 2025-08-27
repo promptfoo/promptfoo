@@ -1,23 +1,15 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
-import path from 'path';
-
 import httpZ from 'http-z';
+import path from 'path';
 import { z } from 'zod';
-import { type FetchWithCacheResult, fetchWithCache } from '../cache';
+
+import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { renderVarsInObject } from '../util';
-import { maybeLoadFromExternalFile } from '../util/file';
-import { isJavascriptFile } from '../util/fileExtensions';
-import invariant from '../util/invariant';
-import { safeJsonStringify } from '../util/json';
-import { getNunjucksEngine } from '../util/templates';
-import { REQUEST_TIMEOUT_MS } from './shared';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -25,6 +17,13 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types';
+import { renderVarsInObject } from '../util';
+import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
+import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
+import { getNunjucksEngine } from '../util/templates';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -61,6 +60,37 @@ function renderJsonTemplate(template: string, vars: Record<string, any>): any {
     const reRendered = renderVarsInObject(template, escapedVars);
     return JSON.parse(reRendered); // This will throw if still invalid
   }
+}
+
+/**
+ * Safely render raw HTTP templates with Nunjucks by wrapping the entire
+ * template in raw blocks and selectively allowing only {{...}} variables.
+ */
+function renderRawRequestWithNunjucks(template: string, vars: Record<string, any>): string {
+  // Protect literal Nunjucks syntax in the source by raw-wrapping
+  // and then re-enabling only variable tags.
+  const VAR_TOKEN = '__PF_VAR__';
+  let working = template;
+
+  // 1) Temporarily replace all {{...}} occurrences with placeholders
+  const placeholders: string[] = [];
+  working = working.replace(/\{\{[\s\S]*?\}\}/g, (m) => {
+    const idx = placeholders.push(m) - 1;
+    return `${VAR_TOKEN}${idx}__`;
+  });
+
+  // 2) Wrap everything in raw so Nunjucks ignores any {%...%} found in headers/cookies
+  working = `{% raw %}${working}{% endraw %}`;
+
+  // 3) Re-enable variables by inserting endraw/raw around each placeholder
+  working = working.replace(new RegExp(`${VAR_TOKEN}(\\d+)__`, 'g'), (_m, g1) => {
+    const original = placeholders[Number(g1)];
+    return `{% endraw %}${original}{% raw %}`;
+  });
+
+  // 4) Render with Nunjucks normally
+  const nunjucks = getNunjucksEngine();
+  return nunjucks.renderString(working, vars);
 }
 
 // This function is used to encode the URL in the first line of a raw request
@@ -650,7 +680,8 @@ export function processTextBody(body: string, vars: Record<string, any>): string
 }
 
 function parseRawRequest(input: string) {
-  const adjusted = input.trim().replace(/\n/g, '\r\n') + '\r\n\r\n';
+  const normalized = input.replace(/\r\n/g, '\n').trim();
+  const adjusted = normalized.replace(/\n/g, '\r\n') + '\r\n\r\n';
   // If the injectVar is in a query param, we need to encode the URL in the first line
   const encoded = urlEncodeRawRequestPath(adjusted);
   try {
@@ -874,6 +905,11 @@ export class HttpProvider implements ApiProvider {
           this.config,
         )}`,
       );
+    }
+
+    // Process body to resolve file:// references
+    if (this.config.body) {
+      this.config.body = maybeLoadConfigFromExternalFile(this.config.body);
     }
   }
 
@@ -1112,6 +1148,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
+
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
@@ -1178,7 +1215,7 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
-    const renderedRequest = getNunjucksEngine().renderString(this.config.request, {
+    const renderedRequest = renderRawRequestWithNunjucks(this.config.request, {
       ...vars,
       prompt: transformedPrompt,
     });

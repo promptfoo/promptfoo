@@ -258,6 +258,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       prompt,
       context?.vars,
       config.systemInstruction,
+      { useAssistantRole: config.useAssistantRole },
     );
 
     // Determine API version based on model
@@ -416,3 +417,15 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
   }
 }
+
+export const DefaultGradingProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultGradingJsonProvider = new AIStudioGenericProvider('gemini-2.5-pro', {
+  config: {
+    generationConfig: {
+      response_mime_type: 'application/json',
+    },
+  },
+});
+export const DefaultLlmRubricProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultSuggestionsProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultSynthesizeProvider = new AIStudioGenericProvider('gemini-2.5-pro');
