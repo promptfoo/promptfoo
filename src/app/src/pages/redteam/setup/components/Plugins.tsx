@@ -1429,14 +1429,8 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                   <Box sx={{ pt: 2 }}>
                     <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
                       <Typography variant="body2">
-                        This is a sample test case generated for the{' '}
-                        <strong>
-                          {displayNameOverrides[generatingPlugin!] ||
-                            categoryAliases[generatingPlugin!] ||
-                            generatingPlugin}
-                        </strong>{' '}
-                        plugin. Use it to understand what types of attacks this plugin will test
-                        for.
+                        This is a sample test case generated for the <code>{generatingPlugin}</code>{' '}
+                        plugin. Fine tune it by adjusting your application details.
                       </Typography>
                     </Alert>
                     <Typography variant="subtitle2" gutterBottom>
@@ -1477,6 +1471,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         '&:hover': {
                           textDecoration: 'underline',
                         },
+                        paddingLeft: 2,
                       }}
                     >
                       Learn more about{' '}
