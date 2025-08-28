@@ -1,12 +1,11 @@
-import chalk from 'chalk';
-import chokidar from 'chokidar';
-import type { Command } from 'commander';
-import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
+
+import chalk from 'chalk';
+import chokidar from 'chokidar';
+import dedent from 'dedent';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
-
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvFloat, getEnvInt } from '../envars';
@@ -20,14 +19,6 @@ import { loadApiProvider } from '../providers';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import type {
-  CommandLineOptions,
-  EvaluateOptions,
-  Scenario,
-  TestSuite,
-  TokenUsage,
-  UnifiedConfig,
-} from '../types';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
 import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
@@ -39,9 +30,19 @@ import invariant from '../util/invariant';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
-import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
 import { notCloudEnabledShareInstructions } from './share';
+import type { Command } from 'commander';
+
+import type {
+  CommandLineOptions,
+  EvaluateOptions,
+  Scenario,
+  TestSuite,
+  TokenUsage,
+  UnifiedConfig,
+} from '../types';
+import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -145,15 +146,6 @@ export async function doEval(
       }
     }
 
-    // Misc settings
-    const iterations = cmdObj.repeat ?? Number.NaN;
-    const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;
-
-    if (!cmdObj.cache || repeat > 1) {
-      logger.info('Cache is disabled.');
-      disableCache();
-    }
-
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
     // Check if config has redteam section but no test cases
@@ -195,9 +187,23 @@ export async function doEval(
       };
     }
 
+    // Misc settings
+    const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
+    const repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
+
+    const cache = cmdObj.cache ?? evaluateOptions.cache;
+
+    console.log('cache', cache);
+
+    if (!cache || repeat > 1) {
+      logger.info('Cache is disabled.');
+      disableCache();
+    }
+
     let maxConcurrency =
       cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-    const delay = cmdObj.delay ?? 0;
+
+    const delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
 
     if (delay > 0) {
       maxConcurrency = 1;
@@ -235,10 +241,18 @@ export async function doEval(
 
     const options: EvaluateOptions = {
       ...evaluateOptions,
-      showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar !== false,
+      showProgressBar:
+        getLogLevel() === 'debug'
+          ? false
+          : cmdObj.progressBar !== undefined
+            ? cmdObj.progressBar !== false
+            : evaluateOptions.showProgressBar !== undefined
+              ? evaluateOptions.showProgressBar
+              : true,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
+      cache,
     };
 
     if (cmdObj.grader) {
