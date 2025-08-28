@@ -733,7 +733,11 @@ export function evalCommand(
       'Delay between each test (in milliseconds)',
       defaultConfig.evaluateOptions?.delay ? String(defaultConfig.evaluateOptions.delay) : '0',
     )
-    .option('--no-cache', 'Do not read or write results to disk cache')
+    .option(
+      '--no-cache',
+      'Do not read or write results to disk cache',
+      defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
+    )
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
 
     // Filtering and subset selection
