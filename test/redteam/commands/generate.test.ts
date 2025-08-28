@@ -10,6 +10,7 @@ import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover
 import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
+import { canContinueWithTarget } from '../../../src/redteam/shared';
 import { getConfigFromCloud } from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
@@ -58,6 +59,7 @@ jest.mock('../../../src/util/cloud', () => ({
   getCloudDatabaseId: jest.fn(),
   getPluginSeverityOverridesFromCloud: jest.fn(),
   isCloudProvider: jest.fn(),
+  getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
 }));
 
 jest.mock('../../../src/cliState', () => ({
@@ -70,6 +72,7 @@ jest.mock('../../../src/globalConfig/cloud', () => ({
     getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
   })),
   cloudConfig: {
+    isEnabled: jest.fn().mockReturnValue(false),
     getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
   },
 }));
@@ -82,6 +85,10 @@ jest.mock('../../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
   neverGenerateRemote: jest.fn().mockReturnValue(false),
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
+}));
+
+jest.mock('../../../src/redteam/shared', () => ({
+  canContinueWithTarget: jest.fn().mockResolvedValue(true),
 }));
 
 jest.mock('../../../src/util/config/manage');
@@ -1043,6 +1050,117 @@ describe('doGenerateRedteam', () => {
       expect(headerComments!.some((comment) => comment.includes('https://api.promptfoo.app'))).toBe(
         true,
       );
+    });
+  });
+
+  describe('canContinueWithTarget permissions', () => {
+    it('should fail when canContinueWithTarget returns false', async () => {
+      // Mock cloudConfig to be enabled
+      const mockCloudConfig = {
+        isEnabled: jest.fn().mockReturnValue(true),
+        getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+      };
+      jest.mocked(cloudConfig).isEnabled = mockCloudConfig.isEnabled;
+
+      // Mock canContinueWithTarget to return false
+      jest.mocked(canContinueWithTarget).mockResolvedValueOnce(false);
+
+      // Setup the test configuration
+      jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: ['openai:gpt-4'],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          providers: ['openai:gpt-4'],
+          redteam: {},
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
+
+      const result = await doGenerateRedteam(options);
+
+      // Verify canContinueWithTarget was called with the correct arguments
+      expect(canContinueWithTarget).toHaveBeenCalledWith(['openai:gpt-4'], 'test-team-id');
+
+      // Verify the warning was logged
+      expect(logger.warn).toHaveBeenCalledWith(
+        'This provider does not exist in your team and you do not have permission to create providers. Please contact your administrator to get access.',
+      );
+
+      // Verify that the function returns null when permission is denied
+      expect(result).toBeNull();
+
+      // Verify that synthesize was not called
+      expect(synthesize).not.toHaveBeenCalled();
+    });
+
+    it('should call canContinueWithTarget and proceed when it returns true', async () => {
+      // Mock cloudConfig to be enabled
+      const mockCloudConfig = {
+        isEnabled: jest.fn().mockReturnValue(true),
+        getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+      };
+      jest.mocked(cloudConfig).isEnabled = mockCloudConfig.isEnabled;
+
+      // Mock canContinueWithTarget to return true
+      jest.mocked(canContinueWithTarget).mockResolvedValueOnce(true);
+
+      // Setup the test configuration
+      jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: ['openai:gpt-4'],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          providers: ['openai:gpt-4'],
+          redteam: {},
+        },
+      });
+
+      jest.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'redteam' },
+          },
+        ],
+        purpose: 'Test purpose',
+        entities: ['Test entity'],
+        injectVar: 'input',
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+        force: true,
+      };
+
+      const result = await doGenerateRedteam(options);
+
+      // Verify canContinueWithTarget was called
+      expect(canContinueWithTarget).toHaveBeenCalledWith(['openai:gpt-4'], 'test-team-id');
+
+      // Verify that the function proceeded normally
+      expect(result).not.toBeNull();
+
+      // Verify that synthesize was called
+      expect(synthesize).toHaveBeenCalled();
     });
   });
 });

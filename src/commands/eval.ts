@@ -16,7 +16,7 @@ import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
-import { canContinueWithProvider } from '../redteam/shared';
+import { canContinueWithTarget, TargetPermissionError } from '../redteam/shared';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
@@ -238,12 +238,11 @@ export async function doEval(
 
     if (cloudConfig.isEnabled()) {
       const teamId = config.metadata?.teamId ?? (await getDefaultTeam()).id;
-      const canContinue = await canContinueWithProvider(config.providers, teamId);
+      const canContinue = await canContinueWithTarget(config.providers, teamId);
       if (!canContinue) {
-        logger.warn(
-          'This provider does not exist in your team and you do not have permission to create providers. Please contact your administrator to get access.',
+        throw new TargetPermissionError(
+          'This target does not exist in your team and you do not have permission to create targets. Please contact your administrator to get access.',
         );
-        return null;
       }
     }
 

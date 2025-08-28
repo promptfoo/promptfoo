@@ -41,7 +41,7 @@ import {
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import { canContinueWithProvider } from '../shared';
+import { canContinueWithTarget } from '../shared';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
@@ -165,7 +165,7 @@ export async function doGenerateRedteam(
     redteamConfig = resolved.config.redteam;
     if (cloudConfig.isEnabled()) {
       const teamId = resolved.config.metadata?.teamId ?? (await getDefaultTeam()).id;
-      const canContinue = await canContinueWithProvider(resolved.config.providers, teamId);
+      const canContinue = await canContinueWithTarget(resolved.config.providers, teamId);
       if (!canContinue) {
         logger.warn(
           'This provider does not exist in your team and you do not have permission to create providers. Please contact your administrator to get access.',

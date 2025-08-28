@@ -10,10 +10,12 @@ import {
 } from '../../src/commands/eval';
 import { evaluate } from '../../src/evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../../src/globalConfig/accounts';
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers';
+import { canContinueWithTarget } from '../../src/redteam/shared';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
@@ -23,10 +25,28 @@ import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');
 jest.mock('../../src/globalConfig/accounts');
+jest.mock('../../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    isEnabled: jest.fn().mockReturnValue(false),
+    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+  },
+}));
 jest.mock('../../src/migrate');
 jest.mock('../../src/providers');
+jest.mock('../../src/redteam/shared', () => ({
+  canContinueWithTarget: jest.fn().mockResolvedValue(true),
+  TargetPermissionError: class TargetPermissionError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'ProviderPermissionError';
+    }
+  },
+}));
 jest.mock('../../src/share');
 jest.mock('../../src/table');
+jest.mock('../../src/util/cloud', () => ({
+  getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
+}));
 jest.mock('fs');
 jest.mock('path', () => {
   const actualPath = jest.requireActual('path');
@@ -223,6 +243,121 @@ describe('evalCommand', () => {
       expect.anything(),
       expect.objectContaining({ maxConcurrency: 4 }),
     );
+  });
+});
+
+describe('canContinueWithTarget permissions', () => {
+  const defaultConfigPath = 'config.yaml';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should fail when canContinueWithTarget returns false', async () => {
+    // Mock cloudConfig to be enabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+
+    // Mock canContinueWithTarget to return false
+    jest.mocked(canContinueWithTarget).mockResolvedValueOnce(false);
+
+    // Setup the test configuration
+    const config = {
+      providers: ['openai:gpt-4'],
+    } as UnifiedConfig;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: ['openai:gpt-4'],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const cmdObj = {};
+
+    await expect(doEval(cmdObj, config, defaultConfigPath, {})).rejects.toThrow(
+      'This target does not exist in your team and you do not have permission to create targets. Please contact your administrator to get access.',
+    );
+
+    // Verify canContinueWithTarget was called with the correct arguments
+    expect(canContinueWithTarget).toHaveBeenCalledWith(['openai:gpt-4'], 'test-team-id');
+
+    // Verify that evaluate was not called
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('should call canContinueWithTarget and proceed when it returns true', async () => {
+    // Mock cloudConfig to be enabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+
+    // Mock canContinueWithTarget to return true
+    jest.mocked(canContinueWithTarget).mockResolvedValueOnce(true);
+
+    // Setup the test configuration
+    const config = {
+      providers: ['openai:gpt-4'],
+    } as UnifiedConfig;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: ['openai:gpt-4'],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const mockEvalRecord = new Eval(config);
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    const cmdObj = {};
+
+    const result = await doEval(cmdObj, config, defaultConfigPath, {});
+
+    // Verify canContinueWithTarget was called
+    expect(canContinueWithTarget).toHaveBeenCalledWith(['openai:gpt-4'], 'test-team-id');
+
+    // Verify that the function proceeded normally
+    expect(result).not.toBeNull();
+
+    // Verify that evaluate was called
+    expect(evaluate).toHaveBeenCalled();
+  });
+
+  it('should not check permissions when cloudConfig is disabled', async () => {
+    // Mock cloudConfig to be disabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+
+    // Setup the test configuration
+    const config = {
+      providers: ['openai:gpt-4'],
+    } as UnifiedConfig;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: ['openai:gpt-4'],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const mockEvalRecord = new Eval(config);
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    const cmdObj = {};
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    // Verify canContinueWithTarget was NOT called
+    expect(canContinueWithTarget).not.toHaveBeenCalled();
+
+    // Verify that evaluate was called
+    expect(evaluate).toHaveBeenCalled();
   });
 });
 

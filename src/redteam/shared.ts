@@ -11,7 +11,12 @@ import { getProviderIds } from '../providers';
 import { createShareableUrl } from '../share';
 import { isRunningUnderNpx, providerToIdentifier } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
-import { canCreateTargets, checkIfCliTargetExists, isCloudProvider } from '../util/cloud';
+import {
+  canCreateTargets,
+  checkIfCliTargetExists,
+  getDefaultTeam,
+  isCloudProvider,
+} from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
@@ -139,12 +144,19 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   return evalResult;
 }
 
-export async function canContinueWithProvider(
+export class TargetPermissionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProviderPermissionError';
+  }
+}
+
+export async function canContinueWithTarget(
   providers: UnifiedConfig['providers'] | undefined,
   teamId: string | undefined,
 ) {
   logger.debug(
-    `[canContinueWithProvider] Checking provider permissions for ${providers} on team ${teamId}`,
+    `[canContinueWithTarget] Checking provider permissions for ${providers} on team ${teamId}`,
   );
 
   if (!providers) {
@@ -152,39 +164,82 @@ export async function canContinueWithProvider(
   }
 
   const providerIds = getProviderIds(providers);
-  if (providerIds.length === 0 || isCloudProvider(providerIds[0])) {
+  if (providerIds.length === 0) {
     return true;
   }
 
-  let identifier: string | undefined;
-
-  if (Array.isArray(providers)) {
-    identifier = providerToIdentifier(providers[0]);
-  } else {
-    identifier = providerToIdentifier(providers);
-  }
-
-  if (!identifier) {
+  // Check if all providers are cloud providers
+  const allCloudProviders = providerIds.every((id) => isCloudProvider(id));
+  if (allCloudProviders) {
     return true;
   }
 
-  logger.debug(`Checking provider permissions for ${identifier} on team ${teamId}`);
+  let effectiveTeamId = teamId;
+  if (!effectiveTeamId) {
+    try {
+      const defaultTeam = await getDefaultTeam();
+      effectiveTeamId = defaultTeam.id;
+      logger.debug(`Using default team ${defaultTeam.name} (${effectiveTeamId})`);
+    } catch (error) {
+      logger.debug(`Failed to get default team: ${error}`);
+      // Continue without team ID - will fail at checkIfCliTargetExists if needed
+      effectiveTeamId = '';
+    }
+  }
 
-  const exists = await checkIfCliTargetExists(identifier, teamId ?? '');
+  // Get all provider identifiers
+  const providersArray = Array.isArray(providers) ? providers : [providers];
+  const identifiers: string[] = [];
 
-  if (exists) {
-    logger.debug(`Provider ${identifier} exists on team ${teamId}`);
+  for (let i = 0; i < providersArray.length; i++) {
+    // Skip cloud providers
+    if (isCloudProvider(providerIds[i])) {
+      continue;
+    }
+
+    const identifier = providerToIdentifier(providersArray[i]);
+
+    if (identifier) {
+      identifiers.push(identifier);
+    }
+  }
+
+  // If no non-cloud identifiers found, return true
+  if (identifiers.length === 0) {
     return true;
   }
 
-  const canCreate = await canCreateTargets(teamId);
-  if (canCreate) {
-    logger.debug(`Provider ${identifier} does not exist on team ${teamId}, but can be created`);
-    return true;
+  // Check permissions for all non-cloud providers
+  for (const identifier of identifiers) {
+    logger.debug(`Checking target permissions for ${identifier} on team ${effectiveTeamId}`);
+
+    const exists = await checkIfCliTargetExists(identifier, effectiveTeamId);
+
+    if (exists) {
+      logger.debug(`Provider ${identifier} exists on team ${effectiveTeamId}`);
+      continue;
+    }
+
+    try {
+      const canCreate = await canCreateTargets(effectiveTeamId);
+      if (canCreate) {
+        logger.debug(
+          `Provider ${identifier} does not exist on team ${effectiveTeamId}, but can be created`,
+        );
+        continue;
+      }
+
+      logger.debug(
+        `Provider ${identifier} does not exist on team ${effectiveTeamId} and cannot be created. User does not have permissions.`,
+      );
+      return false;
+    } catch (error) {
+      logger.debug(`Error checking if user can create targets: ${error}. Continuing anyway.`);
+      // If we can't check permissions, allow the operation to continue
+      // It will fail later with a proper error message if permissions are actually missing
+      continue;
+    }
   }
 
-  logger.debug(
-    `Provider ${identifier} does not exist on team ${teamId} and cannot be created. User does not have permissions.`,
-  );
-  return false;
+  return true;
 }
