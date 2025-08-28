@@ -46,7 +46,7 @@ export function sanitizeUrl(url: string): string {
     }
 
     const parsedUrl = new URL(url);
-    
+
     // Create a copy for sanitization to avoid modifying the original URL
     // Use href instead of toString() for better cross-platform compatibility
     const sanitizedUrl = new URL(parsedUrl.href);
@@ -59,7 +59,7 @@ export function sanitizeUrl(url: string): string {
     // Sanitize query parameters that might contain sensitive data
     const sensitiveParams =
       /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
-    
+
     try {
       for (const key of Array.from(sanitizedUrl.searchParams.keys())) {
         if (sensitiveParams.test(key)) {
