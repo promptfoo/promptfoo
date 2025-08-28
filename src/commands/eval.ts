@@ -145,6 +145,15 @@ export async function doEval(
       }
     }
 
+    // Misc settings
+    const iterations = cmdObj.repeat ?? Number.NaN;
+    const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;
+
+    if (!cmdObj.cache || repeat > 1) {
+      logger.info('Cache is disabled.');
+      disableCache();
+    }
+
     ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
     // Check if config has redteam section but no test cases
@@ -178,38 +187,17 @@ export async function doEval(
       }
     }
 
-    // Merge evaluateOptions: config file -> passed evaluateOptions -> CLI options
-    // The priority is: CLI > passed evaluateOptions > config file
-    const mergedEvaluateOptions: EvaluateOptions = {
-      ...(config.evaluateOptions || {}), // config file options (lowest priority)
-      ...evaluateOptions, // passed options (from defaultConfig)
-      // CLI options override everything (highest priority)
-      ...(cmdObj.maxConcurrency !== undefined ? { maxConcurrency: cmdObj.maxConcurrency } : {}),
-      ...(cmdObj.generateSuggestions !== undefined
-        ? { generateSuggestions: cmdObj.generateSuggestions }
-        : {}),
-      ...(cmdObj.progressBar !== undefined
-        ? { showProgressBar: cmdObj.progressBar !== false }
-        : {}),
-      ...(cmdObj.repeat !== undefined ? { repeat: cmdObj.repeat } : {}),
-      ...(cmdObj.delay !== undefined ? { delay: cmdObj.delay } : {}),
-    };
-
-    logger.debug(`evaluateOptions from config: ${JSON.stringify(config.evaluateOptions)}`);
-    logger.debug(`merged evaluateOptions: ${JSON.stringify(mergedEvaluateOptions)}`);
-
-    // Handle repeat setting
-    const iterations = cmdObj.repeat ?? mergedEvaluateOptions.repeat ?? Number.NaN;
-    const repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
-
-    if (!cmdObj.cache || repeat > 1) {
-      logger.info('Cache is disabled.');
-      disableCache();
+    // Ensure evaluateOptions from the config file are applied
+    if (config.evaluateOptions) {
+      evaluateOptions = {
+        ...config.evaluateOptions,
+        ...evaluateOptions,
+      };
     }
 
     let maxConcurrency =
-      cmdObj.maxConcurrency ?? mergedEvaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-    const delay = cmdObj.delay ?? mergedEvaluateOptions.delay ?? 0;
+      cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
+    const delay = cmdObj.delay ?? 0;
 
     if (delay > 0) {
       maxConcurrency = 1;
@@ -246,7 +234,7 @@ export async function doEval(
     );
 
     const options: EvaluateOptions = {
-      ...mergedEvaluateOptions,
+      ...evaluateOptions,
       showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
@@ -267,6 +255,9 @@ export async function doEval(
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
+    }
+    if (cmdObj.generateSuggestions) {
+      options.generateSuggestions = true;
     }
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
@@ -659,8 +650,12 @@ export function evalCommand(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
 ) {
-  // Initial evaluateOptions from default config (will be merged with file config in doEval)
-  const evaluateOptions: EvaluateOptions = defaultConfig.evaluateOptions || {};
+  const evaluateOptions: EvaluateOptions = {};
+  if (defaultConfig.evaluateOptions) {
+    evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
+    evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
+    evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
+  }
 
   const evalCmd = program
     .command('eval')
