@@ -5,7 +5,7 @@ import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import { canCreateProviders, getDefaultTeam } from '../util/cloud';
+import { canCreateTargets, getDefaultTeam } from '../util/cloud';
 import type { Command } from 'commander';
 
 export function authCommand(program: Command) {
@@ -135,20 +135,20 @@ export function authCommand(program: Command) {
     });
 
   authCommand
-    .command('can-create-providers')
-    .description('Check if user can create providers')
+    .command('can-create-targets')
+    .description('Check if user can create targets')
     .option('-t, --team-id <teamId>', 'The team id to check permissions for')
     .action(async (cmdObj: { teamId?: string }) => {
       if (cmdObj.teamId) {
-        const canCreate = await canCreateProviders(cmdObj.teamId);
-        logger.info(chalk.green(`Can create providers for team ${cmdObj.teamId}: ${canCreate}`));
+        const canCreate = await canCreateTargets(cmdObj.teamId);
+        logger.info(chalk.green(`Can create targets for team ${cmdObj.teamId}: ${canCreate}`));
       } else {
         const team = await getDefaultTeam();
-        const canCreate = await canCreateProviders(team.id);
-        logger.info(chalk.green(`Can create providers for team ${team.name}: ${canCreate}`));
+        const canCreate = await canCreateTargets(team.id);
+        logger.info(chalk.green(`Can create targets for team ${team.name}: ${canCreate}`));
       }
       telemetry.record('command_used', {
-        name: 'auth check-providers',
+        name: 'auth can-create-targets',
       });
     });
 }

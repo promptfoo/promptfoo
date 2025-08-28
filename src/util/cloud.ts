@@ -185,7 +185,7 @@ export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
   return oldestTeam;
 }
 
-export async function checkIfCliProviderExists(id: string, teamId: string): Promise<boolean> {
+export async function checkIfCliTargetExists(id: string, teamId: string): Promise<boolean> {
   const response = await makeRequest(`providers/cli/${teamId}/${id}`, 'GET');
 
   logger.debug(`[checkIfCliProviderExists] Response: ${response.status} ${response.statusText}`);
@@ -198,7 +198,7 @@ export async function checkIfCliProviderExists(id: string, teamId: string): Prom
   return true;
 }
 
-export async function canCreateProviders(teamId: string | undefined): Promise<boolean> {
+export async function canCreateTargets(teamId: string | undefined): Promise<boolean> {
   if (!cloudConfig.isEnabled()) {
     logger.debug(
       '[canCreateProviders] Cloud config is not enabled, create providers is not relevant.',

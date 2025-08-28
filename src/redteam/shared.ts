@@ -11,7 +11,7 @@ import { getProviderIds } from '../providers';
 import { createShareableUrl } from '../share';
 import { isRunningUnderNpx, providerToIdentifier } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
-import { canCreateProviders, checkIfCliProviderExists, isCloudProvider } from '../util/cloud';
+import { canCreateTargets, checkIfCliTargetExists, isCloudProvider } from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
@@ -170,14 +170,14 @@ export async function canContinueWithProvider(
 
   logger.debug(`Checking provider permissions for ${identifier} on team ${teamId}`);
 
-  const exists = await checkIfCliProviderExists(identifier, teamId ?? '');
+  const exists = await checkIfCliTargetExists(identifier, teamId ?? '');
 
   if (exists) {
     logger.debug(`Provider ${identifier} exists on team ${teamId}`);
     return true;
   }
 
-  const canCreate = await canCreateProviders(teamId);
+  const canCreate = await canCreateTargets(teamId);
   if (canCreate) {
     logger.debug(`Provider ${identifier} does not exist on team ${teamId}, but can be created`);
     return true;

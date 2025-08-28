@@ -1,7 +1,7 @@
 import { fetchWithProxy } from '../../src/fetch';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import {
-  canCreateProviders,
+  canCreateTargets,
   getConfigFromCloud,
   getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
@@ -630,7 +630,7 @@ describe('cloud utils', () => {
     });
   });
 
-  describe('canCreateProviders', () => {
+  describe('canCreateTargets', () => {
     it('should return true when user has create Provider ability', async () => {
       mockCloudConfig.isEnabled.mockReturnValue(true);
 
@@ -645,7 +645,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve(mockAbilities),
       } as Response);
 
-      const result = await canCreateProviders('team-123');
+      const result = await canCreateTargets('team-123');
 
       expect(result).toBe(true);
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
@@ -657,7 +657,7 @@ describe('cloud utils', () => {
       );
     });
 
-    it('should return false when user does not have create Provider ability', async () => {
+    it('should return false when user does not have create Target ability', async () => {
       mockCloudConfig.isEnabled.mockReturnValue(true);
 
       const mockAbilities = [
@@ -670,7 +670,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve(mockAbilities),
       } as Response);
 
-      const result = await canCreateProviders('team-123');
+      const result = await canCreateTargets('team-123');
 
       expect(result).toBe(false);
     });
@@ -693,7 +693,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve(mockAbilities),
       } as Response);
 
-      const result = await canCreateProviders(undefined);
+      const result = await canCreateTargets(undefined);
 
       expect(result).toBe(true);
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
@@ -708,7 +708,7 @@ describe('cloud utils', () => {
     it('should return true when cloud config is not enabled', async () => {
       mockCloudConfig.isEnabled.mockReturnValue(false);
 
-      const result = await canCreateProviders('team-123');
+      const result = await canCreateTargets('team-123');
 
       expect(result).toBe(true);
       expect(mockFetchWithProxy).not.toHaveBeenCalled();
@@ -722,7 +722,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve([]),
       } as Response);
 
-      const result = await canCreateProviders('team-123');
+      const result = await canCreateTargets('team-123');
 
       expect(result).toBe(false);
     });
@@ -741,7 +741,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve(mockAbilities),
       } as Response);
 
-      const result = await canCreateProviders('team-123');
+      const result = await canCreateTargets('team-123');
 
       expect(result).toBe(false);
     });
@@ -754,7 +754,7 @@ describe('cloud utils', () => {
         statusText: 'Forbidden',
       } as Response);
 
-      await expect(canCreateProviders('team-123')).rejects.toThrow(
+      await expect(canCreateTargets('team-123')).rejects.toThrow(
         'Failed to check provider permissions: Forbidden',
       );
     });
@@ -764,7 +764,7 @@ describe('cloud utils', () => {
 
       mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
 
-      await expect(canCreateProviders('team-123')).rejects.toThrow('Network error');
+      await expect(canCreateTargets('team-123')).rejects.toThrow('Network error');
     });
 
     it('should handle case-sensitive action and subject matching', async () => {
@@ -780,7 +780,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve(mockAbilities),
       } as Response);
 
-      const result = await canCreateProviders('team-123');
+      const result = await canCreateTargets('team-123');
 
       expect(result).toBe(false); // Should not match due to case sensitivity
     });
