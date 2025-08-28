@@ -8,7 +8,7 @@ try {
   // Check if openssl is available
   try {
     execSync('openssl version', { stdio: 'ignore' });
-  } catch (error) {
+  } catch (_error) {
     console.error('❌ OpenSSL is not available. Please install OpenSSL to generate certificates.');
     console.error('');
     console.error('On macOS: brew install openssl');

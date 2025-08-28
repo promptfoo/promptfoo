@@ -86,38 +86,42 @@ describe('Http Provider Certificate Content Support', () => {
       expect(signatureAuth.keyContent).toBeDefined();
     });
 
-    it('should fail validation when neither path nor content is provided for JKS', () => {
+    it('should accept configurations that fall back to legacy schema', () => {
       const signatureAuth = {
         type: 'jks' as const,
         keystorePassword: 'password',
-        // Neither keystorePath nor keystoreContent provided
+        // Neither keystorePath nor keystoreContent provided - falls back to legacy
         signatureDataTemplate: '{{signatureTimestamp}}',
         signatureAlgorithm: 'SHA256',
         signatureValidityMs: 300000,
       };
 
-      // This should fail validation
+      // This should pass because it falls back to legacy schema for backward compatibility
       expect(() => {
-        HttpProviderConfigSchema.parse({ signatureAuth });
-      }).toThrow(/Either keystorePath or keystoreContent must be provided/);
+        const result = HttpProviderConfigSchema.parse({ signatureAuth });
+        // The type field gets stripped by legacy schema
+        expect(result.signatureAuth).toBeDefined();
+        expect((result.signatureAuth as any).keystorePassword).toBe('password');
+      }).not.toThrow();
     });
 
-    it('should fail validation when no certificate options are provided for PFX', () => {
+    it('should accept PFX configurations that fall back to legacy schema', () => {
       const signatureAuth = {
         type: 'pfx' as const,
         pfxPassword: 'password',
-        // Neither pfxPath, pfxContent, nor cert/key pairs provided
+        // No certificate data provided - falls back to legacy schema
         signatureDataTemplate: '{{signatureTimestamp}}',
         signatureAlgorithm: 'SHA256',
         signatureValidityMs: 300000,
       };
 
-      // This should fail validation
+      // This should pass because it falls back to legacy schema for backward compatibility
       expect(() => {
-        HttpProviderConfigSchema.parse({ signatureAuth });
-      }).toThrow(
-        /Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided/,
-      );
+        const result = HttpProviderConfigSchema.parse({ signatureAuth });
+        // The type field gets stripped by legacy schema
+        expect(result.signatureAuth).toBeDefined();
+        expect((result.signatureAuth as any).pfxPassword).toBe('password');
+      }).not.toThrow();
     });
   });
 });

@@ -44,10 +44,6 @@ function getPostHogClient(): PostHog | null {
       posthogClient = new PostHog(POSTHOG_KEY, {
         host: EVENTS_ENDPOINT,
       });
-
-      posthogClient.on('error', (error) => {
-        logger.debug(`PostHog error: ${error}`);
-      });
     } catch {
       posthogClient = null;
     }
