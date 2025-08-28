@@ -193,8 +193,6 @@ export async function doEval(
 
     const cache = cmdObj.cache ?? evaluateOptions.cache;
 
-    console.log('cache', cache);
-
     if (!cache || repeat > 1) {
       logger.info('Cache is disabled.');
       disableCache();
