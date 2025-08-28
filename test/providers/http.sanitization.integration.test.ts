@@ -80,7 +80,7 @@ describe('HTTP Provider - Sanitization Integration Tests', () => {
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': 'test-client/1.0',
-            'Accept': 'application/json',
+            Accept: 'application/json',
           },
         },
       });
@@ -110,11 +110,14 @@ describe('HTTP Provider - Sanitization Integration Tests', () => {
 
   describe('URL sanitization', () => {
     it('should sanitize URL query parameters', async () => {
-      const provider = new HttpProvider('https://api.example.com/test?api_key=secret123&format=json', {
-        config: {
-          method: 'GET',
+      const provider = new HttpProvider(
+        'https://api.example.com/test?api_key=secret123&format=json',
+        {
+          config: {
+            method: 'GET',
+          },
         },
-      });
+      );
 
       const mockResponse = {
         data: '{"success": true}',
@@ -126,9 +129,7 @@ describe('HTTP Provider - Sanitization Integration Tests', () => {
 
       await provider.callApi('test');
 
-      const debugCall = loggerDebugSpy.mock.calls.find(
-        (call) => call[0].includes('Calling'),
-      );
+      const debugCall = loggerDebugSpy.mock.calls.find((call) => call[0].includes('Calling'));
       expect(debugCall).toBeDefined();
 
       const logMessage = debugCall[0];
@@ -142,23 +143,23 @@ describe('HTTP Provider - Sanitization Integration Tests', () => {
         {
           input: 'https://user:pass@api.com/test?api_key=secret&normal=value',
           expectContains: ['***:***', 'api_key=%5BREDACTED%5D', 'normal=value'],
-          expectNotContains: ['user', 'secret']
+          expectNotContains: ['user', 'secret'],
         },
         {
           input: 'https://api.com/test?token=bearer123&id=123',
           expectContains: ['token=%5BREDACTED%5D', 'id=123'],
-          expectNotContains: ['bearer123']
-        }
+          expectNotContains: ['bearer123'],
+        },
       ];
 
       testCases.forEach(({ input, expectContains, expectNotContains }) => {
         const result = sanitizeUrl(input);
-        
-        expectContains.forEach(expectedText => {
+
+        expectContains.forEach((expectedText) => {
           expect(result).toContain(expectedText);
         });
-        
-        expectNotContains.forEach(secretText => {
+
+        expectNotContains.forEach((secretText) => {
           expect(result).not.toContain(secretText);
         });
       });
@@ -187,17 +188,15 @@ describe('HTTP Provider - Sanitization Integration Tests', () => {
 
       await provider.callApi('test data');
 
-      const debugCall = loggerDebugSpy.mock.calls.find(
-        (call) => call[0].includes('Calling'),
-      );
+      const debugCall = loggerDebugSpy.mock.calls.find((call) => call[0].includes('Calling'));
       expect(debugCall).toBeDefined();
 
       const logMessage = debugCall[0];
-      
+
       // Both URL and header credentials should be sanitized
       expect(logMessage).toContain('api_key=%5BREDACTED%5D');
       expect(logMessage).toContain('"authorization":"[REDACTED]"');
-      
+
       // Header secret should not appear
       expect(logMessage).not.toContain('header_secret456');
       // Note: URL in config object may contain original secret, but main URL is sanitized
@@ -223,25 +222,23 @@ describe('HTTP Provider - Sanitization Integration Tests', () => {
       jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const startTime = Date.now();
-      
+
       // Run multiple calls to test performance impact
-      const promises = Array.from({ length: 5 }, () => 
-        provider.callApi('performance test')
-      );
-      
+      const promises = Array.from({ length: 5 }, () => provider.callApi('performance test'));
+
       await Promise.all(promises);
-      
+
       const endTime = Date.now();
       const totalTime = endTime - startTime;
-      
+
       // Should complete reasonably quickly (less than 500ms for 5 calls)
       expect(totalTime).toBeLessThan(500);
-      
+
       // Verify all calls were sanitized
-      const debugCalls = loggerDebugSpy.mock.calls.filter((call) =>
-        call[0].includes('Calling') && call[0].includes('with config:')
+      const debugCalls = loggerDebugSpy.mock.calls.filter(
+        (call) => call[0].includes('Calling') && call[0].includes('with config:'),
       );
-      
+
       expect(debugCalls.length).toBeGreaterThan(0);
       debugCalls.forEach((call) => {
         expect(call[0]).toContain('"authorization":"[REDACTED]"');
@@ -258,7 +255,7 @@ describe('HTTP Provider - Sanitization Integration Tests', () => {
           body: { test: 'value' },
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': '', // Empty header value
+            Authorization: '', // Empty header value
           },
         },
       });
@@ -273,19 +270,15 @@ describe('HTTP Provider - Sanitization Integration Tests', () => {
 
       // Should not crash
       await expect(provider.callApi('test prompt')).resolves.not.toThrow();
-      
+
       // Should still log something
       expect(loggerDebugSpy).toHaveBeenCalled();
     });
 
     it('should handle malformed URLs in sanitizeUrl function', () => {
-      const malformedInputs = [
-        'not-a-url',
-        '',
-        'https://[invalid-host]/api',
-      ];
+      const malformedInputs = ['not-a-url', '', 'https://[invalid-host]/api'];
 
-      malformedInputs.forEach(input => {
+      malformedInputs.forEach((input) => {
         expect(() => sanitizeUrl(input)).not.toThrow();
         const result = sanitizeUrl(input);
         expect(result).toBeDefined();
