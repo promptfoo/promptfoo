@@ -716,9 +716,6 @@ export function evalCommand(
     )
 
     // Execution control
-    .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls')
-    .option('--repeat <number>', 'Number of times to run each test')
-    .option('--delay <number>', 'Delay between each test (in milliseconds)')
     .option(
       '-j, --max-concurrency <number>',
       'Maximum number of concurrent API calls',
