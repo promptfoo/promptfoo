@@ -490,7 +490,7 @@ tests:
 
       # Context assertions use contextTransform
       - type: context-faithfulness
-        # Step 2b: Context transform - extract sources (runs in parallel with Step 2a)
+        # Step 2b: Context transform - extract sources
         # Also receives output from transformResponse: { answer: "...", sources: [...] }
         contextTransform: 'output.sources.map(s => s.content).join("\n")'
         threshold: 0.9
@@ -507,13 +507,11 @@ tests:
 ### Key Points
 
 1. **Provider Transform** (`transformResponse`): Applied first to normalize provider responses
-2. **Parallel Transforms**:
+2. **Test Case Transforms**:
    - `options.transform`: Modifies output for regular assertions
    - `contextTransform`: Extracts context for context-based assertions
    - Both receive the provider-transformed output directly
 3. **Assertion Transform**: Applied to already-transformed output for specific assertions
-
-This parallel execution ensures that context extraction remains reliable even when the main output is heavily transformed for other assertions.
 
 ### ProviderFunction
 

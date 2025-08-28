@@ -34,7 +34,7 @@ export async function resolveContext(
 
   if (assertion.contextTransform) {
     try {
-      // Use providerTransformedOutput if available (new parallel behavior)
+      // Use providerTransformedOutput if available
       // Otherwise fall back to output for backwards compatibility
       const outputForTransform = providerResponse?.providerTransformedOutput ?? output;
 

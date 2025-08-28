@@ -593,7 +593,7 @@ Transforms can be applied at multiple levels in the evaluation pipeline:
 ### Transform execution order
 
 1. **Provider transforms** (`transformResponse`) - Always applied first
-2. **Test transforms** (`options.transform`) and **Context transforms** (`contextTransform`) - Applied in parallel
+2. **Test transforms** (`options.transform`) and **Context transforms** (`contextTransform`)
    - Both receive the output from the provider transform
    - Test transforms modify the output for assertions
    - Context transforms extract context for context-based assertions (e.g., `context-faithfulness`)

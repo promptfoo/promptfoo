@@ -72,7 +72,7 @@ jest.mock('../src/esm', () => ({}));
 const mockTransform = (jest.requireMock('../src/util/transform') as any)
   .transform as jest.MockedFunction<typeof import('../src/util/transform').transform>;
 
-describe('Parallel transformation integration', () => {
+describe('Transformation integration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -81,7 +81,7 @@ describe('Parallel transformation integration', () => {
     jest.restoreAllMocks();
   });
 
-  it.skip('should apply test.options.transform and assert.contextTransform in parallel from provider output', async () => {
+  it.skip('should apply test.options.transform and assert.contextTransform from provider output', async () => {
     // Track the transformation sequence
     const transformCalls: { expression: string; input: any }[] = [];
 
@@ -157,7 +157,7 @@ describe('Parallel transformation integration', () => {
     expect(contextTransformCall?.input).toBe('PROVIDER TRANSFORMED');
   });
 
-  it.skip('should handle multiple context transforms in parallel', async () => {
+  it.skip('should handle multiple context transforms', async () => {
     const transformCalls: { expression: string; input: any; timestamp: number }[] = [];
 
     mockTransform.mockImplementation(async (expression, input) => {

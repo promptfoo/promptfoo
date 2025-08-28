@@ -381,7 +381,7 @@ assert:
 ```
 
 :::tip Important for RAG evaluations
-The `contextTransform` runs in parallel with `options.transform`, both receiving the provider's output directly. This ensures that context extraction works reliably even when the main output is transformed for other assertions.
+The `contextTransform` and `options.transform` both receive the provider's output directly. This ensures that context extraction works reliably even when the main output is transformed for other assertions.
 
 For example, if you have:
 

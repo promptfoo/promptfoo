@@ -549,12 +549,9 @@ tests:
         value: 'sunny'
 
       # Step 2b: Context transform for RAG assertions (also receives provider transform output)
-      # Runs in parallel with test transform, not sequentially
       - type: context-faithfulness
         contextTransform: 'output.sources.join(" ")'
 ```
-
-**Key point:** Both `options.transform` and `contextTransform` receive the output from `transformResponse` directly, running in parallel. This ensures context extraction works reliably even when the test transform heavily modifies the output.
 
 ## Token Estimation
 
