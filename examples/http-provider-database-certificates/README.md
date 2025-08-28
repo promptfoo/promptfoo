@@ -13,7 +13,7 @@ This example demonstrates how to use HTTP provider authentication with certifica
 The example shows support for:
 
 1. **PFX certificates with content** - Base64-encoded PFX data
-2. **Separate certificate and key content** - Base64-encoded cert and key data  
+2. **Separate certificate and key content** - Base64-encoded cert and key data
 3. **Traditional file-based certificates** - For comparison
 
 ## Prerequisites
@@ -31,18 +31,19 @@ The example shows support for:
 npm install
 ```
 
-2. **Generate test certificates**:
+1. **Generate test certificates**:
 
 ```bash
 npm run setup-certs
 ```
 
 This will create:
+
 - `certificate.pfx` - PFX certificate file (password: `testpassword`)
 - `certificate.crt` - Public certificate in PEM format
 - `private.key` - Private key in PEM format
 
-3. **Start the mock server**:
+1. **Start the mock server**:
 
 ```bash
 npm start
@@ -67,10 +68,10 @@ providers:
       headers:
         Content-Type: application/json
       body:
-        prompt: "{{prompt}}"
+        prompt: '{{prompt}}'
       signatureAuth:
         type: pfx
-        pfxContent: "MIIKXAIBAzCCChgGCSqGSIb3DQEHAaCC..."  # Base64 PFX content
+        pfxContent: 'MIIKXAIBAzCCChgGCSqGSIb3DQEHAaCC...' # Base64 PFX content
         pfxPassword: testpassword
         signatureAlgorithm: SHA256
         signatureValidityMs: 300000
@@ -90,11 +91,11 @@ providers:
       headers:
         Content-Type: application/json
       body:
-        prompt: "{{prompt}}"
+        prompt: '{{prompt}}'
       signatureAuth:
         type: pfx
-        certContent: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t..."  # Base64 cert content
-        keyContent: "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t..."   # Base64 key content
+        certContent: 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t...' # Base64 cert content
+        keyContent: 'LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t...' # Base64 key content
         signatureAlgorithm: SHA256
         signatureValidityMs: 300000
         signatureDataTemplate: 'promptfoo-db-test{{signatureTimestamp}}'
@@ -113,7 +114,7 @@ providers:
       headers:
         Content-Type: application/json
       body:
-        prompt: "{{prompt}}"
+        prompt: '{{prompt}}'
       signatureAuth:
         type: pfx
         pfxPath: ./certificate.pfx
@@ -146,18 +147,20 @@ promptfoo view
 ## How Database Certificate Storage Works
 
 ### Traditional File-Based Approach
+
 ```yaml
 signatureAuth:
   type: pfx
-  pfxPath: ./certificate.pfx        # Read from filesystem
+  pfxPath: ./certificate.pfx # Read from filesystem
   pfxPassword: password
 ```
 
 ### Database-Stored Content Approach
+
 ```yaml
 signatureAuth:
   type: pfx
-  pfxContent: "MIIKXAIBAzCCC..."    # Base64 content from database
+  pfxContent: 'MIIKXAIBAzCCC...' # Base64 content from database
   pfxPassword: password
 ```
 
@@ -190,20 +193,22 @@ PROMPTFOO_PFX_PASSWORD=your_secure_password
 In a real application, you would:
 
 1. Store certificate content as base64 in your database:
+
    ```sql
    INSERT INTO providers (name, certificate_content, certificate_password)
    VALUES ('My API', 'MIIKXAIBAzCCC...', 'encrypted_password');
    ```
 
-2. Transform when serving provider configs:
+1. Transform when serving provider configs:
+
    ```javascript
    const providerConfig = {
      signatureAuth: {
        type: 'pfx',
-       pfxContent: provider.certificate_content,  // Base64 from DB
+       pfxContent: provider.certificate_content, // Base64 from DB
        pfxPassword: decrypt(provider.certificate_password),
        // ... other config
-     }
+     },
    };
    ```
 
@@ -234,13 +239,13 @@ DEBUG=promptfoo* NODE_TLS_REJECT_UNAUTHORIZED=0 promptfoo eval -c promptfooconfi
 
 ## Comparison with File-Based Approach
 
-| Aspect | File-Based | Database Content |
-|--------|------------|------------------|
-| **Deployment** | Files must be present | No file dependencies |
-| **Scaling** | File sync required | Automatic via database |
-| **Security** | Filesystem permissions | Database encryption |
-| **Cloud Ready** | Requires volume mounts | Native cloud support |
-| **Rotation** | File replacement | Database update |
-| **Auditing** | Filesystem logs | Database audit logs |
+| Aspect          | File-Based             | Database Content       |
+| --------------- | ---------------------- | ---------------------- |
+| **Deployment**  | Files must be present  | No file dependencies   |
+| **Scaling**     | File sync required     | Automatic via database |
+| **Security**    | Filesystem permissions | Database encryption    |
+| **Cloud Ready** | Requires volume mounts | Native cloud support   |
+| **Rotation**    | File replacement       | Database update        |
+| **Auditing**    | Filesystem logs        | Database audit logs    |
 
 This example demonstrates that both approaches work identically from a functionality perspective, but database storage provides significant advantages for modern cloud deployments.

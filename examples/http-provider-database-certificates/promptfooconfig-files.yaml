@@ -12,7 +12,7 @@ providers:
         Content-Type: application/json
         User-Agent: promptfoo-file-cert-test
       body:
-        prompt: "{{prompt}}"
+        prompt: '{{prompt}}'
         user: test-user
       signatureAuth:
         type: pfx
@@ -24,27 +24,27 @@ providers:
         signatureDataTemplate: 'promptfoo-db-test{{signatureTimestamp}}'
 
 prompts:
-  - "Hello from the traditional file-based test!"
-  - "How does file-based auth compare to database storage?"
-  - "What are the deployment considerations?"
-  - "Show me this works the same way!"
+  - 'Hello from the traditional file-based test!'
+  - 'How does file-based auth compare to database storage?'
+  - 'What are the deployment considerations?'
+  - 'Show me this works the same way!'
 
 tests:
-  - description: "Should return hello world message (same as database approach)"
+  - description: 'Should return hello world message (same as database approach)'
     assert:
       - type: contains
-        value: "Hello World"
+        value: 'Hello World'
 
-  - description: "Should authenticate successfully (same as database approach)"
+  - description: 'Should authenticate successfully (same as database approach)'
     assert:
       - type: contains
-        value: "authenticated"
+        value: 'authenticated'
 
-  - description: "Should be a valid JSON response"
+  - description: 'Should be a valid JSON response'
     assert:
       - type: is-json
 
-  - description: "Should process the request identically to database approach"
+  - description: 'Should process the request identically to database approach'
     assert:
       - type: javascript
         value: |

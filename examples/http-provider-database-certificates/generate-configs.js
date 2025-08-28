@@ -5,8 +5,8 @@ console.log('🔧 Generating promptfoo configurations with actual certificate co
 try {
   // Check if certificates exist
   const requiredFiles = ['certificate.pfx', 'certificate.crt', 'private.key'];
-  const missingFiles = requiredFiles.filter(file => !fs.existsSync(file));
-  
+  const missingFiles = requiredFiles.filter((file) => !fs.existsSync(file));
+
   if (missingFiles.length > 0) {
     console.error('❌ Missing certificate files:', missingFiles.join(', '));
     console.error('Run: npm run setup-certs');
@@ -162,8 +162,9 @@ defaultTest:
   console.log('   📄 promptfooconfig-files.yaml           - Uses traditional file paths');
   console.log('');
   console.log('🎯 Ready for testing! Start the server with: npm start');
-  console.log('   Then test with: NODE_TLS_REJECT_UNAUTHORIZED=0 promptfoo eval -c promptfooconfig-pfx-content.yaml --no-cache');
-
+  console.log(
+    '   Then test with: NODE_TLS_REJECT_UNAUTHORIZED=0 promptfoo eval -c promptfooconfig-pfx-content.yaml --no-cache',
+  );
 } catch (error) {
   console.error('❌ Error generating configurations:', error.message);
   process.exit(1);
