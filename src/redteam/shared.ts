@@ -169,12 +169,6 @@ export async function canContinueWithTarget(
     return true;
   }
 
-  // Check if all providers are cloud providers
-  const allCloudProviders = providerIds.every((id) => isCloudProvider(id));
-  if (allCloudProviders) {
-    return true;
-  }
-
   let effectiveTeamId = teamId;
   if (!effectiveTeamId) {
     try {
@@ -210,19 +204,19 @@ export async function canContinueWithTarget(
     return true;
   }
 
-  // Check permissions for all non-cloud providers
-  for (const identifier of identifiers) {
-    logger.debug(`Checking target permissions for ${identifier} on team ${effectiveTeamId}`);
+  try {
+    const canCreate = await canCreateTargets(effectiveTeamId);
 
-    const exists = await checkIfCliTargetExists(identifier, effectiveTeamId);
+    for (const identifier of identifiers) {
+      logger.debug(`Checking target permissions for ${identifier} on team ${effectiveTeamId}`);
 
-    if (exists) {
-      logger.debug(`Provider ${identifier} exists on team ${effectiveTeamId}`);
-      continue;
-    }
+      const exists = await checkIfCliTargetExists(identifier, effectiveTeamId);
 
-    try {
-      const canCreate = await canCreateTargets(effectiveTeamId);
+      if (exists) {
+        logger.debug(`Provider ${identifier} exists on team ${effectiveTeamId}`);
+        continue;
+      }
+
       if (canCreate) {
         logger.debug(
           `Provider ${identifier} does not exist on team ${effectiveTeamId}, but can be created`,
@@ -230,16 +224,15 @@ export async function canContinueWithTarget(
         continue;
       }
 
-      logger.debug(
+      logger.warn(
         `Provider ${identifier} does not exist on team ${effectiveTeamId} and cannot be created. User does not have permissions.`,
       );
       return false;
-    } catch (error) {
-      logger.debug(`Error checking if user can create targets: ${error}. Continuing anyway.`);
-      // If we can't check permissions, allow the operation to continue
-      // It will fail later with a proper error message if permissions are actually missing
-      continue;
     }
+  } catch (error) {
+    logger.warn(`Error checking if user can create targets: ${error}. Continuing anyway.`);
+    // If we can't check permissions, allow the operation to continue
+    // It will fail later with a proper error message if permissions are actually missing
   }
 
   return true;
