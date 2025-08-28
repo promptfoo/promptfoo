@@ -28,21 +28,6 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
   }
 }
 
-export async function checkIfCliProviderExists(id: string, teamId: string): Promise<boolean> {
-  const response = await makeRequest(`providers/${id}?teamId=${teamId}`, 'GET');
-
-  logger.debug(`[checkIfCliProviderExists] Response: ${response.status} ${response.statusText}`);
-  if (!response.ok) {
-    return false;
-  }
-  const body = await response.json();
-  logger.debug(`[checkIfCliProviderExists] Body: ${JSON.stringify(body, null, 2)}`);
-  if (body.teamId !== teamId) {
-    return false;
-  }
-  return true;
-}
-
 export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
@@ -198,6 +183,19 @@ export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
   })[0];
 
   return oldestTeam;
+}
+
+export async function checkIfCliProviderExists(id: string, teamId: string): Promise<boolean> {
+  const response = await makeRequest(`providers/cli/${teamId}/${id}`, 'GET');
+
+  logger.debug(`[checkIfCliProviderExists] Response: ${response.status} ${response.statusText}`);
+  if (!response.ok) {
+    return false;
+  }
+  const body = await response.json();
+  logger.debug(`[checkIfCliProviderExists] Body: ${JSON.stringify(body, null, 2)}`);
+
+  return true;
 }
 
 export async function canCreateProviders(teamId: string | undefined): Promise<boolean> {
