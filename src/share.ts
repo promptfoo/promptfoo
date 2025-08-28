@@ -9,6 +9,7 @@ import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
+import { canContinueWithTarget, TargetPermissionError } from './redteam/shared';
 import { makeRequest as makeCloudRequest } from './util/cloud';
 
 import type Eval from './models/eval';
@@ -199,6 +200,17 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
   const isVerbose = isDebugEnabled();
   logger.debug(`Starting chunked results upload to ${url}`);
+
+  const canContinue = await canContinueWithTarget(
+    evalRecord.config.providers,
+    evalRecord.config.metadata?.teamId,
+  );
+  if (!canContinue) {
+    logger.error(
+      'This target does not exist in your team and you do not have permission to create targets. Please contact your administrator to get access.',
+    );
+    return null;
+  }
 
   const sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {

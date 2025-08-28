@@ -269,7 +269,7 @@ describe('canContinueWithTarget permissions', () => {
       config,
       testSuite: {
         prompts: [],
-        providers: ['openai:gpt-4'],
+        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }] as ApiProvider[],
         tests: [],
       },
       basePath: path.resolve('/'),
@@ -304,7 +304,7 @@ describe('canContinueWithTarget permissions', () => {
       config,
       testSuite: {
         prompts: [],
-        providers: ['openai:gpt-4'],
+        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
         tests: [],
       },
       basePath: path.resolve('/'),
@@ -340,7 +340,7 @@ describe('canContinueWithTarget permissions', () => {
       config,
       testSuite: {
         prompts: [],
-        providers: ['openai:gpt-4'],
+        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
         tests: [],
       },
       basePath: path.resolve('/'),

@@ -1069,7 +1069,7 @@ describe('doGenerateRedteam', () => {
       jest.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
         testSuite: {
-          providers: ['openai:gpt-4'],
+          providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
           prompts: [{ raw: 'Test prompt', label: 'Test label' }],
           tests: [],
         },
@@ -1119,7 +1119,7 @@ describe('doGenerateRedteam', () => {
       jest.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
         testSuite: {
-          providers: ['openai:gpt-4'],
+          providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
           prompts: [{ raw: 'Test prompt', label: 'Test label' }],
           tests: [],
         },

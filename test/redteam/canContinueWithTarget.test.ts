@@ -137,7 +137,7 @@ describe('canContinueWithTarget', () => {
   it('should handle mixed cloud and non-cloud providers', async () => {
     const providers = ['openai:gpt-4', { id: 'custom-provider', config: {} }, 'anthropic:claude-3'];
     mockIsCloudProvider.mockImplementation(
-      (id) => id.includes('openai') || id.includes('anthropic'),
+      (id: string) => id.includes('openai') || id.includes('anthropic'),
     );
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -166,7 +166,7 @@ describe('canContinueWithTarget', () => {
       { id: 'anthropic:claude-3', config: {} },
     ];
     mockIsCloudProvider.mockImplementation(
-      (id) => id.includes('openai') || id.includes('anthropic'),
+      (id: string) => id.includes('openai') || id.includes('anthropic'),
     );
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -182,7 +182,7 @@ describe('canContinueWithTarget', () => {
       { config: {} }, // No id field
       'openai:gpt-4', // Cloud provider
     ];
-    mockIsCloudProvider.mockImplementation((id) => id === 'openai:gpt-4');
+    mockIsCloudProvider.mockImplementation((id: string) => id === 'openai:gpt-4');
 
     const result = await canContinueWithTarget(providers, 'team-123');
 
@@ -197,7 +197,7 @@ describe('canContinueWithTarget', () => {
       { id: 'provider-3', config: {} },
     ];
     mockIsCloudProvider.mockReturnValue(false);
-    mockCheckIfCliTargetExists.mockImplementation(async (identifier) => {
+    mockCheckIfCliTargetExists.mockImplementation(async (identifier: string) => {
       return identifier === 'provider-1'; // Only provider-1 exists
     });
     mockCanCreateTargets.mockResolvedValue(false); // Cannot create new targets

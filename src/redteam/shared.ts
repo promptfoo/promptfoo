@@ -4,7 +4,6 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import yaml from 'js-yaml';
-import { UnifiedConfig } from 'src/types';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import { getProviderIds } from '../providers';
@@ -20,6 +19,8 @@ import {
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
+
+import type { UnifiedConfig } from 'src/types';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
@@ -147,7 +148,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 export class TargetPermissionError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'ProviderPermissionError';
+    this.name = 'TargetPermissionError';
   }
 }
 
