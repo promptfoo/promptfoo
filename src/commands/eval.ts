@@ -720,10 +720,23 @@ export function evalCommand(
     .option('--repeat <number>', 'Number of times to run each test')
     .option('--delay <number>', 'Delay between each test (in milliseconds)')
     .option(
-      '--no-cache',
-      'Do not read or write results to disk cache',
-      defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
+      '-j, --max-concurrency <number>',
+      'Maximum number of concurrent API calls',
+      defaultConfig.evaluateOptions?.maxConcurrency
+        ? String(defaultConfig.evaluateOptions.maxConcurrency)
+        : `${DEFAULT_MAX_CONCURRENCY}`,
     )
+    .option(
+      '--repeat <number>',
+      'Number of times to run each test',
+      defaultConfig.evaluateOptions?.repeat ? String(defaultConfig.evaluateOptions.repeat) : '1',
+    )
+    .option(
+      '--delay <number>',
+      'Delay between each test (in milliseconds)',
+      defaultConfig.evaluateOptions?.delay ? String(defaultConfig.evaluateOptions.delay) : '0',
+    )
+    .option('--no-cache', 'Do not read or write results to disk cache')
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
 
     // Filtering and subset selection
