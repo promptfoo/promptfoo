@@ -81,5 +81,5 @@ assert:
 
 ## Further reading
 
-- [Defining context in test cases](/docs/configuration/expected-outputs/model-graded#defining-context)
+- [Defining context in test cases](/docs/configuration/expected-outputs/model-graded#defining-context-for-context-based-assertions)
 - [RAG Evaluation Guide](/docs/guides/evaluate-rag)
