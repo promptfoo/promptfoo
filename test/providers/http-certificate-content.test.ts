@@ -40,7 +40,7 @@ describe('Http Provider Certificate Content Support', () => {
         const result = HttpProviderConfigSchema.parse({ signatureAuth });
         expect(result.signatureAuth).toBeDefined();
       }).not.toThrow();
-      
+
       expect(signatureAuth.keystoreContent).toBeDefined();
     });
 
@@ -60,7 +60,7 @@ describe('Http Provider Certificate Content Support', () => {
         const result = HttpProviderConfigSchema.parse({ signatureAuth });
         expect(result.signatureAuth).toBeDefined();
       }).not.toThrow();
-      
+
       expect(signatureAuth.pfxContent).toBeDefined();
     });
 
@@ -81,7 +81,7 @@ describe('Http Provider Certificate Content Support', () => {
         const result = HttpProviderConfigSchema.parse({ signatureAuth });
         expect(result.signatureAuth).toBeDefined();
       }).not.toThrow();
-      
+
       expect(signatureAuth.certContent).toBeDefined();
       expect(signatureAuth.keyContent).toBeDefined();
     });
@@ -115,7 +115,9 @@ describe('Http Provider Certificate Content Support', () => {
       // This should fail validation
       expect(() => {
         HttpProviderConfigSchema.parse({ signatureAuth });
-      }).toThrow(/Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided/);
+      }).toThrow(
+        /Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided/,
+      );
     });
   });
 });

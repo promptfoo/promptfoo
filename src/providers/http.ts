@@ -195,7 +195,7 @@ export async function generateSignature(
 
         const jks = jksModule as any;
         let keystoreData: Buffer;
-        
+
         if (signatureAuth.keystoreContent) {
           // Use base64 encoded content from database
           keystoreData = Buffer.from(signatureAuth.keystoreContent, 'base64');
@@ -250,12 +250,12 @@ export async function generateSignature(
             const pem = pemModule.default as any;
 
             let result: { key: string; cert: string };
-            
+
             if (signatureAuth.pfxContent) {
               // Use base64 encoded content from database
               logger.debug(`[Signature Auth] Loading PFX from base64 content`);
               const pfxBuffer = Buffer.from(signatureAuth.pfxContent, 'base64');
-              
+
               result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
                 pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
                   if (err) {
@@ -269,15 +269,19 @@ export async function generateSignature(
               // Use file path (existing behavior)
               const resolvedPath = resolveFilePath(signatureAuth.pfxPath);
               logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
-              
+
               result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(resolvedPath, { p12Password: pfxPassword }, (err: any, data: any) => {
-                  if (err) {
-                    reject(err);
-                  } else {
-                    resolve(data);
-                  }
-                });
+                pem.readPkcs12(
+                  resolvedPath,
+                  { p12Password: pfxPassword },
+                  (err: any, data: any) => {
+                    if (err) {
+                      reject(err);
+                    } else {
+                      resolve(data);
+                    }
+                  },
+                );
               });
             }
 
@@ -304,7 +308,10 @@ export async function generateSignature(
               `Failed to load PFX certificate. Make sure the ${signatureAuth.pfxContent ? 'content is valid' : 'file exists'} and the password is correct: ${String(err)}`,
             );
           }
-        } else if ((signatureAuth.certPath && signatureAuth.keyPath) || (signatureAuth.certContent && signatureAuth.keyContent)) {
+        } else if (
+          (signatureAuth.certPath && signatureAuth.keyPath) ||
+          (signatureAuth.certContent && signatureAuth.keyContent)
+        ) {
           try {
             if (signatureAuth.keyContent) {
               // Use base64 encoded content from database
@@ -317,7 +324,7 @@ export async function generateSignature(
               logger.debug(
                 `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
               );
-              
+
               // Read the private key directly from the key file
               if (!fs.existsSync(resolvedKeyPath)) {
                 throw new Error(`Key file not found: ${resolvedKeyPath}`);
@@ -336,7 +343,9 @@ export async function generateSignature(
             );
           }
         } else {
-          throw new Error('PFX type requires either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent');
+          throw new Error(
+            'PFX type requires either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent',
+          );
         }
         break;
       }
@@ -413,10 +422,16 @@ const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   keyContent: z.string().optional(), // Base64 encoded private key content
 }).refine(
   (data) => {
-    return data.pfxPath || data.pfxContent || (data.certPath && data.keyPath) || (data.certContent && data.keyContent);
+    return (
+      data.pfxPath ||
+      data.pfxContent ||
+      (data.certPath && data.keyPath) ||
+      (data.certContent && data.keyContent)
+    );
   },
   {
-    message: 'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type',
+    message:
+      'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type',
   },
 );
 
