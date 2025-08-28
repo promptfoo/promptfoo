@@ -48,6 +48,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
+  noShare: z.boolean().optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -300,7 +301,7 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-    const wantsToShare = cmdObj.share || config.sharing;
+    const wantsToShare = cmdObj.share !== false && (cmdObj.share || config.sharing);
 
     const shareableUrl =
       wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
@@ -773,6 +774,7 @@ export function evalCommand(
       '250',
     )
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
+    .option('--no-share', 'Do not share, this overrides the config file')
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',
@@ -847,7 +849,6 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
       }
-
       doEval(
         validatedOpts as Partial<CommandLineOptions & Command>,
         defaultConfig,
