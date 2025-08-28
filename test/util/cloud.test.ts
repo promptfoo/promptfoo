@@ -1,7 +1,9 @@
 import { fetchWithProxy } from '../../src/fetch';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import {
+  canCreateProviders,
   getConfigFromCloud,
+  getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
   getProviderFromCloud,
   makeRequest,
@@ -537,6 +539,250 @@ describe('cloud utils', () => {
       await expect(getPluginSeverityOverridesFromCloud('provider-err4')).rejects.toThrow(
         'Failed to fetch plugin severity overrides from cloud.',
       );
+    });
+  });
+
+  describe('getDefaultTeam', () => {
+    it('should return the oldest team', async () => {
+      const mockTeams = [
+        { id: 'team-3', name: 'Team 3', createdAt: '2023-01-03T00:00:00Z' },
+        { id: 'team-1', name: 'Team 1', createdAt: '2023-01-01T00:00:00Z' },
+        { id: 'team-2', name: 'Team 2', createdAt: '2023-01-02T00:00:00Z' },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockTeams),
+      } as Response);
+
+      const result = await getDefaultTeam();
+
+      expect(result).toEqual({ id: 'team-1', name: 'Team 1', createdAt: '2023-01-01T00:00:00Z' });
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/users/me/teams',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
+    });
+
+    it('should handle single team', async () => {
+      const mockTeams = [
+        { id: 'team-single', name: 'Single Team', createdAt: '2023-01-01T00:00:00Z' },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockTeams),
+      } as Response);
+
+      const result = await getDefaultTeam();
+
+      expect(result).toEqual({
+        id: 'team-single',
+        name: 'Single Team',
+        createdAt: '2023-01-01T00:00:00Z',
+      });
+    });
+
+    it('should handle teams with same creation date', async () => {
+      const mockTeams = [
+        { id: 'team-a', name: 'Team A', createdAt: '2023-01-01T00:00:00Z' },
+        { id: 'team-b', name: 'Team B', createdAt: '2023-01-01T00:00:00Z' },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockTeams),
+      } as Response);
+
+      const result = await getDefaultTeam();
+
+      // Should return the first one when dates are the same
+      expect(result).toEqual({ id: 'team-a', name: 'Team A', createdAt: '2023-01-01T00:00:00Z' });
+    });
+
+    it('should throw error when request fails', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Unauthorized',
+      } as Response);
+
+      await expect(getDefaultTeam()).rejects.toThrow('Failed to get default team id: Unauthorized');
+    });
+
+    it('should throw error when fetch throws', async () => {
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+
+      await expect(getDefaultTeam()).rejects.toThrow('Network error');
+    });
+
+    it('should handle empty teams array', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response);
+
+      const result = await getDefaultTeam();
+
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('canCreateProviders', () => {
+    it('should return true when user has create Provider ability', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+
+      const mockAbilities = [
+        { action: 'read', subject: 'Provider' },
+        { action: 'create', subject: 'Provider' },
+        { action: 'update', subject: 'Provider' },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAbilities),
+      } as Response);
+
+      const result = await canCreateProviders('team-123');
+
+      expect(result).toBe(true);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/users/me/abilities?teamId=team-123',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
+    });
+
+    it('should return false when user does not have create Provider ability', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+
+      const mockAbilities = [
+        { action: 'read', subject: 'Provider' },
+        { action: 'update', subject: 'Provider' },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAbilities),
+      } as Response);
+
+      const result = await canCreateProviders('team-123');
+
+      expect(result).toBe(false);
+    });
+
+    it('should fetch default team when teamId is not provided', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+
+      const mockTeams = [
+        { id: 'default-team', name: 'Default Team', createdAt: '2023-01-01T00:00:00Z' },
+      ];
+      const mockAbilities = [{ action: 'create', subject: 'Provider' }];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockTeams),
+      } as Response);
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAbilities),
+      } as Response);
+
+      const result = await canCreateProviders(undefined);
+
+      expect(result).toBe(true);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/users/me/abilities?teamId=default-team',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer test-api-key' },
+        },
+      );
+    });
+
+    it('should return true when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      const result = await canCreateProviders('team-123');
+
+      expect(result).toBe(true);
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('should handle empty abilities array', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response);
+
+      const result = await canCreateProviders('team-123');
+
+      expect(result).toBe(false);
+    });
+
+    it('should handle abilities with different subjects', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+
+      const mockAbilities = [
+        { action: 'create', subject: 'User' },
+        { action: 'create', subject: 'Team' },
+        { action: 'read', subject: 'Provider' },
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAbilities),
+      } as Response);
+
+      const result = await canCreateProviders('team-123');
+
+      expect(result).toBe(false);
+    });
+
+    it('should throw error when request fails', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Forbidden',
+      } as Response);
+
+      await expect(canCreateProviders('team-123')).rejects.toThrow(
+        'Failed to check provider permissions: Forbidden',
+      );
+    });
+
+    it('should throw error when fetch throws', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
+
+      await expect(canCreateProviders('team-123')).rejects.toThrow('Network error');
+    });
+
+    it('should handle case-sensitive action and subject matching', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+
+      const mockAbilities = [
+        { action: 'CREATE', subject: 'Provider' }, // uppercase action
+        { action: 'create', subject: 'provider' }, // lowercase subject
+      ];
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockAbilities),
+      } as Response);
+
+      const result = await canCreateProviders('team-123');
+
+      expect(result).toBe(false); // Should not match due to case sensitivity
     });
   });
 });

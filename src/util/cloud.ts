@@ -28,6 +28,21 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
   }
 }
 
+export async function checkIfCliProviderExists(id: string, teamId: string): Promise<boolean> {
+  const response = await makeRequest(`providers/${id}?teamId=${teamId}`, 'GET');
+
+  logger.debug(`[checkIfCliProviderExists] Response: ${response.status} ${response.statusText}`);
+  if (!response.ok) {
+    return false;
+  }
+  const body = await response.json();
+  logger.debug(`[checkIfCliProviderExists] Body: ${JSON.stringify(body, null, 2)}`);
+  if (body.teamId !== teamId) {
+    return false;
+  }
+  return true;
+}
+
 export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
@@ -167,4 +182,56 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
     logger.error(String(e));
     throw new Error(`Failed to fetch plugin severity overrides from cloud.`);
   }
+}
+
+export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
+  const response = await makeRequest(`/users/me/teams`, 'GET');
+  if (!response.ok) {
+    throw new Error(`Failed to get default team id: ${response.statusText}`);
+  }
+
+  const body = await response.json();
+
+  // get the oldest team -- this matches the logic of the enterprise app
+  const oldestTeam = body.sort((a: { createdAt: string }, b: { createdAt: string }) => {
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  })[0];
+
+  return oldestTeam;
+}
+
+export async function canCreateProviders(teamId: string | undefined): Promise<boolean> {
+  if (!cloudConfig.isEnabled()) {
+    logger.debug(
+      '[canCreateProviders] Cloud config is not enabled, create providers is not relevant.',
+    );
+    return true;
+  }
+  if (!teamId) {
+    const team = await getDefaultTeam();
+    teamId = team.id;
+    logger.debug(
+      `[canCreateProviders] No team id provided, using default team ${team.name} (${teamId})`,
+    );
+  }
+
+  const response = await makeRequest(`/users/me/abilities?teamId=${teamId}`, 'GET');
+  if (!response.ok) {
+    throw new Error(`Failed to check provider permissions: ${response.statusText}`);
+  }
+
+  const body = await response.json();
+
+  logger.debug(
+    `[canCreateProviders] Checking provider permissions for team ${teamId}: ${JSON.stringify(
+      body.filter((ability: { action: string; subject: string }) => ability.subject === 'Provider'),
+      null,
+      2,
+    )}`,
+  );
+
+  return body.some(
+    (ability: { action: string; subject: string }) =>
+      ability.action === 'create' && ability.subject === 'Provider',
+  );
 }

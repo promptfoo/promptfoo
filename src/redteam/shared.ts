@@ -4,11 +4,14 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import yaml from 'js-yaml';
+import { UnifiedConfig } from 'src/types';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
+import { getProviderIds } from '../providers';
 import { createShareableUrl } from '../share';
-import { isRunningUnderNpx } from '../util';
+import { isRunningUnderNpx, providerToIdentifier } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
+import { canCreateProviders, checkIfCliProviderExists, isCloudProvider } from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
@@ -134,4 +137,54 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   // Clear the callback when done
   setLogCallback(null);
   return evalResult;
+}
+
+export async function canContinueWithProvider(
+  providers: UnifiedConfig['providers'] | undefined,
+  teamId: string | undefined,
+) {
+  logger.debug(
+    `[canContinueWithProvider] Checking provider permissions for ${providers} on team ${teamId}`,
+  );
+
+  if (!providers) {
+    return true;
+  }
+
+  const providerIds = getProviderIds(providers);
+  if (providerIds.length === 0 || isCloudProvider(providerIds[0])) {
+    return true;
+  }
+
+  let identifier: string | undefined;
+
+  if (Array.isArray(providers)) {
+    identifier = providerToIdentifier(providers[0]);
+  } else {
+    identifier = providerToIdentifier(providers);
+  }
+
+  if (!identifier) {
+    return true;
+  }
+
+  logger.debug(`Checking provider permissions for ${identifier} on team ${teamId}`);
+
+  const exists = await checkIfCliProviderExists(identifier, teamId ?? '');
+
+  if (exists) {
+    logger.debug(`Provider ${identifier} exists on team ${teamId}`);
+    return true;
+  }
+
+  const canCreate = await canCreateProviders(teamId);
+  if (canCreate) {
+    logger.debug(`Provider ${identifier} does not exist on team ${teamId}, but can be created`);
+    return true;
+  }
+
+  logger.debug(
+    `Provider ${identifier} does not exist on team ${teamId} and cannot be created. User does not have permissions.`,
+  );
+  return false;
 }

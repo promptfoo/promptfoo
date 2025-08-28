@@ -21,6 +21,7 @@ import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
   getCloudDatabaseId,
   getConfigFromCloud,
+  getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
@@ -40,6 +41,7 @@ import {
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { canContinueWithProvider } from '../shared';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
@@ -161,6 +163,16 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+    if (cloudConfig.isEnabled()) {
+      const teamId = resolved.config.metadata?.teamId ?? (await getDefaultTeam()).id;
+      const canContinue = await canContinueWithProvider(resolved.config.providers, teamId);
+      if (!canContinue) {
+        logger.warn(
+          'This provider does not exist in your team and you do not have permission to create providers. Please contact your administrator to get access.',
+        );
+        return null;
+      }
+    }
 
     try {
       // If the provider is a cloud provider, check for plugin severity overrides:
