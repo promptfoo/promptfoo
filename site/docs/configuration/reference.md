@@ -433,6 +433,88 @@ interface GuardrailResponse {
 }
 ```
 
+## Transformation Pipeline
+
+Understanding the transformation pipeline is crucial for complex evaluations, especially for RAG systems which require [context-based assertions](/docs/configuration/expected-outputs/model-graded). Here's how transforms are applied:
+
+### Execution Flow
+
+```mermaid
+graph LR
+    subgraph Provider
+      A
+      B
+    end
+
+    subgraph Test Cases
+      D
+      E
+      F
+      G
+    end
+
+    A[API Response] --> B[Provider transformResponse]
+    B --> D[options.transform]
+    B --> E[Assert contextTransform]
+    D --> F[Test Assertions]
+    E --> G[Context Assertions]
+```
+
+### Complete Example: RAG System Evaluation
+
+This example demonstrates how different transforms work together in a RAG evaluation :
+
+```yaml
+providers:
+  - id: 'http://localhost:3000/api/rag'
+    config:
+      # Step 1: Provider transform - normalize API response structure
+      transformResponse: |
+        // API returns: { status: "success", data: { answer: "...", sources: [...] } }
+        // Transform to: { answer: "...", sources: [...] }
+        json.data
+
+tests:
+  - vars:
+      query: 'What is the refund policy?'
+
+    options:
+      # Step 2a: Test transform - extract answer for general assertions
+      # Receives output from transformResponse: { answer: "...", sources: [...] }
+      transform: 'output.answer'
+
+    assert:
+      # Regular assertion uses test-transformed output (just the answer string)
+      - type: contains
+        value: '30 days'
+
+      # Context assertions use contextTransform
+      - type: context-faithfulness
+        # Step 2b: Context transform - extract sources (runs in parallel with Step 2a)
+        # Also receives output from transformResponse: { answer: "...", sources: [...] }
+        contextTransform: 'output.sources.map(s => s.content).join("\n")'
+        threshold: 0.9
+
+      # Another assertion can have its own transform
+      - type: equals
+        value: 'confident'
+        # Step 3: Assertion-level transform (applied after test transform)
+        # Receives: "30-day refund policy" (the test-transformed output)
+        transform: |
+          output.includes("30") ? "confident" : "uncertain"
+```
+
+### Key Points
+
+1. **Provider Transform** (`transformResponse`): Applied first to normalize provider responses
+2. **Parallel Transforms**:
+   - `options.transform`: Modifies output for regular assertions
+   - `contextTransform`: Extracts context for context-based assertions
+   - Both receive the provider-transformed output directly
+3. **Assertion Transform**: Applied to already-transformed output for specific assertions
+
+This parallel execution ensures that context extraction remains reliable even when the main output is heavily transformed for other assertions.
+
 ### ProviderFunction
 
 A ProviderFunction is a function that takes a prompt as an argument and returns a Promise that resolves to a ProviderResponse. It allows you to define custom logic for calling an API.

@@ -522,8 +522,6 @@ tests:
         threshold: 0.85
 ```
 
-**Processing order:** API call → `transformResponse` → `transform` → `contextTransform` → context assertion
-
 ## Other assertion types
 
 For more info on assertions, see [Test assertions](/docs/configuration/expected-outputs).
