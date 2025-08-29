@@ -116,18 +116,19 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     const message = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
 
-    // Prioritize content over reasoning
+    // Prioritize tool calls over content and reasoning
     let output = '';
-    if (message.content) {
+    if (message.function_call || message.tool_calls) {
+      // Tool calls always take priority and never include thinking
+      output = message.function_call || message.tool_calls;
+    } else if (message.content) {
       output = message.content;
       // Add reasoning as thinking content if present and showThinking is enabled
       if (message.reasoning && (this.config.showThinking ?? true)) {
         output = `Thinking: ${message.reasoning}\n\n${output}`;
       }
-    } else if (message.function_call || message.tool_calls) {
-      output = message.function_call || message.tool_calls;
     } else if (message.reasoning && (this.config.showThinking ?? true)) {
-      // Fallback to reasoning if no content (shouldn't happen with Gemini)
+      // Fallback to reasoning if no content and showThinking is enabled
       output = message.reasoning;
     }
     // Handle structured output
