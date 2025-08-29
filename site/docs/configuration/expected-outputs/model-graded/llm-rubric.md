@@ -5,16 +5,16 @@ description: 'Create flexible custom rubrics using natural language to evaluate 
 
 # LLM rubric
 
-The `llm-rubric` assertion is promptfoo's most flexible evaluation method, using an LLM to grade outputs against any custom criteria.
+The `llm-rubric` assertion uses an LLM to grade outputs against custom criteria.
 
-**What it measures**: Given your custom evaluation criteria (the rubric), an LLM judge evaluates the output and provides a score (0-1), pass/fail status, and reasoning for its decision.
+**What it measures**: Given evaluation criteria (the rubric), an LLM judge evaluates the output and provides a score (0-1), pass/fail status, and reasoning.
 
 **Example**:
 
 - Rubric: "Response should be professional yet friendly"
 - Output evaluation: Score 0.8, Pass, "Uses formal language while maintaining approachable tone"
 
-This metric is ideal for **nuanced evaluation** of any quality you care about - tone, style, completeness, or domain-specific requirements.
+This assertion handles custom evaluation criteria such as tone, style, completeness, or domain-specific requirements.
 
 ## Required fields
 
@@ -40,7 +40,7 @@ assert:
 assert:
   - type: llm-rubric
     value: 'Response demonstrates deep technical understanding'
-    threshold: 0.8 # Require high confidence score
+    threshold: 0.8
 ```
 
 ### Complete example
@@ -61,11 +61,9 @@ tests:
       type: 'business email'
       topic: 'project delay'
     assert:
-      # Simple rubric
       - type: llm-rubric
         value: 'Email is professional, empathetic, and provides clear next steps'
 
-      # Detailed rubric with scoring guidelines
       - type: llm-rubric
         value: |
           Evaluate the email on professionalism (0.0-1.0):
@@ -252,7 +250,7 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 
 ## When to use llm-rubric vs. alternatives
 
-- **Use `llm-rubric`** for flexible, custom evaluation with explanations
+- **Use `llm-rubric`** for custom evaluation with explanations
 - **Use [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)** for complex evaluation needing chain-of-thought
 - **Use [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa)** for simple yes/no checks
 - **Use [`pi`](/docs/configuration/expected-outputs/model-graded/pi)** for deterministic scoring
@@ -267,5 +265,5 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 ## Further reading
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
-- [Getting Started](/docs/getting-started) for promptfoo basics
+- [Getting Started](/docs/getting-started) guide
 - [Red team best practices](/docs/red-team/troubleshooting/best-practices) for evaluation design

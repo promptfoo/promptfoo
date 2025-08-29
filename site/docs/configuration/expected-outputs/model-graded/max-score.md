@@ -16,7 +16,7 @@ The `max-score` assertion automatically selects the best output based on objecti
 - Output B: Scores 0.9 on factuality, 1.0 on contains, 0.8 on rubric = Average 0.90 ✓ Winner
 - Output C: Scores 0.8 on factuality, 0.0 on contains, 0.9 on rubric = Average 0.57 ✗
 
-This metric is ideal for **objective selection** when you want transparent, reproducible results without LLM API calls.
+This assertion provides transparent, reproducible selection without LLM API calls.
 
 ## When to use max-score
 
@@ -50,14 +50,12 @@ tests:
   - vars:
       task: 'calculate fibonacci numbers'
     assert:
-      # Regular assertions that score each output
       - type: python
         value: 'assert fibonacci(10) == 55'
       - type: llm-rubric
         value: 'Code is efficient'
       - type: contains
         value: 'def fibonacci'
-      # Max-score selects the output with highest average score
       - type: max-score
 ```
 
@@ -80,14 +78,14 @@ Give different importance to different assertions by specifying weights per asse
 
 ```yaml
 assert:
-  - type: python # Test correctness
-  - type: llm-rubric # Test quality
+  - type: python
+  - type: llm-rubric
     value: 'Well documented'
   - type: max-score
     value:
       weights:
-        python: 3 # Correctness is 3x more important
-        llm-rubric: 1 # Documentation is 1x weight
+        python: 3
+        llm-rubric: 1
 ```
 
 #### How weights work
@@ -159,8 +157,8 @@ tests:
       - type: max-score
         value:
           weights:
-            python: 3 # Correctness most important
-            llm-rubric: 1 # Each quality metric has weight 1
+            python: 3
+            llm-rubric: 1
 ```
 
 ### Example 2: Content generation selection
@@ -189,7 +187,7 @@ tests:
 
       - type: max-score
         value:
-          method: average # All criteria equally important
+          method: average
 ```
 
 ### Example 3: API response selection
@@ -209,15 +207,15 @@ tests:
         value: 'Response includes all requested weather data'
 
       - type: latency
-        threshold: 1000 # Under 1 second
+        threshold: 1000
 
       - type: max-score
         value:
           weights:
-            is-json: 2 # Must be valid JSON
-            contains-json: 2 # Must have required fields
-            llm-rubric: 1 # Quality check
-            latency: 1 # Performance matters
+            is-json: 2
+            contains-json: 2
+            llm-rubric: 1
+            latency: 1
 ```
 
 ## Comparison with select-best

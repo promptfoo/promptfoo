@@ -5,7 +5,7 @@ description: 'Assess closed-domain QA performance using model-based evaluation f
 
 # Model-graded closed QA
 
-The `model-graded-closedqa` assertion provides simple yes/no evaluation of whether your LLM's output meets a specific criterion.
+The `model-graded-closedqa` assertion provides simple yes/no evaluation of whether the LLM output meets a specific criterion.
 
 **What it measures**: Given a criterion and the LLM's response, it evaluates with a binary yes/no whether the response satisfies that criterion. This is useful for clear-cut requirements that don't need nuanced scoring.
 
@@ -15,7 +15,7 @@ The `model-graded-closedqa` assertion provides simple yes/no evaluation of wheth
 - Good response: A 50-word answer → Passes (Y)
 - Poor response: A 200-word answer → Fails (N)
 
-This metric is ideal for **binary requirements** where something either meets the criterion or doesn't.
+This assertion handles binary requirements where something either meets the criterion or doesn't.
 
 ## Required fields
 
@@ -43,11 +43,9 @@ Use specific, measurable criteria. "Is good" is vague; "Includes at least 3 exam
 
 The model-graded-closedqa checker:
 
-1. Takes your criterion and the LLM's output
+1. Takes the criterion and the LLM output
 2. Uses a grading LLM to evaluate if the output meets the criterion
-3. Returns a binary result:
-   - **Y (Yes)**: Output meets the criterion → assertion passes
-   - **N (No)**: Output doesn't meet the criterion → assertion fails
+3. Returns Y (pass) if the output meets the criterion, N (fail) otherwise
 
 Unlike scored assertions, this provides clear pass/fail results without ambiguity.
 
@@ -69,7 +67,6 @@ tests:
       topic: quantum computing
       audience: 5-year-old
     assert:
-      # Each criterion is evaluated independently as yes/no
       - type: model-graded-closedqa
         value: 'Uses simple language appropriate for a child'
       - type: model-graded-closedqa
@@ -143,5 +140,5 @@ defaultTest:
 
 ## Further reading
 
-- Explore all [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for comprehensive evaluation options
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
 - See [deterministic assertions](/docs/configuration/expected-outputs/deterministic) for non-LLM-based checks

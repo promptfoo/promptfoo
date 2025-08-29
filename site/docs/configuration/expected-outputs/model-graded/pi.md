@@ -1,11 +1,11 @@
 ---
 sidebar_position: 8
-description: 'Identify and block prompt injection attacks using advanced model-based classification for enhanced security protection'
+description: 'Use specialized scoring models for consistent, deterministic evaluation of LLM outputs'
 ---
 
 # Pi scorer
 
-The `pi` assertion uses a specialized scoring model for consistent, deterministic evaluation of your LLM outputs.
+The `pi` assertion uses a specialized scoring model for consistent, deterministic evaluation of LLM outputs.
 
 **What it measures**: Given evaluation criteria, Pi uses a purpose-built scoring model (not an LLM acting as judge) to evaluate outputs. It provides numeric scores without explanations, focusing on consistency - the same input always gets the same score.
 
@@ -15,7 +15,7 @@ The `pi` assertion uses a specialized scoring model for consistent, deterministi
 - Output: Gets a consistent numeric score (e.g., 0.85)
 - Same output tested again: Gets exactly 0.85 (deterministic)
 
-This metric is ideal for **consistent benchmarking** when you need reproducible scores.
+This assertion provides reproducible scores for benchmarking.
 
 :::note
 **Important**: Unlike `llm-rubric` which works with your existing providers, Pi requires a separate external API key from Pi Labs.
@@ -69,7 +69,7 @@ The pi assertion requires:
 assert:
   - type: pi
     value: 'Is the response clear and concise without being apologetic?'
-    threshold: 0.5 # Default threshold
+    threshold: 0.5
 ```
 
 :::info
@@ -123,9 +123,8 @@ You can use the [Pi Labs Copilot](https://build.withpi.ai) to interactively brai
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Use Pi scorer for consistent, deterministic evaluation'
 
-# Set your Pi API key
 env:
-  WITHPI_API_KEY: ${WITHPI_API_KEY} # Or hardcode for testing
+  WITHPI_API_KEY: ${WITHPI_API_KEY}
 
 prompts:
   - 'Explain {{concept}} in simple terms for a {{audience}}.'
@@ -139,7 +138,6 @@ tests:
       concept: 'quantum computing'
       audience: 'high school student'
     assert:
-      # Pi provides consistent numeric scores
       - type: pi
         value: 'Is the explanation easy to understand without technical jargon?'
         threshold: 0.7

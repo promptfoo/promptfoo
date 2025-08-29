@@ -1,22 +1,22 @@
 ---
 sidebar_label: Factuality
-description: 'Validate factual accuracy of LLM responses using AI-powered fact-checking against verified knowledge bases and sources'
+description: 'Validate factual accuracy of LLM responses against reference answers'
 ---
 
 # Factuality
 
-The `factuality` assertion checks if your LLM's output is factually consistent with a ground truth reference.
+The `factuality` assertion checks if the LLM output is factually consistent with a ground truth reference.
 
 **What it measures**: Given a reference answer (ground truth) and the LLM's output, it evaluates whether they are factually consistent - the output doesn't have to match exactly, but it can't contradict the facts.
 
 **Example**:
 
 - Reference: "Paris is the capital of France with 2.2 million residents"
-- Good output: "The capital of France is Paris" ✓ (subset, consistent)
-- Good output: "Paris, France's capital, has 2.2M people in a metro area of 10M" ✓ (superset, consistent)
-- Bad output: "Lyon is the capital of France" ✗ (contradicts facts)
+- Good output: "The capital of France is Paris" ✓
+- Good output: "Paris, France's capital, has 2.2M people in a metro area of 10M" ✓
+- Bad output: "Lyon is the capital of France" ✗
 
-This metric is ideal for **fact-checking** and ensuring accuracy against known correct answers.
+This assertion validates factual consistency against reference answers.
 
 ## Required fields
 
@@ -32,7 +32,7 @@ The factuality assertion requires:
 ```yaml
 assert:
   - type: factuality
-    value: 'The Earth orbits around the Sun' # Ground truth reference
+    value: 'The Earth orbits around the Sun'
 ```
 
 ## How it works

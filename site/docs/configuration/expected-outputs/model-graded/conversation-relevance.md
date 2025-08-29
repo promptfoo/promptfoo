@@ -5,9 +5,9 @@ description: 'Evaluate conversation coherence by checking if LLM responses maint
 
 # Conversation relevance
 
-The `conversation-relevance` assertion ensures your chatbot stays on topic throughout multi-turn conversations.
+The `conversation-relevance` assertion evaluates whether responses remain relevant throughout multi-turn conversations.
 
-**What it measures**: Given a conversation history, it evaluates whether each response remains relevant to the conversation context using a sliding window approach. This catches when chatbots drift off-topic or give unrelated answers.
+**What it measures**: Given a conversation history, it evaluates whether each response remains relevant to the conversation context using a sliding window approach.
 
 **Example**:
 
@@ -15,7 +15,7 @@ The `conversation-relevance` assertion ensures your chatbot stays on topic throu
 - User: "What about tomorrow?" → Bot: "Tomorrow will be rainy" ✓ Relevant
 - User: "Should I bring an umbrella?" → Bot: "The capital of France is Paris" ✗ Irrelevant
 
-This metric is ideal for **chatbot quality assurance** and ensuring conversational coherence.
+This assertion evaluates conversational coherence.
 
 ## How it works
 
@@ -131,7 +131,7 @@ tests:
         - input: 'What is 2+2?'
           output: '2+2 equals 4.'
         - input: 'What about 3+3?'
-          output: 'The capital of France is Paris.' # Irrelevant response
+          output: 'The capital of France is Paris.'
         - input: 'Can you solve 5+5?'
           output: '5+5 equals 10.'
     assert:

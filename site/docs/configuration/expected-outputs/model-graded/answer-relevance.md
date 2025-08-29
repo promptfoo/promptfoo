@@ -1,11 +1,11 @@
 ---
 sidebar_label: Answer Relevance
-description: 'Score LLM response relevance and completeness against user queries using sophisticated AI-powered evaluation metrics'
+description: 'Score LLM response relevance and completeness against user queries'
 ---
 
 # Answer relevance
 
-The `answer-relevance` assertion checks if your LLM's response actually answers the user's question.
+The `answer-relevance` assertion checks if the LLM response answers the user's question.
 
 **What it measures**: Given a user's query and the LLM's response, it evaluates how well the response addresses what was asked. It does this by generating potential questions the response could answer, then checking if those match the original query.
 
@@ -15,7 +15,7 @@ The `answer-relevance` assertion checks if your LLM's response actually answers 
 - Good response (high score): "The capital of France is Paris."
 - Poor response (low score): "France has excellent wine and cheese." (doesn't answer the question)
 
-This metric evaluates **response quality**, ensuring the LLM stays on topic.
+This assertion evaluates response relevance to the query.
 
 ## Required fields
 
@@ -45,12 +45,9 @@ The answer relevance checker:
 
 1. Takes the LLM's response and generates potential questions it could be answering
 2. Compares these generated questions with the original query using embeddings
-3. Returns a score from 0 to 1:
-   - **1.0**: Response perfectly answers the query
-   - **0.5**: Response is somewhat related but off-topic
-   - **0.0**: Response is completely irrelevant
+3. Returns a score from 0 to 1 based on relevance
 
-This helps identify when your LLM goes off-topic or provides tangential information instead of answering directly.
+Higher scores indicate more relevant responses to the original query.
 
 ### Complete example
 
@@ -70,7 +67,7 @@ tests:
       topic: quantum computing
     assert:
       - type: answer-relevance
-        threshold: 0.8 # Response must be 80% relevant to the topic
+        threshold: 0.8
 
   - description: 'Test with explicit query variable'
     vars:
@@ -78,7 +75,7 @@ tests:
       topic: 'physical fitness'
     assert:
       - type: answer-relevance
-        threshold: 0.85 # Higher threshold for health topics
+        threshold: 0.85
 ```
 
 ### Overriding the Providers
@@ -135,5 +132,5 @@ defaultTest:
 
 ## Further reading
 
-- Explore all [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for comprehensive evaluation options
-- See [Getting Started](/docs/getting-started) for more examples
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
+- [Getting Started](/docs/getting-started) guide

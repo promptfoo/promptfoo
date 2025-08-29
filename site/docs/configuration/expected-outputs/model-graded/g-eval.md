@@ -1,13 +1,13 @@
 ---
 sidebar_position: 8
-description: "Apply Google's G-Eval framework for sophisticated multi-criteria LLM evaluation using chain-of-thought and probability scoring"
+description: "Apply Google's G-Eval framework for multi-criteria LLM evaluation using chain-of-thought reasoning"
 ---
 
 # G-Eval
 
-The `g-eval` assertion uses chain-of-thought reasoning to provide more thoughtful, nuanced evaluation of your LLM outputs.
+The `g-eval` assertion uses chain-of-thought reasoning to evaluate LLM outputs against custom criteria.
 
-**What it measures**: Given custom evaluation criteria, it uses a grading LLM with chain-of-thought prompting to deeply analyze whether the output meets those criteria. This produces more reliable evaluations than simple scoring.
+**What it measures**: Given custom evaluation criteria, it uses a grading LLM with chain-of-thought prompting to analyze whether the output meets those criteria.
 
 **Example**:
 
@@ -15,7 +15,7 @@ The `g-eval` assertion uses chain-of-thought reasoning to provide more thoughtfu
 - Analysis: The grader thinks step-by-step about factual claims and structure
 - Result: Normalized score from 0-1 based on detailed reasoning
 
-This metric is ideal for **complex evaluation criteria** that benefit from reasoning through multiple aspects.
+This assertion handles complex evaluation criteria requiring step-by-step analysis.
 
 ## Required fields
 
@@ -34,7 +34,7 @@ The g-eval assertion requires:
 assert:
   - type: g-eval
     value: 'Ensure the response is factually accurate and well-structured'
-    threshold: 0.7 # Default threshold
+    threshold: 0.7
 ```
 
 ### Multiple criteria
@@ -46,7 +46,7 @@ assert:
       - 'Check if the response maintains a professional tone'
       - 'Verify that all technical terms are used correctly'
       - 'Ensure no confidential information is revealed'
-    threshold: 0.8 # Higher threshold for multiple criteria
+    threshold: 0.8
 ```
 
 ## How it works
@@ -55,10 +55,7 @@ The G-Eval process:
 
 1. **Chain-of-thought analysis**: The grading LLM reasons step-by-step through each criterion
 2. **Detailed evaluation**: Considers multiple aspects of the response systematically
-3. **Score normalization**: Returns a score from 0 to 1:
-   - **1.0**: Fully meets all criteria with excellent quality
-   - **0.7**: Meets criteria adequately (default threshold)
-   - **0.0**: Fails to meet criteria
+3. **Score normalization**: Returns a score from 0 to 1
 
 G-Eval's chain-of-thought approach produces more consistent and explainable evaluations than simple scoring. Based on the paper ["G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment"](https://arxiv.org/abs/2303.16634).
 
@@ -99,12 +96,10 @@ tests:
       topic: 'quantum computing'
       audience: 'beginner'
     assert:
-      # Single criterion
       - type: g-eval
         value: 'Explanation is clear and accessible to beginners'
         threshold: 0.75
 
-      # Multiple criteria evaluated together
       - type: g-eval
         value:
           - 'Explains technical concepts in simple terms'

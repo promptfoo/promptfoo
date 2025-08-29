@@ -1,13 +1,13 @@
 ---
 sidebar_label: Select Best
-description: 'Leverage AI models to automatically select and rank the best outputs from multiple LLM responses for quality optimization'
+description: 'Select and rank the best outputs from multiple LLM responses using LLM judges'
 ---
 
 # Select best
 
 The `select-best` assertion identifies which prompt or model produces the best output for a given criterion.
 
-**What it measures**: Given multiple outputs from different prompts or providers, it evaluates which one best meets your specified criterion. Only the winning output passes; all others fail.
+**What it measures**: Given multiple outputs from different prompts or providers, it evaluates which one best meets the specified criterion. Only the winning output passes; all others fail.
 
 **Example**:
 
@@ -16,7 +16,7 @@ The `select-best` assertion identifies which prompt or model produces the best o
 - Output B: Funny and viral-worthy → Passes (winner)
 - Output C: Too long → Fails
 
-This metric is ideal for **A/B testing prompts** or **comparing model performance**.
+This assertion compares prompts or model performance.
 
 ## Required fields
 
@@ -51,7 +51,7 @@ The select-best evaluation process:
    - **Pass**: Only for the winning output
    - **Fail**: For all other outputs
 
-This creates a clear winner-takes-all evaluation, perfect for optimization and comparison tasks.
+This creates a winner-takes-all evaluation for optimization and comparison tasks.
 
 ### Complete example - Comparing prompts
 
@@ -59,7 +59,6 @@ This creates a clear winner-takes-all evaluation, perfect for optimization and c
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Compare different prompt strategies'
 
-# Multiple prompts to compare
 prompts:
   - 'Write a tweet about {{topic}}'
   - 'Write a concise, funny tweet about {{topic}}'
