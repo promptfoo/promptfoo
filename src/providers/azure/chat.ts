@@ -137,7 +137,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
-      ...(config.dataSources ? { dataSources: config.dataSources } : {}),
+      ...(config.dataSources ? { dataSources: config.dataSources } : {}), // deprecated
+      ...(config.data_sources ? { data_sources: config.data_sources } : {}), //new
       ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
@@ -241,7 +242,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           };
         }
       } else {
-        const hasDataSources = !!config.dataSources;
+        const hasDataSources = !!config.dataSources || !!config.data_sources;
         const choice = hasDataSources
           ? data.choices.find(
               (choice: { message: { role: string; content: string } }) =>

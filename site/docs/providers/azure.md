@@ -289,7 +289,27 @@ defaultTest:
 
 ## AI Services
 
-You may also specify `deployment_id` and `dataSources`, used to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/use-your-data#conversation-history-for-better-results).
+You may also specify and `data_sources`, used to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/references/on-your-data).
+
+```yaml
+providers:
+  - id: azure:chat:deploymentNameHere
+    config:
+      apiHost: 'xxxxxxxx.openai.azure.com'
+      deployment_id: 'abc123'
+      data_sources:
+         - type: 'azure_search'
+            parameters:
+              endpoint: "https://xxxxxxxx.search.windows.net"
+              index_name: 'index123'
+              authentication:
+                type: "api_key"
+                key: ""
+```
+
+:::note
+
+For legacy Azure OpenAI API versions before 2024-02-15-preview, you can also specify `deployment_id` and `dataSources`, used to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/use-your-data#conversation-history-for-better-results).
 
 ```yaml
 providers:
@@ -305,7 +325,7 @@ providers:
             indexName: '...'
 ```
 
-(The inconsistency in naming convention between `deployment_id` and `dataSources` reflects the actual naming in the Azure API.)
+:::
 
 ## Configuration Reference
 
