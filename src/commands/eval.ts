@@ -32,7 +32,6 @@ import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '
 import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
-import { extractEnvPathFromConfigs } from '../util/config/envPath';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
@@ -102,13 +101,13 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
-  // Pre-extract envPath from config files if no CLI envPath provided
-  const envPath = cmdObj.envPath || extractEnvPathFromConfigs(cmdObj.config);
-  setupEnv(envPath);
+  // Phase 1: Load environment from CLI args (preserves existing behavior)
+  setupEnv(cmdObj.envPath);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
+  let commandLineOptions: Record<string, any> | undefined = undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -157,7 +156,18 @@ export async function doEval(
       disableCache();
     }
 
-    ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
+    ({
+      config,
+      testSuite,
+      basePath: _basePath,
+      commandLineOptions,
+    } = await resolveConfigs(cmdObj, defaultConfig));
+
+    // Phase 2: Load environment from config files if not already set via CLI
+    if (!cmdObj.envPath && commandLineOptions?.envPath) {
+      logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
+      setupEnv(commandLineOptions.envPath);
+    }
 
     // Check if config has redteam section but no test cases
     if (
