@@ -268,4 +268,4 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
 - [Getting Started](/docs/getting-started) for promptfoo basics
-- [Best practices](/docs/guides/best-practices) for evaluation design
+- [Red team best practices](/docs/red-team/troubleshooting/best-practices) for evaluation design

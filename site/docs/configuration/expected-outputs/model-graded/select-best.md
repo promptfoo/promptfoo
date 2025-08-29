@@ -170,4 +170,4 @@ defaultTest:
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more evaluation options
 - [Getting Started](/docs/getting-started) for promptfoo basics
-- [Prompt optimization guide](/docs/guides/prompt-optimization) for systematic improvement
+- [Getting Started](/docs/getting-started) for systematic improvement
