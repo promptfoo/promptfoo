@@ -239,11 +239,11 @@ describe('canContinueWithTarget', () => {
 
   it('should use label instead of id when checking if CLI target exists', async () => {
     const providers = [
-      { 
+      {
         id: 'custom-provider-id',
         label: 'custom-provider-label',
-        config: {} 
-      }
+        config: {},
+      },
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -256,10 +256,10 @@ describe('canContinueWithTarget', () => {
 
   it('should use id when label is not present', async () => {
     const providers = [
-      { 
+      {
         id: 'custom-provider-id',
-        config: {} 
-      }
+        config: {},
+      },
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -275,7 +275,7 @@ describe('canContinueWithTarget', () => {
     // We need to test with the actual provider object
     const providers = [{ id: 'provider-id', label: 'provider-label', config: {} }];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
-    
+
     const result = await canContinueWithTarget(providers, 'team-123');
 
     expect(result).toBe(true);
@@ -285,12 +285,12 @@ describe('canContinueWithTarget', () => {
 
   it('should handle provider with transform property', async () => {
     const providers = [
-      { 
+      {
         id: 'transformed-provider',
         label: 'transformed-label',
         transform: 'response.data',
-        config: {} 
-      }
+        config: {},
+      },
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -302,11 +302,11 @@ describe('canContinueWithTarget', () => {
 
   it('should handle provider with empty string label falling back to id', async () => {
     const providers = [
-      { 
+      {
         id: 'provider-id',
         label: '',
-        config: {} 
-      }
+        config: {},
+      },
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -319,14 +319,14 @@ describe('canContinueWithTarget', () => {
 
   it('should handle provider with neither id nor label returning undefined identifier', async () => {
     const providers = [
-      { 
+      {
         config: { someConfig: 'value' },
         // No id or label
       },
-      { 
+      {
         id: 'valid-provider',
-        config: {} 
-      }
+        config: {},
+      },
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -340,11 +340,11 @@ describe('canContinueWithTarget', () => {
 
   it('should handle mixed provider types in same array', async () => {
     const providers = [
-      'string-provider',  // String provider
-      { id: 'object-provider', label: 'object-label', config: {} },  // ProviderOptions with label
-      { id: 'provider-without-label', config: {} },  // ProviderOptions without label
-      { id: 'simple-object' },  // Simple object with id
-      `${CLOUD_PROVIDER_PREFIX}cloud-provider`,  // Cloud provider (should be skipped)
+      'string-provider', // String provider
+      { id: 'object-provider', label: 'object-label', config: {} }, // ProviderOptions with label
+      { id: 'provider-without-label', config: {} }, // ProviderOptions without label
+      { id: 'simple-object' }, // Simple object with id
+      `${CLOUD_PROVIDER_PREFIX}cloud-provider`, // Cloud provider (should be skipped)
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -360,9 +360,9 @@ describe('canContinueWithTarget', () => {
 
   it('should handle exec: and python: prefixed providers', async () => {
     const providers = [
-      'exec:custom-script',  // Without path separators, stays as-is
-      'python:provider',     // Without path separators, stays as-is
-      'file:///absolute/path/provider.js',  // Absolute path with file://
+      'exec:custom-script', // Without path separators, stays as-is
+      'python:provider', // Without path separators, stays as-is
+      'file:///absolute/path/provider.js', // Absolute path with file://
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -380,8 +380,8 @@ describe('canContinueWithTarget', () => {
   it('should handle providers with path resolution', async () => {
     const path = require('path');
     const providers = [
-      'exec:./custom-script.sh',  // Relative path - will be resolved
-      'python:./provider.py',      // Relative path - will be resolved
+      'exec:./custom-script.sh', // Relative path - will be resolved
+      'python:./provider.py', // Relative path - will be resolved
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -391,21 +391,21 @@ describe('canContinueWithTarget', () => {
     expect(mockCheckIfCliTargetExists).toHaveBeenCalledTimes(2);
     // Check that paths were resolved to absolute paths
     expect(mockCheckIfCliTargetExists).toHaveBeenCalledWith(
-      `exec:${path.resolve('./custom-script.sh')}`, 
-      'team-123'
+      `exec:${path.resolve('./custom-script.sh')}`,
+      'team-123',
     );
     expect(mockCheckIfCliTargetExists).toHaveBeenCalledWith(
-      `python:${path.resolve('./provider.py')}`, 
-      'team-123'
+      `python:${path.resolve('./provider.py')}`,
+      'team-123',
     );
   });
 
   it('should handle provider with only label (no id)', async () => {
     const providers = [
-      { 
+      {
         label: 'provider-with-only-label',
-        config: {} 
-      }
+        config: {},
+      },
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -419,8 +419,8 @@ describe('canContinueWithTarget', () => {
 
   it('should handle golang: prefixed providers', async () => {
     const providers = [
-      'golang:provider',  // Without path separators
-      'golang:./custom-provider.go',  // With relative path
+      'golang:provider', // Without path separators
+      'golang:./custom-provider.go', // With relative path
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
@@ -436,12 +436,12 @@ describe('canContinueWithTarget', () => {
 
   it('should handle providers with delay property', async () => {
     const providers = [
-      { 
+      {
         id: 'delayed-provider',
         label: 'Delayed Provider',
         delay: 1000,
-        config: {} 
-      }
+        config: {},
+      },
     ];
     mockCheckIfCliTargetExists.mockResolvedValue(true);
 
