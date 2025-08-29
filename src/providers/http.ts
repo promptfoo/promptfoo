@@ -1,23 +1,16 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
-import httpZ from 'http-z';
 import path from 'path';
-import { z } from 'zod';
 
-import { fetchWithCache, type FetchWithCacheResult } from '../cache';
+import httpZ from 'http-z';
+import { z } from 'zod';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import { sanitizeUrl } from '../fetch';
 import logger from '../logger';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderOptions,
-  ProviderResponse,
-  TokenUsage,
-} from '../types';
 import { renderVarsInObject } from '../util';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -25,6 +18,14 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+  TokenUsage,
+} from '../types';
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -37,6 +38,129 @@ function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
       typeof value === 'string' ? JSON.stringify(value).slice(1, -1) : value,
     ]),
   );
+}
+
+/**
+ * Maps promptfoo-cloud certificate fields to type-specific fields based on the certificate type.
+ * This handles certificates stored in the database with generic field names.
+ *
+ * @param signatureAuth - The signature authentication configuration
+ * @returns The processed signature authentication configuration
+ */
+function preprocessSignatureAuthConfig(signatureAuth: any): any {
+  if (!signatureAuth) {
+    return signatureAuth;
+  }
+
+  // If generic certificate fields are present, map them to type-specific fields
+  const { certificateContent, certificatePassword, certificateFilename, type, ...rest } =
+    signatureAuth;
+
+  let detectedType = type;
+  if (!detectedType) {
+    // Try to detect from certificateFilename first
+    if (certificateFilename) {
+      const ext = certificateFilename.toLowerCase();
+      if (ext.endsWith('.pfx') || ext.endsWith('.p12')) {
+        detectedType = 'pfx';
+      } else if (ext.endsWith('.jks')) {
+        detectedType = 'jks';
+      } else if (ext.endsWith('.pem') || ext.endsWith('.key')) {
+        detectedType = 'pem';
+      }
+    }
+
+    // If still no type, try to detect from legacy fields
+    if (!detectedType) {
+      if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
+        detectedType = 'pem';
+      } else if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
+        detectedType = 'jks';
+      } else if (
+        signatureAuth.pfxPath ||
+        signatureAuth.pfxContent ||
+        (signatureAuth.certPath && signatureAuth.keyPath)
+      ) {
+        detectedType = 'pfx';
+      }
+    }
+  }
+
+  // Check if we have any generic fields to process
+  const hasGenericFields = certificateContent || certificatePassword || certificateFilename;
+
+  // If no generic fields and no type needs to be detected, return as-is
+  if (!hasGenericFields && !detectedType) {
+    return signatureAuth;
+  }
+
+  const processedAuth = { ...rest };
+
+  // Always preserve the type if it was detected or provided
+  if (detectedType) {
+    processedAuth.type = detectedType;
+  }
+
+  // Only process if we have a determined type or generic fields
+  if (detectedType) {
+    switch (detectedType) {
+      case 'pfx':
+        if (certificateContent && !processedAuth.pfxContent) {
+          processedAuth.pfxContent = certificateContent;
+        }
+        if (certificatePassword && !processedAuth.pfxPassword) {
+          processedAuth.pfxPassword = certificatePassword;
+        }
+        if (certificateFilename && !processedAuth.pfxPath) {
+          // Store filename for reference, though content takes precedence
+          processedAuth.certificateFilename = certificateFilename;
+        }
+        break;
+
+      case 'jks':
+        // Map generic fields to JKS-specific fields
+        if (certificateContent && !processedAuth.keystoreContent) {
+          processedAuth.keystoreContent = certificateContent;
+        }
+        if (certificatePassword && !processedAuth.keystorePassword) {
+          processedAuth.keystorePassword = certificatePassword;
+        }
+        if (certificateFilename && !processedAuth.keystorePath) {
+          processedAuth.certificateFilename = certificateFilename;
+        }
+        break;
+
+      case 'pem':
+        // Map generic fields to PEM-specific fields
+        if (certificateContent && !processedAuth.privateKey) {
+          // For PEM, the certificate content is the private key
+          processedAuth.privateKey = Buffer.from(certificateContent, 'base64').toString('utf8');
+        }
+        // PEM doesn't typically have a password, but store it if provided
+        if (certificatePassword) {
+          processedAuth.certificatePassword = certificatePassword;
+        }
+        if (certificateFilename) {
+          processedAuth.certificateFilename = certificateFilename;
+        }
+        break;
+
+      default:
+        // Unknown type - this is an error if we have generic fields that need mapping
+        if (hasGenericFields) {
+          throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
+        }
+        // Even without generic fields, an unknown type is invalid
+        throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
+    }
+  } else if (hasGenericFields) {
+    // We have generic fields but couldn't determine the type
+    throw new Error(
+      `[Http Provider] Cannot determine certificate type from filename: ${certificateFilename || 'no filename provided'}`,
+    );
+  }
+
+  return processedAuth;
 }
 
 /**
@@ -64,6 +188,25 @@ function sanitizeConfigForLogging(config: any): any {
     if (sanitized.signatureAuth.privateKey) {
       sanitized.signatureAuth.privateKey = '[REDACTED]';
     }
+    // Redact certificate fields
+    if (sanitized.signatureAuth.certificateContent) {
+      sanitized.signatureAuth.certificateContent = '[REDACTED]';
+    }
+    if (sanitized.signatureAuth.certificatePassword) {
+      sanitized.signatureAuth.certificatePassword = '[REDACTED]';
+    }
+    if (sanitized.signatureAuth.pfxContent) {
+      sanitized.signatureAuth.pfxContent = '[REDACTED]';
+    }
+    if (sanitized.signatureAuth.keystoreContent) {
+      sanitized.signatureAuth.keystoreContent = '[REDACTED]';
+    }
+    if (sanitized.signatureAuth.keyContent) {
+      sanitized.signatureAuth.keyContent = '[REDACTED]';
+    }
+    if (sanitized.signatureAuth.certContent) {
+      sanitized.signatureAuth.certContent = '[REDACTED]';
+    }
   }
 
   // Sanitize other potential sensitive fields
@@ -75,6 +218,13 @@ function sanitizeConfigForLogging(config: any): any {
   }
   if (sanitized.token) {
     sanitized.token = '[REDACTED]';
+  }
+  // Sanitize certificate fields at root level
+  if (sanitized.certificateContent) {
+    sanitized.certificateContent = '[REDACTED]';
+  }
+  if (sanitized.certificatePassword) {
+    sanitized.certificatePassword = '[REDACTED]';
   }
 
   // Sanitize headers that might contain sensitive information
@@ -223,24 +373,48 @@ export async function generateSignature(
   try {
     let privateKey: string;
 
-    switch (signatureAuth.type) {
+    // For backward compatibility, detect type from legacy fields if not explicitly set
+    let authType = signatureAuth.type;
+    if (!authType) {
+      if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
+        authType = 'pem';
+      } else if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
+        authType = 'jks';
+      } else if (
+        signatureAuth.pfxPath ||
+        signatureAuth.pfxContent ||
+        (signatureAuth.certPath && signatureAuth.keyPath)
+      ) {
+        authType = 'pfx';
+      }
+    }
+    switch (authType) {
       case 'pem': {
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = resolveFilePath(signatureAuth.privateKeyPath);
           privateKey = fs.readFileSync(resolvedPath, 'utf8');
-        } else {
+        } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
+        } else if (signatureAuth.certificateContent) {
+          logger.debug(`[Signature Auth] Loading PEM from remote certificate content`);
+          privateKey = Buffer.from(signatureAuth.certificateContent, 'base64').toString('utf8');
+        } else {
+          throw new Error(
+            'PEM private key is required. Provide privateKey, privateKeyPath, or certificateContent',
+          );
         }
         break;
       }
       case 'jks': {
         // Check for keystore password in config first, then fallback to environment variable
         const keystorePassword =
-          signatureAuth.keystorePassword || getEnvString('PROMPTFOO_JKS_PASSWORD');
+          signatureAuth.keystorePassword ||
+          signatureAuth.certificatePassword ||
+          getEnvString('PROMPTFOO_JKS_PASSWORD');
 
         if (!keystorePassword) {
           throw new Error(
-            'JKS keystore password is required. Provide it via config keystorePassword or PROMPTFOO_JKS_PASSWORD environment variable',
+            'JKS keystore password is required. Provide it via config keystorePassword/certificatePassword or PROMPTFOO_JKS_PASSWORD environment variable',
           );
         }
 
@@ -254,13 +428,19 @@ export async function generateSignature(
         const jks = jksModule as any;
         let keystoreData: Buffer;
 
-        if (signatureAuth.keystoreContent) {
+        if (signatureAuth.keystoreContent || signatureAuth.certificateContent) {
           // Use base64 encoded content from database
-          keystoreData = Buffer.from(signatureAuth.keystoreContent, 'base64');
-        } else {
+          const content = signatureAuth.keystoreContent || signatureAuth.certificateContent;
+          logger.debug(`[Signature Auth] Loading JKS from base64 content`);
+          keystoreData = Buffer.from(content, 'base64');
+        } else if (signatureAuth.keystorePath) {
           // Use file path (existing behavior)
           const resolvedPath = resolveFilePath(signatureAuth.keystorePath);
           keystoreData = fs.readFileSync(resolvedPath);
+        } else {
+          throw new Error(
+            'JKS keystore content or path is required. Provide keystoreContent/certificateContent or keystorePath',
+          );
         }
 
         const keystore = jks.toPem(keystoreData, keystorePassword);
@@ -287,13 +467,23 @@ export async function generateSignature(
         break;
       }
       case 'pfx': {
-        if (signatureAuth.pfxPath || signatureAuth.pfxContent) {
+        // Check for PFX-specific fields first, then fallback to generic fields
+        const hasPfxContent = signatureAuth.pfxContent || signatureAuth.certificateContent;
+        const hasPfxPath = signatureAuth.pfxPath;
+        const hasCertAndKey =
+          (signatureAuth.certPath && signatureAuth.keyPath) ||
+          (signatureAuth.certContent && signatureAuth.keyContent);
+
+        if (hasPfxPath || hasPfxContent) {
           // Check for PFX password in config first, then fallback to environment variable
-          const pfxPassword = signatureAuth.pfxPassword || getEnvString('PROMPTFOO_PFX_PASSWORD');
+          const pfxPassword =
+            signatureAuth.pfxPassword ||
+            signatureAuth.certificatePassword ||
+            getEnvString('PROMPTFOO_PFX_PASSWORD');
 
           if (!pfxPassword) {
             throw new Error(
-              'PFX certificate password is required. Provide it via config pfxPassword or PROMPTFOO_PFX_PASSWORD environment variable',
+              'PFX certificate password is required. Provide it via config pfxPassword/certificatePassword or PROMPTFOO_PFX_PASSWORD environment variable',
             );
           }
 
@@ -309,10 +499,11 @@ export async function generateSignature(
 
             let result: { key: string; cert: string };
 
-            if (signatureAuth.pfxContent) {
+            if (signatureAuth.pfxContent || signatureAuth.certificateContent) {
               // Use base64 encoded content from database
+              const content = signatureAuth.pfxContent || signatureAuth.certificateContent;
               logger.debug(`[Signature Auth] Loading PFX from base64 content`);
-              const pfxBuffer = Buffer.from(signatureAuth.pfxContent, 'base64');
+              const pfxBuffer = Buffer.from(content, 'base64');
 
               result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
                 pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
@@ -363,13 +554,10 @@ export async function generateSignature(
             }
             logger.error(`Error loading PFX certificate: ${String(err)}`);
             throw new Error(
-              `Failed to load PFX certificate. Make sure the ${signatureAuth.pfxContent ? 'content is valid' : 'file exists'} and the password is correct: ${String(err)}`,
+              `Failed to load PFX certificate. Make sure the ${signatureAuth.pfxContent || signatureAuth.certificateContent ? 'content is valid' : 'file exists'} and the password is correct: ${String(err)}`,
             );
           }
-        } else if (
-          (signatureAuth.certPath && signatureAuth.keyPath) ||
-          (signatureAuth.certContent && signatureAuth.keyContent)
-        ) {
+        } else if (hasCertAndKey) {
           try {
             if (signatureAuth.keyContent) {
               // Use base64 encoded content from database
@@ -505,7 +693,29 @@ const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
   pfxPassword: z.string().optional(),
   certPath: z.string().optional(),
   keyPath: z.string().optional(),
-});
+}).passthrough();
+
+// Generic certificate auth schema (for UI-based certificate uploads)
+const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
+  certificateContent: z.string().optional(),
+  certificatePassword: z.string().optional(),
+  certificateFilename: z.string().optional(),
+  type: z.enum(['pem', 'jks', 'pfx']).optional(),
+  // Include type-specific fields that might be present or added by transform
+  pfxContent: z.string().optional(),
+  pfxPassword: z.string().optional(),
+  pfxPath: z.string().optional(),
+  keystoreContent: z.string().optional(),
+  keystorePassword: z.string().optional(),
+  keystorePath: z.string().optional(),
+  privateKey: z.string().optional(),
+  privateKeyPath: z.string().optional(),
+  keyAlias: z.string().optional(),
+  certPath: z.string().optional(),
+  keyPath: z.string().optional(),
+  certContent: z.string().optional(),
+  keyContent: z.string().optional(),
+}).passthrough();
 
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
@@ -534,12 +744,14 @@ export const HttpProviderConfigSchema = z.object({
   // Digital Signature Authentication with support for multiple certificate types
   signatureAuth: z
     .union([
+      LegacySignatureAuthSchema,
       PemSignatureAuthSchema,
       JksSignatureAuthSchema,
       PfxSignatureAuthSchema,
-      LegacySignatureAuthSchema,
+      GenericCertificateAuthSchema,
     ])
-    .optional(),
+    .optional()
+    .transform(preprocessSignatureAuthConfig),
 });
 
 type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
