@@ -65,7 +65,7 @@ prompts:
   - 'Compose a viral tweet about {{topic}} with emojis'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 tests:
   - description: 'Find best prompt for engagement'
@@ -94,9 +94,9 @@ prompts:
 
 # Multiple providers to compare
 providers:
-  - id: openai:gpt-4o-mini
-  - id: openai:gpt-4o
-  - id: anthropic:claude-3-haiku
+  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-4.1
+  - id: anthropic:messages:claude-opus-4-1-latest
 
 tests:
   - description: 'Find best model for technical accuracy'

@@ -15,8 +15,6 @@ The `answer-relevance` assertion checks if the LLM response answers the user's q
 - Good response (high score): "The capital of France is Paris."
 - Poor response (low score): "France has excellent wine and cheese." (doesn't answer the question)
 
-This assertion evaluates response relevance to the query.
-
 ## Required fields
 
 The answer-relevance assertion requires:
@@ -32,7 +30,7 @@ The answer-relevance assertion requires:
 ```yaml
 assert:
   - type: answer-relevance
-    threshold: 0.8 # Require 80% relevance to the query
+    threshold: 0.8
 ```
 
 :::warning
@@ -59,7 +57,7 @@ prompts:
   - 'Tell me about {{topic}}'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 tests:
   - description: 'Test response relevance for quantum computing query'
@@ -92,11 +90,11 @@ defaultTest:
   options:
     provider:
       text:
-        id: openai:gpt-4
+        id: openai:gpt-4.1
         config:
           temperature: 0
       embedding:
-        id: openai:text-embedding-ada-002
+        id: openai:embeddings:text-embedding-3-large
 ```
 
 You can also override providers at the assertion level:
@@ -106,8 +104,8 @@ assert:
   - type: answer-relevance
     threshold: 0.8
     provider:
-      text: anthropic:claude-2
-      embedding: cohere:embed-english-v3.0
+      text: anthropic:messages:claude-opus-4-1-latest
+      embedding: cohere:embedding:embed-english-v3.0
 ```
 
 ### Customizing the Prompt

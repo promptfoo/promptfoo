@@ -14,8 +14,6 @@ The `llm-rubric` assertion uses an LLM to grade outputs against custom criteria.
 - Rubric: "Response should be professional yet friendly"
 - Output evaluation: Score 0.8, Pass, "Uses formal language while maintaining approachable tone"
 
-This assertion handles custom evaluation criteria such as tone, style, completeness, or domain-specific requirements.
-
 ## Required fields
 
 The llm-rubric assertion requires:
@@ -53,7 +51,7 @@ prompts:
   - 'Write a {{type}} about {{topic}}'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 tests:
   - description: 'Evaluate professional email'

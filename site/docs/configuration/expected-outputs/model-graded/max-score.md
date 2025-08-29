@@ -16,8 +16,6 @@ The `max-score` assertion automatically selects the best output based on objecti
 - Output B: Scores 0.9 on factuality, 1.0 on contains, 0.8 on rubric = Average 0.90 ✓ Winner
 - Output C: Scores 0.8 on factuality, 0.0 on contains, 0.9 on rubric = Average 0.57 ✗
 
-This assertion provides transparent, reproducible selection without LLM API calls.
-
 ## When to use max-score
 
 Use `max-score` when you want to:
@@ -44,7 +42,7 @@ prompts:
   - 'Write a well-documented function to {{task}}'
 
 providers:
-  - openai:gpt-4
+  - id: openai:gpt-4.1
 
 tests:
   - vars:
@@ -138,7 +136,7 @@ prompts:
   - 'Write a well-documented Python function to {{task}}'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 tests:
   - description: 'Find best implementation for list merging'
@@ -146,11 +144,7 @@ tests:
       task: 'merge two sorted lists'
     assert:
       - type: python
-        value: |
-          list1 = [1, 3, 5]
-          list2 = [2, 4, 6]
-          result = merge_lists(list1, list2)
-          assert result == [1, 2, 3, 4, 5, 6]
+        value: 'def merge_lists' in output and 'return' in output
 
       - type: llm-rubric
         value: 'Code has O(n+m) time complexity and is efficient'
@@ -179,7 +173,7 @@ prompts:
   - 'Explain {{concept}} with examples'
 
 providers:
-  - anthropic:claude-3-haiku-20240307
+  - id: anthropic:messages:claude-opus-4-1-latest
 
 tests:
   - vars:

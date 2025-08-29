@@ -16,8 +16,6 @@ The `factuality` assertion checks if the LLM output is factually consistent with
 - Good output: "Paris, France's capital, has 2.2M people in a metro area of 10M" ✓
 - Bad output: "Lyon is the capital of France" ✗
 
-This assertion validates factual consistency against reference answers.
-
 ## Required fields
 
 The factuality assertion requires:
@@ -60,7 +58,7 @@ prompts:
   - 'Tell me about the capital city of {{state}}'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 tests:
   - description: 'Test California capital knowledge'
@@ -82,7 +80,7 @@ tests:
       state: Texas
     assert:
       - type: factuality
-        value: Austin is the capital of Texas, located in central Texas with a population of about 965,000
+        value: Austin is the capital of Texas, located in central Texas
 ```
 
 ## Customizing Score Thresholds
@@ -115,7 +113,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: anthropic:claude-3-7-sonnet-20250219
+       provider: anthropic:messages:claude-opus-4-1-latest
    ```
 
 3. Using assertion-level override:

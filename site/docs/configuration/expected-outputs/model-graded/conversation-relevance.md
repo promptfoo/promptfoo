@@ -15,8 +15,6 @@ The `conversation-relevance` assertion evaluates whether responses remain releva
 - User: "What about tomorrow?" → Bot: "Tomorrow will be rainy" ✓ Relevant
 - User: "Should I bring an umbrella?" → Bot: "The capital of France is Paris" ✗ Irrelevant
 
-This assertion evaluates conversational coherence.
-
 ## How it works
 
 The conversation relevance metric uses a sliding window approach to evaluate conversations:
@@ -91,7 +89,7 @@ prompts:
   - 'Explain {{topic}}'
 
 providers:
-  - openai:gpt-4
+  - id: openai:gpt-4.1
 
 tests:
   - vars:
@@ -172,7 +170,7 @@ Like other model-graded assertions, you can override the default grading provide
 assert:
   - type: conversation-relevance
     threshold: 0.8
-    provider: openai:gpt-4o-mini
+    provider: openai:gpt-4.1-mini
 ```
 
 Or set it globally:
@@ -180,7 +178,7 @@ Or set it globally:
 ```yaml
 defaultTest:
   options:
-    provider: anthropic:claude-3-7-sonnet-latest
+    provider: anthropic:messages:claude-opus-4-1-latest
 ```
 
 ## Tips for effective conversation evaluation

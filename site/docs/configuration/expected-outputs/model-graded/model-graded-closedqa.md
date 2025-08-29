@@ -63,7 +63,7 @@ prompts:
   - 'Explain {{topic}} to a {{audience}}'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 tests:
   - description: 'Test explanation for beginners'

@@ -130,7 +130,7 @@ prompts:
   - 'Explain {{concept}} in simple terms for a {{audience}}.'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 tests:
   - description: 'Evaluate beginner explanation'

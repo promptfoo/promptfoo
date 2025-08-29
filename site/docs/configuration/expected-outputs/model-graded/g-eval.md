@@ -15,8 +15,6 @@ The `g-eval` assertion implements Google's G-Eval framework, using chain-of-thou
 - Analysis: The grader thinks step-by-step about factual claims and structure
 - Result: Normalized score from 0-1 based on detailed reasoning
 
-This assertion handles complex evaluation criteria requiring step-by-step analysis.
-
 ## Required fields
 
 The g-eval assertion requires:
@@ -67,7 +65,7 @@ Like other model-graded assertions, you can override the default GPT-4o evaluato
 assert:
   - type: g-eval
     value: 'Ensure response is factually accurate'
-    provider: openai:gpt-4.1-mini
+    provider: openai:gpt-4.1
 ```
 
 Or globally via test options:
@@ -75,7 +73,7 @@ Or globally via test options:
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-4.1-mini
+    provider: openai:gpt-4.1
 ```
 
 ### Complete example
@@ -88,7 +86,7 @@ prompts:
   - 'Write a technical explanation of {{topic}} suitable for a {{audience}} audience.'
 
 providers:
-  - id: openai:gpt-4o-mini
+  - id: openai:gpt-4.1-mini
 
 tests:
   - description: 'Evaluate beginner-friendly explanation'
