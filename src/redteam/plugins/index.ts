@@ -198,7 +198,8 @@ const pluginFactories: PluginFactory[] = [
     key: category,
     action: async (params: PluginActionParams) => {
       if (neverGenerateRemote()) {
-        throw new Error(`${category} plugin requires remote generation to be enabled`);
+        logger.error(`${category} plugin requires remote generation to be enabled`);
+        return [];
       }
 
       const testCases = await getHarmfulTests(params, category);
@@ -248,7 +249,8 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
   key: category,
   action: async (params: PluginActionParams) => {
     if (neverGenerateRemote()) {
-      throw new Error(`${category} plugin requires remote generation to be enabled`);
+      logger.error(`${category} plugin requires remote generation to be enabled`);
+      return [];
     }
 
     const testCases = await fetchRemoteTestCases(
@@ -277,7 +279,8 @@ function createRemotePlugin<T extends PluginConfig>(
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ purpose, injectVar, n, config }: PluginActionParams) => {
       if (neverGenerateRemote()) {
-        throw new Error(`${key} plugin requires remote generation to be enabled`);
+        logger.error(`${key} plugin requires remote generation to be enabled`);
+        return [];
       }
       const testCases: TestCase[] = await fetchRemoteTestCases(
         key,
