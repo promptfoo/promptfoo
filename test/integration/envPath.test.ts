@@ -41,7 +41,9 @@ describe('Integration: commandLineOptions.envPath', () => {
     fs.writeFileSync(tempEnvFile, 'TEST_VAR=from_config_env');
 
     // Create config with commandLineOptions.envPath
-    fs.writeFileSync(tempConfigFile, `
+    fs.writeFileSync(
+      tempConfigFile,
+      `
 commandLineOptions:
   envPath: ${tempEnvFile}
 
@@ -54,7 +56,8 @@ providers:
 tests:
   - vars:
       input: "test"
-`);
+`,
+    );
 
     const cmdObj = { config: [tempConfigFile] };
 
@@ -75,7 +78,9 @@ tests:
     fs.writeFileSync(cliEnvFile, 'CLI_VAR=from_cli');
     fs.writeFileSync(tempEnvFile, 'CONFIG_VAR=from_config');
 
-    fs.writeFileSync(tempConfigFile, `
+    fs.writeFileSync(
+      tempConfigFile,
+      `
 commandLineOptions:
   envPath: ${tempEnvFile}
 
@@ -88,11 +93,12 @@ providers:
 tests:
   - vars:
       input: "test"
-`);
+`,
+    );
 
-    const cmdObj = { 
+    const cmdObj = {
       config: [tempConfigFile],
-      envPath: cliEnvFile
+      envPath: cliEnvFile,
     };
 
     try {
@@ -107,7 +113,9 @@ tests:
   });
 
   it('should handle missing commandLineOptions section gracefully', async () => {
-    fs.writeFileSync(tempConfigFile, `
+    fs.writeFileSync(
+      tempConfigFile,
+      `
 prompts:
   - "Test prompt"
 
@@ -117,7 +125,8 @@ providers:
 tests:
   - vars:
       input: "test"
-`);
+`,
+    );
 
     const cmdObj = { config: [tempConfigFile] };
 
@@ -135,15 +144,20 @@ tests:
   it('should handle multiple config files and use first envPath found', async () => {
     const config1File = path.join(tempDir, 'config1.yaml');
     const config2File = path.join(tempDir, 'config2.yaml');
-    const envFile1 = path.join(tempDir, '.env1');
+    const _envFile1 = path.join(tempDir, '.env1');
     const envFile2 = path.join(tempDir, '.env2');
 
-    fs.writeFileSync(config1File, `
+    fs.writeFileSync(
+      config1File,
+      `
 prompts:
   - "From config 1"
-`);
+`,
+    );
 
-    fs.writeFileSync(config2File, `
+    fs.writeFileSync(
+      config2File,
+      `
 commandLineOptions:
   envPath: ${envFile2}
 
@@ -156,7 +170,8 @@ providers:
 tests:
   - vars:
       input: "test"
-`);
+`,
+    );
 
     const cmdObj = { config: [config1File, config2File] };
 
