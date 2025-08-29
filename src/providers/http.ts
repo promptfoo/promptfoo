@@ -53,9 +53,10 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
   }
 
   // If generic certificate fields are present, map them to type-specific fields
-  const { certificateContent, certificatePassword, certificateFilename, ...rest } = signatureAuth;
+  const { certificateContent, certificatePassword, certificateFilename, type, ...rest } =
+    signatureAuth;
 
-  let detectedType = signatureAuth.type;
+  let detectedType = type;
   if (!detectedType) {
     // Try to detect from certificateFilename first
     if (certificateFilename) {
@@ -85,56 +86,78 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
     }
   }
 
-  const processedAuth = { ...rest };
+  // Check if we have any generic fields to process
+  const hasGenericFields = certificateContent || certificatePassword || certificateFilename;
 
-  switch (detectedType || signatureAuth.type) {
-    case 'pfx':
-      if (certificateContent && !processedAuth.pfxContent) {
-        processedAuth.pfxContent = certificateContent;
-      }
-      if (certificatePassword && !processedAuth.pfxPassword) {
-        processedAuth.pfxPassword = certificatePassword;
-      }
-      if (certificateFilename && !processedAuth.pfxPath) {
-        // Store filename for reference, though content takes precedence
-        processedAuth.certificateFilename = certificateFilename;
-      }
-      break;
-
-    case 'jks':
-      // Map generic fields to JKS-specific fields
-      if (certificateContent && !processedAuth.keystoreContent) {
-        processedAuth.keystoreContent = certificateContent;
-      }
-      if (certificatePassword && !processedAuth.keystorePassword) {
-        processedAuth.keystorePassword = certificatePassword;
-      }
-      if (certificateFilename && !processedAuth.keystorePath) {
-        processedAuth.certificateFilename = certificateFilename;
-      }
-      break;
-
-    case 'pem':
-      // Map generic fields to PEM-specific fields
-      if (certificateContent && !processedAuth.privateKey) {
-        // For PEM, the certificate content is the private key
-        processedAuth.privateKey = Buffer.from(certificateContent, 'base64').toString('utf8');
-      }
-      // PEM doesn't typically have a password, but store it if provided
-      if (certificatePassword) {
-        processedAuth.certificatePassword = certificatePassword;
-      }
-      if (certificateFilename) {
-        processedAuth.certificateFilename = certificateFilename;
-      }
-      break;
-
-    default:
-      throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
+  // If no generic fields and no type needs to be detected, return as-is
+  if (!hasGenericFields && !detectedType) {
+    return signatureAuth;
   }
 
-  if (detectedType && !processedAuth.type) {
+  const processedAuth = { ...rest };
+
+  // Always preserve the type if it was detected or provided
+  if (detectedType) {
     processedAuth.type = detectedType;
+  }
+
+  // Only process if we have a determined type or generic fields
+  if (detectedType) {
+    switch (detectedType) {
+      case 'pfx':
+        if (certificateContent && !processedAuth.pfxContent) {
+          processedAuth.pfxContent = certificateContent;
+        }
+        if (certificatePassword && !processedAuth.pfxPassword) {
+          processedAuth.pfxPassword = certificatePassword;
+        }
+        if (certificateFilename && !processedAuth.pfxPath) {
+          // Store filename for reference, though content takes precedence
+          processedAuth.certificateFilename = certificateFilename;
+        }
+        break;
+
+      case 'jks':
+        // Map generic fields to JKS-specific fields
+        if (certificateContent && !processedAuth.keystoreContent) {
+          processedAuth.keystoreContent = certificateContent;
+        }
+        if (certificatePassword && !processedAuth.keystorePassword) {
+          processedAuth.keystorePassword = certificatePassword;
+        }
+        if (certificateFilename && !processedAuth.keystorePath) {
+          processedAuth.certificateFilename = certificateFilename;
+        }
+        break;
+
+      case 'pem':
+        // Map generic fields to PEM-specific fields
+        if (certificateContent && !processedAuth.privateKey) {
+          // For PEM, the certificate content is the private key
+          processedAuth.privateKey = Buffer.from(certificateContent, 'base64').toString('utf8');
+        }
+        // PEM doesn't typically have a password, but store it if provided
+        if (certificatePassword) {
+          processedAuth.certificatePassword = certificatePassword;
+        }
+        if (certificateFilename) {
+          processedAuth.certificateFilename = certificateFilename;
+        }
+        break;
+
+      default:
+        // Unknown type - this is an error if we have generic fields that need mapping
+        if (hasGenericFields) {
+          throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
+        }
+        // Even without generic fields, an unknown type is invalid
+        throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
+    }
+  } else if (hasGenericFields) {
+    // We have generic fields but couldn't determine the type
+    throw new Error(
+      `[Http Provider] Cannot determine certificate type from filename: ${certificateFilename || 'no filename provided'}`,
+    );
   }
 
   return processedAuth;
@@ -670,7 +693,7 @@ const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
   pfxPassword: z.string().optional(),
   certPath: z.string().optional(),
   keyPath: z.string().optional(),
-});
+}).passthrough();
 
 // Generic certificate auth schema (for UI-based certificate uploads)
 const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
@@ -678,14 +701,21 @@ const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
   certificatePassword: z.string().optional(),
   certificateFilename: z.string().optional(),
   type: z.enum(['pem', 'jks', 'pfx']).optional(),
-  // Include type-specific fields that might be present
+  // Include type-specific fields that might be present or added by transform
   pfxContent: z.string().optional(),
   pfxPassword: z.string().optional(),
+  pfxPath: z.string().optional(),
   keystoreContent: z.string().optional(),
   keystorePassword: z.string().optional(),
+  keystorePath: z.string().optional(),
   privateKey: z.string().optional(),
+  privateKeyPath: z.string().optional(),
   keyAlias: z.string().optional(),
-});
+  certPath: z.string().optional(),
+  keyPath: z.string().optional(),
+  certContent: z.string().optional(),
+  keyContent: z.string().optional(),
+}).passthrough();
 
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
