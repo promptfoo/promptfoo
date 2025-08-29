@@ -9,6 +9,7 @@ import { fetchWithCache, type FetchWithCacheResult } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
+import { sanitizeUrl } from '../fetch';
 import logger from '../logger';
 import type {
   ApiProvider,
@@ -36,6 +37,63 @@ function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
       typeof value === 'string' ? JSON.stringify(value).slice(1, -1) : value,
     ]),
   );
+}
+
+/**
+ * Sanitizes configuration objects by redacting sensitive fields before logging.
+ * Prevents passwords and other secrets from appearing in debug logs.
+ */
+function sanitizeConfigForLogging(config: any): any {
+  if (!config || typeof config !== 'object') {
+    return config;
+  }
+
+  const sanitized = { ...config };
+
+  // Sanitize signature authentication credentials
+  if (sanitized.signatureAuth) {
+    sanitized.signatureAuth = { ...sanitized.signatureAuth };
+
+    // Redact sensitive fields
+    if (sanitized.signatureAuth.pfxPassword) {
+      sanitized.signatureAuth.pfxPassword = '[REDACTED]';
+    }
+    if (sanitized.signatureAuth.keystorePassword) {
+      sanitized.signatureAuth.keystorePassword = '[REDACTED]';
+    }
+    if (sanitized.signatureAuth.privateKey) {
+      sanitized.signatureAuth.privateKey = '[REDACTED]';
+    }
+  }
+
+  // Sanitize other potential sensitive fields
+  if (sanitized.password) {
+    sanitized.password = '[REDACTED]';
+  }
+  if (sanitized.apiKey) {
+    sanitized.apiKey = '[REDACTED]';
+  }
+  if (sanitized.token) {
+    sanitized.token = '[REDACTED]';
+  }
+
+  // Sanitize headers that might contain sensitive information
+  if (sanitized.headers) {
+    sanitized.headers = { ...sanitized.headers };
+    for (const [key, _value] of Object.entries(sanitized.headers)) {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey.includes('authorization') ||
+        lowerKey.includes('api-key') ||
+        lowerKey.includes('token') ||
+        lowerKey.includes('password')
+      ) {
+        sanitized.headers[key] = '[REDACTED]';
+      }
+    }
+  }
+
+  return sanitized;
 }
 
 /**
@@ -194,8 +252,16 @@ export async function generateSignature(
         });
 
         const jks = jksModule as any;
-        const resolvedPath = resolveFilePath(signatureAuth.keystorePath);
-        const keystoreData = fs.readFileSync(resolvedPath);
+        let keystoreData: Buffer;
+
+        if (signatureAuth.keystoreContent) {
+          // Use base64 encoded content from database
+          keystoreData = Buffer.from(signatureAuth.keystoreContent, 'base64');
+        } else {
+          // Use file path (existing behavior)
+          const resolvedPath = resolveFilePath(signatureAuth.keystorePath);
+          keystoreData = fs.readFileSync(resolvedPath);
+        }
 
         const keystore = jks.toPem(keystoreData, keystorePassword);
 
@@ -221,10 +287,7 @@ export async function generateSignature(
         break;
       }
       case 'pfx': {
-        if (signatureAuth.pfxPath) {
-          const resolvedPath = resolveFilePath(signatureAuth.pfxPath);
-          logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
-
+        if (signatureAuth.pfxPath || signatureAuth.pfxContent) {
           // Check for PFX password in config first, then fallback to environment variable
           const pfxPassword = signatureAuth.pfxPassword || getEnvString('PROMPTFOO_PFX_PASSWORD');
 
@@ -244,16 +307,41 @@ export async function generateSignature(
 
             const pem = pemModule.default as any;
 
-            // Use promise wrapper for pem.readPkcs12
-            const result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-              pem.readPkcs12(resolvedPath, { p12Password: pfxPassword }, (err: any, data: any) => {
-                if (err) {
-                  reject(err);
-                } else {
-                  resolve(data);
-                }
+            let result: { key: string; cert: string };
+
+            if (signatureAuth.pfxContent) {
+              // Use base64 encoded content from database
+              logger.debug(`[Signature Auth] Loading PFX from base64 content`);
+              const pfxBuffer = Buffer.from(signatureAuth.pfxContent, 'base64');
+
+              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
+                pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
+                  if (err) {
+                    reject(err);
+                  } else {
+                    resolve(data);
+                  }
+                });
               });
-            });
+            } else {
+              // Use file path (existing behavior)
+              const resolvedPath = resolveFilePath(signatureAuth.pfxPath);
+              logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
+
+              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
+                pem.readPkcs12(
+                  resolvedPath,
+                  { p12Password: pfxPassword },
+                  (err: any, data: any) => {
+                    if (err) {
+                      reject(err);
+                    } else {
+                      resolve(data);
+                    }
+                  },
+                );
+              });
+            }
 
             if (!result.key) {
               throw new Error('No private key found in PFX file');
@@ -265,7 +353,8 @@ export async function generateSignature(
             );
           } catch (err) {
             if (err instanceof Error) {
-              if (err.message.includes('ENOENT')) {
+              if (err.message.includes('ENOENT') && signatureAuth.pfxPath) {
+                const resolvedPath = resolveFilePath(signatureAuth.pfxPath);
                 throw new Error(`PFX file not found: ${resolvedPath}`);
               }
               if (err.message.includes('invalid') || err.message.includes('decrypt')) {
@@ -274,26 +363,36 @@ export async function generateSignature(
             }
             logger.error(`Error loading PFX certificate: ${String(err)}`);
             throw new Error(
-              `Failed to load PFX certificate. Make sure the file exists and the password is correct: ${String(err)}`,
+              `Failed to load PFX certificate. Make sure the ${signatureAuth.pfxContent ? 'content is valid' : 'file exists'} and the password is correct: ${String(err)}`,
             );
           }
-        } else if (signatureAuth.certPath && signatureAuth.keyPath) {
-          const resolvedCertPath = resolveFilePath(signatureAuth.certPath);
-          const resolvedKeyPath = resolveFilePath(signatureAuth.keyPath);
-          logger.debug(
-            `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
-          );
-
+        } else if (
+          (signatureAuth.certPath && signatureAuth.keyPath) ||
+          (signatureAuth.certContent && signatureAuth.keyContent)
+        ) {
           try {
-            // Read the private key directly from the key file
-            if (!fs.existsSync(resolvedKeyPath)) {
-              throw new Error(`Key file not found: ${resolvedKeyPath}`);
-            }
-            if (!fs.existsSync(resolvedCertPath)) {
-              throw new Error(`Certificate file not found: ${resolvedCertPath}`);
-            }
+            if (signatureAuth.keyContent) {
+              // Use base64 encoded content from database
+              logger.debug(`[Signature Auth] Loading private key from base64 content`);
+              privateKey = Buffer.from(signatureAuth.keyContent, 'base64').toString('utf8');
+            } else {
+              // Use file paths (existing behavior)
+              const resolvedCertPath = resolveFilePath(signatureAuth.certPath);
+              const resolvedKeyPath = resolveFilePath(signatureAuth.keyPath);
+              logger.debug(
+                `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
+              );
 
-            privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
+              // Read the private key directly from the key file
+              if (!fs.existsSync(resolvedKeyPath)) {
+                throw new Error(`Key file not found: ${resolvedKeyPath}`);
+              }
+              if (!fs.existsSync(resolvedCertPath)) {
+                throw new Error(`Certificate file not found: ${resolvedCertPath}`);
+              }
+
+              privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
+            }
             logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
           } catch (err) {
             logger.error(`Error loading certificate/key files: ${String(err)}`);
@@ -302,7 +401,9 @@ export async function generateSignature(
             );
           }
         } else {
-          throw new Error('PFX type requires either pfxPath or both certPath and keyPath');
+          throw new Error(
+            'PFX type requires either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent',
+          );
         }
         break;
       }
@@ -359,24 +460,36 @@ const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
 // JKS signature auth schema
 const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   type: z.literal('jks'),
-  keystorePath: z.string(),
+  keystorePath: z.string().optional(),
+  keystoreContent: z.string().optional(), // Base64 encoded JKS content
   keystorePassword: z.string().optional(),
   keyAlias: z.string().optional(),
+}).refine((data) => data.keystorePath !== undefined || data.keystoreContent !== undefined, {
+  message: 'Either keystorePath or keystoreContent must be provided for JKS type',
 });
 
 // PFX signature auth schema
 const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   type: z.literal('pfx'),
   pfxPath: z.string().optional(),
+  pfxContent: z.string().optional(), // Base64 encoded PFX content
   pfxPassword: z.string().optional(),
   certPath: z.string().optional(),
   keyPath: z.string().optional(),
+  certContent: z.string().optional(), // Base64 encoded certificate content
+  keyContent: z.string().optional(), // Base64 encoded private key content
 }).refine(
   (data) => {
-    return data.pfxPath || (data.certPath && data.keyPath);
+    return (
+      data.pfxPath ||
+      data.pfxContent ||
+      (data.certPath && data.keyPath) ||
+      (data.certContent && data.keyContent)
+    );
   },
   {
-    message: 'Either pfxPath or both certPath and keyPath must be provided for PFX type',
+    message:
+      'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type',
   },
 );
 
@@ -1125,7 +1238,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     logger.debug(
-      `[HTTP Provider]: Calling ${url} with config: ${safeJsonStringify(renderedConfig)}`,
+      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with config: ${safeJsonStringify(sanitizeConfigForLogging(renderedConfig))}`,
     );
 
     const response = await fetchWithCache(
@@ -1231,7 +1344,7 @@ export class HttpProvider implements ApiProvider {
     delete parsedRequest.headers['content-length'];
 
     logger.debug(
-      `[HTTP Provider]: Calling ${url} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(parsedRequest.headers)}`,
+      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(sanitizeConfigForLogging({ headers: parsedRequest.headers }).headers)}`,
     );
     const response = await fetchWithCache(
       url,
