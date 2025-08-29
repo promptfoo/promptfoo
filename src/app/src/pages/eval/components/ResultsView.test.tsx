@@ -2,7 +2,7 @@ import React from 'react';
 
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
@@ -86,11 +86,12 @@ const mockTableWithoutHighlights = {
 };
 
 // Mock the router hooks
+let mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useNavigate: () => vi.fn(),
+    useNavigate: () => mockNavigate,
     useSearchParams: () => [new URLSearchParams(''), vi.fn()],
   };
 });
@@ -155,17 +156,22 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 // Mock the main store
+let mockMainStoreData = {
+  setStateFromConfig: vi.fn(),
+  setConfigFromResults: vi.fn(),
+};
+
 vi.mock('@app/stores/evalConfig', () => ({
-  useStore: vi.fn(() => ({
-    setStateFromConfig: vi.fn(),
-  })),
+  useStore: vi.fn(() => mockMainStoreData),
 }));
 
 // Mock the useToast hook
+let mockUseToastData = {
+  showToast: vi.fn(),
+};
+
 vi.mock('@app/hooks/useToast', () => ({
-  useToast: vi.fn(() => ({
-    showToast: vi.fn(),
-  })),
+  useToast: vi.fn(() => mockUseToastData),
 }));
 
 // Mock the useShiftKey hook
@@ -205,6 +211,8 @@ describe('ResultsView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate = vi.fn();
+
     // Reset to default state
     mockTableStoreData = {
       table: mockTableWithoutHighlights,
@@ -244,6 +252,15 @@ describe('ResultsView', () => {
       setComparisonEvalIds: vi.fn(),
       renderMarkdown: true,
     };
+
+    mockMainStoreData = {
+      setStateFromConfig: vi.fn(),
+      setConfigFromResults: vi.fn(),
+    };
+
+    mockUseToastData = {
+      showToast: vi.fn(),
+    };
   });
 
   it('renders ResultsCharts when table, config, and more than one prompt are present and viewport height is at least 1100px', () => {
@@ -277,6 +294,7 @@ describe('ResultsView', () => {
 
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
+
   it('renders without crashing', () => {
     renderWithProviders(
       <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
@@ -510,5 +528,96 @@ describe('ResultsView', () => {
 
     const showChartsButton = screen.getByText('Show Charts');
     expect(showChartsButton).toBeInTheDocument();
+  });
+
+  it("ResultsView should call setConfigFromResults with the current config and navigate to '/setup/' when the 'Edit and re-run' menu item is clicked, showing no error toast on success", async () => {
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    const evalActionsButton = screen.getByText('Eval actions');
+    fireEvent.click(evalActionsButton);
+
+    const editAndRerunMenuItem = screen.getByText('Edit and re-run');
+    await act(async () => {
+      fireEvent.click(editAndRerunMenuItem);
+    });
+
+    expect(mockMainStoreData.setConfigFromResults).toHaveBeenCalledWith(mockTableStoreData.config);
+
+    expect(mockNavigate).toHaveBeenCalledWith('/setup/');
+
+    expect(mockUseToastData.showToast).not.toHaveBeenCalledWith(
+      expect.stringContaining('Failed to load configuration for editing'),
+      'error',
+    );
+  });
+
+  it('shows loading state when Edit and re-run is clicked', async () => {
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      config: { description: 'Test Config', tags: {} },
+    };
+
+    mockMainStoreData = {
+      ...mockMainStoreData,
+      setConfigFromResults: vi.fn(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
+    };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    const evalActionsButton = screen.getByText('Eval actions');
+    fireEvent.click(evalActionsButton);
+
+    const editAndRerunMenuItem = await screen.findByText('Edit and re-run');
+    fireEvent.click(editAndRerunMenuItem);
+
+    await waitFor(() => {
+      const circularProgress = screen.queryByRole('progressbar');
+      expect(circularProgress).toBeInTheDocument();
+    });
+  });
+
+  it('should show an error toast when setConfigFromResults throws an exception during the "Edit and re-run" operation', async () => {
+    mockMainStoreData.setConfigFromResults.mockRejectedValue(
+      new Error('Failed to transform config'),
+    );
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    const evalActionsButton = screen.getByText('Eval actions');
+    fireEvent.click(evalActionsButton);
+
+    const editAndRerunMenuItem = screen.getByText('Edit and re-run');
+    fireEvent.click(editAndRerunMenuItem);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockUseToastData.showToast).toHaveBeenCalledWith(
+      'Failed to load configuration for editing',
+      'error',
+    );
+  });
+
+  it('navigates to /setup/ when "Edit and re-run" is clicked', async () => {
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    const evalActionsButton = screen.getByText('Eval actions');
+    fireEvent.click(evalActionsButton);
+
+    const editAndRerunMenuItem = screen.getByText('Edit and re-run');
+    fireEvent.click(editAndRerunMenuItem);
+
+    await Promise.resolve();
+
+    expect(mockNavigate).toHaveBeenCalledWith('/setup/');
   });
 });

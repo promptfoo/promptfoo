@@ -4,6 +4,7 @@ import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
 import type {
@@ -52,9 +53,25 @@ vi.mock('./YamlEditor', () => ({
   )),
 }));
 
+vi.mock('@app/stores/evalConfig', async () => {
+  const actual =
+    await vi.importActual<typeof import('@app/stores/evalConfig')>('@app/stores/evalConfig');
+  return {
+    ...actual,
+    transformResultsConfigToSetupConfig: vi.fn((config) => ({
+      ...config,
+      transformed: true,
+    })),
+  };
+});
+
 const renderWithTheme = (component: React.ReactNode) => {
   const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
+  return render(
+    <MemoryRouter>
+      <ThemeProvider theme={theme}>{component}</ThemeProvider>
+    </MemoryRouter>,
+  );
 };
 
 describe('EvaluateTestSuiteCreator', () => {
@@ -217,6 +234,89 @@ describe('EvaluateTestSuiteCreator', () => {
     const config = useStore.getState().config;
     expect(config.derivedMetrics).toEqual(configWithNewField.derivedMetrics);
     expect((config as any).someNewFieldInFuture).toBe('This will work automatically!');
+  });
+
+  it('should display a validation error alert listing all errors when validationStatus.errors is non-empty', () => {
+    const errorMessages = ['Error 1', 'Error 2', 'Error 3'];
+    const updateConfigMock = vi.fn();
+    useStore.setState({
+      updateConfig: updateConfigMock,
+      validationStatus: {
+        isValid: false,
+        errors: errorMessages,
+        hasMinimumFields: false,
+      },
+    });
+
+    renderWithTheme(<EvaluateTestSuiteCreator />);
+
+    const alertTitleElement = screen.getByText('Configuration Issues');
+    const alert = alertTitleElement.closest('div[role="alert"]');
+    expect(alert).toBeInTheDocument();
+
+    errorMessages.forEach((errorMessage) => {
+      expect(alert).toHaveTextContent(errorMessage);
+    });
+  });
+
+  it('should handle and display multiple validation errors', async () => {
+    const errorMessages = [
+      'Provider is required.',
+      'At least one prompt is required.',
+      'Test cases are required.',
+    ];
+    useStore.setState({
+      validationStatus: {
+        isValid: false,
+        errors: errorMessages,
+        hasMinimumFields: false,
+      },
+    });
+
+    renderWithTheme(<EvaluateTestSuiteCreator />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toBeInTheDocument();
+
+    for (const errorMessage of errorMessages) {
+      expect(alert).toHaveTextContent(errorMessage);
+    }
+  });
+
+  it("should call restoreOriginal and update the configuration when the 'Restore Original' button is clicked", async () => {
+    const originalResultsConfig = {
+      description: 'Original Description',
+      providers: [{ id: 'provider1', label: 'Provider 1' }],
+    };
+
+    const restoreOriginalSpy = vi.spyOn(useStore.getState(), 'restoreOriginal');
+
+    useStore.getState().setConfigFromResults(originalResultsConfig);
+    renderWithTheme(<EvaluateTestSuiteCreator />);
+
+    const restoreOriginalButton = await screen.findByRole('button', { name: 'Restore Original' });
+    await userEvent.click(restoreOriginalButton);
+
+    expect(restoreOriginalSpy).toHaveBeenCalled();
+
+    const currentConfig = useStore.getState().config;
+    expect(currentConfig.description).toBe(originalResultsConfig.description);
+    expect(currentConfig.providers).toEqual(originalResultsConfig.providers);
+  });
+
+  it('should handle errors thrown by useEditAndRerunScrollReset gracefully', async () => {
+    const scrollToMock = vi.fn(() => {
+      throw new Error('Failed to reset scroll');
+    });
+
+    Object.defineProperty(window, 'scrollTo', {
+      writable: true,
+      value: scrollToMock,
+    });
+
+    renderWithTheme(<EvaluateTestSuiteCreator />);
+
+    expect(screen.getByText('Set up an evaluation')).toBeInTheDocument();
   });
 
   // Future test scenarios will be added here

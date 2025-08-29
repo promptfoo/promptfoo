@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
 
+import { useEditAndRerunScrollReset } from '@app/hooks/useScrollReset';
 import { useStore } from '@app/stores/evalConfig';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import LinearProgress from '@mui/material/LinearProgress';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { ErrorBoundary } from 'react-error-boundary';
@@ -39,8 +44,18 @@ function ErrorFallback({
 
 const EvaluateTestSuiteCreator: React.FC = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  useEditAndRerunScrollReset();
 
-  const { config, updateConfig, reset } = useStore();
+  const {
+    config,
+    updateConfig,
+    reset,
+    configSource,
+    originalResultsConfig,
+    isLoading,
+    validationStatus,
+    restoreOriginal,
+  } = useStore();
   const { providers = [], prompts = [] } = config;
 
   // Ensure providers is always an array of ProviderOptions
@@ -103,8 +118,74 @@ const EvaluateTestSuiteCreator: React.FC = () => {
 
   return (
     <Container maxWidth="lg" sx={{ marginTop: '2rem' }}>
+      {/* Loading State */}
+      {isLoading && (
+        <Box sx={{ width: '100%', mb: 2 }}>
+          <LinearProgress />
+        </Box>
+      )}
+
+      {/* Config Status */}
+      {configSource !== 'fresh' && (
+        <Box sx={{ mb: 3 }}>
+          <Alert
+            severity={validationStatus.hasMinimumFields ? 'success' : 'warning'}
+            action={
+              originalResultsConfig && (
+                <Button color="inherit" size="small" onClick={restoreOriginal} sx={{ mr: 1 }}>
+                  Restore Original
+                </Button>
+              )
+            }
+          >
+            <AlertTitle>
+              Configuration loaded from{' '}
+              {configSource === 'results' ? 'evaluation results' : 'previous edits'}
+            </AlertTitle>
+            {configSource === 'results' &&
+              'This configuration was automatically created from your evaluation results. You can modify it and run a new evaluation.'}
+            {!validationStatus.hasMinimumFields && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="body2" color="warning.main">
+                  ⚠️ This configuration may be incomplete. Please review providers and prompts.
+                </Typography>
+              </Box>
+            )}
+          </Alert>
+        </Box>
+      )}
+
+      {/* Validation Errors */}
+      {validationStatus.errors.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Alert severity="error">
+            <AlertTitle>Configuration Issues</AlertTitle>
+            <Stack spacing={1}>
+              {validationStatus.errors.map((error, index) => (
+                <Typography key={index} variant="body2">
+                  • {error}
+                </Typography>
+              ))}
+            </Stack>
+          </Alert>
+        </Box>
+      )}
+
       <Stack direction="row" spacing={2} justifyContent="space-between">
-        <Typography variant="h4">Set up an evaluation</Typography>
+        <Box>
+          <Typography variant="h4">Set up an evaluation</Typography>
+          {/* Config source indicator */}
+          {configSource !== 'fresh' && (
+            <Box sx={{ mt: 1 }}>
+              <Chip
+                size="small"
+                label={configSource === 'results' ? 'From Results' : 'User Edited'}
+                color={configSource === 'results' ? 'primary' : 'secondary'}
+                variant="outlined"
+              />
+            </Box>
+          )}
+        </Box>
         <Stack direction="row" spacing={2}>
           <RunTestSuiteButton />
           <ConfigureEnvButton />

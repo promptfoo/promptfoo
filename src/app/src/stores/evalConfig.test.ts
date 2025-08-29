@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIG, useStore } from './evalConfig';
+import * as configTransformation from '../utils/configTransformation';
 
 describe('evalConfig store', () => {
   beforeEach(() => {
@@ -11,6 +12,16 @@ describe('evalConfig store', () => {
     it('should initialize with default config', () => {
       const { config } = useStore.getState();
       expect(config).toEqual(DEFAULT_CONFIG);
+    });
+
+    // [Tusk] FAILING TEST
+    it('should not change configSource when updateConfig is called with empty updates', () => {
+      const { updateConfig, configSource } = useStore.getState();
+      expect(configSource).toBe('fresh');
+
+      updateConfig({});
+
+      expect(useStore.getState().configSource).toBe('fresh');
     });
 
     it('should update config with updateConfig', () => {
@@ -174,6 +185,89 @@ describe('evalConfig store', () => {
 
       const testSuite = useStore.getState().getTestSuite();
       expect(testSuite.derivedMetrics).toEqual(derivedMetrics);
+    });
+  });
+
+  describe('setConfigFromResults', () => {
+    it("should update config, configSource, originalResultsConfig, and isLoading correctly when setConfigFromResults is called with a valid resultsConfig, and validationStatus should reflect the new config's validity after transformation", async () => {
+      const resultsConfig = {
+        description: 'Results Config',
+        providers: [{ id: 'openai:gpt-4' }],
+        prompts: ['Test prompt'],
+      };
+
+      await useStore.getState().setConfigFromResults(resultsConfig);
+
+      const { config, configSource, originalResultsConfig, isLoading, validationStatus } =
+        useStore.getState();
+
+      expect(config).toMatchObject(resultsConfig);
+      expect(configSource).toBe('results');
+      expect(originalResultsConfig).toEqual(resultsConfig);
+      expect(isLoading).toBe(false);
+      expect(validationStatus.isValid).toBe(true);
+      expect(validationStatus.errors).toEqual([]);
+      expect(validationStatus.hasMinimumFields).toBe(true);
+    });
+  });
+
+  describe('setConfigFromResults error handling', () => {
+    it('should always reset isLoading to false even if an unexpected error occurs', async () => {
+      const resultsConfig = { description: 'Results Config' };
+      const originalConsoleError = console.error;
+      console.error = vi.fn();
+
+      const transformSpy = vi
+        .spyOn(configTransformation, 'transformResultsConfigToSetupConfig')
+        .mockImplementation(() => {
+          throw new Error('Unexpected error during transformation');
+        });
+
+      try {
+        await useStore.getState().setConfigFromResults(resultsConfig);
+      } catch (_error) {}
+
+      expect(useStore.getState().isLoading).toBe(false);
+
+      console.error = originalConsoleError;
+      transformSpy.mockRestore();
+    });
+  });
+
+  describe('restoreOriginal', () => {
+    it('should restore config and configSource to the original results config and update validationStatus when restoreOriginal is called and originalResultsConfig is present', () => {
+      const originalResultsConfig = {
+        description: 'Original Description',
+        providers: [{ id: 'openai:gpt-3.5-turbo' }],
+        prompts: ['Original Prompt'],
+      };
+
+      const transformedConfig = {
+        description: 'Transformed Description',
+        providers: [{ id: 'transformed:provider' }],
+        prompts: ['Transformed Prompt'],
+      };
+
+      const transformSpy = vi
+        .spyOn(configTransformation, 'transformResultsConfigToSetupConfig')
+        .mockReturnValue(transformedConfig);
+
+      useStore.setState({ originalResultsConfig });
+
+      const { restoreOriginal } = useStore.getState();
+      restoreOriginal();
+
+      expect(transformSpy).toHaveBeenCalledWith(originalResultsConfig);
+      expect(useStore.getState().config).toEqual(transformedConfig);
+      expect(useStore.getState().configSource).toBe('results');
+      expect(useStore.getState().validationStatus).toBeDefined();
+    });
+
+    it('should not transform config when originalResultsConfig is null', () => {
+      const initialConfig = { ...useStore.getState().config };
+      useStore.getState().restoreOriginal();
+      const currentConfig = useStore.getState().config;
+      expect(currentConfig).toEqual(initialConfig);
     });
   });
 });

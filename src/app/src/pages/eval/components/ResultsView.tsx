@@ -195,7 +195,7 @@ export default function ResultsView({
     setComparisonEvalIds,
   } = useResultsViewSettingsStore();
 
-  const { updateConfig } = useMainStore();
+  const { setConfigFromResults } = useMainStore();
 
   const { showToast } = useToast();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
@@ -722,9 +722,17 @@ export default function ResultsView({
                     </Tooltip>
                     <Tooltip title="Edit this eval in the web UI" placement="left">
                       <MenuItem
-                        onClick={() => {
-                          updateConfig(config);
-                          navigate('/setup/');
+                        onClick={async () => {
+                          try {
+                            handleMenuClose();
+                            if (config) {
+                              await setConfigFromResults(config);
+                              navigate('/setup/');
+                            }
+                          } catch (error) {
+                            console.error('Failed to load config for editing:', error);
+                            showToast('Failed to load configuration for editing', 'error');
+                          }
                         }}
                       >
                         <ListItemIcon>
