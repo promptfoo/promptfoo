@@ -227,7 +227,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
 
         // Generate test cases
         const startTime = Date.now();
-        const result = await doGenerateRedteam(optionsParse.data);
+        const { config: result } = await doGenerateRedteam(optionsParse.data);
         const endTime = Date.now();
 
         if (!result) {

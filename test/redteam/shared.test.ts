@@ -82,7 +82,9 @@ describe('doRedteamRun', () => {
     jest.mocked(fs.mkdirSync).mockImplementation(() => '');
     jest.mocked(fs.writeFileSync).mockImplementation(() => {});
     jest.mocked(yaml.dump).mockReturnValue('mocked-yaml-content');
-    jest.mocked(doGenerateRedteam).mockResolvedValue({});
+    jest
+      .mocked(doGenerateRedteam)
+      .mockResolvedValue({ config: {}, pluginResults: {}, strategyResults: {} });
   });
 
   afterEach(() => {
