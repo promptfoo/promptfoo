@@ -5,7 +5,9 @@ import { useUserStore } from './userStore';
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 const mockedCallApi = callApi as Mock;
