@@ -1,0 +1,181 @@
+description: 'Comprehensive test of showThinking flag with thinking models'
+
+prompts:
+  - 'Please use the get_weather function to get the weather for San Francisco, California.'
+  - 'What is the capital of France? Do not use any functions.'
+
+providers:
+  # Test OpenAI thinking model with showThinking: false
+  - id: openrouter:openai/o1-mini
+    config:
+      temperature: 0.1
+      showThinking: false
+      max_tokens: 1024
+      tool_choice: auto
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather information for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The location to get weather for
+              required: ["location"]
+
+  # Test Gemini model with showThinking: false
+  - id: openrouter:google/gemini-2.5-pro
+    config:
+      temperature: 0.1
+      showThinking: false
+      max_tokens: 1024
+      tool_choice: auto
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather information for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The location to get weather for
+              required: ["location"]
+
+  # Test showThinking: false with tool calls
+  - id: openrouter:qwen/qwen3-235b-a22b-thinking-2507
+    config:
+      temperature: 0.1
+      showThinking: false
+      max_tokens: 1024
+      tool_choice: auto
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather information for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The location to get weather for
+              required: ["location"]
+
+  # Test showThinking: true with tool calls  
+  - id: openrouter:qwen/qwen3-235b-a22b-thinking-2507-with-thinking
+    config:
+      temperature: 0.1
+      showThinking: true
+      max_tokens: 1024
+      tool_choice: auto
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather information for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The location to get weather for
+              required: ["location"]
+
+  # Test showThinking: false with text response (no tools)
+  - id: openrouter:qwen/qwen3-235b-a22b-thinking-2507-text-only
+    config:
+      temperature: 0.1
+      showThinking: false
+      max_tokens: 1024
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+
+  # Test showThinking: true with text response (no tools)
+  - id: openrouter:qwen/qwen3-235b-a22b-thinking-2507-text-with-thinking
+    config:
+      temperature: 0.1
+      showThinking: true
+      max_tokens: 1024
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+
+tests:
+  - description: OpenAI o1-mini should work with showThinking false
+    vars:
+      prompt: 'Please use the get_weather function to get the weather for San Francisco, California.'
+    assert:
+      - type: contains
+        value: "function"
+      - type: not-contains
+        value: "Thinking:"
+    options:
+      provider: openrouter:openai/o1-mini
+
+  - description: Gemini should work with showThinking false 
+    vars:
+      prompt: 'Please use the get_weather function to get the weather for San Francisco, California.'
+    assert:
+      - type: contains
+        value: "function"
+      - type: not-contains
+        value: "Thinking:"
+    options:
+      provider: openrouter:google/gemini-2.5-pro
+
+  - description: Qwen thinking model should work with showThinking false
+    vars:
+      prompt: 'Please use the get_weather function to get the weather for San Francisco, California.'
+    assert:
+      - type: contains
+        value: "function"
+      - type: not-contains
+        value: "Thinking:"
+      - type: not-contains
+        value: "reasoning"
+    options:
+      provider: openrouter:qwen/qwen3-235b-a22b-thinking-2507
+
+  - description: Tool calls with showThinking true should still prioritize tool calls over thinking
+    vars:
+      prompt: 'Please use the get_weather function to get the weather for San Francisco, California.'
+    assert:
+      - type: contains
+        value: "function"
+      - type: not-contains
+        value: "Thinking:"
+    options:
+      provider: openrouter:qwen/qwen3-235b-a22b-thinking-2507-with-thinking
+
+  - description: Text responses with showThinking false should not contain thinking
+    vars:
+      prompt: 'What is the capital of France? Do not use any functions.'
+    assert:
+      - type: not-contains
+        value: "Thinking:"
+      - type: contains
+        value: "Paris"
+    options:
+      provider: openrouter:qwen/qwen3-235b-a22b-thinking-2507-text-only
+
+  - description: Text responses with showThinking true should contain thinking
+    vars:
+      prompt: 'What is the capital of France? Do not use any functions.'
+    assert:
+      - type: contains
+        value: "Thinking:"
+      - type: contains
+        value: "Paris"
+    options:
+      provider: openrouter:qwen/qwen3-235b-a22b-thinking-2507-text-with-thinking

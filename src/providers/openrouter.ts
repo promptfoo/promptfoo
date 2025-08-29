@@ -118,10 +118,12 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     // Prioritize tool calls over content and reasoning
     let output = '';
-    if (message.function_call || message.tool_calls) {
+    const hasFunctionCall = !!(message.function_call && message.function_call.name);
+    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
+    if (hasFunctionCall || hasToolCalls) {
       // Tool calls always take priority and never include thinking
-      output = message.function_call || message.tool_calls;
-    } else if (message.content) {
+      output = hasFunctionCall ? message.function_call : message.tool_calls;
+    } else if (message.content && message.content.trim()) {
       output = message.content;
       // Add reasoning as thinking content if present and showThinking is enabled
       if (message.reasoning && (this.config.showThinking ?? true)) {
