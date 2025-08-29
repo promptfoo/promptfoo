@@ -41,8 +41,11 @@ function escapeJsonVariables(vars: Record<string, any>): Record<string, any> {
 }
 
 /**
- * Maps generic certificate fields to type-specific fields based on the certificate type.
+ * Maps promptfoo-cloud certificate fields to type-specific fields based on the certificate type.
  * This handles certificates stored in the database with generic field names.
+ *
+ * @param signatureAuth - The signature authentication configuration
+ * @returns The processed signature authentication configuration
  */
 function preprocessSignatureAuthConfig(signatureAuth: any): any {
   if (!signatureAuth) {
@@ -52,7 +55,6 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
   // If generic certificate fields are present, map them to type-specific fields
   const { certificateContent, certificatePassword, certificateFilename, ...rest } = signatureAuth;
 
-  // Detect certificate type from filename if not explicitly set
   let detectedType = signatureAuth.type;
   if (!detectedType) {
     // Try to detect from certificateFilename first
@@ -83,12 +85,10 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
     }
   }
 
-  // Map generic fields to type-specific fields based on certificate type
   const processedAuth = { ...rest };
 
   switch (detectedType || signatureAuth.type) {
     case 'pfx':
-      // Map generic fields to PFX-specific fields
       if (certificateContent && !processedAuth.pfxContent) {
         processedAuth.pfxContent = certificateContent;
       }
@@ -110,7 +110,6 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
         processedAuth.keystorePassword = certificatePassword;
       }
       if (certificateFilename && !processedAuth.keystorePath) {
-        // Store filename for reference
         processedAuth.certificateFilename = certificateFilename;
       }
       break;
@@ -131,20 +130,9 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
       break;
 
     default:
-      // If no type is detected, preserve the generic fields
-      // They might be handled by legacy configurations
-      if (certificateContent) {
-        processedAuth.certificateContent = certificateContent;
-      }
-      if (certificatePassword) {
-        processedAuth.certificatePassword = certificatePassword;
-      }
-      if (certificateFilename) {
-        processedAuth.certificateFilename = certificateFilename;
-      }
+      throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
   }
 
-  // Ensure type is set if it was detected
   if (detectedType && !processedAuth.type) {
     processedAuth.type = detectedType;
   }
@@ -177,7 +165,7 @@ function sanitizeConfigForLogging(config: any): any {
     if (sanitized.signatureAuth.privateKey) {
       sanitized.signatureAuth.privateKey = '[REDACTED]';
     }
-    // Redact generic certificate fields
+    // Redact certificate fields
     if (sanitized.signatureAuth.certificateContent) {
       sanitized.signatureAuth.certificateContent = '[REDACTED]';
     }
@@ -208,7 +196,7 @@ function sanitizeConfigForLogging(config: any): any {
   if (sanitized.token) {
     sanitized.token = '[REDACTED]';
   }
-  // Sanitize generic certificate fields at root level
+  // Sanitize certificate fields at root level
   if (sanitized.certificateContent) {
     sanitized.certificateContent = '[REDACTED]';
   }
@@ -385,8 +373,7 @@ export async function generateSignature(
         } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
         } else if (signatureAuth.certificateContent) {
-          // Handle generic certificate content for PEM
-          logger.debug(`[Signature Auth] Loading PEM from generic certificate content`);
+          logger.debug(`[Signature Auth] Loading PEM from remote certificate content`);
           privateKey = Buffer.from(signatureAuth.certificateContent, 'base64').toString('utf8');
         } else {
           throw new Error(
