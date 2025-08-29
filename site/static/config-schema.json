@@ -1553,6 +1553,10 @@
                         "type": "object",
                         "additionalProperties": {},
                         "description": "Strategy-specific configuration"
+                      },
+                      "provider": {
+                        "$ref": "#/definitions/PromptfooConfigSchema/properties/redteam/properties/provider",
+                        "description": "Override redteam provider for this strategy"
                       }
                     },
                     "required": ["id"],
