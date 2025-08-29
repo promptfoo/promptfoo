@@ -33,19 +33,21 @@ jest.mock('../../src/globalConfig/cloud', () => ({
 }));
 jest.mock('../../src/migrate');
 jest.mock('../../src/providers');
-jest.mock('../../src/redteam/shared', () => ({
-  canContinueWithTarget: jest.fn().mockResolvedValue(true),
+jest.mock('../../src/redteam/shared', () => ({}));
+jest.mock('../../src/share');
+jest.mock('../../src/table');
+jest.mock('../../src/util/cloud', () => ({
+  getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
+}));
+
+jest.mock('../../src/util/cloud/canContinueWithTarget', () => ({
   TargetPermissionError: class TargetPermissionError extends Error {
     constructor(message: string) {
       super(message);
       this.name = 'ProviderPermissionError';
     }
   },
-}));
-jest.mock('../../src/share');
-jest.mock('../../src/table');
-jest.mock('../../src/util/cloud', () => ({
-  getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
+  canContinueWithTarget: jest.fn().mockResolvedValue(true),
 }));
 jest.mock('fs');
 jest.mock('path', () => {

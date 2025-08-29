@@ -16,7 +16,6 @@ import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers';
-import { canContinueWithTarget, TargetPermissionError } from '../redteam/shared';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
@@ -24,6 +23,7 @@ import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '
 import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { getDefaultTeam } from '../util/cloud';
+import { canContinueWithTarget, TargetPermissionError } from '../util/cloud/canContinueWithTarget';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';

@@ -9,6 +9,13 @@ import {
   isCloudProvider,
 } from '../cloud';
 
+export class TargetPermissionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TargetPermissionError';
+  }
+}
+
 export async function canContinueWithTarget(
   providers: UnifiedConfig['providers'] | undefined,
   teamId: string | undefined,

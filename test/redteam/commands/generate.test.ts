@@ -10,8 +10,8 @@ import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover
 import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
-import { canContinueWithTarget } from '../../../src/redteam/shared';
 import { getConfigFromCloud } from '../../../src/util/cloud';
+import { canContinueWithTarget } from '../../../src/util/cloud/canContinueWithTarget';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/manage';
@@ -87,7 +87,7 @@ jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
 }));
 
-jest.mock('../../../src/redteam/shared', () => ({
+jest.mock('../../../src/util/cloud/canContinueWithTarget', () => ({
   canContinueWithTarget: jest.fn().mockResolvedValue(true),
 }));
 

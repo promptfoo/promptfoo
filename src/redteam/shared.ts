@@ -6,21 +6,12 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
-import { getProviderIds } from '../providers';
 import { createShareableUrl } from '../share';
-import { isRunningUnderNpx, providerToIdentifier } from '../util';
+import { isRunningUnderNpx } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
-import {
-  canCreateTargets,
-  checkIfCliTargetExists,
-  getDefaultTeam,
-  isCloudProvider,
-} from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
-
-import type { UnifiedConfig } from 'src/types';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
@@ -150,90 +141,4 @@ export class TargetPermissionError extends Error {
     super(message);
     this.name = 'TargetPermissionError';
   }
-}
-
-export async function canContinueWithTarget(
-  providers: UnifiedConfig['providers'] | undefined,
-  teamId: string | undefined,
-) {
-  logger.debug(
-    `[canContinueWithTarget] Checking provider permissions for ${providers} on team ${teamId}`,
-  );
-
-  if (!providers) {
-    return true;
-  }
-
-  const providerIds = getProviderIds(providers);
-  if (providerIds.length === 0) {
-    return true;
-  }
-
-  let effectiveTeamId = teamId;
-  if (!effectiveTeamId) {
-    try {
-      const defaultTeam = await getDefaultTeam();
-      effectiveTeamId = defaultTeam.id;
-      logger.debug(`Using default team ${defaultTeam.name} (${effectiveTeamId})`);
-    } catch (error) {
-      logger.debug(`Failed to get default team: ${error}`);
-      // Continue without team ID - will fail at checkIfCliTargetExists if needed
-      effectiveTeamId = '';
-    }
-  }
-
-  // Get all provider identifiers
-  const providersArray = Array.isArray(providers) ? providers : [providers];
-  const identifiers: string[] = [];
-
-  for (let i = 0; i < providersArray.length; i++) {
-    // Skip cloud providers
-    if (isCloudProvider(providerIds[i])) {
-      continue;
-    }
-
-    const identifier = providerToIdentifier(providersArray[i]);
-
-    if (identifier) {
-      identifiers.push(identifier);
-    }
-  }
-
-  // If no non-cloud identifiers found, return true
-  if (identifiers.length === 0) {
-    return true;
-  }
-
-  try {
-    const canCreate = await canCreateTargets(effectiveTeamId);
-
-    for (const identifier of identifiers) {
-      logger.debug(`Checking target permissions for ${identifier} on team ${effectiveTeamId}`);
-
-      const exists = await checkIfCliTargetExists(identifier, effectiveTeamId);
-
-      if (exists) {
-        logger.debug(`Provider ${identifier} exists on team ${effectiveTeamId}`);
-        continue;
-      }
-
-      if (canCreate) {
-        logger.debug(
-          `Provider ${identifier} does not exist on team ${effectiveTeamId}, but can be created`,
-        );
-        continue;
-      }
-
-      logger.warn(
-        `Provider ${identifier} does not exist on team ${effectiveTeamId} and cannot be created. User does not have permissions.`,
-      );
-      return false;
-    }
-  } catch (error) {
-    logger.warn(`Error checking if user can create targets: ${error}. Continuing anyway.`);
-    // If we can't check permissions, allow the operation to continue
-    // It will fail later with a proper error message if permissions are actually missing
-  }
-
-  return true;
 }
