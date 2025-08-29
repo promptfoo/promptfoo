@@ -701,10 +701,14 @@ export async function resolveConfigs(
   }
 
   cliState.config = config;
+
+  // Extract commandLineOptions from either explicit config files or default config
+  const commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
+
   return {
     config,
     testSuite,
     basePath,
-    commandLineOptions: fileConfig.commandLineOptions,
+    commandLineOptions,
   };
 }
