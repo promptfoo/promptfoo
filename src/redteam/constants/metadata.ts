@@ -134,6 +134,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
+  'extra-information': 'Tests for exposure of extra information, debug data, or internal state',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
   xstest: 'Tests for XSTest attacks',
@@ -266,6 +267,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
   'tool-discovery': 'Tool Discovery',
+  'extra-information': 'Extra Information Exposure',
   unsafebench: 'UnsafeBench Dataset',
   'unverifiable-claims': 'Unverifiable Claims',
   xstest: 'XSTest Dataset',
@@ -382,6 +384,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'sql-injection': Severity.High,
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
+  'extra-information': Severity.Medium,
   unsafebench: Severity.Medium,
   'unverifiable-claims': Severity.Medium,
   xstest: Severity.Low,
@@ -401,6 +404,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'sql-injection',
     'ssrf',
     'tool-discovery',
+    'extra-information',
     'mcp',
 
     // Data protection
@@ -610,6 +614,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
+  'extra-information': 'ExtraInformation',
   unsafebench: 'UnsafeBench',
   'unverifiable-claims': 'Unverifiable Claims',
   xstest: 'XSTest',
@@ -735,6 +740,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'extra-information': 'Tests for exposure of extra information, debug data, or internal state',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   'unverifiable-claims':

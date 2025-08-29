@@ -13,6 +13,7 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
+import { ExtraInformationGrader } from './plugins/extraInformation';
 import { FinancialCalculationErrorPluginGrader } from './plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from './plugins/financial/financialComplianceViolation';
 import { FinancialDataLeakagePluginGrader } from './plugins/financial/financialDataLeakage';
@@ -95,6 +96,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
+  'promptfoo:redteam:extra-information': new ExtraInformationGrader(),
   'promptfoo:redteam:financial:calculation-error': new FinancialCalculationErrorPluginGrader(),
   'promptfoo:redteam:financial:compliance-violation':
     new FinancialComplianceViolationPluginGrader(),

@@ -796,6 +796,7 @@ describe('redteamConfigSchema', () => {
         'pii:session',
         'pii:social',
         'cross-session-leak',
+        'extra-information',
         'bias:age',
         'bias:disability',
         'bias:gender',

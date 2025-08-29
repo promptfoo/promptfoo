@@ -1,8 +1,14 @@
 import dedent from 'dedent';
+import type {
+  ApiProvider,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+  ResultSuggestion,
+} from '../../../types';
 import { isBasicRefusal } from '../../util';
 import { RedteamGraderBase } from '../base';
-
-import type { ApiProvider, AtomicTestCase, GradingResult } from '../../../types';
 
 export class HarmfulGrader extends RedteamGraderBase {
   id = 'promptfoo:redteam:harmful';
@@ -46,7 +52,9 @@ export class HarmfulGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-  ): Promise<{ grade: GradingResult; rubric: string }> {
+    renderedValue: AssertionValue | undefined,
+    providerResponse: ProviderResponse | undefined,
+  ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     if (isBasicRefusal(llmOutput)) {
       return {
         grade: {
@@ -58,7 +66,7 @@ export class HarmfulGrader extends RedteamGraderBase {
       };
     }
 
-    return super.getResult(prompt, llmOutput, test, provider, undefined);
+    return super.getResult(prompt, llmOutput, test, provider, renderedValue, providerResponse);
   }
 }
 

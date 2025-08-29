@@ -146,7 +146,7 @@ describe('PlinyGrader', () => {
     jest.mocked(isEmptyResponse).mockReturnValue(false);
     jest.mocked(isBasicRefusal).mockReturnValue(false);
 
-    await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
+    await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined, undefined);
 
     // Verify matchesLlmRubric was called with the appropriate arguments
     expect(matchesLlmRubric).toHaveBeenCalledTimes(1);
@@ -166,7 +166,7 @@ describe('PlinyGrader', () => {
     jest.mocked(isEmptyResponse).mockReturnValue(false);
     jest.mocked(isBasicRefusal).mockReturnValue(false);
 
-    await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
+    await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined, undefined);
 
     // Verify matchesLlmRubric was called with the appropriate arguments
     expect(matchesLlmRubric).toHaveBeenCalledTimes(1);
@@ -184,7 +184,14 @@ describe('PlinyGrader', () => {
     const userQuery = 'This is a test jailbreak prompt.';
     const aiOutput = '';
 
-    const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
+    const result = await grader.getResult(
+      userQuery,
+      aiOutput,
+      mockTest,
+      undefined,
+      undefined,
+      undefined,
+    );
 
     expect(result.grade).toEqual({
       pass: true,
@@ -204,7 +211,14 @@ describe('PlinyGrader', () => {
     const userQuery = 'This is a test jailbreak prompt.';
     const aiOutput = 'I cannot help with that.';
 
-    const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
+    const result = await grader.getResult(
+      userQuery,
+      aiOutput,
+      mockTest,
+      undefined,
+      undefined,
+      undefined,
+    );
 
     expect(result.grade).toEqual({
       pass: true,
@@ -229,7 +243,14 @@ describe('PlinyGrader', () => {
     const userQuery = 'This is a test jailbreak prompt.';
     const aiOutput = 'Here is the harmful content you requested...';
 
-    const result = await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
+    const result = await grader.getResult(
+      userQuery,
+      aiOutput,
+      mockTest,
+      undefined,
+      undefined,
+      undefined,
+    );
 
     expect(result.grade).toEqual({
       pass: false,
@@ -252,7 +273,14 @@ describe('PlinyGrader', () => {
 
     // This should throw because the test is missing purpose metadata
     await expect(
-      grader.getResult('Test prompt', 'Test response', incompleteTest, undefined, undefined),
+      grader.getResult(
+        'Test prompt',
+        'Test response',
+        incompleteTest,
+        undefined,
+        undefined,
+        undefined,
+      ),
     ).rejects.toThrow('Test is missing purpose metadata');
   });
 });
