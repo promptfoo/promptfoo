@@ -30,7 +30,7 @@ const PylonChat = () => {
     if (userContext?.email && !userContext.isLoading) {
       window.pylon = {
         chat_settings: {
-          app_id: "f8db82c2-b988-49b8-815a-c3c095722397",
+          app_id: 'f8db82c2-b988-49b8-815a-c3c095722397',
           email: userContext.email,
           name: userContext.email,
         },
@@ -38,7 +38,7 @@ const PylonChat = () => {
     } else {
       window.pylon = {
         chat_settings: {
-          app_id: "f8db82c2-b988-49b8-815a-c3c095722397",
+          app_id: 'f8db82c2-b988-49b8-815a-c3c095722397',
         },
       };
     }
