@@ -254,13 +254,13 @@ _Links: [GitHub](https://github.com/utkusen/promptmap), [Blog Post](https://utku
 
 ## Feature comparison table
 
-| Tool           | Focus Area                 | Attack Coverage                                    | Multi-turn | Reports & Export              | CI Support     | Maintenance | License     |
-| -------------- | -------------------------- | -------------------------------------------------- | ---------- | ----------------------------- | -------------- | ----------- | ----------- |
-| **Promptfoo**  | Red-teaming plus evals     | Jailbreaks, injection, policy violations, MCP     | ✅ Via plugins | HTML, policy-mapped reports   | GitHub Actions, CLI | Active     | MIT/Apache  |
-| **PyRIT**      | Orchestration and scoring  | Custom scenarios, multi-turn chains               | ✅ Built-in   | JSON logs, programmatic       | Scripts, notebooks  | Active     | MIT         |
-| **Garak**      | Probe scanning             | Jailbreaks, injection, toxicity, hallucinations   | ✅ Conversational | HTML with z-scores, AVID  | CLI            | Active     | Apache 2.0  |
-| **FuzzyAI**    | Fuzzing                    | Mutation, generation-based attacks                 | ✅ Multi-strategy | CLI, experimental web UI | CLI            | Active     | Apache 2.0  |
-| **promptmap2** | Injection scanner          | Prompt injection, system prompt vulnerabilities   | ✅ Multi-turn  | JSON, console output      | CLI            | Active     | MIT         |
+| Tool           | Focus Area                | Attack Coverage                                 | Multi-turn        | Reports & Export            | CI Support          | Maintenance | License    |
+| -------------- | ------------------------- | ----------------------------------------------- | ----------------- | --------------------------- | ------------------- | ----------- | ---------- |
+| **Promptfoo**  | Red-teaming plus evals    | Jailbreaks, injection, policy violations, MCP   | ✅ Via plugins    | HTML, policy-mapped reports | GitHub Actions, CLI | Active      | MIT/Apache |
+| **PyRIT**      | Orchestration and scoring | Custom scenarios, multi-turn chains             | ✅ Built-in       | JSON logs, programmatic     | Scripts, notebooks  | Active      | MIT        |
+| **Garak**      | Probe scanning            | Jailbreaks, injection, toxicity, hallucinations | ✅ Conversational | HTML with z-scores, AVID    | CLI                 | Active      | Apache 2.0 |
+| **FuzzyAI**    | Fuzzing                   | Mutation, generation-based attacks              | ✅ Multi-strategy | CLI, experimental web UI    | CLI                 | Active      | Apache 2.0 |
+| **promptmap2** | Injection scanner         | Prompt injection, system prompt vulnerabilities | ✅ Multi-turn     | JSON, console output        | CLI                 | Active      | MIT        |
 
 ## Conclusion
 
