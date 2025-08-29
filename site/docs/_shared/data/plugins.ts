@@ -109,6 +109,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description: 'Tests whether an agent will use sensitive information as leverage or blackmail to achieve its goals or prevent shutdown (LOCAL GENERATION)',
+    label: 'security',
+    link: '/docs/red-team/plugins/blackmail/',
+    name: 'Blackmail',
+    pluginId: 'agentic:blackmail',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: false,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to obfuscate malicious content using ASCII smuggling',
     label: 'technical',
     link: '/docs/red-team/plugins/ascii-smuggling/',
