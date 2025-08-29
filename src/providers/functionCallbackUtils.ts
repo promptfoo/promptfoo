@@ -44,7 +44,7 @@ export class FunctionCallbackHandler {
       const isMcpTool = mcpTools.some((tool) => tool.name === functionInfo.name);
 
       if (isMcpTool) {
-        return await this.executeMcpTool(functionInfo.name, functionInfo.arguments || '{}');
+        return await this.executeMcpTool(functionInfo.name, functionInfo.arguments);
       }
     }
 
@@ -231,26 +231,51 @@ export class FunctionCallbackHandler {
   /**
    * Executes an MCP tool
    */
-  private async executeMcpTool(toolName: string, args: string): Promise<FunctionCallResult> {
+  private async executeMcpTool(toolName: string, args: unknown): Promise<FunctionCallResult> {
     try {
       if (!this.mcpClient) {
         throw new Error('MCP client not available');
       }
 
-      const parsedArgs = args ? JSON.parse(args) : {};
+      // Parse arguments: support stringified JSON, object, or empty
+      const parsedArgs =
+        args == null || args === ''
+          ? {}
+          : typeof args === 'string'
+          ? JSON.parse(args)
+          : args;
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
-      if (result.error) {
+      if (result?.error) {
         return {
           output: `MCP Tool Error (${toolName}): ${result.error}`,
           isError: true,
         };
       }
 
-      return {
-        output: `MCP Tool Result (${toolName}): ${result.content}`,
-        isError: false,
+      // Normalize MCP content to a readable string to avoid "[object Object]"
+      const normalizeContent = (content: any): string => {
+        if (content == null) return '';
+        if (typeof content === 'string') return content;
+        if (Array.isArray(content)) {
+          return content
+            .map((part) => {
+              if (typeof part === 'string') return part;
+              if (part && typeof part === 'object') {
+                if ('text' in part && (part as any).text != null) return String((part as any).text);
+                if ('json' in part) return JSON.stringify((part as any).json);
+                if ('data' in part) return JSON.stringify((part as any).data);
+                return JSON.stringify(part);
+              }
+              return String(part);
+            })
+            .join('\n');
+        }
+        return JSON.stringify(content);
       };
+
+      const content = normalizeContent(result?.content);
+      return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
@@ -259,6 +284,13 @@ export class FunctionCallbackHandler {
         isError: true,
       };
     }
+  }
+
+  /**
+   * Sets the MCP client, preserving any loaded callbacks
+   */
+  setMcpClient(client?: MCPClient): void {
+    this.mcpClient = client;
   }
 
   /**

@@ -580,5 +580,74 @@ describe('FunctionCallbackHandler', () => {
         isError: false,
       });
     });
+
+    it('should format non-string MCP content without [object Object]', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'rich_tool', description: 'Tool with rich content' }]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: [
+          { type: 'text', text: 'Part A' },
+          { type: 'json', json: { foo: 'bar' } },
+          { type: 'data', data: { key: 'value' } },
+          { type: 'unknown', other: 'stuff' },
+          'plain string part',
+          null,
+          undefined,
+        ],
+      });
+
+      const call = { name: 'rich_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result.isError).toBe(false);
+      expect(result.output).toContain('Part A');
+      expect(result.output).toContain('"foo":"bar"');
+      expect(result.output).toContain('"key":"value"');
+      expect(result.output).toContain('plain string part');
+      expect(result.output).not.toContain('[object Object]');
+    });
+
+    it('should handle object MCP content without [object Object]', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'object_tool', description: 'Tool returning object' }]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: { type: 'response', data: { result: 'success', count: 42 } },
+      });
+
+      const call = { name: 'object_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result.isError).toBe(false);
+      expect(result.output).toContain('"result":"success"');
+      expect(result.output).toContain('"count":42');
+      expect(result.output).not.toContain('[object Object]');
+    });
+
+    it('should handle null/undefined MCP content gracefully', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'empty_tool', description: 'Tool with empty content' }]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: null,
+      });
+
+      const call = { name: 'empty_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result.isError).toBe(false);
+      expect(result.output).toBe('MCP Tool Result (empty_tool): ');
+    });
+
+    it('should handle non-object arguments passed directly', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'direct_args_tool', description: 'Tool with direct args' }]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: 'success with direct args',
+      });
+
+      const call = { name: 'direct_args_tool', arguments: { param: 'value' } }; // Direct object, not string
+      const result = await handler.processCall(call, {});
+
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('direct_args_tool', { param: 'value' });
+      expect(result).toEqual({
+        output: 'MCP Tool Result (direct_args_tool): success with direct args',
+        isError: false,
+      });
+    });
   });
 });

@@ -33,8 +33,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     this.mcpClient = new MCPClient(this.config.mcp!);
     await this.mcpClient.initialize();
 
-    // Recreate the callback handler with the MCP client
-    this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
+    // Inject MCP client to preserve any loaded callbacks
+    this.functionCallbackHandler.setMcpClient(this.mcpClient);
   }
 
   async cleanup(): Promise<void> {
