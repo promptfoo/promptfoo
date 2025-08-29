@@ -115,15 +115,7 @@ describe('RedteamIterativeProvider', () => {
 
     // Note: default remote provider selection is covered elsewhere; here we focus on the local-preference flag
 
-    it('should prefer local redteam provider when PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER=true', () => {
-      process.env.PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER = 'true';
-      const provider = new RedteamIterativeProvider({
-        injectVar: 'test',
-        redteamProvider: 'openai:gpt-4o',
-      });
-      const redteam: any = (provider as any).redteamProvider;
-      expect(redteam).toBe('openai:gpt-4o');
-    });
+    // Removed tests related to deprecated PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER
   });
 
   describe('runRedteamConversation', () => {

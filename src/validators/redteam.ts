@@ -1,11 +1,16 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+
 import {
+  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
+  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
+  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
+  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   DEFAULT_STRATEGIES,
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
@@ -13,18 +18,13 @@ import {
   MEDICAL_PLUGINS,
   PII_PLUGINS,
   type Plugin,
-  ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
-  ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
-  ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
-  DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   type Strategy,
 } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
+import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
-
-import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
@@ -130,6 +130,7 @@ export const RedteamStrategySchema = z.union([
   z.object({
     id: strategyIdSchema,
     config: z.record(z.unknown()).optional().describe('Strategy-specific configuration'),
+    provider: ProviderSchema.optional().describe('Override redteam provider for this strategy'),
   }),
 ]);
 

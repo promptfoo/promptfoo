@@ -17,7 +17,6 @@ import dedent from 'dedent';
 import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
 
-import { getEnvBool } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -981,9 +980,23 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     let redteamProvider: ApiProvider;
     let gradingProvider: ApiProvider;
 
-    const preferLocal = getEnvBool('PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER', false);
+    const hasStrategyOverride = Boolean(
+      (this.config as any).redteamProvider || (this.config as any).scoringProvider,
+    );
 
-    if (shouldGenerateRemote() && !preferLocal) {
+    if (hasStrategyOverride) {
+      redteamProvider = await redteamProviderManager.getProvider({
+        provider: (this.config as any).redteamProvider,
+        jsonOnly: true,
+      });
+      gradingProvider = await redteamProviderManager.getProvider({
+        provider: (this.config as any).redteamProvider,
+        jsonOnly: true,
+      });
+      logger.debug(
+        `[IterativeTree] Using per-strategy override redteam provider: ${redteamProvider.id()} and grading provider: ${gradingProvider.id()}`,
+      );
+    } else if (shouldGenerateRemote()) {
       gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
         jsonOnly: true,
@@ -994,12 +1007,19 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         jsonOnly: true,
         preferSmallModel: false,
       });
+      logger.debug(
+        '[IterativeTree] Using remote redteam and grading providers (PromptfooChatCompletionProvider)',
+      );
     } else {
       redteamProvider = await redteamProviderManager.getProvider({
-        provider: this.config.redteamProvider,
+        // Pass undefined to resolve from global redteam provider
+        provider: undefined,
         jsonOnly: true,
       });
-      gradingProvider = redteamProvider; // Default to using same provider
+      gradingProvider = redteamProvider;
+      logger.debug(
+        `[IterativeTree] Using local redteam provider: ${redteamProvider.id()} and grading provider: ${gradingProvider.id()}`,
+      );
     }
 
     return runRedteamConversation({

@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 
-import { getEnvBool, getEnvInt } from '../../envars';
+import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -528,9 +528,17 @@ class RedteamIterativeProvider implements ApiProvider {
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
 
-    const preferLocal = getEnvBool('PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER', false);
+    const hasStrategyOverride = Boolean(
+      (config as any).redteamProvider || (config as any).scoringProvider,
+    );
 
-    if (shouldGenerateRemote() && !preferLocal) {
+    if (hasStrategyOverride) {
+      // Per-strategy override takes precedence over remote generation
+      this.redteamProvider = (config as any).redteamProvider as any;
+      this.gradingProvider =
+        ((config as any).scoringProvider as any) || ((config as any).redteamProvider as any);
+      logger.debug('[Iterative] Using per-strategy override providers');
+    } else if (shouldGenerateRemote()) {
       this.gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
         jsonOnly: true,
@@ -541,8 +549,13 @@ class RedteamIterativeProvider implements ApiProvider {
         jsonOnly: true,
         preferSmallModel: false,
       });
+      logger.debug(
+        '[Iterative] Using remote redteam and grading providers (PromptfooChatCompletionProvider)',
+      );
     } else {
-      this.redteamProvider = config.redteamProvider;
+      this.redteamProvider = (config as any).redteamProvider || (undefined as any);
+      this.gradingProvider = (config as any).redteamProvider || (undefined as any);
+      logger.debug('[Iterative] Using local redteam provider from config');
     }
   }
 
@@ -568,10 +581,12 @@ class RedteamIterativeProvider implements ApiProvider {
       filters: context.filters,
       vars: context.vars,
       redteamProvider: await redteamProviderManager.getProvider({
+        // If undefined, manager resolves to global redteam provider
         provider: this.redteamProvider,
         jsonOnly: true,
       }),
       gradingProvider: await redteamProviderManager.getProvider({
+        // If undefined, manager resolves to global redteam provider
         provider: this.gradingProvider,
         jsonOnly: true,
       }),

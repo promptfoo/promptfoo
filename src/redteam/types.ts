@@ -76,6 +76,7 @@ export type RedteamStrategyObject = ConfigurableObject & {
     plugins?: string[];
     [key: string]: unknown;
   };
+  provider?: string | ProviderOptions | ApiProvider;
 };
 export type RedteamStrategy = string | RedteamStrategyObject;
 

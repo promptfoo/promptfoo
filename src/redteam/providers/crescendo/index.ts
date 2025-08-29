@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
 
-import { getEnvBool } from '../../../envars';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -78,7 +77,7 @@ interface CrescendoConfig {
   injectVar: string;
   maxTurns?: number;
   maxBacktracks?: number;
-  redteamProvider: RedteamFileConfig['provider'];
+  redteamProvider?: RedteamFileConfig['provider'];
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   stateful?: boolean;
   continueAfterSuccess?: boolean;
@@ -125,7 +124,7 @@ export class CrescendoProvider implements ApiProvider {
     prompt: string;
     response: string;
   }> = [];
-  private preferLocalRedteamProvider: boolean;
+  // preferLocalRedteamProvider removed; use per-strategy provider overrides instead
 
   constructor(config: CrescendoConfig) {
     // Create a copy of config to avoid mutating the original
@@ -148,9 +147,6 @@ export class CrescendoProvider implements ApiProvider {
     // Ensure continueAfterSuccess defaults to false
     this.config.continueAfterSuccess = config.continueAfterSuccess ?? false;
 
-    // Cache env preference once
-    this.preferLocalRedteamProvider = getEnvBool('PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER', false);
-
     logger.debug(
       `[Crescendo] CrescendoProvider initialized with config: ${JSON.stringify(config)}`,
     );
@@ -158,18 +154,31 @@ export class CrescendoProvider implements ApiProvider {
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      if (shouldGenerateRemote()) {
+      const hasStrategyOverride = Boolean((this.config as any).redteamProvider);
+      if (hasStrategyOverride) {
+        this.redTeamProvider = await redteamProviderManager.getProvider({
+          provider: (this.config as any).redteamProvider,
+          preferSmallModel: false,
+          jsonOnly: true,
+        });
+        logger.debug(
+          `[Crescendo] Using per-strategy override redteam provider: ${this.redTeamProvider.id()}`,
+        );
+      } else if (shouldGenerateRemote()) {
         this.redTeamProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
         });
+        logger.debug('[Crescendo] Using remote redteam provider (PromptfooChatCompletionProvider)');
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
-          provider: this.config.redteamProvider,
+          // Pass undefined to resolve from global redteam provider
+          provider: undefined,
           preferSmallModel: false,
           jsonOnly: true,
         });
+        logger.debug(`[Crescendo] Using local redteam provider: ${this.redTeamProvider.id()}`);
       }
     }
     return this.redTeamProvider;
@@ -177,17 +186,29 @@ export class CrescendoProvider implements ApiProvider {
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      if (shouldGenerateRemote() && !this.preferLocalRedteamProvider) {
+      const hasStrategyOverride = Boolean((this.config as any).redteamProvider);
+      if (hasStrategyOverride) {
+        this.scoringProvider = await redteamProviderManager.getProvider({
+          provider: (this.config as any).redteamProvider,
+          preferSmallModel: false,
+        });
+        logger.debug(
+          `[Crescendo] Using per-strategy override scoring provider (same as redteam): ${this.scoringProvider.id()}`,
+        );
+      } else if (shouldGenerateRemote()) {
         this.scoringProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: false,
           preferSmallModel: false,
         });
+        logger.debug('[Crescendo] Using remote scoring provider (PromptfooChatCompletionProvider)');
       } else {
         this.scoringProvider = await redteamProviderManager.getProvider({
-          provider: this.config.redteamProvider as RedteamFileConfig['provider'],
+          // Pass undefined to resolve from global redteam provider
+          provider: undefined,
           preferSmallModel: false,
         });
+        logger.debug(`[Crescendo] Using local scoring provider: ${this.scoringProvider.id()}`);
       }
     }
     return this.scoringProvider;
@@ -205,6 +226,10 @@ export class CrescendoProvider implements ApiProvider {
     logger.debug(`[Crescendo] callApi context: ${safeJsonStringify(context)}`);
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
+
+    logger.debug(
+      `[Crescendo] Provider selection: remote=${shouldGenerateRemote()} redteamProvider=${(this.config as any).redteamProvider ? 'override' : 'default'}`,
+    );
 
     logger.debug(`[Crescendo] callApi invoked with prompt: ${prompt}`);
 

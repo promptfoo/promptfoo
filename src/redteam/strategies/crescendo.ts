@@ -14,6 +14,9 @@ export function addCrescendo(
         config: {
           injectVar,
           ...config,
+          ...(config && (config as any).redteamProvider
+            ? { redteamProvider: (config as any).redteamProvider }
+            : {}),
         },
       },
       assert: testCase.assert?.map((assertion) => ({
