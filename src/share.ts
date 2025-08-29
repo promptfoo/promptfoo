@@ -9,8 +9,8 @@ import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { canContinueWithTarget } from './redteam/shared';
 import { makeRequest as makeCloudRequest } from './util/cloud';
+import { canContinueWithTarget } from './util/cloud/canContinueWithTarget';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';

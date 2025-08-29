@@ -25,6 +25,7 @@ import {
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
+import { canContinueWithTarget } from '../../util/cloud/canContinueWithTarget';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
@@ -41,7 +42,6 @@ import {
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import { canContinueWithTarget } from '../shared';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';

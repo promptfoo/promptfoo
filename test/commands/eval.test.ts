@@ -15,8 +15,8 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers';
-import { canContinueWithTarget } from '../../src/redteam/shared';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
+import { canContinueWithTarget } from '../../src/util/cloud/canContinueWithTarget';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
