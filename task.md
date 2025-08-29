@@ -6,21 +6,23 @@
 
 **Problem**: The Vertex AI provider doesn't process the top-level `responseSchema` configuration when using `file://` protocol. While `generationConfig.response_schema` works directly, the convenient `responseSchema: file://schema.json` syntax fails.
 
-**Expected Behavior**: 
+**Expected Behavior**:
+
 ```yaml
 providers:
   - id: vertex:gemini-2.5-flash
     config:
-      responseSchema: file://schema.json  # Should work
+      responseSchema: file://schema.json # Should work
 ```
 
 **Current Workaround**:
+
 ```yaml
 providers:
   - id: vertex:gemini-2.5-flash
     config:
       generationConfig:
-        response_schema: file://schema.json  # Works but inconsistent
+        response_schema: file://schema.json # Works but inconsistent
 ```
 
 ## Root Cause Analysis
@@ -52,11 +54,13 @@ providers:
 **Approach**: Copy the exact responseSchema handling logic from AI Studio to Vertex.
 
 **Implementation**:
+
 - Add required imports to `src/providers/google/vertex.ts`
 - Insert responseSchema processing logic in `callGeminiApi()` method
 - Add same validation and error handling
 
 **Pros**:
+
 - ✅ Exact feature parity with AI Studio
 - ✅ Maintains consistent API across Google providers
 - ✅ Proven implementation (has tests and works in production)
@@ -64,6 +68,7 @@ providers:
 - ✅ No breaking changes
 
 **Cons**:
+
 - ❌ Code duplication between providers
 
 **Effort**: Low (1-2 hours)
@@ -74,17 +79,20 @@ providers:
 **Approach**: Create a shared utility function for responseSchema processing.
 
 **Implementation**:
+
 - Create `processResponseSchema()` in `src/providers/google/util.ts`
 - Update both AI Studio and Vertex to use shared function
 - Maintain backward compatibility
 
 **Pros**:
+
 - ✅ DRY principle - eliminates code duplication
 - ✅ Easier to maintain and test
 - ✅ Future Google providers can reuse
 - ✅ Consistent behavior guaranteed
 
 **Cons**:
+
 - ❌ Larger refactor affecting multiple files
 - ❌ Risk of breaking AI Studio (requires careful testing)
 - ❌ More complex implementation
@@ -97,16 +105,19 @@ providers:
 **Approach**: Add configuration preprocessing that converts `responseSchema` to `generationConfig.response_schema` before provider instantiation.
 
 **Implementation**:
+
 - Modify provider factory/configuration loading
 - Transform config early in the pipeline
 - All Google providers benefit automatically
 
 **Pros**:
+
 - ✅ No provider-specific code changes
 - ✅ Benefits all Google providers
 - ✅ Clean separation of concerns
 
 **Cons**:
+
 - ❌ Complex configuration transformation logic
 - ❌ Harder to debug configuration issues
 - ❌ May affect other provider behaviors unexpectedly
@@ -123,6 +134,7 @@ providers:
 **Timeline**: 1-2 hours
 
 1. **Update Vertex Provider Imports**:
+
    ```typescript
    // Add to existing imports in src/providers/google/vertex.ts
    import { maybeLoadFromExternalFile } from '../../util/file';
@@ -160,6 +172,7 @@ providers:
 ### Testing Requirements
 
 #### Unit Tests
+
 - [x] Test `responseSchema` with JSON string
 - [x] Test `responseSchema` with `file://` protocol
 - [x] Test variable substitution in file paths
@@ -168,12 +181,14 @@ providers:
 - [x] Test JSON parsing errors
 
 #### Integration Tests
+
 - [x] End-to-end test with real schema file
 - [x] Verify structured output generation
 - [x] Test with complex nested schemas
 - [x] Compatibility with existing `generationConfig.response_schema` usage
 
 #### Edge Cases
+
 - [x] Empty schema files
 - [x] Invalid JSON schemas
 - [x] File permissions issues
@@ -183,14 +198,17 @@ providers:
 ## Files to Modify
 
 ### Core Implementation
+
 - `src/providers/google/vertex.ts` - Add responseSchema processing logic
 - `src/providers/google/vertex.ts` - Add required imports
 
 ### Testing
+
 - `test/providers/google/vertex.test.ts` - Add comprehensive test coverage
 - Create test schema files in `test/fixtures/schemas/`
 
 ### Documentation (Optional)
+
 - `site/docs/providers/vertex.md` - Update with responseSchema examples
 
 ## Risk Mitigation

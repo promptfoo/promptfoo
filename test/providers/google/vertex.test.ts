@@ -1438,7 +1438,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
-      
+
       // Mock fs for schema file loading
       jest.mocked(fs.existsSync).mockImplementation((filePath) => {
         const pathStr = filePath.toString();
@@ -1478,7 +1478,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         if (pathStr.includes('template-vars.json')) {
           return JSON.stringify({
             type: 'object',
-            properties: { '{{fieldName}}': { type: 'string', description: '{{fieldDescription}}' } },
+            properties: {
+              '{{fieldName}}': { type: 'string', description: '{{fieldDescription}}' },
+            },
             required: ['{{fieldName}}'],
           });
         }
@@ -1601,7 +1603,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       const mockResponse = {
         data: [
           {
-            candidates: [{ content: { parts: [{ text: '{"greeting": "Hello", "name": "John"}' }] } }],
+            candidates: [
+              { content: { parts: [{ text: '{"greeting": "Hello", "name": "John"}' }] } },
+            ],
             usageMetadata: {
               promptTokenCount: 12,
               candidatesTokenCount: 18,
@@ -1622,7 +1626,11 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
       jest.mocked(fs.existsSync).mockImplementation((filePath) => {
         const pathStr = filePath.toString();
-        return pathStr.includes('variable-content.json') || pathStr.includes('simple.json') || pathStr.includes('complex.json');
+        return (
+          pathStr.includes('variable-content.json') ||
+          pathStr.includes('simple.json') ||
+          pathStr.includes('complex.json')
+        );
       });
 
       jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
@@ -1637,7 +1645,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
               },
               name: {
                 type: 'string',
-                description: 'The person\'s name',
+                description: "The person's name",
               },
             },
             required: ['greeting', 'name'],
@@ -1646,9 +1654,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         return '{}';
       });
 
-      await provider.callGeminiApi('Generate a message', { 
+      await provider.callGeminiApi('Generate a message', {
         vars: contextVars,
-        prompt: { raw: 'Generate a message', display: 'Generate a message', label: 'test' }
+        prompt: { raw: 'Generate a message', display: 'Generate a message', label: 'test' },
       });
 
       expect(mockRequest).toHaveBeenCalledWith(
@@ -1657,9 +1665,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
             generationConfig: expect.objectContaining({
               response_schema: {
                 type: 'object',
-                properties: { 
+                properties: {
                   greeting: { type: 'string', description: 'A personalized greeting message' },
-                  name: { type: 'string', description: 'The person\'s name' },
+                  name: { type: 'string', description: "The person's name" },
                 },
                 required: ['greeting', 'name'],
               },

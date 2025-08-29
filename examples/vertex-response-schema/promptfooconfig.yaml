@@ -1,13 +1,13 @@
-description: "Test Vertex AI responseSchema with file:// protocol"
+description: 'Test Vertex AI responseSchema with file:// protocol'
 
 prompts:
-  - "Write a tweet about {{topic}}"
+  - 'Write a tweet about {{topic}}'
 
 providers:
   - id: vertex:gemini-2.5-flash
     config:
       region: us-central1
-      projectId: your-project-id  # Replace with your actual project ID
+      projectId: your-project-id # Replace with your actual project ID
       responseSchema: file://schema.json
 
 tests:
@@ -15,14 +15,14 @@ tests:
       topic: bananas
     assert:
       - type: equals
-        value: "Bananas are great"
+        value: 'Bananas are great'
         transform: JSON.parse(output).tweet
 
   - vars:
       topic: artificial intelligence
     assert:
       - type: contains
-        value: "AI"
+        value: 'AI'
         transform: JSON.parse(output).tweet
 
   - vars:

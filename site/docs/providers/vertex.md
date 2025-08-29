@@ -509,26 +509,26 @@ defaultTest:
 
 ### Configuration Reference
 
-| Option                             | Description                                      | Default                              |
-| ---------------------------------- | ------------------------------------------------ | ------------------------------------ |
-| `apiKey`                           | GCloud API token                                 | None                                 |
-| `apiHost`                          | API host override                                | `{region}-aiplatform.googleapis.com` |
-| `apiVersion`                       | API version                                      | `v1`                                 |
-| `credentials`                      | Service account credentials (JSON or file path)  | None                                 |
-| `projectId`                        | GCloud project ID                                | `VERTEX_PROJECT_ID` env var          |
-| `region`                           | GCloud region                                    | `us-central1`                        |
-| `publisher`                        | Model publisher                                  | `google`                             |
-| `context`                          | Model context                                    | None                                 |
-| `examples`                         | Few-shot examples                                | None                                 |
-| `safetySettings`                   | Content filtering                                | None                                 |
-| `generationConfig.temperature`     | Randomness control                               | None                                 |
-| `generationConfig.maxOutputTokens` | Max tokens to generate                           | None                                 |
-| `generationConfig.topP`            | Nucleus sampling                                 | None                                 |
-| `generationConfig.topK`            | Sampling diversity                               | None                                 |
-| `generationConfig.stopSequences`   | Generation stop triggers                         | `[]`                                 |
+| Option                             | Description                                            | Default                              |
+| ---------------------------------- | ------------------------------------------------------ | ------------------------------------ |
+| `apiKey`                           | GCloud API token                                       | None                                 |
+| `apiHost`                          | API host override                                      | `{region}-aiplatform.googleapis.com` |
+| `apiVersion`                       | API version                                            | `v1`                                 |
+| `credentials`                      | Service account credentials (JSON or file path)        | None                                 |
+| `projectId`                        | GCloud project ID                                      | `VERTEX_PROJECT_ID` env var          |
+| `region`                           | GCloud region                                          | `us-central1`                        |
+| `publisher`                        | Model publisher                                        | `google`                             |
+| `context`                          | Model context                                          | None                                 |
+| `examples`                         | Few-shot examples                                      | None                                 |
+| `safetySettings`                   | Content filtering                                      | None                                 |
+| `generationConfig.temperature`     | Randomness control                                     | None                                 |
+| `generationConfig.maxOutputTokens` | Max tokens to generate                                 | None                                 |
+| `generationConfig.topP`            | Nucleus sampling                                       | None                                 |
+| `generationConfig.topK`            | Sampling diversity                                     | None                                 |
+| `generationConfig.stopSequences`   | Generation stop triggers                               | `[]`                                 |
 | `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
-| `toolConfig`                       | Tool/function calling config                     | None                                 |
-| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`) | None                                 |
+| `toolConfig`                       | Tool/function calling config                           | None                                 |
+| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -689,18 +689,20 @@ tests:
 ```
 
 The `responseSchema` option automatically:
+
 - Sets `response_mime_type` to `application/json`
 - Validates the schema format
 - Supports variable substitution with `{{var}}` syntax
 - Loads schemas from external files with `file://` protocol
 
 Example `schemas/analysis-schema.json`:
+
 ```json
 {
   "type": "object",
   "properties": {
     "sentiment": {
-      "type": "string", 
+      "type": "string",
       "enum": ["positive", "negative", "neutral"],
       "description": "Overall sentiment of the text"
     },
@@ -712,7 +714,7 @@ Example `schemas/analysis-schema.json`:
     },
     "keywords": {
       "type": "array",
-      "items": {"type": "string"},
+      "items": { "type": "string" },
       "description": "Key topics identified"
     }
   },
