@@ -4,6 +4,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
+import { checkServerFeatureSupport } from './server';
 
 import type { Plugin, Severity } from '../redteam/constants';
 import type { UnifiedConfig } from '../types';
@@ -167,4 +168,114 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
     logger.error(String(e));
     throw new Error(`Failed to fetch plugin severity overrides from cloud.`);
   }
+}
+
+export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
+  const response = await makeRequest(`/users/me/teams`, 'GET');
+  if (!response.ok) {
+    throw new Error(`Failed to get default team id: ${response.statusText}`);
+  }
+
+  const body = await response.json();
+
+  // get the oldest team -- this matches the logic of the enterprise app
+  const oldestTeam = body.sort((a: { createdAt: string }, b: { createdAt: string }) => {
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  })[0];
+
+  return oldestTeam;
+}
+
+export async function checkIfCliTargetExists(id: string, teamId: string): Promise<boolean> {
+  const hasCliListEndpoint = await checkServerFeatureSupport(
+    'cli-list-endpoint',
+    '2025-08-28T14:49:11-07:00',
+  );
+  if (hasCliListEndpoint) {
+    try {
+      const response = await makeRequest(`providers/cli/${teamId}/${id}`, 'GET');
+
+      logger.debug(`[checkIfCliTargetExists] Response: ${response.status} ${response.statusText}`);
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const body = await response.json();
+      logger.debug(`[checkIfCliTargetExists] Body: ${JSON.stringify(body, null, 2)}`);
+
+      return true;
+    } catch (error) {
+      logger.error(`[checkIfCliTargetExists] Error checking if target exists: ${String(error)}`);
+      return false;
+    }
+
+    // If we get a 404, the endpoint might not exist yet, fall back to legacy endpoint
+  } else {
+    logger.debug(
+      `[checkIfCliTargetExists] New endpoint not found, falling back to legacy dashboard/targets endpoint`,
+    );
+
+    try {
+      const legacyResponse = await makeRequest(`dashboard/targets?teamId=${teamId}`, 'GET');
+
+      if (!legacyResponse.ok) {
+        logger.debug(
+          `[checkIfCliTargetExists] Legacy endpoint failed: ${legacyResponse.status} ${legacyResponse.statusText}`,
+        );
+        return false;
+      }
+
+      const targets = await legacyResponse.json();
+      logger.debug(`[checkIfCliTargetExists] Legacy targets: ${JSON.stringify(targets, null, 2)}`);
+
+      // Check if the target exists in the array
+      const targetExists =
+        Array.isArray(targets) && targets.some((target: any) => target.id === id);
+      logger.debug(
+        `[checkIfCliTargetExists] Target ${id} exists in legacy response: ${targetExists}`,
+      );
+
+      return targetExists;
+    } catch (error) {
+      logger.error(`[checkIfCliTargetExists] Error checking legacy endpoint: ${error}`);
+      return false;
+    }
+  }
+}
+
+export async function canCreateTargets(teamId: string | undefined): Promise<boolean> {
+  if (!cloudConfig.isEnabled()) {
+    logger.debug(
+      '[canCreateTargets] Cloud config is not enabled, create providers is not relevant.',
+    );
+    return true;
+  }
+  if (!teamId) {
+    const team = await getDefaultTeam();
+    teamId = team.id;
+    logger.debug(
+      `[canCreateTargets] No team id provided, using default team ${team.name} (${teamId})`,
+    );
+  }
+
+  const response = await makeRequest(`/users/me/abilities?teamId=${teamId}`, 'GET');
+  if (!response.ok) {
+    throw new Error(`Failed to check provider permissions: ${response.statusText}`);
+  }
+
+  const body = await response.json();
+
+  logger.debug(
+    `[canCreateTargets] Checking provider permissions for team ${teamId}: ${JSON.stringify(
+      body.filter((ability: { action: string; subject: string }) => ability.subject === 'Provider'),
+      null,
+      2,
+    )}`,
+  );
+
+  return body.some(
+    (ability: { action: string; subject: string }) =>
+      ability.action === 'create' && ability.subject === 'Provider',
+  );
 }

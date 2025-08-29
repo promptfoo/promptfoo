@@ -21,9 +21,11 @@ import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
   getCloudDatabaseId,
   getConfigFromCloud,
+  getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
+import { canContinueWithTarget } from '../../util/cloud/canContinueWithTarget';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
@@ -161,6 +163,16 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+    if (cloudConfig.isEnabled()) {
+      const teamId = resolved.config.metadata?.teamId ?? (await getDefaultTeam()).id;
+      const canContinue = await canContinueWithTarget(resolved.config.providers, teamId);
+      if (!canContinue) {
+        logger.warn(
+          'This provider does not exist in your team and you do not have permission to create providers. Please contact your administrator to get access.',
+        );
+        return null;
+      }
+    }
 
     // Warn if both tests section and redteam config are present
     if (redteamConfig && resolved.testSuite.tests && resolved.testSuite.tests.length > 0) {

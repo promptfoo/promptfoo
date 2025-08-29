@@ -5,6 +5,7 @@ import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { canCreateTargets, getDefaultTeam } from '../util/cloud';
 import type { Command } from 'commander';
 
 export function authCommand(program: Command) {
@@ -118,6 +119,60 @@ export function authCommand(program: Command) {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get user info: ${errorMessage}`);
+        process.exitCode = 1;
+      }
+    });
+
+  authCommand
+    .command('default-team')
+    .description('Show default team for the current user')
+    .action(async () => {
+      try {
+        if (!cloudConfig.isEnabled()) {
+          logger.info(
+            chalk.yellow('PromptFoo Cloud is not enabled, run `promptfoo auth login` to enable it'),
+          );
+          return;
+        }
+
+        const teamId = await getDefaultTeam();
+        logger.info(chalk.green(`Default team: ${teamId}`));
+        telemetry.record('command_used', {
+          name: 'auth team',
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Failed to get default team: ${errorMessage}`);
+        process.exitCode = 1;
+      }
+    });
+
+  authCommand
+    .command('can-create-targets')
+    .description('Check if user can create targets')
+    .option('-t, --team-id <teamId>', 'The team id to check permissions for')
+    .action(async (cmdObj: { teamId?: string }) => {
+      try {
+        if (!cloudConfig.isEnabled()) {
+          logger.info(
+            chalk.yellow('PromptFoo Cloud is not enabled, run `promptfoo auth login` to enable it'),
+          );
+          return;
+        }
+        if (cmdObj.teamId) {
+          const canCreate = await canCreateTargets(cmdObj.teamId);
+          logger.info(chalk.green(`Can create targets for team ${cmdObj.teamId}: ${canCreate}`));
+        } else {
+          const team = await getDefaultTeam();
+          const canCreate = await canCreateTargets(team.id);
+          logger.info(chalk.green(`Can create targets for team ${team.name}: ${canCreate}`));
+        }
+        telemetry.record('command_used', {
+          name: 'auth can-create-targets',
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Failed to check if user can create targets: ${errorMessage}`);
         process.exitCode = 1;
       }
     });

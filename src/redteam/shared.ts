@@ -135,3 +135,10 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   setLogCallback(null);
   return evalResult;
 }
+
+export class TargetPermissionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TargetPermissionError';
+  }
+}
