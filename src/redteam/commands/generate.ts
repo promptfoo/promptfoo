@@ -22,6 +22,7 @@ import {
   getCloudDatabaseId,
   getConfigFromCloud,
   getPluginSeverityOverridesFromCloud,
+  getPoliciesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
@@ -44,8 +45,10 @@ import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import type {
+  PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
+  RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
@@ -228,7 +231,7 @@ export async function doGenerateRedteam(
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
 
-  let plugins;
+  let plugins: RedteamPluginObject[] = [];
 
   // If plugins are defined in the config file
   if (redteamConfig?.plugins && redteamConfig.plugins.length > 0) {
@@ -297,6 +300,29 @@ export async function doGenerateRedteam(
     });
 
     logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
+  }
+
+  // Resolve policy references
+  const policyPluginsWithRefs = plugins.filter(
+    (plugin) =>
+      plugin.id === 'policy' &&
+      typeof plugin.config?.policy === 'object' &&
+      plugin.config.policy.id &&
+      uuidValidate(plugin!.config!.policy!.id),
+  );
+  if (policyPluginsWithRefs.length > 0) {
+    logger.debug(`Resolving policy references for ${policyPluginsWithRefs.length} plugins`);
+    const ids = policyPluginsWithRefs.map((p) => (p.config!.policy! as PolicyObject).id);
+    // Load the policy texts
+    const policyTexts = await getPoliciesFromCloud(ids);
+    // Overwrite the policy texts to the plugins
+    for (const policyPlugin of policyPluginsWithRefs) {
+      const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
+      policyPlugin.config!.policy = {
+        id: policyId,
+        text: policyTexts[policyId],
+      } as PolicyObject;
+    }
   }
 
   let strategies: (string | { id: string })[] =
