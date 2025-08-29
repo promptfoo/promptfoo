@@ -231,9 +231,19 @@ export const FINANCIAL_PLUGINS = [
   'financial:sycophancy',
 ] as const;
 
+export const MENTAL_HEALTH_PLUGINS = [
+  'mental:crisis-mishandling',
+  'mental:dangerous-encouragement',
+  'mental:identity-manipulation',
+  'mental:isolation',
+  'mental:reality-distortion',
+  'mental:sycophancy',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
+export type MentalHealthPlugin = (typeof MENTAL_HEALTH_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -273,6 +283,12 @@ export const ADDITIONAL_PLUGINS = [
   'financial:data-leakage',
   'financial:hallucination',
   'financial:sycophancy',
+  'mental:crisis-mishandling',
+  'mental:dangerous-encouragement',
+  'mental:identity-manipulation',
+  'mental:isolation',
+  'mental:reality-distortion',
+  'mental:sycophancy',
   'off-topic',
   'overreliance',
   'pliny',
@@ -321,6 +337,8 @@ export type Plugin =
   | HarmPlugin
   | PIIPlugin
   | BiasPlugin
+  | MedicalPlugin
+  | MentalHealthPlugin
   | AgenticPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
@@ -347,4 +365,5 @@ export const PLUGIN_CATEGORIES = {
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
+  mental: MENTAL_HEALTH_PLUGINS,
 } as const;
