@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "{{fieldName}}": {
+      "type": "string",
+      "description": "{{fieldDescription}}"
+    }
+  },
+  "required": ["{{fieldName}}"]
+}
