@@ -1,8 +1,15 @@
 import dedent from 'dedent';
-
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
+import { maybeLoadToolsFromExternalFile } from '../../util';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
+import invariant from '../../util/invariant';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { redteamProviderManager } from '../providers/shared';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
+
 import type {
   ApiProvider,
   Assertion,
@@ -13,13 +20,6 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types';
-import { maybeLoadToolsFromExternalFile } from '../../util';
-import { retryWithDeduplication, sampleArray } from '../../util/generation';
-import invariant from '../../util/invariant';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
@@ -249,6 +249,19 @@ export abstract class RedteamPluginBase {
         );
         return [];
       }
+
+      // Handle rejections:
+      if (isBasicRefusal(generatedPrompts)) {
+        logger.error('Rejection detected');
+
+        // Was rejection caused by the purpose?
+        // TODO: Use a fast, cheap model to classify whether the purpose is harmful.
+        // If so, sanitize the purpose and retry again.
+        // If it still fails, log the error and return an empty array.
+        //logger.info(this.purpose);
+        return [];
+      }
+
       return parseGeneratedPrompts(generatedPrompts);
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
