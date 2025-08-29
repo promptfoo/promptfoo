@@ -54,14 +54,32 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
 
   // Detect certificate type from filename if not explicitly set
   let detectedType = signatureAuth.type;
-  if (!detectedType && certificateFilename) {
-    const ext = certificateFilename.toLowerCase();
-    if (ext.endsWith('.pfx') || ext.endsWith('.p12')) {
-      detectedType = 'pfx';
-    } else if (ext.endsWith('.jks')) {
-      detectedType = 'jks';
-    } else if (ext.endsWith('.pem') || ext.endsWith('.key')) {
-      detectedType = 'pem';
+  if (!detectedType) {
+    // Try to detect from certificateFilename first
+    if (certificateFilename) {
+      const ext = certificateFilename.toLowerCase();
+      if (ext.endsWith('.pfx') || ext.endsWith('.p12')) {
+        detectedType = 'pfx';
+      } else if (ext.endsWith('.jks')) {
+        detectedType = 'jks';
+      } else if (ext.endsWith('.pem') || ext.endsWith('.key')) {
+        detectedType = 'pem';
+      }
+    }
+
+    // If still no type, try to detect from legacy fields
+    if (!detectedType) {
+      if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
+        detectedType = 'pem';
+      } else if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
+        detectedType = 'jks';
+      } else if (
+        signatureAuth.pfxPath ||
+        signatureAuth.pfxContent ||
+        (signatureAuth.certPath && signatureAuth.keyPath)
+      ) {
+        detectedType = 'pfx';
+      }
     }
   }
 
@@ -344,7 +362,22 @@ export async function generateSignature(
   try {
     let privateKey: string;
 
-    switch (signatureAuth.type) {
+    // For backward compatibility, detect type from legacy fields if not explicitly set
+    let authType = signatureAuth.type;
+    if (!authType) {
+      if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
+        authType = 'pem';
+      } else if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
+        authType = 'jks';
+      } else if (
+        signatureAuth.pfxPath ||
+        signatureAuth.pfxContent ||
+        (signatureAuth.certPath && signatureAuth.keyPath)
+      ) {
+        authType = 'pfx';
+      }
+    }
+    switch (authType) {
       case 'pem': {
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = resolveFilePath(signatureAuth.privateKeyPath);
@@ -694,11 +727,11 @@ export const HttpProviderConfigSchema = z.object({
   // Digital Signature Authentication with support for multiple certificate types
   signatureAuth: z
     .union([
+      LegacySignatureAuthSchema,
       PemSignatureAuthSchema,
       JksSignatureAuthSchema,
       PfxSignatureAuthSchema,
       GenericCertificateAuthSchema,
-      LegacySignatureAuthSchema,
     ])
     .optional()
     .transform(preprocessSignatureAuthConfig),
@@ -1159,13 +1192,7 @@ export class HttpProvider implements ApiProvider {
   private lastSignature?: string;
 
   constructor(url: string, options: ProviderOptions) {
-    // Preprocess signature auth config to map generic certificate fields
-    const processedConfig = {
-      ...options.config,
-      signatureAuth: preprocessSignatureAuthConfig(options.config?.signatureAuth),
-    };
-
-    this.config = HttpProviderConfigSchema.parse(processedConfig);
+    this.config = HttpProviderConfigSchema.parse(options.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
