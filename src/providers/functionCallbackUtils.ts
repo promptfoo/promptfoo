@@ -37,17 +37,17 @@ export class FunctionCallbackHandler {
   ): Promise<FunctionCallResult> {
     // Extract function information from various formats
     const functionInfo = this.extractFunctionInfo(call);
-    
+
     // Check if this is an MCP tool first (before checking function callbacks)
     if (this.mcpClient && functionInfo) {
       const mcpTools = this.mcpClient.getAllTools();
-      const isMcpTool = mcpTools.some(tool => tool.name === functionInfo.name);
-      
+      const isMcpTool = mcpTools.some((tool) => tool.name === functionInfo.name);
+
       if (isMcpTool) {
         return await this.executeMcpTool(functionInfo.name, functionInfo.arguments || '{}');
       }
     }
-    
+
     if (!functionInfo || !callbacks || !callbacks[functionInfo.name]) {
       // No callback available - return stringified original
       return {
@@ -236,17 +236,17 @@ export class FunctionCallbackHandler {
       if (!this.mcpClient) {
         throw new Error('MCP client not available');
       }
-      
+
       const parsedArgs = args ? JSON.parse(args) : {};
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
-      
+
       if (result.error) {
         return {
           output: `MCP Tool Error (${toolName}): ${result.error}`,
           isError: true,
         };
       }
-      
+
       return {
         output: `MCP Tool Result (${toolName}): ${result.content}`,
         isError: false,

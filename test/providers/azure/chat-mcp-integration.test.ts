@@ -23,7 +23,8 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
         },
       ]),
       callTool: jest.fn().mockResolvedValue({
-        content: 'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
+        content:
+          'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
       }),
     } as any;
 
@@ -84,7 +85,8 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
     // Verify result format matches expected pattern (not [object Object])
     expect(result).toEqual({
-      output: 'MCP Tool Result (list_resources): Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
+      output:
+        'MCP Tool Result (list_resources): Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
       isError: false,
     });
 

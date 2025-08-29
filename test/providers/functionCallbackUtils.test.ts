@@ -495,9 +495,7 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should fall back to function callbacks when tool is not an MCP tool', async () => {
-      mockMCPClient.getAllTools.mockReturnValue([
-        { name: 'mcp_tool', description: 'An MCP tool' },
-      ]);
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'mcp_tool', description: 'An MCP tool' }]);
 
       const callbacks: FunctionCallbackConfig = {
         regular_function: async (args: string) => 'callback result',
