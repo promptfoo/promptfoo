@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "greeting": {
+      "type": "string",
+      "description": "{{greetingDescription}}"
+    },
+    "name": {
+      "type": "string",
+      "description": "The person's name"
+    }
+  },
+  "required": ["greeting", "name"]
+}
