@@ -582,7 +582,9 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should format non-string MCP content without [object Object]', async () => {
-      mockMCPClient.getAllTools.mockReturnValue([{ name: 'rich_tool', description: 'Tool with rich content' }]);
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'rich_tool', description: 'Tool with rich content' },
+      ]);
       mockMCPClient.callTool.mockResolvedValue({
         content: [
           { type: 'text', text: 'Part A' },
@@ -607,7 +609,9 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should handle object MCP content without [object Object]', async () => {
-      mockMCPClient.getAllTools.mockReturnValue([{ name: 'object_tool', description: 'Tool returning object' }]);
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'object_tool', description: 'Tool returning object' },
+      ]);
       mockMCPClient.callTool.mockResolvedValue({
         content: { type: 'response', data: { result: 'success', count: 42 } },
       });
@@ -622,7 +626,9 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should handle null/undefined MCP content gracefully', async () => {
-      mockMCPClient.getAllTools.mockReturnValue([{ name: 'empty_tool', description: 'Tool with empty content' }]);
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'empty_tool', description: 'Tool with empty content' },
+      ]);
       mockMCPClient.callTool.mockResolvedValue({
         content: null,
       });
@@ -635,7 +641,9 @@ describe('FunctionCallbackHandler', () => {
     });
 
     it('should handle non-object arguments passed directly', async () => {
-      mockMCPClient.getAllTools.mockReturnValue([{ name: 'direct_args_tool', description: 'Tool with direct args' }]);
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'direct_args_tool', description: 'Tool with direct args' },
+      ]);
       mockMCPClient.callTool.mockResolvedValue({
         content: 'success with direct args',
       });

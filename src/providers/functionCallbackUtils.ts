@@ -20,6 +20,7 @@ import type { MCPClient } from './mcp/client';
  */
 export class FunctionCallbackHandler {
   private loadedCallbacks: Record<string, FunctionCallback> = {};
+  private mcpToolNames: Set<string> | null = null;
 
   constructor(private mcpClient?: MCPClient) {}
 
@@ -40,10 +41,13 @@ export class FunctionCallbackHandler {
 
     // Check if this is an MCP tool first (before checking function callbacks)
     if (this.mcpClient && functionInfo) {
-      const mcpTools = this.mcpClient.getAllTools();
-      const isMcpTool = mcpTools.some((tool) => tool.name === functionInfo.name);
+      // Lazy-load MCP tool names for efficient lookup
+      if (this.mcpToolNames === null) {
+        const mcpTools = this.mcpClient.getAllTools();
+        this.mcpToolNames = new Set(mcpTools.map((tool) => tool.name));
+      }
 
-      if (isMcpTool) {
+      if (this.mcpToolNames.has(functionInfo.name)) {
         return await this.executeMcpTool(functionInfo.name, functionInfo.arguments);
       }
     }
@@ -239,11 +243,7 @@ export class FunctionCallbackHandler {
 
       // Parse arguments: support stringified JSON, object, or empty
       const parsedArgs =
-        args == null || args === ''
-          ? {}
-          : typeof args === 'string'
-          ? JSON.parse(args)
-          : args;
+        args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
       if (result?.error) {
@@ -255,16 +255,28 @@ export class FunctionCallbackHandler {
 
       // Normalize MCP content to a readable string to avoid "[object Object]"
       const normalizeContent = (content: any): string => {
-        if (content == null) return '';
-        if (typeof content === 'string') return content;
+        if (content == null) {
+          return '';
+        }
+        if (typeof content === 'string') {
+          return content;
+        }
         if (Array.isArray(content)) {
           return content
             .map((part) => {
-              if (typeof part === 'string') return part;
+              if (typeof part === 'string') {
+                return part;
+              }
               if (part && typeof part === 'object') {
-                if ('text' in part && (part as any).text != null) return String((part as any).text);
-                if ('json' in part) return JSON.stringify((part as any).json);
-                if ('data' in part) return JSON.stringify((part as any).data);
+                if ('text' in part && (part as any).text != null) {
+                  return String((part as any).text);
+                }
+                if ('json' in part) {
+                  return JSON.stringify((part as any).json);
+                }
+                if ('data' in part) {
+                  return JSON.stringify((part as any).data);
+                }
                 return JSON.stringify(part);
               }
               return String(part);
@@ -291,6 +303,8 @@ export class FunctionCallbackHandler {
    */
   setMcpClient(client?: MCPClient): void {
     this.mcpClient = client;
+    // Reset cached tool names when MCP client changes
+    this.mcpToolNames = null;
   }
 
   /**
