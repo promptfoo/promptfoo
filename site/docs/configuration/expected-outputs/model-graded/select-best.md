@@ -154,10 +154,17 @@ defaultTest:
 
 ## When to use select-best
 
-- **Prompt optimization**: Finding the best wording or structure
-- **Model selection**: Comparing different models on same tasks
-- **Style testing**: Identifying which approach works best for your use case
-- **A/B testing**: Evaluating variations systematically
+- **Prompt optimization**: Finding the best wording or structure across variations
+- **Model comparison**: Comparing different models on the same task
+- **Style evaluation**: Identifying which approach works best for your use case
+- **A/B testing**: Systematically evaluating different approaches
+
+## Performance considerations
+
+- Requires one additional LLM API call per test case for evaluation
+- More expensive than [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) which uses existing assertion scores
+- Results may vary between runs due to LLM non-determinism
+- Best for subjective criteria where human-like judgment is needed
 
 ## Related assertions
 

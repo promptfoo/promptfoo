@@ -162,9 +162,10 @@ tests:
 
 ## When to use Pi vs. alternatives
 
-- **Use `pi`** for consistent benchmarking and CI/CD pipelines
-- **Use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)** when you need reasoning for failures
-- **Use [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)** for complex evaluation with chain-of-thought
+- **Use `pi`** for consistent benchmarking, CI/CD pipelines, and reproducible scoring
+- **Use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)** when you need detailed reasoning for evaluation decisions
+- **Use [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)** for complex evaluation requiring chain-of-thought analysis
+- **Use [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa)** for simple binary (yes/no) requirements
 
 ## Related assertions
 
@@ -175,5 +176,6 @@ tests:
 ## Further reading
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
-- [Pi Documentation](https://docs.withpi.ai) for calibration and advanced configuration
-- [Pi Labs Copilot](https://build.withpi.ai) for brainstorming metrics
+- [Pi Documentation](https://docs.withpi.ai) for advanced configuration and calibration
+- [Pi Labs Copilot](https://build.withpi.ai) for interactive metric development
+- [Getting Started](/docs/getting-started) guide for promptfoo basics

@@ -183,11 +183,23 @@ defaultTest:
     provider: anthropic:claude-3-7-sonnet-latest
 ```
 
-## See also
+## Tips for effective conversation evaluation
 
-- [Context relevance](/docs/configuration/expected-outputs/model-graded/context-relevance) - For evaluating if context is relevant to a query
-- [Answer relevance](/docs/configuration/expected-outputs/model-graded/answer-relevance) - For evaluating if an answer is relevant to a question
-- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) - Overview of all model-graded assertions
+- **Use appropriate window sizes**: Smaller windows (2-3) for short interactions, larger (5-7) for complex conversations
+- **Test edge cases**: Include conversations with topic changes, clarifications, and follow-up questions
+- **Consider context**: Vague responses to vague inputs are often acceptable
+- **Combine with other assertions**: Use alongside [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) for comprehensive evaluation
+
+## Related assertions
+
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - For evaluating if context is relevant to a query
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - For evaluating if an answer is relevant to a question
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - For custom conversation quality criteria
+
+## Further reading
+
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
+- [Getting Started](/docs/getting-started) guide
 
 ## Citation
 

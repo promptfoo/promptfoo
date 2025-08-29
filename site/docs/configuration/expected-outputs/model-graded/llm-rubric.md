@@ -250,10 +250,11 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 
 ## When to use llm-rubric vs. alternatives
 
-- **Use `llm-rubric`** for custom evaluation with explanations
-- **Use [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)** for complex evaluation needing chain-of-thought
-- **Use [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa)** for simple yes/no checks
-- **Use [`pi`](/docs/configuration/expected-outputs/model-graded/pi)** for deterministic scoring
+- **Use `llm-rubric`** for flexible custom evaluation with scoring and explanations
+- **Use [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)** for complex evaluation requiring structured chain-of-thought reasoning
+- **Use [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa)** for simple binary (pass/fail) requirements
+- **Use [`pi`](/docs/configuration/expected-outputs/model-graded/pi)** for consistent, deterministic scoring without explanations
+- **Use [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality)** for fact-checking against reference answers
 
 ## Related assertions
 

@@ -39,6 +39,10 @@ assert:
 Use specific, measurable criteria. "Is good" is vague; "Includes at least 3 examples" is clear.
 :::
 
+:::warning
+This assertion returns binary results only. For scored evaluation (0-1 scale), use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) instead.
+:::
+
 ## How it works
 
 The model-graded-closedqa checker:

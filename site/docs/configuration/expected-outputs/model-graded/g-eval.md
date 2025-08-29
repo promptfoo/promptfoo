@@ -5,7 +5,7 @@ description: "Apply Google's G-Eval framework for multi-criteria LLM evaluation 
 
 # G-Eval
 
-The `g-eval` assertion uses chain-of-thought reasoning to evaluate LLM outputs against custom criteria.
+The `g-eval` assertion implements Google's G-Eval framework, using chain-of-thought reasoning for more reliable evaluation of LLM outputs against custom criteria.
 
 **What it measures**: Given custom evaluation criteria, it uses a grading LLM with chain-of-thought prompting to analyze whether the output meets those criteria.
 
@@ -57,7 +57,7 @@ The G-Eval process:
 2. **Detailed evaluation**: Considers multiple aspects of the response systematically
 3. **Score normalization**: Returns a score from 0 to 1
 
-G-Eval's chain-of-thought approach produces more consistent and explainable evaluations than simple scoring. Based on the paper ["G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment"](https://arxiv.org/abs/2303.16634).
+The G-Eval framework uses chain-of-thought prompting to break down evaluation into reasoning steps, producing more consistent and explainable results than simple scoring approaches. This implementation is based on ["G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment"](https://arxiv.org/abs/2303.16634).
 
 ## Customizing the evaluator
 

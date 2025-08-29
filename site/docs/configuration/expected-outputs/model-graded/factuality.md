@@ -52,22 +52,37 @@ By default, options A, B, C, and E are considered passing grades, while D is con
 Here's a complete example showing how to use factuality checks:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Verify factual accuracy against known correct answers'
+
 prompts:
   - 'What is the capital of {{state}}?'
+  - 'Tell me about the capital city of {{state}}'
+
 providers:
-  - openai:gpt-4.1
-  - anthropic:claude-3-7-sonnet-20250219
+  - id: openai:gpt-4o-mini
+
 tests:
-  - vars:
+  - description: 'Test California capital knowledge'
+    vars:
       state: California
     assert:
       - type: factuality
         value: Sacramento is the capital of California
-  - vars:
+        
+  - description: 'Test New York capital knowledge'
+    vars:
       state: New York
     assert:
       - type: factuality
         value: Albany is the capital city of New York state
+        
+  - description: 'Test with detailed reference'
+    vars:
+      state: Texas
+    assert:
+      - type: factuality
+        value: Austin is the capital of Texas, located in central Texas with a population of about 965,000
 ```
 
 ## Customizing Score Thresholds

@@ -128,17 +128,21 @@ assert:
 
 ### Example 1: Multi-criteria code selection
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Select best code implementation using multiple criteria'
+
 prompts:
   - 'Write a Python function to {{task}}'
   - 'Write an optimized Python function to {{task}}'
-  - 'Write a documented Python function to {{task}}'
+  - 'Write a well-documented Python function to {{task}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - id: openai:gpt-4o-mini
 
 tests:
-  - vars:
+  - description: 'Find best implementation for list merging'
+    vars:
       task: 'merge two sorted lists'
     assert:
       - type: python
@@ -149,16 +153,21 @@ tests:
           assert result == [1, 2, 3, 4, 5, 6]
 
       - type: llm-rubric
-        value: 'Code has O(n+m) time complexity'
+        value: 'Code has O(n+m) time complexity and is efficient'
 
       - type: llm-rubric
-        value: 'Code is well documented with docstring'
+        value: 'Code includes clear docstring and comments'
+
+      - type: contains
+        value: 'def merge_lists'
 
       - type: max-score
         value:
+          method: average
           weights:
             python: 3
             llm-rubric: 1
+            contains: 1
 ```
 
 ### Example 2: Content generation selection

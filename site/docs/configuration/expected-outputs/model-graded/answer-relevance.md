@@ -7,7 +7,7 @@ description: 'Score LLM response relevance and completeness against user queries
 
 The `answer-relevance` assertion checks if the LLM response answers the user's question.
 
-**What it measures**: Given a user's query and the LLM's response, it evaluates how well the response addresses what was asked. It does this by generating potential questions the response could answer, then checking if those match the original query.
+**What it measures**: Given a user's query and the LLM's response, it evaluates how well the response addresses what was asked. It generates potential questions the response could answer, then compares these with the original query using embedding similarity.
 
 **Example**:
 
@@ -43,11 +43,11 @@ The default threshold is 0, which means the assertion will pass even with comple
 
 The answer relevance checker:
 
-1. Takes the LLM's response and generates potential questions it could be answering
-2. Compares these generated questions with the original query using embeddings
-3. Returns a score from 0 to 1 based on relevance
+1. Uses an LLM to generate potential questions the response could be answering
+2. Compares these questions with the original query using embedding similarity
+3. Returns a relevance score from 0 to 1
 
-Higher scores indicate more relevant responses to the original query.
+This approach catches responses that are topically related but don't actually answer the specific question asked.
 
 ### Complete example
 
