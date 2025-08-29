@@ -40,7 +40,7 @@ vi.mock('./hooks/useRedTeamConfig', () => ({
 vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 
 // Mock child components to isolate the page component
-vi.mock('@app/components/CrispChat', () => ({ default: () => <div>CrispChat</div> }));
+vi.mock('@app/components/PylonChat', () => ({ default: () => <div>PylonChat</div> }));
 vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
 vi.mock('./components/Purpose', () => ({ default: () => <div>Purpose</div> }));
 vi.mock('./components/Plugins', () => ({ default: () => <div>Plugins</div> }));
