@@ -7,6 +7,18 @@ const sharp = require('sharp');
 // Constants for image generation
 const WIDTH = 1200;
 const HEIGHT = 630;
+// Template version constant removed; caching disabled
+
+function resolveImageFullPath(imagePath) {
+  const cwd = process.cwd();
+  const inSiteDir = cwd.endsWith('/site');
+  if (imagePath.startsWith('/')) {
+    return inSiteDir
+      ? path.join(cwd, 'static', imagePath)
+      : path.join(cwd, 'site/static', imagePath);
+  }
+  return inSiteDir ? path.join(cwd, imagePath) : path.join(cwd, 'site', imagePath);
+}
 
 // Helper function to escape HTML/XML entities
 function escapeXml(text) {
@@ -135,25 +147,7 @@ async function getImageAsBase64(imagePath, maxWidth = 520, maxHeight = 430) {
   try {
     // Handle relative paths from frontmatter
     // Check if we're already in the site directory
-    const cwd = process.cwd();
-    const inSiteDir = cwd.endsWith('/site');
-
-    let fullPath;
-    if (imagePath.startsWith('/')) {
-      // Absolute path from static directory
-      if (inSiteDir) {
-        fullPath = path.join(cwd, 'static', imagePath);
-      } else {
-        fullPath = path.join(cwd, 'site/static', imagePath);
-      }
-    } else {
-      // Relative path
-      if (inSiteDir) {
-        fullPath = path.join(cwd, imagePath);
-      } else {
-        fullPath = path.join(cwd, 'site', imagePath);
-      }
-    }
+    const fullPath = resolveImageFullPath(imagePath);
 
     const ext = path.extname(fullPath).toLowerCase().replace('.', '');
 
@@ -235,15 +229,15 @@ async function generateSvgTemplate(metadata = {}) {
   // Check if we have a valid image
   const hasImage = image && !image.startsWith('http');
   const imageBase64 = hasImage ? await getImageAsBase64(image) : null;
-  const hasValidImage = hasImage && imageBase64;
+  const hasValidImage = Boolean(hasImage && imageBase64);
 
   // Debug image processing
   if (routePath && routePath.includes('/blog/') && image) {
     console.log(`  Template for ${routePath}:`);
     console.log('    Has image:', hasImage);
-    console.log('    Image path:', image);
-    console.log('    Image loaded:', !!imageBase64);
-    console.log('    Has valid image:', hasValidImage);
+    console.log('    Image provided:', Boolean(image));
+    console.log('    Image loaded:', Boolean(imageBase64));
+    console.log('    Has valid image:', Boolean(hasValidImage));
   }
 
   // Get page type
@@ -599,6 +593,8 @@ module.exports = function (context, options) {
       let successCount = 0;
       let failureCount = 0;
 
+      // Caching disabled; proceed without reading cache manifest
+
       // Create a map of routes to their metadata
       const routeMetadata = new Map();
 
@@ -705,9 +701,9 @@ module.exports = function (context, options) {
               (routePath.includes('100k') || routePath.includes('excessive'))
             ) {
               console.log(`\nProcessing ${routePath}:`);
-              console.log('  Image from file:', fileMetadata.image);
-              console.log('  Image from metadata:', metadata.image);
-              console.log('  Final image:', fullMetadata.image);
+              console.log('  Image from file present:', Boolean(fileMetadata.image));
+              console.log('  Image from metadata present:', Boolean(metadata.image));
+              console.log('  Final image present:', Boolean(fullMetadata.image));
             }
 
             // Final fallback for title to path parsing
