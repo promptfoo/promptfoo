@@ -3,6 +3,8 @@ import chokidar from 'chokidar';
 import type { Command } from 'commander';
 import dedent from 'dedent';
 import fs from 'fs';
+import { globSync } from 'glob';
+import yaml from 'js-yaml';
 import * as path from 'path';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
@@ -101,7 +103,41 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
-  setupEnv(cmdObj.envPath);
+  // Pre-extract envPath from config files if no CLI envPath provided
+  let envPath = cmdObj.envPath;
+  if (!envPath && cmdObj.config) {
+    try {
+      const configPaths = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
+      for (const configPath of configPaths) {
+        const resolvedPath = path.resolve(process.cwd(), configPath);
+        const globPaths = globSync(resolvedPath, {
+          windowsPathsNoEscape: true,
+        });
+
+        for (const globPath of globPaths) {
+          try {
+            const rawConfig = yaml.load(fs.readFileSync(globPath, 'utf-8')) as any;
+            if (rawConfig?.commandLineOptions?.envPath) {
+              envPath = rawConfig.commandLineOptions.envPath;
+              logger.debug(`Using envPath from config: ${envPath}`);
+              break; // Use first found envPath
+            }
+          } catch (_fileError) {
+            // Skip individual file errors silently during pre-parsing
+            continue;
+          }
+        }
+
+        if (envPath) {
+          break; // Found envPath, stop processing remaining config paths
+        }
+      }
+    } catch (error) {
+      logger.debug(`Failed to pre-extract envPath from config: ${(error as Error).message}`);
+    }
+  }
+
+  setupEnv(envPath);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
