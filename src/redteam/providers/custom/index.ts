@@ -1,31 +1,9 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import {
-  accumulateTokenUsage,
-  createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
-} from '../../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../../remoteGeneration';
-import { isBasicRefusal } from '../../util';
-import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
-import { getGoalRubric } from '../prompts';
-import {
-  getLastMessageContent,
-  getTargetResponse,
-  messagesToRedteamHistory,
-  redteamProviderManager,
-  type TargetResponse,
-  tryUnblocking,
-} from '../shared';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -38,8 +16,30 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
+import invariant from '../../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
+import { getNunjucksEngine } from '../../../util/templates';
+import { sleep } from '../../../util/time';
+import {
+  accumulateGraderTokenUsage,
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../../remoteGeneration';
 import type { BaseRedteamMetadata } from '../../types';
+import { isBasicRefusal } from '../../util';
+import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
+import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
+import {
+  getLastMessageContent,
+  getTargetResponse,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  type TargetResponse,
+  tryUnblocking,
+} from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -118,7 +118,7 @@ interface CustomConfig {
   strategyText: string;
   maxTurns?: number;
   maxBacktracks?: number;
-  redteamProvider: RedteamFileConfig['provider'];
+  redteamProvider?: RedteamFileConfig['provider'];
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   stateful?: boolean;
   continueAfterSuccess?: boolean;
@@ -194,18 +194,31 @@ export class CustomProvider implements ApiProvider {
 
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      if (shouldGenerateRemote()) {
+      const hasStrategyOverride = Boolean((this.config as any).redteamProvider);
+      if (hasStrategyOverride) {
+        this.redTeamProvider = await redteamProviderManager.getProvider({
+          provider: (this.config as any).redteamProvider,
+          preferSmallModel: false,
+          jsonOnly: true,
+        });
+        logger.debug(
+          `[Custom] Using per-strategy override redteam provider: ${this.redTeamProvider.id()}`,
+        );
+      } else if (shouldGenerateRemote()) {
         this.redTeamProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
         });
+        logger.debug('[Custom] Using remote redteam provider (PromptfooChatCompletionProvider)');
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
-          provider: this.config.redteamProvider,
+          // Pass undefined to resolve from global redteam provider
+          provider: undefined,
           preferSmallModel: false,
           jsonOnly: true,
         });
+        logger.debug(`[Custom] Using local redteam provider: ${this.redTeamProvider.id()}`);
       }
     }
     return this.redTeamProvider;
@@ -213,17 +226,29 @@ export class CustomProvider implements ApiProvider {
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      if (shouldGenerateRemote()) {
+      const hasStrategyOverride = Boolean((this.config as any).redteamProvider);
+      if (hasStrategyOverride) {
+        this.scoringProvider = await redteamProviderManager.getProvider({
+          provider: (this.config as any).redteamProvider,
+          preferSmallModel: false,
+        });
+        logger.debug(
+          `[Custom] Using per-strategy override scoring provider (same as redteam): ${this.scoringProvider.id()}`,
+        );
+      } else if (shouldGenerateRemote()) {
         this.scoringProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: false,
           preferSmallModel: false,
         });
+        logger.debug('[Custom] Using remote scoring provider (PromptfooChatCompletionProvider)');
       } else {
         this.scoringProvider = await redteamProviderManager.getProvider({
-          provider: this.config.redteamProvider,
+          // Pass undefined to resolve from global redteam provider
+          provider: undefined,
           preferSmallModel: false,
         });
+        logger.debug(`[Custom] Using local scoring provider: ${this.scoringProvider.id()}`);
       }
     }
     return this.scoringProvider;

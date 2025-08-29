@@ -21,6 +21,9 @@ export function addCustom(
           injectVar,
           variant,
           ...config,
+          ...(config && (config as any).redteamProvider
+            ? { redteamProvider: (config as any).redteamProvider }
+            : {}),
         },
       },
       assert: testCase.assert?.map((assertion) => ({

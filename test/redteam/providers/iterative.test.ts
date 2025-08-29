@@ -5,6 +5,11 @@ import RedteamIterativeProvider, {
 } from '../../../src/redteam/providers/iterative';
 import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types';
 
+// Force remote mode for provider-selection tests in this file
+jest.mock('../../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: () => true,
+}));
+
 const mockGetProvider = jest.fn<() => Promise<any>>();
 const mockGetTargetResponse = jest.fn<() => Promise<any>>();
 const mockCheckPenalizedPhrases = jest.fn<() => boolean>();
@@ -72,6 +77,8 @@ describe('RedteamIterativeProvider', () => {
       }),
     );
     mockCheckPenalizedPhrases.mockImplementation(() => false);
+
+    delete process.env.PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER;
   });
 
   describe('constructor', () => {
@@ -105,6 +112,10 @@ describe('RedteamIterativeProvider', () => {
       expect(provider['numIterations']).toBe(15);
       delete process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS;
     });
+
+    // Note: default remote provider selection is covered elsewhere; here we focus on the local-preference flag
+
+    // Removed tests related to deprecated PROMPTFOO_PREFER_LOCAL_REDTEAM_PROVIDER
   });
 
   describe('runRedteamConversation', () => {
