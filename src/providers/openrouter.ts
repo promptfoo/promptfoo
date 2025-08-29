@@ -118,7 +118,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     // Prioritize content over reasoning
     let output = '';
-    if (message.content) {
+    if (message.content && message.content.trim()) {
       output = message.content;
       // Add reasoning as thinking content if present and showThinking is enabled
       if (message.reasoning && (this.config.showThinking ?? true)) {
