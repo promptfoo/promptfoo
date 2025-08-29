@@ -289,7 +289,7 @@ defaultTest:
 
 ## AI Services
 
-You may also specify and `data_sources`, used to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/references/on-your-data).
+You may also specify `data_sources` to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/references/on-your-data).
 
 ```yaml
 providers:
@@ -297,14 +297,14 @@ providers:
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
       deployment_id: 'abc123'
-      data_sources:
-         - type: 'azure_search'
-            parameters:
-              endpoint: "https://xxxxxxxx.search.windows.net"
-              index_name: 'index123'
-              authentication:
-                type: "api_key"
-                key: ""
+data_sources:
+ - type: azure_search
+  parameters:
+   endpoint: https://xxxxxxxx.search.windows.net
+    index_name: index123
+     authentication:
+      type: api_key
+       key: ''
 ```
 
 :::note

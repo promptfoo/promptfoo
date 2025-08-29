@@ -137,8 +137,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
-      ...(config.dataSources ? { dataSources: config.dataSources } : {}), // deprecated
-      ...(config.data_sources ? { data_sources: config.data_sources } : {}), //new
+      ...(config.dataSources ? { dataSources: config.dataSources } : {}), // legacy support for versions < 2024-02-15-preview
+      ...(config.data_sources ? { data_sources: config.data_sources } : {}),
       ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
