@@ -12,6 +12,7 @@ import type {
   FunctionCallResult,
   ToolCall,
 } from './functionCallbackTypes';
+import type { MCPClient } from './mcp/client';
 
 /**
  * Handles function callback execution for AI providers.
@@ -19,6 +20,8 @@ import type {
  */
 export class FunctionCallbackHandler {
   private loadedCallbacks: Record<string, FunctionCallback> = {};
+
+  constructor(private mcpClient?: MCPClient) {}
 
   /**
    * Processes a function call by executing its callback or returning the original call
@@ -34,6 +37,17 @@ export class FunctionCallbackHandler {
   ): Promise<FunctionCallResult> {
     // Extract function information from various formats
     const functionInfo = this.extractFunctionInfo(call);
+    
+    // Check if this is an MCP tool first (before checking function callbacks)
+    if (this.mcpClient && functionInfo) {
+      const mcpTools = this.mcpClient.getAllTools();
+      const isMcpTool = mcpTools.some(tool => tool.name === functionInfo.name);
+      
+      if (isMcpTool) {
+        return await this.executeMcpTool(functionInfo.name, functionInfo.arguments || '{}');
+      }
+    }
+    
     if (!functionInfo || !callbacks || !callbacks[functionInfo.name]) {
       // No callback available - return stringified original
       return {
@@ -211,6 +225,39 @@ export class FunctionCallbackHandler {
       return func as FunctionCallback;
     } catch (error) {
       throw new Error(`Failed to load function from ${fileRef}: ${error}`);
+    }
+  }
+
+  /**
+   * Executes an MCP tool
+   */
+  private async executeMcpTool(toolName: string, args: string): Promise<FunctionCallResult> {
+    try {
+      if (!this.mcpClient) {
+        throw new Error('MCP client not available');
+      }
+      
+      const parsedArgs = args ? JSON.parse(args) : {};
+      const result = await this.mcpClient.callTool(toolName, parsedArgs);
+      
+      if (result.error) {
+        return {
+          output: `MCP Tool Error (${toolName}): ${result.error}`,
+          isError: true,
+        };
+      }
+      
+      return {
+        output: `MCP Tool Result (${toolName}): ${result.content}`,
+        isError: false,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
+      return {
+        output: `MCP Tool Error (${toolName}): ${errorMessage}`,
+        isError: true,
+      };
     }
   }
 

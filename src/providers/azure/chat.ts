@@ -17,10 +17,13 @@ import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } fro
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;
-  private functionCallbackHandler = new FunctionCallbackHandler();
+  private functionCallbackHandler: FunctionCallbackHandler;
 
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
+    // Initialize the callback handler without MCP client first
+    this.functionCallbackHandler = new FunctionCallbackHandler();
+    
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
@@ -29,6 +32,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
     await this.mcpClient.initialize();
+    
+    // Recreate the callback handler with the MCP client
+    this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
   }
 
   async cleanup(): Promise<void> {
