@@ -192,6 +192,9 @@ export const HYPERBOLIC_CHAT_MODELS = [
 export const HYPERBOLIC_REASONING_MODELS = [
   'deepseek-ai/DeepSeek-R1',
   'deepseek-ai/DeepSeek-R1-Zero',
+  'deepseek-ai/DeepSeek-V3',
+  'deepseek-ai/DeepSeek-V3-0324',
+  'deepseek/DeepSeek-V2.5',
   'qwen/QwQ-32B',
   'qwen/QwQ-32B-Preview',
 ];
