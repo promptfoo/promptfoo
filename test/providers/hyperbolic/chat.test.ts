@@ -136,19 +136,44 @@ describe('HyperbolicProvider', () => {
     jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
-    expect(result.cost).toBe((0.5 / 1e6) * 1000 + (2.18 / 1e6) * 500);
+    expect(result.cost).toBe((2.0 / 1e6) * 1000 + (2.0 / 1e6) * 500);
+  });
+
+  it('should identify reasoning model by direct ID', () => {
+    const reasoningProvider = new HyperbolicProvider('deepseek-ai/DeepSeek-R1', options);
+    expect(reasoningProvider['isReasoningModel']()).toBe(true);
+  });
+
+  it('should identify reasoning model by alias', () => {
+    const reasoningProvider = new HyperbolicProvider('DeepSeek-R1', options);
+    expect(reasoningProvider['isReasoningModel']()).toBe(true);
+  });
+
+  it('should identify non-reasoning model by direct ID', () => {
+    const nonReasoningProvider = new HyperbolicProvider('meta-llama/Llama-3.1-70B', options);
+    expect(nonReasoningProvider['isReasoningModel']()).toBe(false);
+  });
+
+  it('should identify non-reasoning model by alias', () => {
+    const nonReasoningProvider = new HyperbolicProvider('Llama-3.1-70B', options);
+    expect(nonReasoningProvider['isReasoningModel']()).toBe(false);
+  });
+
+  it('should return false for unknown model', () => {
+    const unknownProvider = new HyperbolicProvider('unknown-model', options);
+    expect(unknownProvider['isReasoningModel']()).toBe(false);
   });
 });
 
 describe('calculateHyperbolicCost', () => {
   it('should calculate cost correctly for known model', () => {
     const cost = calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', {}, 1000, 500);
-    expect(cost).toBe((0.5 / 1e6) * 1000 + (2.18 / 1e6) * 500);
+    expect(cost).toBe((2.0 / 1e6) * 1000 + (2.0 / 1e6) * 500);
   });
 
   it('should calculate cost correctly for model alias', () => {
     const cost = calculateHyperbolicCost('DeepSeek-R1', {}, 1000, 500);
-    expect(cost).toBe((0.5 / 1e6) * 1000 + (2.18 / 1e6) * 500);
+    expect(cost).toBe((2.0 / 1e6) * 1000 + (2.0 / 1e6) * 500);
   });
 
   it('should return undefined for unknown model', () => {

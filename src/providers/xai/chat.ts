@@ -19,6 +19,24 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
 };
 
 export const XAI_CHAT_MODELS = [
+  // Grok Code Fast Models
+  {
+    id: 'grok-code-fast-1',
+    cost: {
+      input: 0.2 / 1e6,
+      output: 1.5 / 1e6,
+      cache_read: 0.02 / 1e6,
+    },
+    aliases: ['grok-code-fast'],
+  },
+  {
+    id: 'grok-code-fast-1-0825',
+    cost: {
+      input: 0.2 / 1e6,
+      output: 1.5 / 1e6,
+      cache_read: 0.02 / 1e6,
+    },
+  },
   // Grok-4 Models
   {
     id: 'grok-4-0709',
@@ -116,6 +134,9 @@ export const GROK_REASONING_EFFORT_MODELS = [
 
 // All reasoning models (including Grok-4 which doesn't support reasoning_effort)
 export const GROK_REASONING_MODELS = [
+  'grok-code-fast-1',
+  'grok-code-fast',
+  'grok-code-fast-1-0825',
   'grok-4-0709',
   'grok-4',
   'grok-4-latest',
