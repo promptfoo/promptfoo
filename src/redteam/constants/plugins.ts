@@ -226,8 +226,13 @@ export const MEDICAL_PLUGINS = [
 export const FINANCIAL_PLUGINS = [
   'financial:calculation-error',
   'financial:compliance-violation',
+  'financial:confidential-disclosure',
+  'financial:counterfactual',
   'financial:data-leakage',
+  'financial:defamation',
   'financial:hallucination',
+  'financial:impartiality',
+  'financial:misconduct',
   'financial:sycophancy',
 ] as const;
 
@@ -270,8 +275,13 @@ export const ADDITIONAL_PLUGINS = [
   'medical:sycophancy',
   'financial:calculation-error',
   'financial:compliance-violation',
+  'financial:confidential-disclosure',
+  'financial:counterfactual',
   'financial:data-leakage',
+  'financial:defamation',
   'financial:hallucination',
+  'financial:impartiality',
+  'financial:misconduct',
   'financial:sycophancy',
   'off-topic',
   'overreliance',
