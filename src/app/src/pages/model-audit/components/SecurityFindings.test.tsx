@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import SecurityFindings from './SecurityFindings';
 
-import type { ScanResult, ScanIssue } from '../ModelAudit.types';
+import type { ScanIssue, ScanResult } from '../ModelAudit.types';
 
 describe('SecurityFindings', () => {
   const mockOnSeverityChange = vi.fn();

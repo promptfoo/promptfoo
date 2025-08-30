@@ -7,10 +7,6 @@ import 'prismjs/themes/prism.css';
 
 import React from 'react';
 
-import dedent from 'dedent';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
-
 import { useToast } from '@app/hooks/useToast';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -34,13 +30,15 @@ import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import { useTheme } from '@mui/material/styles';
 import Switch from '@mui/material/Switch';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import type { ProviderOptions } from '@promptfoo/types';
-
+import dedent from 'dedent';
+import Prism from 'prismjs';
+import Editor from 'react-simple-code-editor';
 import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
+import type { ProviderOptions } from '@promptfoo/types';
 
 interface HttpAdvancedConfigurationProps {
   selectedTarget: ProviderOptions;

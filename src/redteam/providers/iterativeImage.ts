@@ -1,8 +1,19 @@
 import dedent from 'dedent';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject } from '../../util/json';
+import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
+
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -14,17 +25,6 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../types';
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject } from '../../util/json';
-import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { createEmptyTokenUsage, accumulateResponseTokenUsage } from '../../util/tokenUsageUtils';
-import {
-  createIterationContext,
-  getTargetResponse,
-  redteamProviderManager,
-  type TargetResponse,
-} from './shared';
 
 interface ImageGenerationOutput {
   prompt: string;

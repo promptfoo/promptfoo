@@ -1,8 +1,8 @@
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import UpdateBanner from './UpdateBanner';
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
-import { ThemeProvider, createTheme, Theme } from '@mui/material/styles';
+import { createTheme, Theme, ThemeProvider } from '@mui/material/styles';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import UpdateBanner from './UpdateBanner';
 
 vi.mock('@app/hooks/useVersionCheck');
 

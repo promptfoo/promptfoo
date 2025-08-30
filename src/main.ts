@@ -2,7 +2,6 @@
 
 import { Command } from 'commander';
 import { version } from '../package.json';
-import { isMainModule } from './util/module-paths';
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -36,6 +35,7 @@ import { simbaCommand } from './redteam/commands/simba';
 import { checkForUpdates } from './updates';
 import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
+import { isMainModule } from './util/module-paths';
 
 /**
  * Adds verbose and env-file options to all commands recursively

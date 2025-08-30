@@ -1,10 +1,10 @@
 import React from 'react';
 
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ProviderTypeSelector from './ProviderTypeSelector';
-import { useTelemetry } from '@app/hooks/useTelemetry';
 
 import type { ProviderOptions } from '../../types';
 

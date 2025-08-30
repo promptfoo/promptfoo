@@ -1,9 +1,9 @@
 import * as path from 'path';
-import { getDirname, isMainModule } from './util/module-paths';
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database';
 import logger from './logger';
+import { getDirname, isMainModule } from './util/module-paths';
 
 /**
  * Run migrations on the database, skipping the ones already applied. Also creates the sqlite db if it doesn't exist.

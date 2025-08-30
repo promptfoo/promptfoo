@@ -8,10 +8,10 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import {
+  accumulateGraderTokenUsage,
+  accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
 } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { isBasicRefusal } from '../../util';

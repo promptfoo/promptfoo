@@ -1,9 +1,8 @@
 import { renderHook } from '@testing-library/react';
-import type { EvaluateTable } from '@promptfoo/types';
 import { describe, expect, it, vi } from 'vitest';
-
-import { usePassingTestCounts, useTestCounts, usePassRates } from './hooks';
+import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import { useTableStore } from './store';
+import type { EvaluateTable } from '@promptfoo/types';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),

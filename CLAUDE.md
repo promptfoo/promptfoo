@@ -124,8 +124,8 @@ Always follow this workflow:
 
 ## Project Conventions
 
-- Use CommonJS modules (type: "commonjs" in package.json)
-- Node.js version requirement (>=18.0.0)
+- Use ESM modules (type: "module" in package.json)
+- Node.js version requirement (>=20.0.0)
 - Follow file structure: core logic in src/, tests in test/
 - Examples belong in examples/ with clear README.md
 - Document provider configurations following examples in existing code

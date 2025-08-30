@@ -1,10 +1,8 @@
-import { fileURLToPath } from 'url';
-import { isMainModule } from '../../util/module-paths';
-import path from 'path';
 import { Presets, SingleBar } from 'cli-progress';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
+import { isMainModule } from '../../util/module-paths';
 
 import type { TestCase } from '../../types';
 

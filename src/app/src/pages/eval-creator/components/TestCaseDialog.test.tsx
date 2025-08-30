@@ -1,11 +1,11 @@
-import { render, screen, act } from '@testing-library/react';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import type { Assertion, TestCase } from '@promptfoo/types';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import AssertsForm from './AssertsForm';
 import TestCaseForm from './TestCaseDialog';
 import VarsForm from './VarsForm';
-import AssertsForm from './AssertsForm';
+import type { Assertion, TestCase } from '@promptfoo/types';
 
 vi.mock('./VarsForm', () => ({
   default: vi.fn(() => <div data-testid="mock-vars-form" />),

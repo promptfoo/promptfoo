@@ -1,7 +1,7 @@
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { writeOutput, createOutputMetadata } from '../util';
+import { createOutputMetadata, writeOutput } from '../util';
 import type { Command } from 'commander';
 
 export function exportCommand(program: Command) {

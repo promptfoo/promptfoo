@@ -1,13 +1,12 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { isMainModule } from '../../util/module-paths';
 
 import { Presets, SingleBar } from 'cli-progress';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
+import { isMainModule } from '../../util/module-paths';
 import { neverGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types';

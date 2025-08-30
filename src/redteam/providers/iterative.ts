@@ -1,29 +1,16 @@
 import dedent from 'dedent';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import {
+  accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
@@ -39,6 +26,19 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 

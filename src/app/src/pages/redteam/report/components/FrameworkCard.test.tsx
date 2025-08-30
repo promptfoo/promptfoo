@@ -1,10 +1,11 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { Severity } from '@promptfoo/redteam/constants';
-import FrameworkCard from './FrameworkCard';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import FrameworkCard from './FrameworkCard';
 
 vi.mock('@promptfoo/redteam/constants', async () => {
   const original = await vi.importActual<typeof import('@promptfoo/redteam/constants')>(

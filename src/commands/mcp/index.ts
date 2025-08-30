@@ -1,7 +1,8 @@
-import type { Command } from 'commander';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { startHttpMcpServer, startStdioMcpServer } from './server';
+import type { Command } from 'commander';
+
 import type { McpCommandOptions } from './types';
 
 export function mcpCommand(program: Command): void {
@@ -36,5 +37,5 @@ export function mcpCommand(program: Command): void {
 }
 
 // Re-export server functions for direct use
-export { startHttpMcpServer, startStdioMcpServer, createMcpServer } from './server';
+export { createMcpServer, startHttpMcpServer, startStdioMcpServer } from './server';
 export * from './types';

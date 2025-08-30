@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import Alert from '@mui/material/Alert';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Snackbar from '@mui/material/Snackbar';
+
+import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import CloseIcon from '@mui/icons-material/Close';
-import UpdateIcon from '@mui/icons-material/Update';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import UpdateIcon from '@mui/icons-material/Update';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Snackbar from '@mui/material/Snackbar';
 import { styled } from '@mui/material/styles';
-import { useVersionCheck } from '@app/hooks/useVersionCheck';
+import Typography from '@mui/material/Typography';
 
 const StyledAlert = styled(Alert)(({ theme }) => ({
   borderRadius: 0,

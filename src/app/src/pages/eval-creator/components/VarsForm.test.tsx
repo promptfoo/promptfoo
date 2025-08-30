@@ -1,9 +1,10 @@
 import React from 'react';
+
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import VarsForm from './VarsForm';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 const renderWithTheme = (component: React.ReactNode) => {
   const theme = createTheme();

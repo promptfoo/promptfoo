@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { stringify } from 'csv-stringify/sync';
@@ -8,7 +9,6 @@ import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as os from 'os';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';

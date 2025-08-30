@@ -1,10 +1,8 @@
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-
-import HistoryTab from './HistoryTab';
 import { useModelAuditStore } from '../store';
+import HistoryTab from './HistoryTab';
 
 vi.mock('../store');
 

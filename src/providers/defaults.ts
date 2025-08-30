@@ -4,14 +4,19 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
-import { hasGoogleDefaultCredentials } from './google/util';
 import {
-  DefaultGradingProvider as GoogleAiStudioGradingProvider,
+  DefaultGitHubGradingJsonProvider,
+  DefaultGitHubGradingProvider,
+  DefaultGitHubSuggestionsProvider,
+} from './github/defaults';
+import {
   DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
+  DefaultGradingProvider as GoogleAiStudioGradingProvider,
   DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
 } from './google/ai.studio';
+import { hasGoogleDefaultCredentials } from './google/util';
 import {
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
   DefaultGradingProvider as GeminiGradingProvider,
@@ -23,11 +28,6 @@ import {
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from './mistral/defaults';
-import {
-  DefaultGitHubGradingProvider,
-  DefaultGitHubGradingJsonProvider,
-  DefaultGitHubSuggestionsProvider,
-} from './github/defaults';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,

@@ -1,6 +1,5 @@
+import path, { dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { dirname } from 'path';
-import path from 'path';
 
 /**
  * Cross-compatible helper to get import.meta.url equivalent
@@ -19,14 +18,14 @@ export function getImportMetaUrl(): string {
   } catch {
     // Fall through to CJS approach
   }
-  
+
   // In CJS: derive from __filename
   // @ts-ignore - __filename exists in CJS
   if (typeof __filename !== 'undefined') {
     // @ts-ignore
     return pathToFileURL(__filename).href;
   }
-  
+
   // Fallback (shouldn't normally happen)
   return '';
 }
@@ -37,7 +36,7 @@ export function getImportMetaUrl(): string {
  */
 export function getDirname(importMetaUrl?: string): string {
   const url = importMetaUrl || getImportMetaUrl();
-  
+
   if (url) {
     try {
       // ESM approach
@@ -46,14 +45,14 @@ export function getDirname(importMetaUrl?: string): string {
       // Fall through to CJS
     }
   }
-  
+
   // CJS fallback
   // @ts-ignore - __dirname exists in CJS
   if (typeof __dirname !== 'undefined') {
     // @ts-ignore
     return __dirname;
   }
-  
+
   // Final fallback
   return process.cwd();
 }
@@ -64,7 +63,7 @@ export function getDirname(importMetaUrl?: string): string {
  */
 export function isMainModule(importMetaUrl?: string): boolean {
   const url = importMetaUrl || getImportMetaUrl();
-  
+
   if (url && process.argv[1]) {
     try {
       // ESM approach
@@ -73,7 +72,7 @@ export function isMainModule(importMetaUrl?: string): boolean {
       // Fall through to CJS
     }
   }
-  
+
   // CJS fallback
   try {
     // @ts-ignore - require.main exists in CJS
