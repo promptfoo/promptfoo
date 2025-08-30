@@ -28,7 +28,7 @@
     "!dist/src/__mocks__"
   ],
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "bin": {
     "promptfoo": "dist/src/main.js",
