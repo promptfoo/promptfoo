@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document outlines a comprehensive plan to migrate the promptfoo project from CommonJS to ESM (ECMAScript Modules). The migration will modernize the codebase, improve testing performance (potentially up to 4x faster), and align with current JavaScript standards.
+This document outlines a comprehensive plan to migrate the promptfoo project from CommonJS to ESM (ECMAScript Modules). The migration will modernize the codebase and align with current JavaScript standards. Any performance improvements will be measured and not assumed.
 
 ## Current State Analysis
 
@@ -25,10 +25,10 @@ This document outlines a comprehensive plan to migrate the promptfoo project fro
 #### ⚠️ Migration Challenges Identified
 
 1. **CommonJS Usage Patterns**:
-   - `require.main === module` checks (6 instances)
-   - `__dirname` and `__filename` usage (8 instances)
-   - Build scripts using CommonJS (generate-constants.js)
-   - Module.exports in onboarding.ts (2 instances)
+   - `require.main === module` checks (6+ instances across CLI, strategies, and scripts)
+   - `__dirname` and `__filename` usage (numerous occurrences across `src/` and `scripts/`)
+   - Build scripts using CommonJS (e.g., `scripts/generate-constants.js`, `scripts/generate-blog-image.js`)
+   - `module.exports` inside onboarding templates in `src/onboarding.ts` (intentional examples; do not auto-convert)
 
 2. **Configuration Dependencies**:
    - Jest configuration needs ESM support
@@ -53,15 +53,17 @@ This document outlines a comprehensive plan to migrate the promptfoo project fro
 {
   "compilerOptions": {
     "module": "ESNext",
-    "moduleResolution": "Node16",
+    "moduleResolution": "NodeNext",
     "target": "ES2022",
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": false // Explicitly disable for strict ESM
+    "esModuleInterop": true,
+    "verbatimModuleSyntax": true
   }
 }
 ```
 
-#### 1.2 Update Root Package.json
+#### 1.2 Update Root Package.json (decide ESM-only vs dual-package)
+
+Option A: ESM-only (breaking change in a major release)
 
 ```json
 {
@@ -75,14 +77,26 @@ This document outlines a comprehensive plan to migrate the promptfoo project fro
 }
 ```
 
-#### 1.3 Update Site Workspace
+Option B: Dual package (preserve CommonJS consumers)
 
 ```json
-// site/package.json
 {
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs",
+      "types": "./dist/types/index.d.ts"
+    }
+  }
 }
 ```
+
+Note: Choose one path and align the build output accordingly.
+
+#### 1.3 Site Workspace strategy
+
+Do not change the `site` workspace to ESM in Phase 1. It currently uses CommonJS config files (e.g., `site/babel.config.js`, `site/sidebars.js`). If desired, convert in a later phase by either renaming those files to `.cjs` or porting them to ESM.
 
 ### Phase 2: Code Transformation (Medium Risk)
 
@@ -104,13 +118,14 @@ const __dirname = dirname(__filename);
 const configPath = path.join(__dirname, 'config.json');
 ```
 
-**Files requiring updates**:
+**Files requiring updates (examples, not exhaustive)**:
 
 - `src/esm.ts` (already has ESM helper)
 - `src/migrate.ts`
 - `src/python/pythonUtils.ts`
 - `src/app/vite.config.ts`
 - `src/providers/golangCompletion.ts`
+- `scripts/generate-constants.js` (if converting to ESM rather than renaming to `.cjs`)
 
 #### 2.2 Replace require.main Checks
 
@@ -120,22 +135,32 @@ if (require.main === module) {
   main();
 }
 
-// After
-if (import.meta.url === `file://${process.argv[1]}`) {
+// After (robust, handles spaces/platforms)
+import { fileURLToPath, pathToFileURL } from 'url';
+import path from 'path';
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain) {
   main();
 }
+// Alternatively:
+// if (import.meta.url === pathToFileURL(process.argv[1]!).href) { main(); }
 ```
 
-**Files requiring updates**:
+**Files requiring updates (examples)**:
 
 - `src/main.ts`
 - `src/migrate.ts`
 - `src/redteam/strategies/simpleVideo.ts`
 - `src/redteam/strategies/simpleImage.ts`
+- `scripts/generateCitation.ts`
 
 #### 2.3 Fix Import Statements
 
-Add `.js` extensions to all relative imports:
+Prefer tool-assisted or build-time handling. Options:
+
+- Add `.js` extensions to all relative imports in source, or
+- Use a bundler/post-build rewrite to add extensions in output while keeping source imports extensionless, or
+- Use `moduleResolution: NodeNext` with explicit specifiers.
 
 ```typescript
 // Before
@@ -147,7 +172,7 @@ import { evaluate } from './evaluator.js';
 
 #### 2.4 Convert Build Scripts
 
-**Convert `scripts/generate-constants.js` to ESM**:
+Either convert `scripts/generate-constants.js` to ESM or rename to `generate-constants.cjs` if the root becomes ESM. If converting:
 
 ```javascript
 import fs from 'fs';
@@ -162,7 +187,7 @@ const __dirname = dirname(__filename);
 
 #### 2.5 Fix module.exports Usage
 
-**In `src/onboarding.ts`**: Replace `module.exports` with `export`
+Do not modify the `module.exports` inside `src/onboarding.ts` template strings; these are user-facing examples that intentionally show CommonJS. If desired, add parallel ESM templates rather than replacing the CJS ones.
 
 ### Phase 3: Testing & Tooling Updates (Medium Risk)
 
@@ -170,48 +195,23 @@ const __dirname = dirname(__filename);
 
 #### 3.1 Update Jest Configuration
 
+Stick with Jest + SWC (current setup). Only add mappings if needed.
+
 ```typescript
-// jest.config.ts
+// jest.config.ts (illustrative)
+import type { Config } from 'jest';
 const config: Config = {
-  preset: 'ts-jest/presets/default-esm',
   extensionsToTreatAsEsm: ['.ts'],
-  globals: {
-    'ts-jest': {
-      useESM: true,
-    },
-  },
-  transform: {
-    '^.+\\.m?[tj]sx?$': [
-      '@swc/jest',
-      {
-        jsc: {
-          parser: {
-            syntax: 'typescript',
-          },
-          target: 'es2022',
-        },
-        module: {
-          type: 'es6',
-        },
-      },
-    ],
-  },
-  moduleNameMapping: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
-  },
+  transform: { '^.+\\.m?[tj]sx?$': '@swc/jest' },
+  // If import suffixes cause issues when running tests against TS source, add:
+  // moduleNameMapper: { '^(\\.{1,2}/.*)\\.js$': '$1' },
 };
+export default config;
 ```
 
-#### 3.2 Update ts-node Configuration
+#### 3.2 Standardize runtime TypeScript execution
 
-```json
-// tsconfig.json
-{
-  "ts-node": {
-    "esm": true
-  }
-}
-```
+Prefer `tsx` for running TypeScript in ESM mode instead of `ts-node`. Ensure scripts consistently use one approach.
 
 #### 3.3 Update Package Scripts
 
@@ -219,7 +219,7 @@ const config: Config = {
 {
   "scripts": {
     "db:migrate": "node --loader tsx/esm src/migrate.ts",
-    "local": "node --loader tsx/esm --experimental-specifier-resolution=node src/main.ts"
+    "local": "node --loader tsx/esm src/main.ts"
   }
 }
 ```
@@ -228,11 +228,11 @@ const config: Config = {
 
 **Estimated Duration**: 1-2 days
 
-#### 4.1 Update Dependencies to ESM Versions
+#### 4.1 Dependency compatibility review
 
-- Replace `lodash` with `lodash-es` (if used)
-- Ensure all dependencies support ESM
-- Update any CJS-only dependencies
+- Ensure critical dependencies work under ESM (or have CJS fallbacks if using a dual build)
+- Keep `esModuleInterop: true` to ease interop with CJS packages
+- Replace or shim any problematic CJS-only dependencies if they block ESM-only builds
 
 #### 4.2 Review Peer Dependencies
 
@@ -261,6 +261,7 @@ Verify all peer dependencies support ESM and update versions if needed.
 - [ ] Build scripts execute successfully
 - [ ] Runtime behavior unchanged for core functionality
 - [ ] CLI entry points work correctly
+- [ ] Package can be consumed by external projects (`npm pack` + install test)
 
 #### Phase 3 Verification
 
@@ -283,6 +284,7 @@ Verify all peer dependencies support ESM and update versions if needed.
 - [ ] All existing tests pass
 - [ ] Mocking functionality still works
 - [ ] Import assertions work correctly
+- [ ] Packaging smoke test for both ESM and (if supported) CJS consumers
 
 #### Integration Tests
 
