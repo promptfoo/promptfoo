@@ -1,3 +1,6 @@
+import { fileURLToPath } from 'url';
+import { isMainModule } from '../../util/module-paths';
+import path from 'path';
 import { Presets, SingleBar } from 'cli-progress';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -175,8 +178,8 @@ async function main() {
     const processedPrompt = processedTestCases[0].vars?.prompt as string;
     logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
-    // Check if we're running this directly (not being imported)
-    if (require.main === module) {
+    // Check if we're running this directly (not being imported) - cross-compatible
+    if (isMainModule()) {
       // Write to a file for testing with image viewers
       const fs = await import('fs');
       const outputFilePath = 'test-image.png';
@@ -195,7 +198,7 @@ async function main() {
   }
 }
 
-// Run the main function if this file is executed directly
-if (require.main === module) {
+// Run the main function if this file is executed directly - cross-compatible
+if (isMainModule()) {
   main();
 }

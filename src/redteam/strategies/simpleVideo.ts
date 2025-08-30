@@ -1,6 +1,8 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { isMainModule } from '../../util/module-paths';
 
 import { Presets, SingleBar } from 'cli-progress';
 import cliState from '../../cliState';
@@ -260,7 +262,8 @@ async function main(): Promise<void> {
     const processedPrompt = processedTestCases[0].vars?.prompt as string;
     logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
-    if (require.main === module) {
+    // Cross-compatible module main check
+    if (isMainModule()) {
       await writeVideoFile(base64Video, 'test-video.mp4');
       logger.info(`You can open it with any video player to verify the conversion.`);
     }
@@ -269,6 +272,7 @@ async function main(): Promise<void> {
   }
 }
 
-if (require.main === module) {
+// Cross-compatible module main check
+if (isMainModule()) {
   main();
 }

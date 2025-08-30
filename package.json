@@ -4,24 +4,25 @@
   "author": "Ian Webster",
   "version": "0.118.1",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/promptfoo/promptfoo.git"
   },
-  "main": "dist/src/index.js",
+  "main": "dist/cjs/src/index.cjs",
+  "types": "dist/types/src/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/src/index.js",
-      "require": "./dist/src/index.js"
-    }
+      "types": "./dist/types/src/index.d.ts",
+      "import": "./dist/esm/src/index.js",
+      "require": "./dist/cjs/src/index.cjs"
+    },
+    "./package.json": "./package.json"
   },
   "workspaces": [
     "src/app",
     "site"
   ],
-  "types": "dist/src/index.d.ts",
-  "typings": "dist/src/index.d.ts",
   "files": [
     "dist",
     "!dist/test",
@@ -31,19 +32,21 @@
     "node": ">=18.0.0"
   },
   "bin": {
-    "promptfoo": "dist/src/main.js",
-    "pf": "dist/src/main.js"
+    "promptfoo": "dist/cjs/src/main.cjs",
+    "pf": "dist/cjs/src/main.cjs"
   },
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
-    "bin": "dist/src/main.js",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('fs').readdirSync('dist/cjs', {recursive: true}).forEach(f => { if (f.endsWith('.js')) { const oldPath = 'dist/cjs/' + f; const newPath = oldPath.replace(/\\.js$/, '.cjs'); require('fs').renameSync(oldPath, newPath); } })\" && node scripts/fix-cjs-imports.cjs",
+    "build:types": "tsc -p tsconfig.types.json",
     "build:watch": "tsc --watch",
-    "build": "npm run generate-constants && tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx mkdir -p dist/src/golang && shx cp src/golang/wrapper.go dist/src/golang && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:app && shx chmod +x dist/src/main.js",
-    "citation:generate": "ts-node scripts/generateCitation.ts",
+    "build": "npm run generate-constants && npm run build:clean && npm run build:esm && npm run build:cjs && npm run build:types && shx cp src/*.html dist/esm/src && shx cp src/*.html dist/cjs/src && shx cp src/python/wrapper.py dist/esm/src/python && shx cp src/python/wrapper.py dist/cjs/src/python && shx mkdir -p dist/esm/src/golang && shx mkdir -p dist/cjs/src/golang && shx cp src/golang/wrapper.go dist/esm/src/golang && shx cp src/golang/wrapper.go dist/cjs/src/golang && shx rm -rf dist/esm/drizzle && shx rm -rf dist/cjs/drizzle && shx cp -r drizzle dist/esm/drizzle && shx cp -r drizzle dist/cjs/drizzle && npm run build:app && shx chmod +x dist/cjs/src/main.cjs",
+    "citation:generate": "node --loader tsx/esm scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
-    "db:migrate": "node --require tsx/cjs src/migrate.ts",
+    "db:migrate": "node --loader tsx/esm src/migrate.ts",
     "db:studio": "npx drizzle-kit studio",
     "dev:app": "npm run dev --prefix src/app",
     "dev:server": "nodemon -P 1000 src/server/index.ts",
@@ -51,7 +54,7 @@
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json)$' | xargs npx @biomejs/biome format --write && git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(css|scss|html|md|mdc|mdx|yaml|yml)$' | xargs prettier --write",
     "format:check": "npx @biomejs/biome format && prettier --check '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
     "format": "npx @biomejs/biome format --write . && prettier --write '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
-    "generate-constants": "node scripts/generate-constants.js",
+    "generate-constants": "node scripts/generate-constants.cjs",
     "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json && npx @biomejs/biome format --write site/static/config-schema.json",
     "knip": "knip",
     "l": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|ts|tsx)$' | xargs npx @biomejs/biome lint --write",
@@ -60,7 +63,7 @@
     "lint:tests": "npx @biomejs/biome lint test",
     "lint": "npm run lint:src",
     "local:web": "npm run dev --prefix src/app",
-    "local": "ts-node --cwdMode --transpileOnly src/main.ts",
+    "local": "node --loader tsx/esm src/main.ts",
     "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "postversion": "npm run citation:generate && git add CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
@@ -70,7 +73,7 @@
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
     "tsc": "tsc",
-    "mcp": "node dist/src/main.js mcp",
+    "mcp": "node dist/cjs/src/main.cjs mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy\" --ignore-dirs=\"dist,site,examples,node_modules\""
   },
   "overrides": {

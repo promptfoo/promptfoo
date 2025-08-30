@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { getDirname, isMainModule } from './util/module-paths';
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database';
@@ -17,7 +18,9 @@ export async function runDbMigrations(): Promise<void> {
     setImmediate(() => {
       try {
         const db = getDb();
-        const migrationsFolder = path.join(__dirname, '..', 'drizzle');
+        // Cross-compatible directory resolution
+        const currentDir = getDirname();
+        const migrationsFolder = path.join(currentDir, '..', 'drizzle');
         logger.debug(`Running database migrations...`);
         migrate(db, { migrationsFolder });
         logger.debug('Database migrations completed');
@@ -30,7 +33,8 @@ export async function runDbMigrations(): Promise<void> {
   });
 }
 
-if (require.main === module) {
+// Cross-compatible main check
+if (isMainModule()) {
   // Run migrations and exit with appropriate code
   runDbMigrations()
     .then(() => process.exit(0))

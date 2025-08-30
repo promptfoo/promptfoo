@@ -44,6 +44,10 @@ This document outlines a comprehensive plan to migrate the promptfoo project fro
 
 ## Migration Strategy
 
+### Project Constraints
+
+- Do not rename existing files if at all possible. Prefer code edits and build-time transforms over renames.
+
 ### Phase 1: Foundation Setup (Low Risk)
 
 **Estimated Duration**: 2-3 days
@@ -259,7 +263,12 @@ import { evaluate } from './evaluator.js';
 
 #### 2.4 Convert Build Scripts
 
-Either convert `scripts/generate-constants.js` to ESM or rename to `generate-constants.cjs` if the root becomes ESM. If converting:
+Prefer code edits and build-time transforms over renames. If a script relies on CommonJS globals and must remain runnable under root ESM, use one of:
+
+- Wrap with a tiny launcher that uses `node --loader tsx/esm` (for TS) or dynamic `import()` calls
+- Use a bundler (e.g., esbuild) to emit a CJS artifact for the script while keeping source filename unchanged
+
+If converting to ESM, use the following pattern:
 
 ```javascript
 import fs from 'fs';
@@ -279,7 +288,8 @@ Do not modify the `module.exports` inside `src/onboarding.ts` template strings; 
 #### 2.6 CLI Binary compatibility (dual-package)
 
 - Ensure the CLI entry in `bin` points to the CJS output (e.g., `dist/cjs/main.cjs`) with a shebang (`#!/usr/bin/env node`).
-- In ESM build, keep an equivalent `dist/esm/main.js` for module consumers who import programmatic APIs.
+- Keep an equivalent `dist/esm/main.js` for module consumers who import programmatic APIs.
+- Do not rename source files; rely on build outputs to create CJS/ESM variants.
 
 ### Phase 3: Testing & Tooling Updates (Medium Risk)
 
@@ -339,6 +349,8 @@ Notes:
 - Node.js v23+ includes experimental native TypeScript stripping, which is great for dev scripts. Keep publishing via `tsc` (or a bundler) to emit JS for your distributed package.
 - Avoid relying on experimental flags in CI or published artifacts until stabilized.
 
+For dual-package builds, prefer stable toolchains (`tsc`/bundler) and avoid experimental flags in the production build pipeline.
+
 #### 3.3 Update Package Scripts
 
 ```json
@@ -348,7 +360,8 @@ Notes:
     "build:esm": "tsc -p tsconfig.esm.json",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:types": "tsc -p tsconfig.types.json",
-    "build": "npm run build:clean && npm run build:esm && npm run build:cjs && npm run build:types && shx chmod +x dist/cjs/main.cjs",
+    "postbuild": "shx chmod +x dist/cjs/main.cjs",
+    "build": "npm run build:clean && npm run build:esm && npm run build:cjs && npm run build:types && npm run postbuild",
     "db:migrate": "node --loader tsx/esm src/migrate.ts",
     "local": "node --loader tsx/esm src/main.ts"
   }

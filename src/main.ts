@@ -2,6 +2,7 @@
 
 import { Command } from 'commander';
 import { version } from '../package.json';
+import { isMainModule } from './util/module-paths';
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -138,7 +139,8 @@ async function main() {
   program.parse();
 }
 
-if (require.main === module) {
+// Cross-compatible main check
+if (isMainModule()) {
   checkNodeVersion();
   main();
 }
