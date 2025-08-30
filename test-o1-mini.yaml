@@ -1,0 +1,22 @@
+description: 'Test OpenAI o1-mini with showThinking false'
+
+prompts:
+  - 'What is 2+2? Answer with just the number.'
+
+providers:
+  # Test o1-mini without tools first (since it may not support function calls)
+  - id: openrouter:openai/o1-mini
+    config:
+      temperature: 0.1
+      showThinking: false
+      max_tokens: 100
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+
+tests:
+  - description: o1-mini should work with showThinking false for text responses
+    assert:
+      - type: not-contains
+        value: "Thinking:"
+      - type: contains
+        value: "4"

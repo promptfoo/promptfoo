@@ -1,0 +1,126 @@
+description: 'Debug showThinking issue with OpenRouter providers'
+
+prompts:
+  - 'Please use the get_weather function to get the weather for San Francisco, California.'
+
+providers:
+  # OpenAI thinking provider that reportedly works  
+  - id: openrouter:openai/o1-mini
+    config:
+      temperature: 0.1
+      showThinking: false
+      top_p: 0.25
+      tool_choice: auto
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather information for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The location to get weather for
+                unit:
+                  type: string
+                  enum: ["celsius", "fahrenheit"]
+                  description: Temperature unit
+              required: ["location"]
+
+  # Another OpenAI thinking provider mentioned in the issue
+  - id: openrouter:openai/gpt-5-mini
+    config:
+      temperature: 0.1
+      showThinking: false
+      top_p: 0.25
+      response_format: text
+      reasoning_effort: high
+      tool_choice: auto
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather information for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The location to get weather for
+                unit:
+                  type: string
+                  enum: ["celsius", "fahrenheit"]
+                  description: Temperature unit
+              required: ["location"]
+
+  # Qwen provider that reportedly has issues
+  - id: openrouter:qwen/qwen3-235b-a22b-thinking-2507
+    config:
+      temperature: 0.1
+      showThinking: false
+      top_p: 0.25
+      max_tokens: 1024
+      tool_choice: auto
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather information for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The location to get weather for
+                unit:
+                  type: string
+                  enum: ["celsius", "fahrenheit"]
+                  description: Temperature unit
+              required: ["location"]
+
+  # Another Qwen provider variation
+  - id: openrouter:qwen/qwen3-coder
+    config:
+      temperature: 0.1
+      showThinking: false
+      top_p: 0.25
+      tool_choice: auto
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather information for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The location to get weather for
+                unit:
+                  type: string
+                  enum: ["celsius", "fahrenheit"]
+                  description: Temperature unit
+              required: ["location"]
+
+tests:
+  - description: Should make a tool call without showing thinking
+    assert:
+      - type: contains
+        value: "function"
+      - type: not-contains
+        value: "Thinking:"
+      - type: not-contains
+        value: "reasoning"
+      - type: not-contains
+        value: "I need to"
+      - type: not-contains
+        value: "Let me"

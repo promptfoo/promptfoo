@@ -1,0 +1,46 @@
+description: 'Final proof that the fix resolves the GitHub issue #5262'
+
+prompts:
+  - 'Please use the get_weather function to get the weather for San Francisco, California.'
+
+providers:
+  # The exact model mentioned in the GitHub issue that was broken
+  - id: openrouter:qwen/qwen3-235b-a22b-thinking-2507
+    config:
+      temperature: 0.1
+      showThinking: false
+      top_p: 0.25
+      max_tokens: 1024
+      tool_choice: auto
+      apiKeyEnvar: OPENROUTER_API_KEY
+      apiBaseUrl: https://openrouter.ai/api/v1
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather information for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: The location to get weather for
+                unit:
+                  type: string
+                  enum: ["celsius", "fahrenheit"]
+                  description: Temperature unit
+              required: ["location"]
+
+tests:
+  - description: Should make a tool call without showing thinking (GitHub issue #5262)
+    assert:
+      - type: contains
+        value: "function"
+      - type: not-contains
+        value: "Thinking:"
+      - type: not-contains
+        value: "reasoning"
+      - type: not-contains
+        value: "I need to"
+      - type: not-contains
+        value: "Let me"
