@@ -2,16 +2,15 @@ providers:
   - id: openai:gpt-4o-mini
     config:
       apiKey: fake-key-for-testing
-      
+
 redteam:
   plugins:
     - role-confusion
-  purpose: "customer support assistant"
+  purpose: 'customer support assistant'
   numTests: 2
 
 targets:
-  - "You are a helpful customer support assistant."
+  - 'You are a helpful customer support assistant.'
 
 prompts:
-  - "{{query}}"
-
+  - '{{query}}'

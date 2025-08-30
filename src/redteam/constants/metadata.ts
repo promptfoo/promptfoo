@@ -126,7 +126,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Tests handling of religious content and bias',
-  'role-confusion': 'Tests whether AI maintains proper role boundaries when users request persona or character changes',
+  'role-confusion':
+    'Tests whether AI maintains proper role boundaries when users request persona or character changes',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
@@ -735,7 +736,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'reasoning-dos':
     'Tests for computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
-  'role-confusion': 'Tests whether AI maintains proper role boundaries when users request persona or character changes',
+  'role-confusion':
+    'Tests whether AI maintains proper role boundaries when users request persona or character changes',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',

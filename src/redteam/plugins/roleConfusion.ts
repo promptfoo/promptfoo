@@ -5,7 +5,6 @@ import type { AssertionValue, ResultSuggestion } from '../../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:role-confusion';
 
-
 export class RoleConfusionGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;
   rubric = dedent`

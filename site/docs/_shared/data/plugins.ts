@@ -1252,7 +1252,8 @@ export const PLUGINS = [
   },
   {
     category: 'Trust and Safety',
-    description: 'Tests whether AI maintains professional boundaries when users request persona or character changes',
+    description:
+      'Tests whether AI maintains professional boundaries when users request persona or character changes',
     label: 'brand',
     link: '/docs/red-team/plugins/role-confusion/',
     name: 'Role Confusion',
