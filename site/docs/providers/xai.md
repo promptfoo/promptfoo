@@ -79,11 +79,11 @@ providers:
 
 Multiple Grok models support reasoning capabilities:
 
-**Grok Code Fast Models**: The `grok-code-fast-1` and related models are designed as reasoning models that excel at agentic coding workflows. They support:
+**Grok Code Fast Models**: The `grok-code-fast-1` family are reasoning models optimized for agentic coding workflows. They support:
 
 - Function calling and tool usage
-- Web search capabilities through search parameters
-- Optimized for fast inference with reasoning capabilities built-in
+- Web search via `search_parameters`
+- Fast inference with built-in reasoning
 
 **Grok-3 Models**: The `grok-3-mini-beta` and `grok-3-mini-fast-beta` models support reasoning through the `reasoning_effort` parameter:
 
@@ -132,6 +132,8 @@ The Grok Code Fast models are optimized for agentic coding workflows and offer s
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: xai:grok-code-fast-1
+    # or use the alias:
+    # - id: xai:grok-code-fast
     config:
       temperature: 0.1 # Lower temperature often preferred for coding tasks
       max_completion_tokens: 4096
