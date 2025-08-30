@@ -2,7 +2,9 @@
 
 ## Executive Summary
 
-This document outlines a comprehensive plan to migrate the promptfoo project from CommonJS to ESM (ECMAScript Modules). The migration will modernize the codebase and align with current JavaScript standards. Any performance improvements will be measured and not assumed.
+This document outlines a comprehensive plan to migrate the promptfoo project from CommonJS to ESM (ECMAScript Modules). The migration will modernize the codebase and align with current JavaScript standards.
+
+**2025 Context**: Native ESM support is now mature in Node.js v22+ with built-in CommonJS-to-ESM interop, and Node.js v23 includes experimental native TypeScript stripping. Jest 30 (released June 2025) has improved ESM support, though some APIs remain experimental. Any performance improvements will be measured and not assumed.
 
 ## Current State Analysis
 
@@ -49,14 +51,47 @@ This document outlines a comprehensive plan to migrate the promptfoo project fro
 #### 1.1 Update TypeScript Configuration
 
 ```json
-// tsconfig.json
+// tsconfig.base.json
 {
   "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "NodeNext",
     "target": "ES2022",
+    "moduleResolution": "NodeNext",
     "esModuleInterop": true,
-    "verbatimModuleSyntax": true
+    "declaration": true,
+    "declarationMap": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true
+  },
+  "include": ["src", "test"]
+}
+
+// tsconfig.esm.json
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "outDir": "dist/esm"
+  }
+}
+
+// tsconfig.cjs.json
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "outDir": "dist/cjs"
+  }
+}
+
+// tsconfig.types.json
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist/types"
   }
 }
 ```
@@ -93,6 +128,54 @@ Option B: Dual package (preserve CommonJS consumers)
 ```
 
 Note: Choose one path and align the build output accordingly.
+
+#### Decision matrix: ESM-only vs dual-package
+
+| Criteria               | ESM-only                                  | Dual-package (ESM + CJS)                            |
+| ---------------------- | ----------------------------------------- | --------------------------------------------------- |
+| Backward compatibility | Breaking for CJS consumers                | Preserves existing CJS users                        |
+| Publishing complexity  | Simple (one build)                        | Higher (two outputs, conditional exports)           |
+| Tree-shaking           | Best (ESM-native)                         | Good (depends on consumer/tooling)                  |
+| Node.js support range  | Modern Node only                          | Broader (legacy CJS users supported)                |
+| Tooling requirements   | Standard `tsc`/bundler                    | Build orchestration for CJS/ESM/types               |
+| Test matrix            | Smaller                                   | Larger (esm + cjs consumption tests)                |
+| Package.json exports   | `import` + `types`                        | `import` + `require` + `types` (possibly sub-paths) |
+| Recommended when       | You can cut a major and move users to ESM | You must maintain CJS compatibility                 |
+
+Guidance:
+
+- If you are comfortable with a major version bump and your audience is primarily modern Node/bundlers, choose ESM-only.
+- If you need to avoid breaking CJS consumers, choose dual-package and add end-to-end consumption tests for both module types.
+
+#### Chosen approach for promptfoo: Dual-package (ESM + CJS)
+
+We will maintain support for both ESM and CommonJS consumers. This requires:
+
+- Conditional exports in `package.json` for `import`, `require`, and `types`
+- Separate build outputs: `dist/esm` (ESM), `dist/cjs` (CJS), and `dist/types` (d.ts)
+- Ensuring the CLI binary (`bin`) points to a CJS entry for maximum compatibility
+
+Example `package.json` changes:
+
+```json
+{
+  "type": "module",
+  "main": "dist/cjs/index.cjs",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "promptfoo": "dist/cjs/main.cjs",
+    "pf": "dist/cjs/main.cjs"
+  }
+}
+```
 
 #### 1.3 Site Workspace strategy
 
@@ -159,8 +242,12 @@ if (isMain) {
 Prefer tool-assisted or build-time handling. Options:
 
 - Add `.js` extensions to all relative imports in source, or
-- Use a bundler/post-build rewrite to add extensions in output while keeping source imports extensionless, or
+- Use a bundler/post-build rewrite to add extensions in output while keeping source imports without extensions, or
 - Use `moduleResolution: NodeNext` with explicit specifiers.
+
+Notes for ESM in 2025:
+
+- JSON modules: if importing JSON at runtime under ESM, use `import data from './file.json' with { type: 'json' }` (or read via `fs`). Keep `"resolveJsonModule": true` for TS type support.
 
 ```typescript
 // Before
@@ -189,35 +276,79 @@ const __dirname = dirname(__filename);
 
 Do not modify the `module.exports` inside `src/onboarding.ts` template strings; these are user-facing examples that intentionally show CommonJS. If desired, add parallel ESM templates rather than replacing the CJS ones.
 
+#### 2.6 CLI Binary compatibility (dual-package)
+
+- Ensure the CLI entry in `bin` points to the CJS output (e.g., `dist/cjs/main.cjs`) with a shebang (`#!/usr/bin/env node`).
+- In ESM build, keep an equivalent `dist/esm/main.js` for module consumers who import programmatic APIs.
+
 ### Phase 3: Testing & Tooling Updates (Medium Risk)
 
 **Estimated Duration**: 2-3 days
 
-#### 3.1 Update Jest Configuration
+#### 3.1 Update Jest Configuration (Jest 30+ Features)
 
-Stick with Jest + SWC (current setup). Only add mappings if needed.
+Leverage Jest 30 improvements while maintaining current SWC setup:
 
 ```typescript
-// jest.config.ts (illustrative)
+// jest.config.ts (Jest 30 optimized)
 import type { Config } from 'jest';
 const config: Config = {
   extensionsToTreatAsEsm: ['.ts'],
   transform: { '^.+\\.m?[tj]sx?$': '@swc/jest' },
+  // Jest 30+ has native .mts/.cts support
+  // If using Node.js v23 native TS stripping, Jest skips TS transformer automatically
   // If import suffixes cause issues when running tests against TS source, add:
   // moduleNameMapper: { '^(\\.{1,2}/.*)\\.js$': '$1' },
+
+  // Jest 30 improvements
+  testEnvironmentOptions: {
+    globalsCleanup: 'soft', // Already in your config
+  },
 };
 export default config;
 ```
 
-#### 3.2 Standardize runtime TypeScript execution
+**Note**: Jest 30 (June 2025) includes native support for `.mts`/`.cts` files and automatic TypeScript transformer skipping when using Node.js native stripping.
 
-Prefer `tsx` for running TypeScript in ESM mode instead of `ts-node`. Ensure scripts consistently use one approach.
+#### 3.2 Leverage Modern Node.js TypeScript Support (2025)
+
+##### Option A: Native TypeScript Stripping (Node.js v23+)
+
+```json
+{
+  "scripts": {
+    "db:migrate": "node --experimental-strip-types src/migrate.ts",
+    "local": "node --experimental-strip-types src/main.ts"
+  }
+}
+```
+
+##### Option B: TSX (if compatibility needed)
+
+```json
+{
+  "scripts": {
+    "db:migrate": "node --loader tsx/esm src/migrate.ts",
+    "local": "node --loader tsx/esm src/main.ts"
+  }
+}
+```
+
+Notes:
+
+- Node.js v23+ includes experimental native TypeScript stripping, which is great for dev scripts. Keep publishing via `tsc` (or a bundler) to emit JS for your distributed package.
+- Avoid relying on experimental flags in CI or published artifacts until stabilized.
 
 #### 3.3 Update Package Scripts
 
 ```json
 {
   "scripts": {
+    "build:clean": "shx rm -rf dist",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:types": "tsc -p tsconfig.types.json",
+    "build": "npm run build:clean && npm run build:esm && npm run build:cjs && npm run build:types && shx chmod +x dist/cjs/main.cjs",
     "db:migrate": "node --loader tsx/esm src/migrate.ts",
     "local": "node --loader tsx/esm src/main.ts"
   }
@@ -262,6 +393,10 @@ Verify all peer dependencies support ESM and update versions if needed.
 - [ ] Runtime behavior unchanged for core functionality
 - [ ] CLI entry points work correctly
 - [ ] Package can be consumed by external projects (`npm pack` + install test)
+- [ ] CLI binaries retain executable shebang and correct ESM execution
+- [ ] JSON module imports (if any) function under ESM (or fall back to fs)
+- [ ] Programmatic API works for both ESM `import` and CJS `require`
+- [ ] Bin works when installed globally and locally (npx)
 
 #### Phase 3 Verification
 
@@ -285,6 +420,7 @@ Verify all peer dependencies support ESM and update versions if needed.
 - [ ] Mocking functionality still works
 - [ ] Import assertions work correctly
 - [ ] Packaging smoke test for both ESM and (if supported) CJS consumers
+- [ ] Dual-consumption tests: one project using `import`, one using `require`
 
 #### Integration Tests
 
@@ -309,15 +445,19 @@ Verify all peer dependencies support ESM and update versions if needed.
 
 ## Risk Assessment & Mitigation
 
-### High Risk Items
+### High Risk Items (Updated for August 2025)
 
-1. **Jest ESM Support**: Still experimental
-   - **Mitigation**: Consider Vitest as alternative
+1. **Jest ESM Support**: Improved with Jest 30 but some APIs still experimental
+   - **Mitigation**: Jest 30 has better ESM support; Vitest remains a stable alternative
    - **Rollback Plan**: Maintain Jest with CommonJS support
 
-2. **Third-party Dependencies**: Some may not support ESM
-   - **Mitigation**: Identify and update/replace incompatible deps
-   - **Rollback Plan**: Use import() for problematic dependencies
+2. **Third-party Dependencies**: ESM ecosystem much more mature in 2025
+   - **Mitigation**: Most major packages now support ESM; fewer compatibility issues expected
+   - **Rollback Plan**: Use import() for any remaining problematic dependencies
+
+3. **Experimental Node flags for TypeScript**
+   - **Mitigation**: Limit `--experimental-strip-types` to local/dev scripts; keep build artifacts generated by stable toolchains (tsc/bundler)
+   - **Rollback Plan**: Fall back to `tsx`/`ts-node` for script execution if issues arise
 
 ### Medium Risk Items
 
@@ -359,12 +499,12 @@ Verify all peer dependencies support ESM and update versions if needed.
 
 ## Timeline & Resources
 
-### Estimated Timeline: 8-13 days
+### Estimated Timeline: 6-10 days (Updated for 2025 tooling maturity)
 
-- **Phase 1**: 2-3 days
-- **Phase 2**: 3-5 days
-- **Phase 3**: 2-3 days
-- **Phase 4**: 1-2 days
+- **Phase 1**: 1-2 days (TypeScript/package.json config - simplified with modern tooling)
+- **Phase 2**: 3-4 days (Code transformation - same complexity)
+- **Phase 3**: 1-2 days (Testing/tooling - Jest 30 + native Node.js features reduce complexity)
+- **Phase 4**: 1-2 days (Dependencies - more stable ESM ecosystem in 2025)
 
 ### Required Resources
 
@@ -410,12 +550,15 @@ Verify all peer dependencies support ESM and update versions if needed.
 3. **Update documentation**: Reflect new module system
 4. **Performance optimization**: Leverage ESM benefits
 
-### Future Considerations
+### Future Considerations (2025 Edition)
 
-1. **Top-level await**: Can be used where beneficial
-2. **Dynamic imports**: More efficient lazy loading
-3. **Bundle analysis**: Tree shaking improvements
-4. **Dependency management**: Prefer ESM-first packages
+1. **Native TypeScript execution**: Consider Node.js v23+ native TypeScript stripping for development workflows
+2. **Top-level await**: Can be used where beneficial
+3. **Dynamic imports**: More efficient lazy loading
+4. **Bundle analysis**: Tree shaking improvements
+5. **Dependency management**: ESM-first packages are now the standard
+6. **Built-in Node.js features**: Leverage native file watching and other modern Node.js capabilities
+7. **Package exports/types**: Consider subpath exports and `"types"` condition for better editor/TS tooling if you ship dual outputs
 
 ## Conclusion
 
