@@ -479,7 +479,12 @@ export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
-): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
+): Promise<{
+  testSuite: TestSuite;
+  config: Partial<UnifiedConfig>;
+  basePath: string;
+  commandLineOptions?: Record<string, any>;
+}> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
@@ -696,5 +701,14 @@ export async function resolveConfigs(
   }
 
   cliState.config = config;
-  return { config, testSuite, basePath };
+
+  // Extract commandLineOptions from either explicit config files or default config
+  const commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
+
+  return {
+    config,
+    testSuite,
+    basePath,
+    commandLineOptions,
+  };
 }

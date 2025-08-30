@@ -138,6 +138,7 @@ tests: tests.csv
 
 # Set default command-line options
 commandLineOptions:
+  envPath: .env.local # Load environment variables from custom .env file
   maxConcurrency: 10
   repeat: 3
   delay: 1000
