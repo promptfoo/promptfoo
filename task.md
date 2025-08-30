@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document outlines a comprehensive plan to migrate the promptfoo project from CommonJS to ESM (ECMAScript Modules). The migration will modernize the codebase, improve testing performsance (potentially up to 4x faster), and align with current JavaScript standards.
+This document outlines a comprehensive plan to migrate the promptfoo project from CommonJS to ESM (ECMAScript Modules). The migration will modernize the codebase, improve testing performance (potentially up to 4x faster), and align with current JavaScript standards.
 
 ## Current State Analysis
 
