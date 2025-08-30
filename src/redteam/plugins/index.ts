@@ -41,6 +41,7 @@ import { PolicyPlugin } from './policy';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
+import { RoleConfusionPlugin } from './roleConfusion';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
@@ -190,6 +191,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
   createPluginFactory(RbacPlugin, 'rbac'),
+  createPluginFactory(RoleConfusionPlugin, 'role-confusion'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
