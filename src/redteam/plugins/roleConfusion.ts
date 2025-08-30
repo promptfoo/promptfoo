@@ -1,7 +1,7 @@
 import dedent from 'dedent';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { RedteamGraderBase } from './base';
 
-import type { Assertion, AssertionValue, ResultSuggestion } from '../../types';
+import type { AssertionValue, ResultSuggestion } from '../../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:role-confusion';
 
