@@ -186,8 +186,8 @@ export default function ResultsView({
 
   const {
     setInComparisonMode,
-    columnStates,
     setColumnState,
+    getColumnState,
     maxTextLength,
     wordBreak,
     showInferenceDetails,
@@ -348,7 +348,7 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const currentColumnState = columnStates[currentEvalId] || {
+  const currentColumnState = getColumnState(currentEvalId) || {
     selectedColumns: allColumns,
     columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
   };

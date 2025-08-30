@@ -206,7 +206,9 @@ interface SettingsState {
   setStickyHeader: (stickyHeader: boolean) => void;
 
   columnStates: Record<string, ColumnState>;
+  lastUsedColumnSettings: ColumnState | null;
   setColumnState: (evalId: string, state: ColumnState) => void;
+  getColumnState: (evalId: string) => ColumnState | null;
 
   maxImageWidth: number;
   setMaxImageWidth: (maxImageWidth: number) => void;
@@ -241,13 +243,19 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
 
       columnStates: {},
+      lastUsedColumnSettings: null,
       setColumnState: (evalId: string, state: ColumnState) =>
         set((prevState) => ({
           columnStates: {
             ...prevState.columnStates,
             [evalId]: state,
           },
+          lastUsedColumnSettings: state,
         })),
+      getColumnState: (evalId: string) => {
+        const state = get();
+        return state.columnStates[evalId] || state.lastUsedColumnSettings;
+      },
 
       maxImageWidth: 256,
       setMaxImageWidth: (maxImageWidth: number) => set(() => ({ maxImageWidth })),
