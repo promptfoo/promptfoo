@@ -221,13 +221,13 @@ async function sendTraces(
       body: JSON.stringify(traces),
     });
 
-    if (!response.ok) {
+    if (response.ok) {
+      logger.debug(`Successfully sent ${traces.length} traces for evaluation ${evalId}`);
+    } else {
       const responseBody = await response.text();
       logger.warn(
         `Failed to send traces to ${tracesUrl}: ${response.statusText}, body: ${responseBody}`,
       );
-    } else {
-      logger.debug(`Successfully sent ${traces.length} traces for evaluation ${evalId}`);
     }
   } catch (error) {
     logger.warn(`Failed to send traces for evaluation ${evalId}: ${error}`);
