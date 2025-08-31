@@ -59,21 +59,24 @@ export default defineConfig({
         '../../node_modules/react/jsx-dev-runtime.js',
       ),
       // Fix MUI ESM import issues
-      '@mui/material/styles': path.resolve(__dirname, '../../node_modules/@mui/material/styles/index.js'),
+      '@mui/material/styles': path.resolve(
+        __dirname,
+        '../../node_modules/@mui/material/styles/index.js',
+      ),
       '@mui/system': path.resolve(__dirname, '../../node_modules/@mui/system/esm/index.js'),
     },
   },
   optimizeDeps: {
     exclude: ['react-syntax-highlighter'],
     include: [
-      'react', 
-      'react-dom', 
+      'react',
+      'react-dom',
       '@testing-library/react',
       '@mui/material',
       '@mui/system',
       '@mui/icons-material',
       '@mui/x-data-grid',
-      '@mui/x-charts'
+      '@mui/x-charts',
     ],
   },
   build: {
