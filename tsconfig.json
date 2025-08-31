@@ -1,22 +1,23 @@
 {
   "compilerOptions": {
-    "declaration": true,
-    "declarationMap": true,
+    "declaration": false,
+    "declarationMap": false,
     "esModuleInterop": true,
-    "target": "es2020",
-    "module": "CommonJS",
+    "target": "ES2022",
+    "module": "ESNext",
     "moduleResolution": "node",
     "outDir": "dist",
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
     "resolveJsonModule": true,
-    "composite": true,
+    "composite": false,
     "rootDir": ".",
     "baseUrl": "./"
   },
   "ts-node": {
-    "swc": true
+    "swc": true,
+    "esm": true
   },
   "include": ["src/", "test/", "./package.json", "src/**/*.json", "test/**/*.json"],
   "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*", "test/site/"]

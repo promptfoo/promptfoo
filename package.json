@@ -57,47 +57,47 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/types/src/index.d.ts",
+      "types": "./dist/types/index.d.ts",
       "import": "./dist/esm/src/index.js",
       "require": "./dist/cjs/src/index.cjs"
     },
     "./assertions": {
-      "types": "./dist/types/src/assertions/index.d.ts",
+      "types": "./dist/types/assertions/index.d.ts",
       "import": "./dist/esm/src/assertions/index.js",
       "require": "./dist/cjs/src/assertions/index.cjs"
     },
     "./providers": {
-      "types": "./dist/types/src/providers/index.d.ts",
+      "types": "./dist/types/providers/index.d.ts",
       "import": "./dist/esm/src/providers/index.js",
       "require": "./dist/cjs/src/providers/index.cjs"
     },
     "./redteam": {
-      "types": "./dist/types/src/redteam/index.d.ts",
+      "types": "./dist/types/redteam/index.d.ts",
       "import": "./dist/esm/src/redteam/index.js",
       "require": "./dist/cjs/src/redteam/index.cjs"
     },
     "./types": {
-      "types": "./dist/types/src/types/index.d.ts",
+      "types": "./dist/types/types/index.d.ts",
       "import": "./dist/esm/src/types/index.js",
       "require": "./dist/cjs/src/types/index.cjs"
     },
     "./util": {
-      "types": "./dist/types/src/util/index.d.ts",
+      "types": "./dist/types/util/index.d.ts",
       "import": "./dist/esm/src/util/index.js",
       "require": "./dist/cjs/src/util/index.cjs"
     },
     "./cache": {
-      "types": "./dist/types/src/cache.d.ts",
+      "types": "./dist/types/cache.d.ts",
       "import": "./dist/esm/src/cache.js",
       "require": "./dist/cjs/src/cache.cjs"
     },
     "./evaluator": {
-      "types": "./dist/types/src/evaluator.d.ts",
+      "types": "./dist/types/evaluator.d.ts",
       "import": "./dist/esm/src/evaluator.js",
       "require": "./dist/cjs/src/evaluator.cjs"
     },
     "./logger": {
-      "types": "./dist/types/src/logger.d.ts",
+      "types": "./dist/types/logger.d.ts",
       "import": "./dist/esm/src/logger.js",
       "require": "./dist/cjs/src/logger.cjs"
     },

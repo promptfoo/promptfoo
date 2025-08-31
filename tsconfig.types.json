@@ -3,10 +3,10 @@
   "compilerOptions": {
     "emitDeclarationOnly": true,
     "declaration": true,
-    "declarationMap": true,
+    "declarationMap": false,
     "outDir": "dist/types",
     "rootDir": "src"
   },
-  "include": ["src/**/*", "src/**/*.json"],
-  "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*", "test/**/*"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.json", "package.json"],
+  "exclude": ["test", "src/app", "dist"]
 }

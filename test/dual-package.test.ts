@@ -10,7 +10,7 @@ describe('Dual Package Publishing', () => {
   const distPath = path.resolve(__dirname, '../dist');
   const cjsIndexPath = path.resolve(distPath, 'cjs/src/index.cjs');
   const esmIndexPath = path.resolve(distPath, 'esm/src/index.js');
-  const typesIndexPath = path.resolve(distPath, 'types/src/index.d.ts');
+  const typesIndexPath = path.resolve(distPath, 'types/index.d.ts');
 
   beforeAll(() => {
     // Ensure build artifacts exist
@@ -216,7 +216,7 @@ describe('Dual Package Publishing', () => {
 
       expect(packageJson.exports).toMatchObject({
         '.': {
-          types: './dist/types/src/index.d.ts',
+          types: './dist/types/index.d.ts',
           import: './dist/esm/src/index.js',
           require: './dist/cjs/src/index.cjs',
         },
@@ -231,7 +231,7 @@ describe('Dual Package Publishing', () => {
 
     it('should have correct types field', () => {
       const packageJson = require('../package.json');
-      expect(packageJson.types).toBe('dist/types/src/index.d.ts');
+      expect(packageJson.types).toBe('dist/types/index.d.ts');
     });
 
     it('should have type: "module" for ESM', () => {

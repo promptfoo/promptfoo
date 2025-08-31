@@ -20,12 +20,12 @@ function renameJsFiles(dir) {
 
 if (require.main === module) {
   const cjsDir = path.join(__dirname, '..', 'dist', 'cjs');
-  
+
   if (!fs.existsSync(cjsDir)) {
     console.error('CJS dist directory not found:', cjsDir);
     process.exit(1);
   }
-  
+
   console.log('Renaming .js files to .cjs in', cjsDir);
   renameJsFiles(cjsDir);
   console.log('JS to CJS renaming complete!');

@@ -25,16 +25,16 @@ function copyAndPrepareForCjs(srcDir, destDir, isTestDir = false) {
       let content = fs.readFileSync(srcPath, 'utf8');
 
       // Remove JSON import assertions for CJS compatibility
-      content = content.replace(
-        /(\s+)with\s+\{\s*type:\s*["']json["']\s*\}/g,
-        ''
-      );
+      content = content.replace(/(\s+)with\s+\{\s*type:\s*["']json["']\s*\}/g, '');
 
       // For test files, update imports from ../src/ to ../.cjs-src/
       if (isTestDir) {
         content = content.replace(/from\s+['"]\.\.\/src\//g, "from '../.cjs-src/");
         content = content.replace(/from\s+['"]\.\.\/\.\.\/src\//g, "from '../../.cjs-src/");
-        content = content.replace(/from\s+['"]\.\.\/\.\.\/\.\.\/src\//g, "from '../../../.cjs-src/");
+        content = content.replace(
+          /from\s+['"]\.\.\/\.\.\/\.\.\/src\//g,
+          "from '../../../.cjs-src/",
+        );
       }
 
       fs.writeFileSync(destPath, content);
@@ -50,9 +50,9 @@ if (require.main === module) {
   const testDir = path.join(__dirname, '..', 'test');
   const cjsSrcDir = path.join(__dirname, '..', '.cjs-src');
   const cjsTestDir = path.join(__dirname, '..', '.cjs-test');
-  
+
   console.log('Preparing CJS source by removing JSON import assertions...');
-  
+
   // Clean existing directories
   if (fs.existsSync(cjsSrcDir)) {
     fs.rmSync(cjsSrcDir, { recursive: true, force: true });
@@ -60,7 +60,7 @@ if (require.main === module) {
   if (fs.existsSync(cjsTestDir)) {
     fs.rmSync(cjsTestDir, { recursive: true, force: true });
   }
-  
+
   copyAndPrepareForCjs(srcDir, cjsSrcDir, false);
   copyAndPrepareForCjs(testDir, cjsTestDir, true);
   console.log('CJS source and tests prepared!');
