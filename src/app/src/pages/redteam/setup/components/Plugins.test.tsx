@@ -165,8 +165,9 @@ describe('Plugins', () => {
   it('should render presets section using Grid and display all preset cards', async () => {
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
+    // Verify the presets section has Grid structure (MuiGrid-root is used by legacy Grid)
     expect(
-      screen.getByText('Presets').closest('div')?.querySelector('.MuiGrid-container'),
+      screen.getByText('Presets').closest('div')?.querySelector('[class*="MuiGrid-root"]'),
     ).toBeInTheDocument();
 
     expect(screen.getByText('Recommended')).toBeInTheDocument();
