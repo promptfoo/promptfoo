@@ -147,7 +147,7 @@ describe('JSON export with improved error handling', () => {
     it('should not create output file when memory error occurs', async () => {
       try {
         await writeOutput(tempFilePath, mockEval, null);
-      } catch (error) {
+      } catch (_error) {
         // Expected to throw
       }
 

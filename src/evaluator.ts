@@ -479,15 +479,22 @@ export async function runEval({
     } else {
       // Create a copy of response so we can potentially mutate it.
       const processedResponse = { ...response };
-      const transforms: string[] = [
-        provider.transform, // Apply provider transform first
-        // NOTE: postprocess is deprecated. Use the first defined transform.
-        [test.options?.transform, test.options?.postprocess].find((s) => s),
-      ]
-        .flat()
-        .filter((s): s is string => typeof s === 'string');
-      for (const t of transforms) {
-        processedResponse.output = await transform(t, processedResponse.output, {
+
+      // Apply provider transform first (if exists)
+      if (provider.transform) {
+        processedResponse.output = await transform(provider.transform, processedResponse.output, {
+          vars,
+          prompt,
+        });
+      }
+
+      // Store the provider-transformed output for assertions (contextTransform)
+      const providerTransformedOutput = processedResponse.output;
+
+      // Apply test transform (if exists)
+      const testTransform = test.options?.transform || test.options?.postprocess;
+      if (testTransform) {
+        processedResponse.output = await transform(testTransform, processedResponse.output, {
           vars,
           prompt,
         });
@@ -505,10 +512,15 @@ export async function runEval({
         }
       }
 
+      // Pass providerTransformedOutput for contextTransform to use
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
-        providerResponse: processedResponse,
+        providerResponse: {
+          ...processedResponse,
+          // Add provider-transformed output for contextTransform
+          providerTransformedOutput,
+        },
         test,
         latencyMs: response.cached ? undefined : latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,

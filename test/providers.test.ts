@@ -134,7 +134,7 @@ describe('loadApiProvider', () => {
     const { maybeLoadConfigFromExternalFile } = jest.requireMock('../src/util/file');
     maybeLoadConfigFromExternalFile.mockReturnValue(resolvedContent);
 
-    const provider = await loadApiProvider('file://provider.yaml', {
+    const _provider = await loadApiProvider('file://provider.yaml', {
       basePath: '/test',
     });
 
@@ -171,7 +171,7 @@ describe('loadApiProvider', () => {
     const { maybeLoadConfigFromExternalFile } = jest.requireMock('../src/util/file');
     maybeLoadConfigFromExternalFile.mockReturnValue(resolvedContent);
 
-    const provider = await loadApiProvider('file://provider.json', {
+    const _provider = await loadApiProvider('file://provider.json', {
       basePath: '/test',
     });
 
