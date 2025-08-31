@@ -50,12 +50,12 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
     it('should allow setting column state for multiple eval IDs', () => {
       const evalId1 = 'test-eval-1';
       const evalId2 = 'test-eval-2';
-      
+
       const columnState1: ColumnState = {
         selectedColumns: ['col1', 'col2'],
         columnVisibility: { col1: true, col2: false },
       };
-      
+
       const columnState2: ColumnState = {
         selectedColumns: ['col3', 'col4'],
         columnVisibility: { col3: false, col4: true },
@@ -74,12 +74,12 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
 
     it('should overwrite existing column state for the same eval ID', () => {
       const evalId = 'test-eval-1';
-      
+
       const initialState: ColumnState = {
         selectedColumns: ['col1'],
         columnVisibility: { col1: true },
       };
-      
+
       const updatedState: ColumnState = {
         selectedColumns: ['col1', 'col2', 'col3'],
         columnVisibility: { col1: false, col2: true, col3: true },
@@ -122,12 +122,12 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
       const evalId1 = 'test-eval-1';
       const evalId2 = 'test-eval-2';
       const evalId3 = 'nonexistent-eval';
-      
+
       const columnState1: ColumnState = {
         selectedColumns: ['col1'],
         columnVisibility: { col1: true },
       };
-      
+
       const columnState2: ColumnState = {
         selectedColumns: ['col2', 'col3'],
         columnVisibility: { col2: true, col3: false },
@@ -152,12 +152,12 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
     it('should prioritize specific eval column state over last used settings', () => {
       const evalId1 = 'test-eval-1';
       const evalId2 = 'test-eval-2';
-      
+
       const columnState1: ColumnState = {
         selectedColumns: ['col1'],
         columnVisibility: { col1: true },
       };
-      
+
       const columnState2: ColumnState = {
         selectedColumns: ['col2', 'col3'],
         columnVisibility: { col2: true, col3: false },
@@ -178,14 +178,14 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
     it('should persist column visibility settings across different evaluations', () => {
       const evalId1 = 'test-eval-1';
       const evalId2 = 'test-eval-2';
-      
+
       const sharedSettings: ColumnState = {
         selectedColumns: ['Variable 1', 'Prompt 1', 'Output'],
         columnVisibility: {
           'Variable 1': true,
           'Prompt 1': false,
-          'Output': true,
-          'Score': false,
+          Output: true,
+          Score: false,
         },
       };
 
@@ -224,8 +224,8 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
           'Variable with spaces and special chars!@#': true,
           'Prompt 1': true,
           'Prompt 2': false,
-          'Output': true,
-          'Score': false,
+          Output: true,
+          Score: false,
           'Very long column name that might be problematic in some contexts': true,
         },
       };

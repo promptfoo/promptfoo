@@ -19,13 +19,13 @@ describe('ColumnSelector', () => {
 
   it('displays button with correct format showing selected/total count', () => {
     const selectedColumns = ['col1', 'col2'];
-    
+
     render(
       <ColumnSelector
         columnData={mockColumnData}
         selectedColumns={selectedColumns}
         onChange={mockOnChange}
-      />
+      />,
     );
 
     const button = screen.getByRole('button', { name: /columns/i });
@@ -34,13 +34,13 @@ describe('ColumnSelector', () => {
 
   it('updates count when different columns are selected', () => {
     const selectedColumns = ['col1'];
-    
+
     render(
       <ColumnSelector
         columnData={mockColumnData}
         selectedColumns={selectedColumns}
         onChange={mockOnChange}
-      />
+      />,
     );
 
     const button = screen.getByRole('button', { name: /columns/i });
@@ -49,13 +49,13 @@ describe('ColumnSelector', () => {
 
   it('shows 0/total when no columns are selected', () => {
     const selectedColumns: string[] = [];
-    
+
     render(
       <ColumnSelector
         columnData={mockColumnData}
         selectedColumns={selectedColumns}
         onChange={mockOnChange}
-      />
+      />,
     );
 
     const button = screen.getByRole('button', { name: /columns/i });
@@ -64,13 +64,13 @@ describe('ColumnSelector', () => {
 
   it('shows total/total when all columns are selected', () => {
     const selectedColumns = ['col1', 'col2', 'Variable 1', 'col3'];
-    
+
     render(
       <ColumnSelector
         columnData={mockColumnData}
         selectedColumns={selectedColumns}
         onChange={mockOnChange}
-      />
+      />,
     );
 
     const button = screen.getByRole('button', { name: /columns/i });
@@ -79,13 +79,9 @@ describe('ColumnSelector', () => {
 
   it('handles empty columnData array', () => {
     const selectedColumns: string[] = [];
-    
+
     render(
-      <ColumnSelector
-        columnData={[]}
-        selectedColumns={selectedColumns}
-        onChange={mockOnChange}
-      />
+      <ColumnSelector columnData={[]} selectedColumns={selectedColumns} onChange={mockOnChange} />,
     );
 
     const button = screen.getByRole('button', { name: /columns/i });
@@ -94,13 +90,13 @@ describe('ColumnSelector', () => {
 
   it('opens dialog when button is clicked', () => {
     const selectedColumns = ['col1'];
-    
+
     render(
       <ColumnSelector
         columnData={mockColumnData}
         selectedColumns={selectedColumns}
         onChange={mockOnChange}
-      />
+      />,
     );
 
     const button = screen.getByRole('button', { name: /columns/i });
@@ -111,24 +107,25 @@ describe('ColumnSelector', () => {
 
   it('calls onChange when column is toggled', () => {
     const selectedColumns = ['col1'];
-    
+
     render(
       <ColumnSelector
         columnData={mockColumnData}
         selectedColumns={selectedColumns}
         onChange={mockOnChange}
-      />
+      />,
     );
 
     const button = screen.getByRole('button', { name: /columns/i });
     fireEvent.click(button);
 
     const checkboxes = screen.getAllByRole('checkbox');
-    const column2Checkbox = checkboxes.find((checkbox) => 
-      checkbox.getAttribute('aria-labelledby')?.includes('Column 2') || 
-      checkbox.closest('label')?.textContent?.includes('Column 2')
+    const column2Checkbox = checkboxes.find(
+      (checkbox) =>
+        checkbox.getAttribute('aria-labelledby')?.includes('Column 2') ||
+        checkbox.closest('label')?.textContent?.includes('Column 2'),
     );
-    
+
     if (column2Checkbox) {
       fireEvent.click(column2Checkbox);
     }
@@ -138,19 +135,19 @@ describe('ColumnSelector', () => {
         target: expect.objectContaining({
           value: ['col1', 'col2'],
         }),
-      })
+      }),
     );
   });
 
   it('shows all button works correctly', () => {
     const selectedColumns = ['col1'];
-    
+
     render(
       <ColumnSelector
         columnData={mockColumnData}
         selectedColumns={selectedColumns}
         onChange={mockOnChange}
-      />
+      />,
     );
 
     const button = screen.getByRole('button', { name: /columns/i });
@@ -164,7 +161,7 @@ describe('ColumnSelector', () => {
         target: expect.objectContaining({
           value: ['col1', 'col2', 'Variable 1', 'col3'],
         }),
-      })
+      }),
     );
   });
 });
