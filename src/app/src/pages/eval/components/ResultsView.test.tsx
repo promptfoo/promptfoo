@@ -127,6 +127,7 @@ let mockResultsViewSettingsStoreData = {
   setInComparisonMode: vi.fn(),
   columnStates: { '1': mockColumnState },
   setColumnState: vi.fn(),
+  getColumnState: vi.fn((evalId: string) => mockColumnState),
   maxTextLength: 100,
   wordBreak: 'break-word',
   showInferenceDetails: true,
@@ -237,6 +238,7 @@ describe('ResultsView', () => {
       setInComparisonMode: vi.fn(),
       columnStates: { '1': mockColumnState },
       setColumnState: vi.fn(),
+      getColumnState: vi.fn((evalId: string) => mockColumnState),
       maxTextLength: 100,
       wordBreak: 'break-word',
       showInferenceDetails: true,
@@ -433,6 +435,10 @@ describe('ResultsView', () => {
           columnVisibility: { 'Variable 1': true, 'Prompt 1': false },
         },
       },
+      getColumnState: vi.fn((evalId: string) => ({
+        selectedColumns: ['Variable 1'],
+        columnVisibility: { 'Variable 1': true, 'Prompt 1': false },
+      })),
     };
 
     vi.mock('./store', () => ({
@@ -502,6 +508,7 @@ describe('ResultsView', () => {
     mockResultsViewSettingsStoreData = {
       ...mockResultsViewSettingsStoreData,
       renderMarkdown: true,
+      getColumnState: vi.fn((evalId: string) => mockColumnState),
     };
 
     renderWithProviders(
