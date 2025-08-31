@@ -18,34 +18,42 @@ export const HYPERBOLIC_CHAT_MODELS = [
   {
     id: 'deepseek-ai/DeepSeek-R1',
     cost: {
-      input: 2.0 / 1e6,
-      output: 2.0 / 1e6,
+      input: 0.5 / 1e6,
+      output: 2.18 / 1e6,
     },
     aliases: ['DeepSeek-R1'],
   },
   {
-    id: 'deepseek-ai/DeepSeek-R1-0528',
+    id: 'deepseek-ai/DeepSeek-R1-Zero',
     cost: {
-      input: 3.0 / 1e6,
-      output: 3.0 / 1e6,
+      input: 0.5 / 1e6,
+      output: 2.18 / 1e6,
     },
-    aliases: ['DeepSeek-R1-0528'],
+    aliases: ['DeepSeek-R1-Zero'],
   },
   {
     id: 'deepseek-ai/DeepSeek-V3',
     cost: {
-      input: 0.25 / 1e6,
-      output: 0.25 / 1e6,
+      input: 0.27 / 1e6,
+      output: 1.1 / 1e6,
     },
     aliases: ['DeepSeek-V3'],
   },
   {
     id: 'deepseek-ai/DeepSeek-V3-0324',
     cost: {
-      input: 1.25 / 1e6,
-      output: 1.25 / 1e6,
+      input: 0.27 / 1e6,
+      output: 1.1 / 1e6,
     },
     aliases: ['DeepSeek-V3-0324'],
+  },
+  {
+    id: 'deepseek/DeepSeek-V2.5',
+    cost: {
+      input: 0.14 / 1e6,
+      output: 0.28 / 1e6,
+    },
+    aliases: ['DeepSeek-V2.5'],
   },
   // Qwen Models
   {
@@ -183,9 +191,7 @@ export const HYPERBOLIC_CHAT_MODELS = [
 
 export const HYPERBOLIC_REASONING_MODELS = [
   'deepseek-ai/DeepSeek-R1',
-  'deepseek-ai/DeepSeek-R1-0528',
-  'deepseek-ai/DeepSeek-V3',
-  'deepseek-ai/DeepSeek-V3-0324',
+  'deepseek-ai/DeepSeek-R1-Zero',
   'qwen/QwQ-32B',
   'qwen/QwQ-32B-Preview',
 ];
@@ -235,17 +241,7 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
   }
 
   protected isReasoningModel(): boolean {
-    // First try direct match
-    if (HYPERBOLIC_REASONING_MODELS.includes(this.modelName)) {
-      return true;
-    }
-
-    // Then resolve alias and check again
-    const model = HYPERBOLIC_CHAT_MODELS.find(
-      (m) => m.aliases && m.aliases.includes(this.modelName),
-    );
-
-    return model ? HYPERBOLIC_REASONING_MODELS.includes(model.id) : false;
+    return HYPERBOLIC_REASONING_MODELS.includes(this.modelName);
   }
 
   protected supportsTemperature(): boolean {
