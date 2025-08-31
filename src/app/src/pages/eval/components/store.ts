@@ -58,7 +58,7 @@ interface FetchEvalOptions {
   filters?: ResultsFilter[];
 }
 
-interface ColumnState {
+export interface ColumnState {
   selectedColumns: string[];
   columnVisibility: VisibilityState;
 }
