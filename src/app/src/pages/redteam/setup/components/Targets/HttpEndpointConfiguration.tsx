@@ -26,7 +26,6 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import yaml from 'js-yaml';
-import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 
 import type { ProviderOptions } from '../../types';

@@ -19,7 +19,7 @@ import './Overview.css';
 interface OverviewProps {
   categoryStats: Record<PluginType, { pass: number; total: number }>;
   plugins: RedteamPluginObject[];
-  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
+  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
 

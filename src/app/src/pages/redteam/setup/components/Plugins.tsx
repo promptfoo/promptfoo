@@ -11,12 +11,10 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { Grid2 } from '@mui/material';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/GridLegacy';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -690,7 +688,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 Presets
               </Typography>
 
-              <Grid2 container spacing={2} sx={{ mb: 3 }}>
+              <Grid container spacing={2} sx={{ mb: 3 }}>
                 {presets.map((preset) => {
                   const isSelected =
                     preset.name === 'Custom'
@@ -715,7 +713,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     </Grid>
                   );
                 })}
-              </Grid2>
+              </Grid>
             </Box>
 
             {/* Search and Filter section */}

@@ -34,7 +34,7 @@ interface TestSuitesProps {
   evalId: string;
   categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
   plugins: RedteamPluginObject[];
-  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
+  vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
   vulnerabilitiesDataGridFilterModel: GridFilterModel;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
 }
