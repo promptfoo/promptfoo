@@ -89,10 +89,10 @@ jobs:
           elif [[ -z "$PROMPTFOO_POSTHOG_KEY" ]]; then
             echo "PostHog key not available (running without secret), skipping check"
           else
-            if ! grep -q "export const POSTHOG_KEY = 'phc_" dist/esm/src/generated/constants.js; then
-              echo "Error: PostHog key not properly replaced in generated/constants.js"
-              echo "Content of generated/constants.js:"
-              cat dist/esm/src/generated/constants.js
+            if ! grep -q "POSTHOG_KEY.*phc_" dist/index.js; then
+              echo "Error: PostHog key not properly replaced in bundled files"
+              echo "Checking for POSTHOG_KEY in dist/index.js:"
+              grep -n "POSTHOG_KEY" dist/index.js | head -3
               exit 1
             fi
             echo "PostHog key replacement verified successfully"
