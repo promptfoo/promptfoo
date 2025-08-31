@@ -184,7 +184,10 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
         useResultsViewSettingsStore.setState({ lastUsedColumnSettings });
       });
 
-      const retrievedState = useResultsViewSettingsStore.getState().getColumnState(evalId);
+      const validColumns = ['col1', 'col2'];
+      const retrievedState = useResultsViewSettingsStore
+        .getState()
+        .getColumnState(evalId, validColumns);
 
       const _expectedState: ColumnState = {
         selectedColumns: ['col1', 'col2'],

@@ -348,13 +348,28 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const currentColumnState = getColumnState(currentEvalId) || {
+  const currentColumnState = getColumnState(currentEvalId, allColumns) || {
     selectedColumns: allColumns,
     columnVisibility: allColumns.reduce(
       (acc, col) => ({ ...acc, [col]: true }),
       {} as VisibilityState,
     ),
   };
+
+  // Persist default column state if none exists
+  React.useEffect(() => {
+    const existingState = getColumnState(currentEvalId, allColumns);
+    if (!existingState) {
+      const defaultState = {
+        selectedColumns: allColumns,
+        columnVisibility: allColumns.reduce(
+          (acc, col) => ({ ...acc, [col]: true }),
+          {} as VisibilityState,
+        ),
+      };
+      setColumnState(currentEvalId, defaultState);
+    }
+  }, [currentEvalId, allColumns, getColumnState, setColumnState]);
 
   const visiblePromptCount = React.useMemo(
     () =>

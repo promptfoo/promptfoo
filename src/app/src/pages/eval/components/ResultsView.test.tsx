@@ -5,6 +5,8 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EvaluateTableRow } from './types';
+import { ResultFailureReason } from './types';
 import ResultsView from './ResultsView';
 
 // Mock data
@@ -259,11 +261,13 @@ describe('ResultsView', () => {
           vars: ['Variable 1'],
         },
         body: [
-          {
+          ({
             outputs: [{ pass: true, score: 1, text: 'test output' }],
             test: {},
             vars: ['test var'],
-          },
+            description: 'Test description',
+            testIdx: 0,
+          } as EvaluateTableRow),
         ],
       },
     };

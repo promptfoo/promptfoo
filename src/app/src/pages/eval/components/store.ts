@@ -208,7 +208,7 @@ interface SettingsState {
   columnStates: Record<string, ColumnState>;
   lastUsedColumnSettings: ColumnState | null;
   setColumnState: (evalId: string, state: ColumnState) => void;
-  getColumnState: (evalId: string) => ColumnState | null;
+  getColumnState: (evalId: string, validColumns?: string[]) => ColumnState | null;
 
   maxImageWidth: number;
   setMaxImageWidth: (maxImageWidth: number) => void;
@@ -252,9 +252,30 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
           },
           lastUsedColumnSettings: state,
         })),
-      getColumnState: (evalId: string) => {
+      getColumnState: (evalId: string, validColumns?: string[]) => {
         const state = get();
-        return state.columnStates[evalId] || state.lastUsedColumnSettings;
+        const columnState = state.columnStates[evalId] || state.lastUsedColumnSettings;
+
+        if (!columnState || !validColumns) {
+          return columnState;
+        }
+
+        // Filter out columns that don't exist in the current evaluation
+        const filteredSelectedColumns = columnState.selectedColumns.filter((col) =>
+          validColumns.includes(col),
+        );
+
+        const filteredColumnVisibility: VisibilityState = {};
+        for (const [col, visible] of Object.entries(columnState.columnVisibility)) {
+          if (validColumns.includes(col)) {
+            filteredColumnVisibility[col] = visible;
+          }
+        }
+
+        return {
+          selectedColumns: filteredSelectedColumns,
+          columnVisibility: filteredColumnVisibility,
+        };
       },
 
       maxImageWidth: 256,
