@@ -12,7 +12,7 @@ describe('TypeScript Types Coverage', () => {
   beforeAll(() => {
     // Check if type files exist, build if not
     const typesPath = path.resolve(__dirname, '../dist/types/index.d.ts');
-    
+
     if (!existsSync(typesPath)) {
       console.log('Type files missing, running build...');
       execSync('npm run build', { stdio: 'inherit' });
