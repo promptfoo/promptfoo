@@ -203,7 +203,10 @@ function CreateDropdown({
                     },
                   }}
                 >
-                  <Link to={item.href} style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}>
+                  <Link
+                    to={item.href}
+                    style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}
+                  >
                     <Box sx={{ width: '100%' }}>
                       <Box
                         sx={{
@@ -371,7 +374,10 @@ function EvalsDropdown({
                     },
                   }}
                 >
-                  <Link to={item.href} style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}>
+                  <Link
+                    to={item.href}
+                    style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}
+                  >
                     <Box sx={{ width: '100%' }}>
                       <Box
                         sx={{
