@@ -1,20 +1,16 @@
+import path from 'path';
 import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'url';
 
 import logger from './logger';
 import { safeResolve } from './util/file.node.js';
+import { getDirname } from './util/module-paths';
 
 // esm-specific crap that needs to get mocked out in tests
 
-//import path from 'path';
-//import { fileURLToPath } from 'url';
-
 export function getDirectory(): string {
-  /*
-  // @ts-ignore: Jest chokes on this
-  const __filename = fileURLToPath(import.meta.url);
-  return path.dirname(__filename);
- */
-  return __dirname;
+  // Use cross-compatible helper instead of __dirname
+  return getDirname();
 }
 
 export async function importModule(modulePath: string, functionName?: string) {

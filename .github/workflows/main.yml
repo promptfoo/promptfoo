@@ -302,7 +302,18 @@ jobs:
       - name: Run local server
         run: |
           npm run build
-          PROMPTFOO_CONFIG_DIR=~/tmp LOG_LEVEL=DEBUG API_PORT=8500 node dist/server/index.cjs &
+          mkdir -p /tmp/promptfoo-ci
+          
+          # Kill any existing processes on port 8500
+          pkill -f "API_PORT=8500" || true
+          
+          # Run database migrations first
+          PROMPTFOO_CONFIG_DIR=/tmp/promptfoo-ci node dist/main.cjs db:migrate
+          
+          # Start server
+          PROMPTFOO_CONFIG_DIR=/tmp/promptfoo-ci LOG_LEVEL=DEBUG API_PORT=8500 node dist/server/index.cjs &
+          SERVER_PID=$!
+          echo "Started server with PID: $SERVER_PID"
 
           # Wait for server to be ready
           echo "Waiting for server to start..."
@@ -313,11 +324,19 @@ jobs:
             fi
             echo "Attempt $i: Server not ready yet, waiting 2 seconds..."
             sleep 2
+            
+            # Check if server process is still running
+            if ! ps -p $SERVER_PID > /dev/null; then
+              echo "ERROR: Server process died, PID $SERVER_PID no longer exists"
+              exit 1
+            fi
           done
 
           # Final check
           if ! curl -s http://localhost:8500/ > /dev/null 2>&1; then
             echo "ERROR: Server failed to start after 60 seconds"
+            # Show server logs for debugging
+            ps aux | grep node || echo "No node processes found"
             exit 1
           fi
 

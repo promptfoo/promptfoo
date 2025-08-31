@@ -6,6 +6,7 @@ import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
+import { getDirname } from '../util/module-paths';
 import { execAsync } from './execAsync';
 import type { Options as PythonShellOptions } from 'python-shell';
 
@@ -145,7 +146,7 @@ export async function runPython(
     env: process.env,
     mode: 'binary',
     pythonPath,
-    scriptPath: __dirname,
+    scriptPath: getDirname(),
     // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
     ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
   };
