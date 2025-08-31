@@ -115,9 +115,10 @@ async function sendEvalRecord(
 
   if (!response.ok) {
     const responseBody = await response.text();
-    throw new Error(
-      `Failed to send initial eval data to ${url}: ${response.statusText}, body: ${responseBody}`,
-    );
+    // Ensure full error is visible by formatting it properly
+    const errorMessage = `Failed to send initial eval data to ${url}: ${response.statusText}`;
+    const bodyMessage = responseBody ? `\nResponse body: ${responseBody}` : '';
+    throw new Error(`${errorMessage}${bodyMessage}`);
   }
 
   const responseJson = await response.json();
@@ -339,6 +340,10 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
     return evalId;
   } catch (e) {
+    if (progressBar) {
+      progressBar.stop();
+    }
+
     logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
 
     if (evalId) {

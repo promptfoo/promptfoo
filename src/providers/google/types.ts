@@ -219,6 +219,13 @@ export interface CompletionOptions {
   };
 
   mcp?: MCPConfig;
+
+  /**
+   * Controls role mapping when converting from OpenAI format to Gemini format.
+   * If true, uses 'assistant' role (for older Gemini versions).
+   * If false (default), maps 'assistant' to 'model' (for newer Gemini versions).
+   */
+  useAssistantRole?: boolean;
 }
 
 // Claude API interfaces

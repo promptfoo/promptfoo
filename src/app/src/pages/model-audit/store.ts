@@ -64,6 +64,7 @@ interface ModelAuditState {
   // Actions - Recent scans
   addRecentScan: (paths: ScanPath[], label?: string) => void;
   removeRecentScan: (id: string) => void;
+  removeRecentPath: (scanId: string, pathToRemove: string) => void;
   clearRecentScans: () => void;
 
   // Actions - Scan configuration
@@ -145,6 +146,24 @@ export const useModelAuditStore = create<ModelAuditState>()(
       removeRecentScan: (id) => {
         set((state) => ({
           recentScans: state.recentScans.filter((scan) => scan.id !== id),
+        }));
+      },
+
+      removeRecentPath: (scanId, pathToRemove) => {
+        set((state) => ({
+          recentScans: state.recentScans
+            .map((scan) => {
+              if (scan.id === scanId) {
+                const updatedPaths = scan.paths.filter((p) => p.path !== pathToRemove);
+                // If no paths left, remove the scan entirely
+                if (updatedPaths.length === 0) {
+                  return null;
+                }
+                return { ...scan, paths: updatedPaths };
+              }
+              return scan;
+            })
+            .filter(Boolean) as RecentScan[],
         }));
       },
 

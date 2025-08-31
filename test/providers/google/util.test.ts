@@ -252,6 +252,58 @@ describe('util', () => {
       });
     });
 
+    it('should map assistant role to model role by default', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'model', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant mapped to model
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should preserve assistant role when useAssistantRole is true', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'assistant', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant preserved
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should map assistant to model when useAssistantRole is false', () => {
+      const input = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'Hello' }] },
+          { role: 'model', parts: [{ text: 'Hi there' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
     it('should handle OpenAI chat format with array content', () => {
       const input = [
         {
@@ -270,6 +322,21 @@ describe('util', () => {
         coerced: true,
         systemInstruction: undefined,
       });
+    });
+
+    it('should respect useAssistantRole flag with array content', () => {
+      const input = [
+        { role: 'user', content: [{ type: 'text', text: 'Question' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'Answer' }] },
+      ];
+
+      // Test with useAssistantRole: true
+      const resultWithAssistant = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(resultWithAssistant.contents[1].role).toBe('assistant');
+
+      // Test with useAssistantRole: false (default)
+      const resultWithModel = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(resultWithModel.contents[1].role).toBe('model');
     });
 
     it('should handle OpenAI chat format with object content', () => {

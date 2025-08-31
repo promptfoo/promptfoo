@@ -130,7 +130,10 @@ const GeminiFormatSchema = z.array(ContentSchema);
 
 export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
 
-export function maybeCoerceToGeminiFormat(contents: any): {
+export function maybeCoerceToGeminiFormat(
+  contents: any,
+  options?: { useAssistantRole?: boolean },
+): {
   contents: GeminiFormat;
   coerced: boolean;
   systemInstruction: { parts: [Part, ...Part[]] } | undefined;
@@ -194,14 +197,20 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     contents.every((item) => typeof item.content === 'string')
   ) {
     // This looks like an OpenAI chat format
+    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
     coercedContents = contents.map((item) => ({
-      role: item.role as 'user' | 'model' | undefined,
+      role: (item.role === 'assistant' ? targetRole : item.role) as 'user' | 'model' | undefined,
       parts: [{ text: item.content }],
     }));
     coerced = true;
   } else if (Array.isArray(contents) && contents.every((item) => item.role && item.content)) {
     // This looks like an OpenAI chat format with content that might be an array or object
+    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
     coercedContents = contents.map((item) => {
+      const mappedRole = (item.role === 'assistant' ? targetRole : item.role) as
+        | 'user'
+        | 'model'
+        | undefined;
       if (Array.isArray(item.content)) {
         // Handle array content
         const parts = item.content.map((contentItem: any) => {
@@ -215,19 +224,19 @@ export function maybeCoerceToGeminiFormat(contents: any): {
           }
         });
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts,
         };
       } else if (typeof item.content === 'object') {
         // Handle object content
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts: [item.content],
         };
       } else {
         // Handle string content
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts: [{ text: item.content }],
         };
       }
@@ -355,11 +364,35 @@ export async function hasGoogleDefaultCredentials() {
 
 export function getCandidate(data: GeminiResponseData) {
   if (!data || !data.candidates || data.candidates.length < 1) {
-    throw new Error('Expected at least one candidate in AI Studio API response.');
+    // Check if the prompt was blocked
+    let errorDetails = 'No candidates returned in API response.';
+
+    if (data?.promptFeedback?.blockReason) {
+      errorDetails = `Response blocked: ${data.promptFeedback.blockReason}`;
+      if (data.promptFeedback.safetyRatings) {
+        const flaggedCategories = data.promptFeedback.safetyRatings
+          .filter((rating) => rating.probability !== 'NEGLIGIBLE')
+          .map((rating) => `${rating.category}: ${rating.probability}`);
+        if (flaggedCategories.length > 0) {
+          errorDetails += ` (Safety ratings: ${flaggedCategories.join(', ')})`;
+        }
+      }
+    } else if (data?.promptFeedback?.safetyRatings) {
+      const flaggedCategories = data.promptFeedback.safetyRatings
+        .filter((rating) => rating.probability !== 'NEGLIGIBLE')
+        .map((rating) => `${rating.category}: ${rating.probability}`);
+      if (flaggedCategories.length > 0) {
+        errorDetails = `Response may have been blocked due to safety filters: ${flaggedCategories.join(', ')}`;
+      }
+    }
+
+    errorDetails += `\n\nGot response: ${JSON.stringify(data)}`;
+
+    throw new Error(errorDetails);
   }
   if (data.candidates.length > 1) {
     logger.debug(
-      `Expected one candidate in AI Studio API response, but got ${data.candidates.length}.`,
+      `Expected one candidate in AI Studio API response, but got ${data.candidates.length}: ${JSON.stringify(data)}`,
     );
   }
   const candidate = data.candidates[0];
@@ -367,6 +400,38 @@ export function getCandidate(data: GeminiResponseData) {
 }
 
 export function formatCandidateContents(candidate: Candidate) {
+  // Check if the candidate was blocked or stopped for safety reasons
+  if (
+    candidate.finishReason &&
+    ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'].includes(
+      candidate.finishReason,
+    )
+  ) {
+    let errorMessage = `Response was blocked with finish reason: ${candidate.finishReason}`;
+
+    if (candidate.safetyRatings) {
+      const flaggedCategories = candidate.safetyRatings
+        .filter((rating) => rating.probability !== 'NEGLIGIBLE' || rating.blocked)
+        .map(
+          (rating) =>
+            `${rating.category}: ${rating.probability}${rating.blocked ? ' (BLOCKED)' : ''}`,
+        );
+      if (flaggedCategories.length > 0) {
+        errorMessage += `\nSafety ratings: ${flaggedCategories.join(', ')}`;
+      }
+    }
+
+    if (candidate.finishReason === 'RECITATION') {
+      errorMessage +=
+        "\n\nThis typically occurs when the response is too similar to content from the model's training data.";
+    } else if (candidate.finishReason === 'SAFETY') {
+      errorMessage +=
+        '\n\nThe response was blocked due to safety filters. Consider adjusting safety settings or modifying your prompt.';
+    }
+
+    throw new Error(errorMessage);
+  }
+
   if (candidate.content?.parts) {
     let output = '';
     let is_text = true;
@@ -590,6 +655,7 @@ export function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, string | object>,
   configSystemInstruction?: Content | string,
+  options?: { useAssistantRole?: boolean },
 ): {
   contents: GeminiFormat;
   systemInstruction: Content | { parts: [Part, ...Part[]] } | undefined;
@@ -608,7 +674,7 @@ export function geminiFormatAndSystemInstructions(
     contents: updatedContents,
     coerced,
     systemInstruction: parsedSystemInstruction,
-  } = maybeCoerceToGeminiFormat(contents);
+  } = maybeCoerceToGeminiFormat(contents, options);
   if (coerced) {
     logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
     contents = updatedContents;
