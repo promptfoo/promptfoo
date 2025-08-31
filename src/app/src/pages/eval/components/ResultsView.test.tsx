@@ -6,7 +6,6 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EvaluateTableRow } from './types';
-import { ResultFailureReason } from './types';
 import ResultsView from './ResultsView';
 
 // Mock data
