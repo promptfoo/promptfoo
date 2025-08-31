@@ -303,7 +303,7 @@ jobs:
         run: |
           npm run build
           PROMPTFOO_CONFIG_DIR=~/tmp LOG_LEVEL=DEBUG API_PORT=8500 node dist/server/index.cjs &
-          
+
           # Wait for server to be ready
           echo "Waiting for server to start..."
           for i in {1..30}; do
@@ -314,7 +314,7 @@ jobs:
             echo "Attempt $i: Server not ready yet, waiting 2 seconds..."
             sleep 2
           done
-          
+
           # Final check
           if ! curl -s http://localhost:8500/ > /dev/null 2>&1; then
             echo "ERROR: Server failed to start after 60 seconds"
@@ -325,7 +325,7 @@ jobs:
         id: eval
         run: |
           PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/main.cjs eval -c .github/assets/promptfooconfig.yaml --share
-          
+
           # Give the upload a moment to complete before checking
           sleep 2
         env:
