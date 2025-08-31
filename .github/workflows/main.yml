@@ -304,11 +304,14 @@ jobs:
           npm run build
           mkdir -p /tmp/promptfoo-ci
 
+          # Copy migrations to temp directory for CI
+          cp -r drizzle /tmp/drizzle
+
           # Kill any existing processes on port 8500
-          pkill -f "API_PORT=8500" || true
+          pgrep -f "API_PORT=8500" | xargs -r kill || true
 
           # Start server
-          PROMPTFOO_CONFIG_DIR=/tmp/promptfoo-ci LOG_LEVEL=DEBUG API_PORT=8500 node dist/server/index.cjs &
+          PROMPTFOO_CONFIG_DIR=/tmp/promptfoo-ci DRIZZLE_MIGRATIONS_DIR=/tmp/drizzle LOG_LEVEL=DEBUG API_PORT=8500 node dist/server/index.cjs &
           SERVER_PID=$!
           echo "Started server with PID: $SERVER_PID"
 
