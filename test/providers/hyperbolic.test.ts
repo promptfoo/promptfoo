@@ -99,12 +99,12 @@ describe('HyperbolicProvider', () => {
   describe('calculateHyperbolicCost', () => {
     it('should calculate cost for known models', () => {
       const cost = calculateHyperbolicCost('deepseek-ai/DeepSeek-R1', {}, 1000, 500);
-      expect(cost).toBe((2.0 / 1e6) * 1000 + (2.0 / 1e6) * 500);
+      expect(cost).toBe((0.5 / 1e6) * 1000 + (2.18 / 1e6) * 500);
     });
 
     it('should handle model aliases', () => {
       const cost = calculateHyperbolicCost('DeepSeek-R1', {}, 1000, 500);
-      expect(cost).toBe((2.0 / 1e6) * 1000 + (2.0 / 1e6) * 500);
+      expect(cost).toBe((0.5 / 1e6) * 1000 + (2.18 / 1e6) * 500);
     });
 
     it('should return undefined for unknown models', () => {
