@@ -30,6 +30,7 @@ jobs:
           # Remove when https://github.com/nodejs/node/issues/51766 is resolved
           - node: '22.x'
             os: windows-latest
+          # TODO: Track upstream issue causing failures on Node 24.x + windows-latest
           - node: '24.x'
             os: windows-latest
 

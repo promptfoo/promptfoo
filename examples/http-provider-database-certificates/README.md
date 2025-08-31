@@ -18,7 +18,7 @@ The example shows support for:
 
 ## Prerequisites
 
-- Node.js 18.0.0 or higher
+- Node.js 20.0.0 or higher
 - A certificate for testing (the setup script will create one for you)
 
 ## Setup
