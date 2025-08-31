@@ -85,6 +85,12 @@ jest.mock('../src/constants', () => {
   };
 });
 
+jest.mock('../src/tracing/store', () => ({
+  getTraceStore: jest.fn().mockReturnValue({
+    getTracesByEvaluation: jest.fn(),
+  }),
+}));
+
 describe('stripAuthFromUrl', () => {
   it('removes username and password from URL', () => {
     const input = 'https://user:pass@example.com/path?query=value#hash';
@@ -537,5 +543,223 @@ describe('hasEvalBeenShared', () => {
 
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(false);
+  });
+});
+
+describe('trace sharing integration', () => {
+  const mockTraceStore = {
+    getTracesByEvaluation: jest.fn(),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(require('../src/tracing/store').getTraceStore).mockReturnValue(mockTraceStore);
+    mockFetch.mockReset();
+    jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
+  });
+
+  it('sends traces after successful eval sharing', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+
+    const mockEval = buildMockEval();
+    const mockTraces = [
+      { id: 'trace-1', evalId: mockEval.id, data: 'trace data 1' },
+      { id: 'trace-2', evalId: mockEval.id, data: 'trace data 2' },
+    ];
+
+    mockTraceStore.getTracesByEvaluation.mockResolvedValue(mockTraces);
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'remote-eval-id' }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+    // Mock the traces send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(mockEval.id);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.app/api/eval/results/remote-eval-id/traces',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(mockTraces),
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+        }),
+      }),
+    );
+  });
+
+  it('handles empty traces gracefully', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+
+    const mockEval = buildMockEval();
+    mockTraceStore.getTracesByEvaluation.mockResolvedValue([]);
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'remote-eval-id' }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(mockEval.id);
+    // Traces endpoint should not be called when there are no traces
+    expect(mockFetch).toHaveBeenCalledTimes(2); // Only eval and results calls
+  });
+
+  it('handles trace sending failure gracefully without breaking share process', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+
+    const mockEval = buildMockEval();
+    const mockTraces = [{ id: 'trace-1', evalId: mockEval.id, data: 'trace data 1' }];
+
+    mockTraceStore.getTracesByEvaluation.mockResolvedValue(mockTraces);
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'remote-eval-id' }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+    // Mock the traces send failure
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      text: () => Promise.resolve('Server error'),
+    });
+
+    const result = await createShareableUrl(mockEval as Eval);
+
+    expect(result).toContain('eval');
+    expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(mockEval.id);
+    expect(mockFetch).toHaveBeenCalledTimes(3); // All three calls made
+  });
+
+  it('handles trace store error gracefully', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+
+    const mockEval = buildMockEval();
+    mockTraceStore.getTracesByEvaluation.mockRejectedValue(new Error('Trace store error'));
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'remote-eval-id' }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    const result = await createShareableUrl(mockEval as Eval);
+
+    expect(result).toContain('eval');
+    expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(mockEval.id);
+    // Traces endpoint should not be called due to error
+    expect(mockFetch).toHaveBeenCalledTimes(2); // Only eval and results calls
+  });
+
+  it('sends traces with cloud config enabled', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+
+    const mockEval = buildMockEval();
+    const mockTraces = [{ id: 'trace-1', evalId: mockEval.id, data: 'trace data 1' }];
+
+    mockTraceStore.getTracesByEvaluation.mockResolvedValue(mockTraces);
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'remote-eval-id' }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+    // Mock the traces send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(mockEval.id);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.example.com/api/v1/results/remote-eval-id/traces',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(mockTraces),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer mock-api-key',
+        }),
+      }),
+    );
+  });
+
+  it('constructs correct traces URL by replacing /results with /results/{remoteEvalId}/traces', async () => {
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+
+    const mockEval = buildMockEval();
+    const mockTraces = [{ id: 'trace-1' }];
+
+    mockTraceStore.getTracesByEvaluation.mockResolvedValue(mockTraces);
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'remote-eval-123' }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+    // Mock the traces send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // Verify the URL construction
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.app/api/eval/results/remote-eval-123/traces',
+      expect.any(Object),
+    );
   });
 });
