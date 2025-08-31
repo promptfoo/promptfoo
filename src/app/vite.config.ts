@@ -58,12 +58,6 @@ export default defineConfig({
         __dirname,
         '../../node_modules/react/jsx-dev-runtime.js',
       ),
-      // Fix MUI ESM import issues
-      '@mui/material/styles': path.resolve(
-        __dirname,
-        '../../node_modules/@mui/material/styles/index.js',
-      ),
-      '@mui/system': path.resolve(__dirname, '../../node_modules/@mui/system/esm/index.js'),
     },
   },
   optimizeDeps: {
