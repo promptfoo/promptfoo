@@ -26,13 +26,6 @@ jobs:
       matrix:
         node: ['20.x', '22.x', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        exclude:
-          # Remove when https://github.com/nodejs/node/issues/51766 is resolved
-          - node: '22.x'
-            os: windows-latest
-          # TODO: Track upstream issue causing failures on Node 24.x + windows-latest
-          - node: '24.x'
-            os: windows-latest
 
     steps:
       - name: Checkout repo
