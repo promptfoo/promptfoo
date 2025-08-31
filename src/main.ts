@@ -18,8 +18,7 @@ import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
-// Heavy commands imported dynamically to avoid startup hanging
-// import { evalCommand } from './commands/eval';
+import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
 import { generateAssertionsCommand } from './commands/generate/assertions';
@@ -101,8 +100,7 @@ async function main() {
       process.exitCode = 1;
     });
 
-  // Main commands - dynamically import heavy commands
-  const { evalCommand } = await import('./commands/eval');
+  // Main commands
   evalCommand(program, defaultConfig, defaultConfigPath);
   initCommand(program);
   viewCommand(program);
@@ -133,7 +131,6 @@ async function main() {
     await loadDefaultConfig(undefined, 'redteam');
 
   redteamInitCommand(redteamBaseCommand);
-  // evalCommand is already imported above via dynamic import
   evalCommand(
     redteamBaseCommand,
     redteamConfig ?? defaultConfig,
