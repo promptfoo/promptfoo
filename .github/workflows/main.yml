@@ -303,10 +303,10 @@ jobs:
         run: |
           npm run build
           mkdir -p /tmp/promptfoo-ci
-          
+
           # Kill any existing processes on port 8500
           pkill -f "API_PORT=8500" || true
-          
+
           # Start server
           PROMPTFOO_CONFIG_DIR=/tmp/promptfoo-ci LOG_LEVEL=DEBUG API_PORT=8500 node dist/server/index.cjs &
           SERVER_PID=$!

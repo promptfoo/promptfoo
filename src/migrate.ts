@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs';
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database';
@@ -14,29 +15,44 @@ function findMigrationsFolder(): string {
     return process.env.DRIZZLE_MIGRATIONS_DIR;
   }
 
+  const dirname = getDirname();
+  logger.debug(`findMigrationsFolder: getDirname() returned: ${dirname}`);
+
   // Try multiple resolution strategies
   const candidates = [
     // Relative to module directory (runtime ESM)
-    getDirname().endsWith('/src') ? path.resolve(getDirname(), '..', 'drizzle') : null,
+    dirname.endsWith('/src') ? path.resolve(dirname, '..', 'drizzle') : null,
     // Relative to current working directory (Jest/CI)
     path.resolve(process.cwd(), 'drizzle'),
     // Fallback for CJS environments
     typeof __dirname !== 'undefined' ? path.resolve(__dirname, '..', 'drizzle') : null,
+    // For bundled contexts, try relative to dist
+    dirname.includes('/dist/') ? path.resolve(dirname, '../../../drizzle') : null,
+    // For bundled contexts, try dist/drizzle
+    path.resolve(process.cwd(), 'dist', 'drizzle'),
   ].filter(Boolean) as string[];
+
+  logger.debug(`findMigrationsFolder: trying candidates: ${JSON.stringify(candidates)}`);
 
   // Return the first path that exists
   for (const candidate of candidates) {
     try {
-      if (require('fs').existsSync(candidate)) {
+      logger.debug(`findMigrationsFolder: checking if exists: ${candidate}`);
+      if (fs.existsSync(candidate)) {
+        logger.debug(`findMigrationsFolder: found migrations at: ${candidate}`);
         return candidate;
+      } else {
+        logger.debug(`findMigrationsFolder: does not exist: ${candidate}`);
       }
-    } catch {
-      // Continue to next candidate
+    } catch (error) {
+      logger.debug(`findMigrationsFolder: error checking ${candidate}: ${String(error)}`);
     }
   }
 
-  // Default fallback
-  return path.resolve(process.cwd(), 'drizzle');
+  logger.error(
+    `findMigrationsFolder: no valid migrations folder found. Candidates tried: ${JSON.stringify(candidates)}`,
+  );
+  throw new Error('Could not find drizzle migrations folder');
 }
 
 /**

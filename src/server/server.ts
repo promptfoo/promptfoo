@@ -267,16 +267,22 @@ export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
 ) {
+  logger.info(`startServer: Creating Express app...`);
   const app = createApp();
+  logger.info(`startServer: Express app created successfully`);
 
+  logger.info(`startServer: Creating HTTP server...`);
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: '*',
     },
   });
+  logger.info(`startServer: HTTP and Socket.IO servers created successfully`);
 
+  logger.info(`startServer: About to run database migrations...`);
   await runDbMigrations();
+  logger.info(`startServer: Database migrations completed successfully`);
 
   setupSignalWatcher(async () => {
     const latestEval = await Eval.latest();

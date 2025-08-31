@@ -1,6 +1,4 @@
-import path from 'path';
 import { pathToFileURL } from 'node:url';
-import { fileURLToPath } from 'url';
 
 import logger from './logger';
 import { safeResolve } from './util/file.node.js';

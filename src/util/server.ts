@@ -93,12 +93,12 @@ export async function checkServerRunning(port = getDefaultPort()): Promise<boole
     // Add a reasonable timeout to prevent hanging
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
-    
+
     const response = await fetch(`http://localhost:${port}/health`, {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
-    
+
     const data = await response.json();
     return data.status === 'OK' && data.version === VERSION;
   } catch (err) {
