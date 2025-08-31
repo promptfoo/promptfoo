@@ -24,7 +24,7 @@ providers:
                 location:
                   type: string
                   description: The location to get weather for
-              required: ["location"]
+              required: ['location']
 
   # Test Gemini (original target for the code)
   - id: openrouter:google/gemini-2.5-pro
@@ -46,7 +46,7 @@ providers:
                 location:
                   type: string
                   description: The location to get weather for
-              required: ["location"]
+              required: ['location']
 
   # Test another working model for comparison
   - id: openrouter:qwen/qwen3-coder
@@ -68,18 +68,18 @@ providers:
                 location:
                   type: string
                   description: The location to get weather for
-              required: ["location"]
+              required: ['location']
 
 tests:
   - description: All models should return tool calls without thinking when showThinking is false
     assert:
       - type: contains
-        value: "function"
+        value: 'function'
       - type: not-contains
-        value: "Thinking:"
-      - type: not-contains  
-        value: "reasoning"
+        value: 'Thinking:'
       - type: not-contains
-        value: "I need to"
+        value: 'reasoning'
       - type: not-contains
-        value: "Let me"
+        value: 'I need to'
+      - type: not-contains
+        value: 'Let me'

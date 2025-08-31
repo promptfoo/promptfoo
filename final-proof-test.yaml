@@ -27,20 +27,20 @@ providers:
                   description: The location to get weather for
                 unit:
                   type: string
-                  enum: ["celsius", "fahrenheit"]
+                  enum: ['celsius', 'fahrenheit']
                   description: Temperature unit
-              required: ["location"]
+              required: ['location']
 
 tests:
   - description: Should make a tool call without showing thinking (GitHub issue #5262)
     assert:
       - type: contains
-        value: "function"
+        value: 'function'
       - type: not-contains
-        value: "Thinking:"
+        value: 'Thinking:'
       - type: not-contains
-        value: "reasoning"
+        value: 'reasoning'
       - type: not-contains
-        value: "I need to"
+        value: 'I need to'
       - type: not-contains
-        value: "Let me"
+        value: 'Let me'

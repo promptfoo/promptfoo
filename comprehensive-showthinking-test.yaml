@@ -25,7 +25,7 @@ providers:
                 location:
                   type: string
                   description: The location to get weather for
-              required: ["location"]
+              required: ['location']
 
   # Test Gemini model with showThinking: false
   - id: openrouter:google/gemini-2.5-pro
@@ -47,7 +47,7 @@ providers:
                 location:
                   type: string
                   description: The location to get weather for
-              required: ["location"]
+              required: ['location']
 
   # Test showThinking: false with tool calls
   - id: openrouter:qwen/qwen3-235b-a22b-thinking-2507
@@ -69,9 +69,9 @@ providers:
                 location:
                   type: string
                   description: The location to get weather for
-              required: ["location"]
+              required: ['location']
 
-  # Test showThinking: true with tool calls  
+  # Test showThinking: true with tool calls
   - id: openrouter:qwen/qwen3-235b-a22b-thinking-2507-with-thinking
     config:
       temperature: 0.1
@@ -91,7 +91,7 @@ providers:
                 location:
                   type: string
                   description: The location to get weather for
-              required: ["location"]
+              required: ['location']
 
   # Test showThinking: false with text response (no tools)
   - id: openrouter:qwen/qwen3-235b-a22b-thinking-2507-text-only
@@ -117,20 +117,20 @@ tests:
       prompt: 'Please use the get_weather function to get the weather for San Francisco, California.'
     assert:
       - type: contains
-        value: "function"
+        value: 'function'
       - type: not-contains
-        value: "Thinking:"
+        value: 'Thinking:'
     options:
       provider: openrouter:openai/o1-mini
 
-  - description: Gemini should work with showThinking false 
+  - description: Gemini should work with showThinking false
     vars:
       prompt: 'Please use the get_weather function to get the weather for San Francisco, California.'
     assert:
       - type: contains
-        value: "function"
+        value: 'function'
       - type: not-contains
-        value: "Thinking:"
+        value: 'Thinking:'
     options:
       provider: openrouter:google/gemini-2.5-pro
 
@@ -139,11 +139,11 @@ tests:
       prompt: 'Please use the get_weather function to get the weather for San Francisco, California.'
     assert:
       - type: contains
-        value: "function"
+        value: 'function'
       - type: not-contains
-        value: "Thinking:"
+        value: 'Thinking:'
       - type: not-contains
-        value: "reasoning"
+        value: 'reasoning'
     options:
       provider: openrouter:qwen/qwen3-235b-a22b-thinking-2507
 
@@ -152,9 +152,9 @@ tests:
       prompt: 'Please use the get_weather function to get the weather for San Francisco, California.'
     assert:
       - type: contains
-        value: "function"
+        value: 'function'
       - type: not-contains
-        value: "Thinking:"
+        value: 'Thinking:'
     options:
       provider: openrouter:qwen/qwen3-235b-a22b-thinking-2507-with-thinking
 
@@ -163,9 +163,9 @@ tests:
       prompt: 'What is the capital of France? Do not use any functions.'
     assert:
       - type: not-contains
-        value: "Thinking:"
+        value: 'Thinking:'
       - type: contains
-        value: "Paris"
+        value: 'Paris'
     options:
       provider: openrouter:qwen/qwen3-235b-a22b-thinking-2507-text-only
 
@@ -174,8 +174,8 @@ tests:
       prompt: 'What is the capital of France? Do not use any functions.'
     assert:
       - type: contains
-        value: "Thinking:"
+        value: 'Thinking:'
       - type: contains
-        value: "Paris"
+        value: 'Paris'
     options:
       provider: openrouter:qwen/qwen3-235b-a22b-thinking-2507-text-with-thinking

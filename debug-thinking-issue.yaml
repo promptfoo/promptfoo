@@ -4,7 +4,7 @@ prompts:
   - 'Please use the get_weather function to get the weather for San Francisco, California.'
 
 providers:
-  # OpenAI thinking provider that reportedly works  
+  # OpenAI thinking provider that reportedly works
   - id: openrouter:openai/o1-mini
     config:
       temperature: 0.1
@@ -26,9 +26,9 @@ providers:
                   description: The location to get weather for
                 unit:
                   type: string
-                  enum: ["celsius", "fahrenheit"]
+                  enum: ['celsius', 'fahrenheit']
                   description: Temperature unit
-              required: ["location"]
+              required: ['location']
 
   # Another OpenAI thinking provider mentioned in the issue
   - id: openrouter:openai/gpt-5-mini
@@ -54,9 +54,9 @@ providers:
                   description: The location to get weather for
                 unit:
                   type: string
-                  enum: ["celsius", "fahrenheit"]
+                  enum: ['celsius', 'fahrenheit']
                   description: Temperature unit
-              required: ["location"]
+              required: ['location']
 
   # Qwen provider that reportedly has issues
   - id: openrouter:qwen/qwen3-235b-a22b-thinking-2507
@@ -81,9 +81,9 @@ providers:
                   description: The location to get weather for
                 unit:
                   type: string
-                  enum: ["celsius", "fahrenheit"]
+                  enum: ['celsius', 'fahrenheit']
                   description: Temperature unit
-              required: ["location"]
+              required: ['location']
 
   # Another Qwen provider variation
   - id: openrouter:qwen/qwen3-coder
@@ -107,20 +107,20 @@ providers:
                   description: The location to get weather for
                 unit:
                   type: string
-                  enum: ["celsius", "fahrenheit"]
+                  enum: ['celsius', 'fahrenheit']
                   description: Temperature unit
-              required: ["location"]
+              required: ['location']
 
 tests:
   - description: Should make a tool call without showing thinking
     assert:
       - type: contains
-        value: "function"
+        value: 'function'
       - type: not-contains
-        value: "Thinking:"
+        value: 'Thinking:'
       - type: not-contains
-        value: "reasoning"
+        value: 'reasoning'
       - type: not-contains
-        value: "I need to"
+        value: 'I need to'
       - type: not-contains
-        value: "Let me"
+        value: 'Let me'

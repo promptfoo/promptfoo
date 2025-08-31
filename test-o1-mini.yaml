@@ -17,6 +17,6 @@ tests:
   - description: o1-mini should work with showThinking false for text responses
     assert:
       - type: not-contains
-        value: "Thinking:"
+        value: 'Thinking:'
       - type: contains
-        value: "4"
+        value: '4'

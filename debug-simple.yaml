@@ -23,6 +23,6 @@ providers:
                 location:
                   type: string
                   description: The location to get weather for
-              required: ["location"]
+              required: ['location']
 
 tests: []
