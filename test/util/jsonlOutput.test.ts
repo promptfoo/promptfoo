@@ -62,7 +62,7 @@ describe('JSONL output with proper line endings', () => {
 
     // Create async iterator for batches
     const batchIterator = [batch1, batch2];
-    let batchIndex = 0;
+    const batchIndex = 0;
 
     mockEval.fetchResultsBatched = jest.fn().mockImplementation(async function* () {
       for (const batch of batchIterator) {

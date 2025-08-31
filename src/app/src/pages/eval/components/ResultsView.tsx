@@ -350,7 +350,10 @@ export default function ResultsView({
 
   const currentColumnState = getColumnState(currentEvalId) || {
     selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
+    columnVisibility: allColumns.reduce(
+      (acc, col) => ({ ...acc, [col]: true }),
+      {} as VisibilityState,
+    ),
   };
 
   const visiblePromptCount = React.useMemo(
