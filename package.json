@@ -205,6 +205,8 @@
     "playwright-extra": "^4.3.6",
     "prettier": "3.6.2",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "sharp": "^0.34.3",
     "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
