@@ -30,16 +30,39 @@ export default defineConfig({
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
     react(),
-    nodePolyfills(), // Removed vm exclusion - we need it for new Function() calls
+    nodePolyfills({
+      // To exclude specific polyfills, add them to this list.
+      exclude: [
+        'fs', // Excludes the polyfill for `fs` and `node:fs`.
+        'process', // Exclude process polyfill for React 19 compatibility
+      ],
+      // Whether to polyfill specific globals.
+      globals: {
+        Buffer: true, // can also be 'build', 'dev', or false
+        global: true,
+        process: false, // Let React 19 handle process
+      },
+      // Whether to polyfill Node.js built-in modules.
+      protocolImports: true,
+    }),
   ],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
       '@promptfoo': path.resolve(__dirname, '../'),
+      react: path.resolve(__dirname, '../../node_modules/react'),
+      'react-dom': path.resolve(__dirname, '../../node_modules/react-dom'),
+      'react-dom/client': path.resolve(__dirname, '../../node_modules/react-dom/client.js'),
+      'react/jsx-runtime': path.resolve(__dirname, '../../node_modules/react/jsx-runtime.js'),
+      'react/jsx-dev-runtime': path.resolve(
+        __dirname,
+        '../../node_modules/react/jsx-dev-runtime.js',
+      ),
     },
   },
   optimizeDeps: {
     exclude: ['react-syntax-highlighter'],
+    include: ['react', 'react-dom', '@testing-library/react'],
   },
   build: {
     emptyOutDir: true,
@@ -56,6 +79,22 @@ export default defineConfig({
       },
     },
     rollupOptions: {
+      external: [
+        'vite-plugin-node-polyfills/shims/buffer',
+        'vite-plugin-node-polyfills/shims/process',
+        'vite-plugin-node-polyfills/shims/global',
+        'vite-plugin-node-polyfills/shims/util',
+      ],
+      onwarn(warning, warn) {
+        // Suppress warnings about vite-plugin-node-polyfills shims
+        if (
+          warning.code === 'UNRESOLVED_IMPORT' &&
+          warning.id?.includes('vite-plugin-node-polyfills/shims/')
+        ) {
+          return;
+        }
+        warn(warning);
+      },
       output: {
         // Manual chunking to split vendor libraries
         manualChunks: {
@@ -95,6 +134,7 @@ export default defineConfig({
     'import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY': JSON.stringify(
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
     ),
+    global: 'globalThis',
     'import.meta.env.VITE_POSTHOG_KEY': JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',

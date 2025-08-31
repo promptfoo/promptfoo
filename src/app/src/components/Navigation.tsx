@@ -1,5 +1,4 @@
-import React, { forwardRef, useState } from 'react';
-
+import React, { useState } from 'react';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EngineeringIcon from '@mui/icons-material/Engineering';
@@ -21,16 +20,9 @@ import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
 import type { ButtonProps } from '@mui/material/Button';
-import type { LinkProps } from 'react-router-dom';
 import './Navigation.css';
 
-// Create a properly typed forwarded ref component for MUI compatibility
-const RouterLink = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => (
-  <Link ref={ref} {...props} />
-));
-RouterLink.displayName = 'RouterLink';
-
-const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
+const NavButton = styled(Button)<ButtonProps>(({ theme }) => ({
   color: theme.palette.text.primary,
   padding: theme.spacing(0.5, 1),
   minWidth: 'auto',
@@ -69,9 +61,9 @@ function NavLink({ href, label }: { href: string; label: string }) {
   const isActive = location.pathname.startsWith(href);
 
   return (
-    <NavButton component={RouterLink as any} to={href} className={isActive ? 'active' : ''}>
-      {label}
-    </NavButton>
+    <Link to={href} style={{ textDecoration: 'none' }}>
+      <NavButton className={isActive ? 'active' : ''}>{label}</NavButton>
+    </Link>
   );
 }
 
@@ -192,8 +184,6 @@ function CreateDropdown({
               {menuItems.map((item) => (
                 <MenuItem
                   key={item.href}
-                  component={RouterLink}
-                  to={item.href}
                   onClick={handleClose}
                   sx={{
                     py: 1.5,
@@ -213,30 +203,32 @@ function CreateDropdown({
                     },
                   }}
                 >
-                  <Box sx={{ width: '100%' }}>
-                    <Box
-                      sx={{
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        color: 'text.primary',
-                        mb: 0.25,
-                        letterSpacing: '-0.01em',
-                      }}
-                    >
-                      {item.label}
+                  <Link to={item.href} style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}>
+                    <Box sx={{ width: '100%' }}>
+                      <Box
+                        sx={{
+                          fontSize: '0.875rem',
+                          fontWeight: 500,
+                          color: 'text.primary',
+                          mb: 0.25,
+                          letterSpacing: '-0.01em',
+                        }}
+                      >
+                        {item.label}
+                      </Box>
+                      <Box
+                        sx={{
+                          fontSize: '0.8125rem',
+                          color: 'text.secondary',
+                          lineHeight: 1.4,
+                          whiteSpace: 'normal',
+                          opacity: 0.8,
+                        }}
+                      >
+                        {item.description}
+                      </Box>
                     </Box>
-                    <Box
-                      sx={{
-                        fontSize: '0.8125rem',
-                        color: 'text.secondary',
-                        lineHeight: 1.4,
-                        whiteSpace: 'normal',
-                        opacity: 0.8,
-                      }}
-                    >
-                      {item.description}
-                    </Box>
-                  </Box>
+                  </Link>
                 </MenuItem>
               ))}
             </MenuList>
@@ -360,8 +352,6 @@ function EvalsDropdown({
               {menuItems.map((item) => (
                 <MenuItem
                   key={item.href}
-                  component={RouterLink}
-                  to={item.href}
                   onClick={handleClose}
                   sx={{
                     py: 1.5,
@@ -381,30 +371,32 @@ function EvalsDropdown({
                     },
                   }}
                 >
-                  <Box sx={{ width: '100%' }}>
-                    <Box
-                      sx={{
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        color: 'text.primary',
-                        mb: 0.25,
-                        letterSpacing: '-0.01em',
-                      }}
-                    >
-                      {item.label}
+                  <Link to={item.href} style={{ textDecoration: 'none', color: 'inherit', width: '100%' }}>
+                    <Box sx={{ width: '100%' }}>
+                      <Box
+                        sx={{
+                          fontSize: '0.875rem',
+                          fontWeight: 500,
+                          color: 'text.primary',
+                          mb: 0.25,
+                          letterSpacing: '-0.01em',
+                        }}
+                      >
+                        {item.label}
+                      </Box>
+                      <Box
+                        sx={{
+                          fontSize: '0.8125rem',
+                          color: 'text.secondary',
+                          lineHeight: 1.4,
+                          whiteSpace: 'normal',
+                          opacity: 0.8,
+                        }}
+                      >
+                        {item.description}
+                      </Box>
                     </Box>
-                    <Box
-                      sx={{
-                        fontSize: '0.8125rem',
-                        color: 'text.secondary',
-                        lineHeight: 1.4,
-                        whiteSpace: 'normal',
-                        opacity: 0.8,
-                      }}
-                    >
-                      {item.description}
-                    </Box>
-                  </Box>
+                  </Link>
                 </MenuItem>
               ))}
             </MenuList>

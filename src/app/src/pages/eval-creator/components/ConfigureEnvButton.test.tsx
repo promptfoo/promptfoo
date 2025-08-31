@@ -1,15 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, renderWithTheme } from '@app/test-utils';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore } from '@app/stores/evalConfig';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import ConfigureEnvButton from './ConfigureEnvButton';
-
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
 
 const openProviderSettingsDialog = async () => {
   const apiKeysButton = screen.getByRole('button', { name: /api keys/i });

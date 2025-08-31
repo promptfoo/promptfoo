@@ -1,7 +1,6 @@
-import React from 'react';
-
+import { fireEvent, screen } from '@app/test-utils';
+import { render } from '@testing-library/react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import type { ProviderOptions } from '@promptfoo/types';

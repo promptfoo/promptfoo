@@ -4,7 +4,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import CodeBlock from '@theme/CodeBlock';
 import styles from './styles.module.css';
 
-export default function HomepageInfo(): JSX.Element {
+export default function HomepageInfo(): React.ReactElement {
   const [activeTab, setActiveTab] = useState('security');
 
   const tabs = [

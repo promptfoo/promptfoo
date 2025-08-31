@@ -1,10 +1,10 @@
-import React, { type JSX } from 'react';
+import React from 'react';
 import { Box, Typography, Stack, useTheme, Paper, alpha } from '@mui/material';
 import { tokens } from '../tokens';
 
 interface SettingsSectionProps {
   title: string;
-  icon?: JSX.Element | null;
+  icon?: React.ReactElement | null;
   children: React.ReactNode;
   description?: string;
 }
@@ -50,7 +50,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
             py: tokens.spacing.padding.tiny,
           }}
         >
-          {icon && (
+          {icon ? (
             <Box
               sx={{
                 color: theme.palette.primary.main,
@@ -61,7 +61,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
             >
               {icon}
             </Box>
-          )}
+          ) : null}
           <Typography
             variant="subtitle1"
             fontWeight={600}

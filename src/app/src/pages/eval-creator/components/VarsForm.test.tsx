@@ -1,14 +1,7 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { screen, renderWithTheme } from '@app/test-utils';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import VarsForm from './VarsForm';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme();
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
 
 describe('VarsForm', () => {
   it('should update the value and call onAdd when a user changes a TextField value', async () => {

@@ -31,6 +31,8 @@
     "@swc/core": "^1.13.4",
     "@swc/jest": "^0.2.39",
     "@tsconfig/docusaurus": "^2.0.3",
+    "@types/react": "^19.1.7",
+    "@types/react-dom": "^19.1.6",
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
     "dedent": "^1.6.0",
@@ -65,5 +67,9 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "swiper": "^11.2.10"
+  },
+  "resolutions": {
+    "@types/react": "^19.1.7",
+    "@types/react-dom": "^19.1.6"
   }
 }

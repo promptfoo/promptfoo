@@ -62,7 +62,7 @@ function convertMarkdownToHtml(text: string): string {
   return text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>').replace(/\n/g, '<br />');
 }
 
-export default function FAQ(): JSX.Element {
+export default function FAQ(): React.ReactElement {
   return (
     <section className={`${styles.section} ${styles.faqSection}`}>
       <div className={styles.container}>
