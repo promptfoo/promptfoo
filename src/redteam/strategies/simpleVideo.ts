@@ -278,7 +278,7 @@ async function main(): Promise<void> {
 }
 
 // Cross-compatible module main check
-// Skip if we're in the CLI bundle to avoid conflicts
-if (isMainModule() && !(global as any).__PROMPTFOO_CLI_BUNDLE__) {
+// Skip if we're in any bundled context to avoid conflicts
+if (isMainModule() && !process.argv[1]?.includes('dist/') && !(global as any).__PROMPTFOO_CLI_BUNDLE__) {
   main();
 }

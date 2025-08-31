@@ -1,3 +1,12 @@
+// Set a global flag to indicate we're in a bundled context
+// This helps strategy files avoid executing their main functions
+if (
+  process.argv[1] &&
+  (process.argv[1].includes('server/index.cjs') || process.argv[1].includes('server/index.js'))
+) {
+  (global as any).__PROMPTFOO_CLI_BUNDLE__ = true;
+}
+
 import { getDefaultPort } from '../constants';
 import logger from '../logger';
 import { BrowserBehavior, checkServerRunning } from '../util/server';
@@ -10,7 +19,7 @@ async function main() {
   try {
     logger.info(`About to check if server is running on port ${port}...`);
     const isRunning = await checkServerRunning(port);
-    logger.info(`Server running check result: ${isRunning}`);
+    logger.info(`Server running check completed, result: ${isRunning}`);
     if (isRunning) {
       logger.info(`Promptfoo server already running at http://localhost:${port}`);
       process.exitCode = 1;
