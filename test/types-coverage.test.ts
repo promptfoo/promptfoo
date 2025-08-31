@@ -36,7 +36,7 @@ describe('TypeScript Types Coverage', () => {
   it('should have valid typesVersions paths that exist', () => {
     const typesVersionsPaths = typesVersions['*'];
 
-    for (const [key, paths] of Object.entries(typesVersionsPaths)) {
+    for (const [_key, paths] of Object.entries(typesVersionsPaths)) {
       const pathArray = Array.isArray(paths) ? paths : [paths];
 
       for (const typePath of pathArray) {
