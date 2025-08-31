@@ -3,7 +3,10 @@
 // Set a global flag to indicate we're in the main CLI bundle
 // This helps isMainModule() detect bundled contexts properly
 // Only set this flag when running from an actual bundled file
-if (process.argv[1] && (process.argv[1].endsWith('main.cjs') || process.argv[1].includes('main.cjs'))) {
+if (
+  process.argv[1] &&
+  (process.argv[1].endsWith('main.cjs') || process.argv[1].includes('main.cjs'))
+) {
   (global as any).__PROMPTFOO_CLI_BUNDLE__ = true;
 }
 

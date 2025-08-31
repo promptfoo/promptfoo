@@ -4,15 +4,15 @@ export default defineConfig([
   // Build library entry points as dual-format with bundling
   {
     entry: {
-      'index': 'src/index.ts',
+      index: 'src/index.ts',
       'assertions/index': 'src/assertions/index.ts',
-      'providers/index': 'src/providers/index.ts', 
+      'providers/index': 'src/providers/index.ts',
       'redteam/index': 'src/redteam/index.ts',
       'types/index': 'src/types/index.ts',
       'util/index': 'src/util/index.ts',
-      'cache': 'src/cache.ts',
-      'evaluator': 'src/evaluator.ts',
-      'logger': 'src/logger.ts',
+      cache: 'src/cache.ts',
+      evaluator: 'src/evaluator.ts',
+      logger: 'src/logger.ts',
       'server/index': 'src/server/index.ts',
     },
     format: ['cjs', 'esm'],
@@ -28,17 +28,30 @@ export default defineConfig([
     noExternal: [], // Bundle everything except external packages
     external: [
       // Heavy dependencies
-      'better-sqlite3', 'express',
+      'better-sqlite3',
+      'express',
       // Peer dependencies that should not be bundled
-      'natural', 'sharp', 'playwright', 'pdf-parse', 'langfuse', 'fluent-ffmpeg',
+      'natural',
+      'sharp',
+      'playwright',
+      'pdf-parse',
+      'langfuse',
+      'fluent-ffmpeg',
       // AWS SDK packages
-      '@aws-sdk/client-bedrock-runtime', '@aws-sdk/client-bedrock-agent-runtime',
-      '@aws-sdk/client-sagemaker-runtime', '@aws-sdk/credential-provider-sso',
+      '@aws-sdk/client-bedrock-runtime',
+      '@aws-sdk/client-bedrock-agent-runtime',
+      '@aws-sdk/client-sagemaker-runtime',
+      '@aws-sdk/credential-provider-sso',
       // Azure packages
-      '@azure/identity', '@azure/openai-assistants',
+      '@azure/identity',
+      '@azure/openai-assistants',
       // Other optional/heavy packages
-      'google-auth-library', '@fal-ai/client', 'ibm-cloud-sdk-core',
-      'node-sql-parser', 'playwright-extra', 'puppeteer-extra-plugin-stealth'
+      'google-auth-library',
+      '@fal-ai/client',
+      'ibm-cloud-sdk-core',
+      'node-sql-parser',
+      'playwright-extra',
+      'puppeteer-extra-plugin-stealth',
     ], // Externalize heavy deps and peer deps for library builds
     outExtension({ format }) {
       return {
@@ -50,24 +63,37 @@ export default defineConfig([
       // Explicitly configure external packages at esbuild level
       options.external = [
         // Heavy dependencies
-        'better-sqlite3', 'express',
+        'better-sqlite3',
+        'express',
         // Peer dependencies that should not be bundled
-        'natural', 'sharp', 'playwright', 'pdf-parse', 'langfuse', 'fluent-ffmpeg',
+        'natural',
+        'sharp',
+        'playwright',
+        'pdf-parse',
+        'langfuse',
+        'fluent-ffmpeg',
         // AWS SDK packages
-        '@aws-sdk/client-bedrock-runtime', '@aws-sdk/client-bedrock-agent-runtime',
-        '@aws-sdk/client-sagemaker-runtime', '@aws-sdk/credential-provider-sso',
+        '@aws-sdk/client-bedrock-runtime',
+        '@aws-sdk/client-bedrock-agent-runtime',
+        '@aws-sdk/client-sagemaker-runtime',
+        '@aws-sdk/credential-provider-sso',
         // Azure packages
-        '@azure/identity', '@azure/openai-assistants',
+        '@azure/identity',
+        '@azure/openai-assistants',
         // Other optional/heavy packages
-        'google-auth-library', '@fal-ai/client', 'ibm-cloud-sdk-core',
-        'node-sql-parser', 'playwright-extra', 'puppeteer-extra-plugin-stealth'
+        'google-auth-library',
+        '@fal-ai/client',
+        'ibm-cloud-sdk-core',
+        'node-sql-parser',
+        'playwright-extra',
+        'puppeteer-extra-plugin-stealth',
       ];
     },
   },
   // Build main CLI bundled with fixed isMainModule detection
   {
     entry: {
-      'main': 'src/main.ts',
+      main: 'src/main.ts',
     },
     format: ['cjs'],
     dts: false,
@@ -93,15 +119,15 @@ export default defineConfig([
   // Build types separately to avoid memory issues
   {
     entry: {
-      'index': 'src/index.ts',
+      index: 'src/index.ts',
       'assertions/index': 'src/assertions/index.ts',
-      'providers/index': 'src/providers/index.ts', 
+      'providers/index': 'src/providers/index.ts',
       'redteam/index': 'src/redteam/index.ts',
       'types/index': 'src/types/index.ts',
       'util/index': 'src/util/index.ts',
-      'cache': 'src/cache.ts',
-      'evaluator': 'src/evaluator.ts',
-      'logger': 'src/logger.ts',
+      cache: 'src/cache.ts',
+      evaluator: 'src/evaluator.ts',
+      logger: 'src/logger.ts',
       'server/index': 'src/server/index.ts',
     },
     format: ['esm'], // Only need types once
@@ -113,17 +139,30 @@ export default defineConfig([
       // Explicitly configure external packages at esbuild level
       options.external = [
         // Heavy dependencies
-        'better-sqlite3', 'express',
+        'better-sqlite3',
+        'express',
         // Peer dependencies that should not be bundled
-        'natural', 'sharp', 'playwright', 'pdf-parse', 'langfuse', 'fluent-ffmpeg',
+        'natural',
+        'sharp',
+        'playwright',
+        'pdf-parse',
+        'langfuse',
+        'fluent-ffmpeg',
         // AWS SDK packages
-        '@aws-sdk/client-bedrock-runtime', '@aws-sdk/client-bedrock-agent-runtime',
-        '@aws-sdk/client-sagemaker-runtime', '@aws-sdk/credential-provider-sso',
+        '@aws-sdk/client-bedrock-runtime',
+        '@aws-sdk/client-bedrock-agent-runtime',
+        '@aws-sdk/client-sagemaker-runtime',
+        '@aws-sdk/credential-provider-sso',
         // Azure packages
-        '@azure/identity', '@azure/openai-assistants',
+        '@azure/identity',
+        '@azure/openai-assistants',
         // Other optional/heavy packages
-        'google-auth-library', '@fal-ai/client', 'ibm-cloud-sdk-core',
-        'node-sql-parser', 'playwright-extra', 'puppeteer-extra-plugin-stealth'
+        'google-auth-library',
+        '@fal-ai/client',
+        'ibm-cloud-sdk-core',
+        'node-sql-parser',
+        'playwright-extra',
+        'puppeteer-extra-plugin-stealth',
       ];
     },
   },
