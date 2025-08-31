@@ -66,7 +66,8 @@ export async function runDbMigrations(): Promise<void> {
 }
 
 // Cross-compatible main check
-if (isMainModule()) {
+// Skip if we're in the CLI bundle to avoid conflicts
+if (isMainModule() && !(global as any).__PROMPTFOO_CLI_BUNDLE__) {
   // Run migrations and exit with appropriate code
   runDbMigrations()
     .then(() => process.exit(0))

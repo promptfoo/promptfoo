@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
 import logger from './logger';
-import { safeResolve } from './util/file.node';
+import { safeResolve } from './util/file.node.js';
 
 // esm-specific crap that needs to get mocked out in tests
 

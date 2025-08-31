@@ -147,6 +147,10 @@ export async function addImageToBase64(
 
 // Main function for direct testing via: npx tsx simpleImage.ts "Text to convert to image"
 async function main() {
+  // Skip execution if we're in the CLI bundle
+  if ((global as any).__PROMPTFOO_CLI_BUNDLE__) {
+    return;
+  }
   // Get text from command line arguments or use default
   const textToConvert = process.argv[2] || 'This is a test of the image encoding strategy.';
 
@@ -177,7 +181,8 @@ async function main() {
     logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
     // Check if we're running this directly (not being imported) - cross-compatible
-    if (isMainModule()) {
+    // Skip if we're in the CLI bundle to avoid conflicts
+    if (isMainModule() && !(global as any).__PROMPTFOO_CLI_BUNDLE__) {
       // Write to a file for testing with image viewers
       const fs = await import('fs');
       const outputFilePath = 'test-image.png';
@@ -197,6 +202,7 @@ async function main() {
 }
 
 // Run the main function if this file is executed directly - cross-compatible
-if (isMainModule()) {
+// Skip if we're in the CLI bundle to avoid conflicts
+if (isMainModule() && !(global as any).__PROMPTFOO_CLI_BUNDLE__) {
   main();
 }

@@ -10,7 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/promptfoo/promptfoo.git"
   },
-  "main": "dist/cjs/src/index.cjs",
+  "main": "dist/index.cjs",
   "types": "dist/types/index.d.ts",
   "typesVersions": {
     "*": {
@@ -58,48 +58,48 @@
   "exports": {
     ".": {
       "types": "./dist/types/index.d.ts",
-      "import": "./dist/esm/src/index.js",
-      "require": "./dist/cjs/src/index.cjs"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     },
     "./assertions": {
       "types": "./dist/types/assertions/index.d.ts",
-      "import": "./dist/esm/src/assertions/index.js",
-      "require": "./dist/cjs/src/assertions/index.cjs"
+      "import": "./dist/assertions/index.js",
+      "require": "./dist/assertions/index.cjs"
     },
     "./providers": {
       "types": "./dist/types/providers/index.d.ts",
-      "import": "./dist/esm/src/providers/index.js",
-      "require": "./dist/cjs/src/providers/index.cjs"
+      "import": "./dist/providers/index.js",
+      "require": "./dist/providers/index.cjs"
     },
     "./redteam": {
       "types": "./dist/types/redteam/index.d.ts",
-      "import": "./dist/esm/src/redteam/index.js",
-      "require": "./dist/cjs/src/redteam/index.cjs"
+      "import": "./dist/redteam/index.js",
+      "require": "./dist/redteam/index.cjs"
     },
     "./types": {
       "types": "./dist/types/types/index.d.ts",
-      "import": "./dist/esm/src/types/index.js",
-      "require": "./dist/cjs/src/types/index.cjs"
+      "import": "./dist/types/index.js",
+      "require": "./dist/types/index.cjs"
     },
     "./util": {
       "types": "./dist/types/util/index.d.ts",
-      "import": "./dist/esm/src/util/index.js",
-      "require": "./dist/cjs/src/util/index.cjs"
+      "import": "./dist/util/index.js",
+      "require": "./dist/util/index.cjs"
     },
     "./cache": {
       "types": "./dist/types/cache.d.ts",
-      "import": "./dist/esm/src/cache.js",
-      "require": "./dist/cjs/src/cache.cjs"
+      "import": "./dist/cache.js",
+      "require": "./dist/cache.cjs"
     },
     "./evaluator": {
       "types": "./dist/types/evaluator.d.ts",
-      "import": "./dist/esm/src/evaluator.js",
-      "require": "./dist/cjs/src/evaluator.cjs"
+      "import": "./dist/evaluator.js",
+      "require": "./dist/evaluator.cjs"
     },
     "./logger": {
       "types": "./dist/types/logger.d.ts",
-      "import": "./dist/esm/src/logger.js",
-      "require": "./dist/cjs/src/logger.cjs"
+      "import": "./dist/logger.js",
+      "require": "./dist/logger.cjs"
     },
     "./package.json": "./package.json"
   },
@@ -108,15 +108,7 @@
     "site"
   ],
   "files": [
-    "dist/cjs/**/*.cjs",
-    "dist/esm/**/*.js",
-    "dist/types/**/*.d.ts",
-    "dist/*/src/**/*.py",
-    "dist/*/src/**/*.go",
-    "dist/*/src/**/*.html",
-    "dist/*/src/**/*.json",
-    "dist/*/drizzle/**/*",
-    "dist/*/package.json",
+    "dist/**",
     "!dist/test/**",
     "!dist/*/test/**",
     "!dist/**/__mocks__/**",
@@ -129,19 +121,20 @@
     "node": ">=20.0.0"
   },
   "bin": {
-    "promptfoo": "dist/cjs/src/main.cjs",
-    "pf": "dist/cjs/src/main.cjs"
+    "promptfoo": "dist/main.cjs",
+    "pf": "dist/main.cjs"
   },
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
-    "bin": "dist/cjs/src/main.cjs",
+    "bin": "dist/main.cjs",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
+    "build:copy-assets": "shx mkdir -p dist/python dist/golang drizzle && shx cp src/*.html dist/ && shx cp src/python/wrapper.py dist/python/ && shx cp src/golang/wrapper.go dist/golang/ && shx cp -r drizzle dist/",
     "build:esm": "tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.cjs fix",
     "build:cjs": "node scripts/prepare-cjs-src.cjs && tsc -p tsconfig.cjs.json && node scripts/rename-js-to-cjs.cjs && node scripts/fix-cjs-imports.cjs && shx rm -rf .cjs-src .cjs-test",
     "build:types": "tsc -p tsconfig.types.json",
     "build:watch": "tsc --watch",
-    "build": "npm run generate-constants && npm run build:clean && npm run build:esm && npm run build:cjs && npm run build:types && shx cp src/*.html dist/esm/src && shx cp src/*.html dist/cjs/src && shx cp src/python/wrapper.py dist/esm/src/python && shx cp src/python/wrapper.py dist/cjs/src/python && shx mkdir -p dist/esm/src/golang && shx mkdir -p dist/cjs/src/golang && shx cp src/golang/wrapper.go dist/esm/src/golang && shx cp src/golang/wrapper.go dist/cjs/src/golang && shx rm -rf dist/esm/drizzle && shx rm -rf dist/cjs/drizzle && shx cp -r drizzle dist/esm/drizzle && shx cp -r drizzle dist/cjs/drizzle && npm run build:app && shx chmod +x dist/cjs/src/main.cjs && node scripts/fix-esm-imports.cjs validate",
+    "build": "npm run generate-constants && NODE_OPTIONS=\"--max-old-space-size=8192\" tsup && node scripts/fix-esm-imports.cjs fix && npm run build:copy-assets && npm run build:app && shx chmod +x dist/main.cjs",
     "citation:generate": "node scripts/dev-runner.cjs scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
     "db:migrate": "node scripts/dev-runner.cjs src/migrate.ts",
@@ -171,7 +164,7 @@
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
     "tsc": "tsc",
-    "mcp": "node dist/cjs/src/main.cjs mcp",
+    "mcp": "node dist/main.cjs mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy\" --ignore-dirs=\"dist,site,examples,node_modules\""
   },
   "overrides": {
@@ -292,6 +285,7 @@
     "source-map-support": "^0.5.21",
     "supertest": "^7.1.4",
     "ts-dedent": "^2.2.0",
+    "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "winston-transport": "^4.9.0",
     "zod-to-json-schema": "^3.24.6"

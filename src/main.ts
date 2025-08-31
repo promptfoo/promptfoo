@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+// Set a global flag to indicate we're in the main CLI bundle
+// This helps isMainModule() detect bundled contexts properly
+(global as any).__PROMPTFOO_CLI_BUNDLE__ = true;
+
 import { Command } from 'commander';
 import packageJson from '../package.json' with { type: 'json' };
 import { checkNodeVersion } from './checkNodeVersion';
@@ -8,7 +12,8 @@ import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
-import { evalCommand } from './commands/eval';
+// Heavy commands imported dynamically to avoid startup hanging
+// import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
 import { generateAssertionsCommand } from './commands/generate/assertions';
@@ -90,7 +95,8 @@ async function main() {
       process.exitCode = 1;
     });
 
-  // Main commands
+  // Main commands - dynamically import heavy commands
+  const { evalCommand } = await import('./commands/eval');
   evalCommand(program, defaultConfig, defaultConfigPath);
   initCommand(program);
   viewCommand(program);
@@ -121,6 +127,7 @@ async function main() {
     await loadDefaultConfig(undefined, 'redteam');
 
   redteamInitCommand(redteamBaseCommand);
+  // evalCommand is already imported above via dynamic import
   evalCommand(
     redteamBaseCommand,
     redteamConfig ?? defaultConfig,

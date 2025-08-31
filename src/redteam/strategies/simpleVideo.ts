@@ -238,6 +238,11 @@ export async function writeVideoFile(base64Video: string, outputFilePath: string
 }
 
 async function main(): Promise<void> {
+  // Skip execution if we're in the CLI bundle
+  if ((global as any).__PROMPTFOO_CLI_BUNDLE__) {
+    return;
+  }
+
   const textToConvert = process.argv[2] || 'This is a test of the video encoding strategy.';
 
   logger.info(`Converting text to video: "${textToConvert}"`);
@@ -262,7 +267,8 @@ async function main(): Promise<void> {
     logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
     // Cross-compatible module main check
-    if (isMainModule()) {
+    // Skip if we're in the CLI bundle to avoid conflicts
+    if (isMainModule() && !(global as any).__PROMPTFOO_CLI_BUNDLE__) {
       await writeVideoFile(base64Video, 'test-video.mp4');
       logger.info(`You can open it with any video player to verify the conversion.`);
     }
@@ -272,6 +278,7 @@ async function main(): Promise<void> {
 }
 
 // Cross-compatible module main check
-if (isMainModule()) {
+// Skip if we're in the CLI bundle to avoid conflicts
+if (isMainModule() && !(global as any).__PROMPTFOO_CLI_BUNDLE__) {
   main();
 }

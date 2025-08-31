@@ -274,15 +274,26 @@ function validateEsmImports(dir) {
 
 if (require.main === module) {
   const command = process.argv[2];
-  const esmDir = path.join(__dirname, '..', 'dist', 'esm');
+  const distDir = path.join(__dirname, '..', 'dist');
 
   if (command === 'fix') {
-    console.log('Fixing ESM imports...');
-    fixEsmImports(esmDir);
+    console.log('Fixing ESM imports in dist/...');
+    // Fix all .js files in dist/ (these are ESM files from tsup)
+    const glob = require('glob');
+    const jsFiles = glob.sync('**/*.js', {
+      cwd: distDir,
+      ignore: ['main.cjs', 'src/app/**/*', '**/*.cjs'], // Skip CLI bundle and web app
+    });
+
+    for (const relativeFile of jsFiles) {
+      const fullPath = path.join(distDir, relativeFile);
+      console.log(`Processing: ${relativeFile}`);
+      fixEsmImports(path.dirname(fullPath));
+    }
     console.log('ESM imports fixed!');
   } else if (command === 'validate') {
-    console.log('Validating ESM imports...');
-    const hasIssues = validateEsmImports(esmDir);
+    console.log('Validating ESM imports in dist/...');
+    const hasIssues = validateEsmImports(distDir);
     if (hasIssues) {
       console.error('❌ ESM validation failed!');
       process.exit(1);
