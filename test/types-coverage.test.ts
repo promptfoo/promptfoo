@@ -1,12 +1,23 @@
 /**
  * Test that typesVersions covers all exported subpaths
  */
+import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import path from 'path';
 
 describe('TypeScript Types Coverage', () => {
   const packageJson = require('../package.json');
   const { exports, typesVersions } = packageJson;
+
+  beforeAll(() => {
+    // Check if type files exist, build if not
+    const typesPath = path.resolve(__dirname, '../dist/types/index.d.ts');
+    
+    if (!existsSync(typesPath)) {
+      console.log('Type files missing, running build...');
+      execSync('npm run build', { stdio: 'inherit' });
+    }
+  }, 300000); // 5 minute timeout for build
 
   it('should have typesVersions entries for all exports', () => {
     const exportPaths = Object.keys(exports).filter(
