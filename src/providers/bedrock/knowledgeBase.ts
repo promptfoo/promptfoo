@@ -1,15 +1,18 @@
+import type { Agent } from 'http';
+
+import { getCache, isCacheEnabled } from '../../cache';
+import { getEnvInt, getEnvString } from '../../envars';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { AwsBedrockGenericProvider } from './index';
 import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
 } from '@aws-sdk/client-bedrock-agent-runtime';
-import type { Agent } from 'http';
-import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString, getEnvInt } from '../../envars';
-import logger from '../../logger';
-import telemetry from '../../telemetry';
+
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, ProviderResponse } from '../../types/providers';
-import { AwsBedrockGenericProvider } from './index';
 
 interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;
@@ -203,7 +206,7 @@ export class AwsBedrockKnowledgeBaseProvider
         return {
           output: parsedResponse.output,
           metadata: { citations: parsedResponse.citations },
-          tokenUsage: {},
+          tokenUsage: createEmptyTokenUsage(), // TODO: Add token usage once Bedrock Knowledge Base API supports it
           cached: true,
         };
       }
@@ -244,7 +247,7 @@ export class AwsBedrockKnowledgeBaseProvider
       return {
         output,
         metadata: { citations },
-        tokenUsage: {},
+        tokenUsage: createEmptyTokenUsage(), // TODO: Add token usage once Bedrock Knowledge Base API supports it
       };
     } catch (err) {
       return {

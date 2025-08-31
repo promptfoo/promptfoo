@@ -9,6 +9,7 @@ import { IntentPlugin } from '../../../src/redteam/plugins/intent';
 import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
+
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('../../../src/cache');
@@ -27,6 +28,11 @@ jest.mock('../../../src/util', () => ({
     generator: 'Generate test prompts',
     grader: 'Grade the response',
   }),
+}));
+jest.mock('../../../src/integrations/huggingfaceDatasets', () => ({
+  fetchHuggingFaceDataset: jest
+    .fn()
+    .mockResolvedValue([{ vars: { prompt: 'test prompt', category: 'test' } }]),
 }));
 
 // Mock contracts plugin to ensure it has canGenerateRemote = true

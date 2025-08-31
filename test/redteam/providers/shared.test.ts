@@ -7,10 +7,11 @@ import {
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
-  redteamProviderManager,
   getTargetResponse,
-  messagesToRedteamHistory,
   type Message,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import type {
   ApiProvider,
@@ -20,6 +21,10 @@ import type {
   ProviderResponse,
 } from '../../../src/types';
 import { sleep } from '../../../src/util/time';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../src/util/tokenUsageUtils';
 
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/cliState', () => ({
@@ -527,6 +532,49 @@ describe('shared redteam provider utilities', () => {
       const result = messagesToRedteamHistory(messages);
 
       expect(result).toEqual([{ prompt: 'user message 2', output: 'assistant response 2' }]);
+    });
+  });
+
+  // New tests for tryUnblocking env flag
+  describe('tryUnblocking environment flag', () => {
+    const originalEnv = process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        delete process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+      } else {
+        process.env.PROMPTFOO_DISABLE_UNBLOCKING = originalEnv;
+      }
+    });
+
+    it('short-circuits when PROMPTFOO_DISABLE_UNBLOCKING=true', async () => {
+      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'irrelevant',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.unblockingPrompt).toBeUndefined();
+    });
+
+    it('does not increment token usage when skipped via env flag', async () => {
+      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
+
+      const total = createEmptyTokenUsage();
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'irrelevant',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      accumulateResponseTokenUsage(total, result);
+
+      expect(total.numRequests).toBe(0);
     });
   });
 });

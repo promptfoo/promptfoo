@@ -1,4 +1,5 @@
 import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
+
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
 import type { AssistantFunctionCallback } from '../openai/types';
@@ -87,6 +88,12 @@ export interface AzureCompletionOptions {
   stop?: string[];
   seed?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
+
+  /**
+   * If set, automatically call these functions when the model calls them.
+   * Keys are function names, values are either functions or strings (JavaScript code).
+   */
+  functionToolCallbacks?: Record<string, AssistantFunctionCallback | string>;
 
   passthrough?: object;
   mcp?: MCPConfig;

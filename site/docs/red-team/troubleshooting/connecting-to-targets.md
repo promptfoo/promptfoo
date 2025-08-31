@@ -1,5 +1,6 @@
 ---
 sidebar_label: Connecting to Targets
+description: Red team API authentication and rate limiting configurations by validating security headers and tokens to protect AI systems from unauthorized access and abuse
 ---
 
 # Connecting to Targets

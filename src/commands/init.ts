@@ -1,15 +1,16 @@
+import fs from 'fs/promises';
+import path from 'path';
+
 import confirm from '@inquirer/confirm';
 import select from '@inquirer/select';
 import chalk from 'chalk';
-import type { Command } from 'commander';
 import dedent from 'dedent';
-import fs from 'fs/promises';
-import path from 'path';
 import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 import { isRunningUnderNpx } from '../util';
+import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 

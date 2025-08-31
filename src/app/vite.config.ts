@@ -1,12 +1,16 @@
 /// <reference types="vitest" />
-import react from '@vitejs/plugin-react';
+
 import path from 'path';
+
+import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json';
 
 const API_PORT = process.env.API_PORT || '15500';
 
+// These environment variables are inherited from the parent process (main promptfoo server)
+// We set VITE_ prefixed variables here so Vite can expose them to the client code
 if (process.env.NODE_ENV === 'development') {
   process.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
     process.env.PROMPTFOO_REMOTE_API_BASE_URL || `http://localhost:${API_PORT}`;

@@ -1,9 +1,8 @@
-import { render, screen, act, fireEvent } from '@testing-library/react';
-import React from 'react';
-import type { AssertionType, GradingResult } from '@promptfoo/types';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import type { AssertionType, GradingResult } from '@promptfoo/types';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -56,7 +55,7 @@ describe('EvalOutputPromptDialog', () => {
 
   it('displays output when provided', () => {
     render(<EvalOutputPromptDialog {...defaultProps} />);
-    expect(screen.getByText('Output')).toBeInTheDocument();
+    expect(screen.getByText('Original Output')).toBeInTheDocument();
     expect(screen.getByText('Test output')).toBeInTheDocument();
   });
 
@@ -112,9 +111,11 @@ describe('EvalOutputPromptDialog', () => {
 
     fireEvent.mouseEnter(promptBox!);
 
-    // Get the button by its aria-label (updated to match new implementation)
-    const copyButton = screen.getByLabelText('Copy prompt');
-    await userEvent.click(copyButton);
+    // Find all copy buttons and select the first one (for the prompt)
+    const copyIcons = screen.getAllByTestId('ContentCopyIcon');
+    const copyButton = copyIcons[0].closest('button');
+    expect(copyButton).toBeInTheDocument();
+    await userEvent.click(copyButton!);
 
     expect(mockClipboard.writeText).toHaveBeenCalledWith('Test prompt');
     expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();

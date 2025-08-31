@@ -1,8 +1,9 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, ProviderResponse } from '../types';
 import { REQUEST_TIMEOUT_MS } from './shared';
+
+import type { ApiProvider, ProviderResponse } from '../types';
 
 interface LlamaCompletionOptions {
   n_predict?: number;

@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+displayed_sidebar: promptfoo
 sidebar_label: Overview
 title: Configuration Overview - Prompts, Tests, and Outputs
 description: Quick overview of promptfoo's core configuration concepts including prompts, test cases, outputs, and common patterns for LLM evaluation.
@@ -224,6 +224,8 @@ tests:
 prompts:
   - file://generate.js:createPrompt
 ```
+
+Wildcards like `path/to/prompts/**/*.py:func_name` are also supported.
 
 ## Next Steps
 

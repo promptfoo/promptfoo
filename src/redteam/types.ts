@@ -102,12 +102,14 @@ type CommonOptions = {
   sharing?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   testGenerationInstructions?: string;
+  maxConcurrency?: number;
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
 export interface RedteamCliGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
+  target?: string;
   defaultConfig: Record<string, unknown>;
   defaultConfigPath?: string;
   envFile?: string;
@@ -120,6 +122,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
   progressBar?: boolean;
+  configFromCloud?: any;
 }
 
 export interface RedteamFileConfig extends CommonOptions {

@@ -18,7 +18,7 @@ keywords:
   ]
 date: 2025-07-11
 authors: [vanessa]
-tags: [security, compliance, enterprise, certification]
+tags: [company-update, best-practices]
 ---
 
 # Promptfoo Achieves SOC 2 Type II and ISO 27001 Certification: Strengthening Trust in AI Security

@@ -1,8 +1,9 @@
-import { SingleBar, Presets } from 'cli-progress';
+import { Presets, SingleBar } from 'cli-progress';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { TestCase } from '../../types';
 import invariant from '../../util/invariant';
+
+import type { TestCase } from '../../types';
 
 // Helper function to escape XML special characters for SVG
 function escapeXml(unsafe: string): string {

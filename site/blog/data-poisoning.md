@@ -17,6 +17,7 @@ keywords:
   ]
 date: 2025-01-07
 authors: [vanessa]
+tags: [security-vulnerability, best-practices, data-poisoning]
 ---
 
 # Defending Against Data Poisoning Attacks on LLMs: A Comprehensive Guide

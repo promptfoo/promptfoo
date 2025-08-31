@@ -1,8 +1,9 @@
+import * as fs from 'fs';
+
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import * as fs from 'fs';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
@@ -11,7 +12,6 @@ import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../ty
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import type { StrategyExemptPlugin } from './constants';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
@@ -32,8 +32,12 @@ import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies';
 import { DEFAULT_LANGUAGES } from './strategies/multilingual';
-import type { RedteamStrategyObject, SynthesizeOptions } from './types';
 import { extractGoalFromPrompt, getShortPluginId } from './util';
+
+import type { StrategyExemptPlugin } from './constants';
+import type { RedteamStrategyObject, SynthesizeOptions } from './types';
+
+const MAX_MAX_CONCURRENCY = 20;
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -263,9 +267,15 @@ async function applyStrategies(
       const loadedStrategy = await loadStrategy(strategy.id);
       strategyAction = loadedStrategy.action;
     } else {
-      // Handle custom strategy variants (e.g., custom:aggressive)
-      const baseStrategyId = strategy.id.includes(':') ? strategy.id.split(':')[0] : strategy.id;
-      const builtinStrategy = Strategies.find((s) => s.id === baseStrategyId);
+      // First try to find the exact strategy ID (e.g., jailbreak:composite)
+      let builtinStrategy = Strategies.find((s) => s.id === strategy.id);
+
+      // If not found, handle custom strategy variants (e.g., custom:aggressive)
+      if (!builtinStrategy && strategy.id.includes(':')) {
+        const baseStrategyId = strategy.id.split(':')[0];
+        builtinStrategy = Strategies.find((s) => s.id === baseStrategyId);
+      }
+
       if (!builtinStrategy) {
         logger.warn(`Strategy ${strategy.id} not registered, skipping`);
         continue;
@@ -487,6 +497,11 @@ export async function synthesize({
     logger.warn('Delay is enabled, setting max concurrency to 1.');
   }
 
+  if (maxConcurrency > MAX_MAX_CONCURRENCY) {
+    maxConcurrency = MAX_MAX_CONCURRENCY;
+    logger.info(`Max concurrency for test generation is capped at ${MAX_MAX_CONCURRENCY}.`);
+  }
+
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
     if (isStrategyCollection(strategy.id)) {
@@ -646,7 +661,7 @@ export async function synthesize({
         registeredPlugin.validate({
           language,
           modifiers: {
-            testGenerationInstructions,
+            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
             ...(plugin.config?.modifiers || {}),
           },
           ...resolvePluginConfig(plugin.config),
@@ -743,7 +758,7 @@ export async function synthesize({
         config: {
           language,
           modifiers: {
-            testGenerationInstructions,
+            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
             ...(plugin.config?.modifiers || {}),
           },
           ...resolvePluginConfig(plugin.config),
@@ -762,6 +777,10 @@ export async function synthesize({
             pluginConfig: resolvePluginConfig(plugin.config),
             severity:
               plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            modifiers: {
+              ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
+              ...(plugin.config?.modifiers || {}),
+            },
             ...(t?.metadata || {}),
           },
         }));
@@ -808,6 +827,10 @@ export async function synthesize({
             pluginConfig: resolvePluginConfig(plugin.config),
             severity:
               plugin.severity || getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+            modifiers: {
+              ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
+              ...(plugin.config?.modifiers || {}),
+            },
             ...(t.metadata || {}),
           },
         }));

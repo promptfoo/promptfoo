@@ -88,6 +88,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could cause harm',
+  'medical:off-label-use':
+    'Tests for inappropriate off-label medication recommendations without proper disclaimers',
   'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
   'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
   'financial:calculation-error':
@@ -133,11 +135,13 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
+  'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
   bias: 'Bias detection across protected characteristics',
+  medical: 'Medical AI safety testing across healthcare vulnerabilities',
 };
 
 // These names are displayed in risk cards and in the table
@@ -174,6 +178,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:anchoring-bias': 'Medical Anchoring Bias',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
+  'medical:off-label-use': 'Medical Off-Label Use',
   'medical:prioritization-error': 'Medical Prioritization Error',
   'medical:sycophancy': 'Medical Sycophancy',
   'financial:calculation-error': 'Financial Calculation Error',
@@ -192,6 +197,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'bias:gender': 'Gender Bias',
   'bias:race': 'Race Bias',
   bias: 'Bias Detection',
+  medical: 'Medical Safety Suite',
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -261,6 +267,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'system-prompt-override': 'System Prompt Override',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
+  'unverifiable-claims': 'Unverifiable Claims',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
 };
@@ -307,6 +314,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:anchoring-bias': Severity.High,
   'medical:hallucination': Severity.Critical,
   'medical:incorrect-knowledge': Severity.Critical,
+  'medical:off-label-use': Severity.High,
   'medical:prioritization-error': Severity.High,
   'medical:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
@@ -324,6 +332,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'bias:gender': Severity.Low,
   'bias:race': Severity.Low,
   bias: Severity.Low,
+  medical: Severity.High,
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -374,6 +383,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
   unsafebench: Severity.Medium,
+  'unverifiable-claims': Severity.Medium,
   xstest: Severity.Low,
 };
 
@@ -465,6 +475,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'medical:hallucination',
     'medical:anchoring-bias',
     'medical:incorrect-knowledge',
+    'medical:off-label-use',
     'medical:prioritization-error',
     'medical:sycophancy',
   ],
@@ -525,6 +536,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:anchoring-bias': 'MedicalAnchoringBias',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
+  'medical:off-label-use': 'MedicalOffLabelUse',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
   'financial:calculation-error': 'FinancialCalculationError',
@@ -547,6 +559,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'bias:gender': 'Gender Bias',
   'bias:race': 'Race Bias',
   bias: 'Bias Detection',
+  medical: 'Medical Safety',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -598,6 +611,7 @@ export const categoryAliases: Record<Plugin, string> = {
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
+  'unverifiable-claims': 'Unverifiable Claims',
   xstest: 'XSTest',
 };
 
@@ -643,6 +657,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'bias:gender': 'Tests handling of gender bias in responses, stereotypes, and discrimination',
   'bias:race': 'Tests handling of race bias in responses, stereotypes, and discrimination',
   bias: 'Unified bias detection across protected characteristics including age, disability, gender, and race',
+  medical:
+    'Comprehensive medical AI safety testing for healthcare-specific vulnerabilities including hallucination, anchoring bias, incorrect knowledge, off-label use, prioritization errors, and sycophancy',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -678,6 +694,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for fabricated medical facts, non-existent studies, made-up drug interactions, or other false medical information',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could be harmful if followed',
+  'medical:off-label-use':
+    'Tests for inappropriate off-label medication recommendations without proper disclaimers, warnings, or professional consultation requirements',
   'medical:prioritization-error':
     'Tests for poor medical prioritization and triage decisions that could delay critical care',
   'medical:sycophancy':
@@ -719,6 +737,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
+  'unverifiable-claims':
+    'Tests whether an AI system makes claims that cannot be verified, including future predictions, unsourced statistics, and unknowable information',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',

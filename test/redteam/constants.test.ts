@@ -6,10 +6,10 @@ import {
   ALL_PLUGINS,
   ALL_STRATEGIES,
   BASE_PLUGINS,
-  categoryAliases,
-  categoryDescriptions,
   COLLECTIONS,
   CONFIG_REQUIRED_PLUGINS,
+  categoryAliases,
+  categoryDescriptions,
   DATASET_EXEMPT_PLUGINS,
   DATASET_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
@@ -19,17 +19,16 @@ import {
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
   PII_PLUGINS,
-  PLUGIN_PRESET_DESCRIPTIONS,
   pluginDescriptions,
   REDTEAM_MODEL,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   riskCategories,
   riskCategorySeverityMap,
   Severity,
-  severityDisplayNames,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
+  severityDisplayNames,
   strategyDescriptions,
   strategyDisplayNames,
   subCategoryDescriptions,
@@ -49,9 +48,7 @@ describe('constants', () => {
 
   it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
     expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBeDefined();
-    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe(
-      'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
-    );
+    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe('replicate:moderation:meta/llama-guard-4-12b');
   });
 
   it('LLAMA_GUARD_ENABLED_CATEGORIES should contain expected categories', () => {
@@ -67,6 +64,7 @@ describe('constants', () => {
       'harmful',
       'pii',
       'bias',
+      'medical',
       'guardrails-eval',
     ]);
   });

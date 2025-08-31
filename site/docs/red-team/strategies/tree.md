@@ -1,7 +1,7 @@
 ---
 sidebar_label: Tree-based Jailbreaks
 title: Tree-based Jailbreaks Strategy
-description: Create a branching structure of single-shot prompts to systematically explore and bypass AI constraints
+description: Build tree-structured attack patterns with branching prompts to systematically map and exploit AI system constraint boundaries
 ---
 
 # Tree-based Jailbreaks Strategy
@@ -31,6 +31,16 @@ The Tree-based Jailbreaks strategy works by:
 :::warning
 This strategy is medium cost. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
+
+## Session Management
+
+When using `transformVars` with `context.uuid`, each branch exploration automatically gets a new UUID, maintaining the single-shot nature of each prompt variation.
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+```
 
 ![Tree-based Jailbreaks Strategy](/img/docs/tree-jailbreak.svg)
 

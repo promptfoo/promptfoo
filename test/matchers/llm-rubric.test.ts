@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -7,8 +8,9 @@ import { matchesLlmRubric, renderLlmRubricPrompt } from '../../src/matchers';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
-import type { ApiProvider, Assertion, GradingConfig } from '../../src/types';
 import { TestGrader } from '../util/utils';
+
+import type { ApiProvider, Assertion, GradingConfig } from '../../src/types';
 
 jest.mock('../../src/esm', () => ({
   importModule: jest.fn(),
@@ -71,12 +73,14 @@ describe('matchesLlmRubric', () => {
       pass: true,
       reason: 'Test grading output',
       score: 1,
+      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -110,6 +114,7 @@ describe('matchesLlmRubric', () => {
           acceptedPrediction: 0,
           rejectedPrediction: 0,
         },
+        numRequests: 0,
       },
     });
   });
@@ -132,6 +137,16 @@ describe('matchesLlmRubric', () => {
 
     expect(options.provider.callApi).toHaveBeenCalledWith(
       expect.stringContaining(JSON.stringify(rubric)),
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: expect.stringContaining(JSON.stringify(rubric)),
+        }),
+        vars: expect.objectContaining({
+          output: 'Sample output',
+          rubric: rubric,
+        }),
+      }),
     );
   });
 
@@ -153,13 +168,15 @@ describe('matchesLlmRubric', () => {
       assertion: undefined,
       pass: false,
       score: 0,
-      reason: 'llm-rubric produced malformed response - output must be string or object',
+      reason:
+        'llm-rubric produced malformed response - output must be string or object. Output: 42',
       tokensUsed: {
         total: 10,
         prompt: 5,
         completion: 5,
         cached: 0,
         completionDetails: undefined,
+        numRequests: 0,
       },
     });
   });
@@ -189,6 +206,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         completionDetails: undefined,
+        numRequests: 0,
       },
     });
   });
@@ -218,6 +236,128 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         completionDetails: undefined,
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should fail when string output contains only empty JSON array', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'Here is the result: []',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      assertion: undefined,
+      pass: false,
+      score: 0,
+      reason: 'Could not extract JSON from llm-rubric response',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: undefined,
+      },
+    });
+  });
+
+  it('should fail when string contains only null', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'Result: null',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    // Since extractJsonObjects only looks for objects starting with {, this returns no objects
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      assertion: undefined,
+      pass: false,
+      score: 0,
+      reason: 'Could not extract JSON from llm-rubric response',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: undefined,
+      },
+    });
+  });
+
+  it('should fail when string contains only a JSON string primitive', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: '"just a string"',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      assertion: undefined,
+      pass: false,
+      score: 0,
+      reason: 'Could not extract JSON from llm-rubric response',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: undefined,
+      },
+    });
+  });
+
+  it('should fail when string contains only a number', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: jest.fn().mockResolvedValue({
+          output: 'Result: 123',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      assertion: undefined,
+      pass: false,
+      score: 0,
+      reason: 'Could not extract JSON from llm-rubric response',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: undefined,
       },
     });
   });
@@ -239,12 +379,14 @@ describe('matchesLlmRubric', () => {
       pass: false,
       reason: 'Grading failed',
       score: 0,
+      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
   });
@@ -319,15 +461,29 @@ describe('matchesLlmRubric', () => {
       reason: 'Grading passed',
       pass: true,
       score: 1,
+      assertion: undefined,
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
       },
     });
-    expect(mockCallApi).toHaveBeenCalledWith('Grading prompt');
+    expect(mockCallApi).toHaveBeenCalledWith(
+      'Grading prompt',
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: 'Grading prompt',
+        }),
+        vars: expect.objectContaining({
+          output: 'Sample output',
+          rubric: 'Expected output',
+        }),
+      }),
+    );
 
     mockCallApi.mockRestore();
   });
@@ -681,17 +837,31 @@ describe('matchesLlmRubric', () => {
       expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
       'utf8',
     );
-    expect(grading.provider.callApi).toHaveBeenCalledWith(expect.stringContaining(mockFileContent));
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining(mockFileContent),
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: expect.stringContaining(mockFileContent),
+        }),
+        vars: expect.objectContaining({
+          output: 'Test output',
+          rubric: 'Test rubric',
+        }),
+      }),
+    );
     expect(result).toEqual({
       pass: true,
       score: 1,
       reason: 'Test passed',
+      assertion: undefined,
       tokensUsed: {
         total: 10,
         prompt: 5,
         completion: 5,
         cached: 0,
         completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        numRequests: 0,
       },
     });
   });
@@ -722,6 +892,16 @@ describe('matchesLlmRubric', () => {
 
     expect(grading.provider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Do this: Test rubric'),
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: expect.stringContaining('Do this: Test rubric'),
+        }),
+        vars: expect.objectContaining({
+          output: 'Test output',
+          rubric: 'Test rubric',
+        }),
+      }),
     );
     expect(mockImportModule).toHaveBeenCalledWith(filePath, undefined);
 
@@ -779,7 +959,19 @@ describe('matchesLlmRubric', () => {
     const { doRemoteGrading } = remoteGrading;
     expect(doRemoteGrading).not.toHaveBeenCalled();
 
-    expect(grading.provider.callApi).toHaveBeenCalledWith(expect.stringContaining('Custom prompt'));
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Custom prompt'),
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          label: 'llm-rubric',
+          raw: expect.stringContaining('Custom prompt'),
+        }),
+        vars: expect.objectContaining({
+          output: 'Test output',
+          rubric: 'Test rubric',
+        }),
+      }),
+    );
   });
 
   it('should call remote when redteam is enabled and rubric prompt is not overridden', async () => {

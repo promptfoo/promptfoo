@@ -1,6 +1,14 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
+import { ProviderEnvOverridesSchema } from '../types/env';
+import { BaseTokenUsageSchema } from '../types/shared';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
+import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
+import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+import { RedteamConfigSchema } from '../validators/redteam';
+import { NunjucksFilterMapSchema } from '../validators/shared';
+
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -8,21 +16,14 @@ import type {
   StrategyConfig,
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
-import { ProviderEnvOverridesSchema } from '../types/env';
-import { TokenUsageSchema } from '../types/shared';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
-import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
-import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
-import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema } from '../validators/shared';
 import type { Prompt, PromptFunction } from './prompts';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 import type { TraceData } from './tracing';
 
+export * from '../redteam/types';
 export * from './prompts';
 export * from './providers';
-export * from '../redteam/types';
 export * from './shared';
 export * from './tracing';
 
@@ -185,11 +186,15 @@ const EvaluateOptionsSchema = z.object({
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
   /**
-   * Timeout in milliseconds for each evaluation step. Default is 0 (no timeout).
+   * Timeout in milliseconds for each individual test case/provider API call.
+   * When reached, that specific test is marked as an error.
+   * Default is 0 (no timeout).
    */
   timeoutMs: z.number().optional(),
   /**
-   * Maximum runtime in milliseconds for the entire evaluation. Default is 0 (no limit).
+   * Maximum total runtime in milliseconds for the entire evaluation process.
+   * When reached, all remaining tests are marked as errors and the evaluation ends.
+   * Default is 0 (no limit).
    */
   maxEvalTimeMs: z.number().optional(),
   isRedteam: z.boolean().optional(),
@@ -204,7 +209,7 @@ const PromptMetricsSchema = z.object({
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
-  tokenUsage: TokenUsageSchema,
+  tokenUsage: BaseTokenUsageSchema,
   namedScores: z.record(z.string(), z.number()),
   namedScoresCount: z.record(z.string(), z.number()),
   redteam: z
@@ -418,12 +423,14 @@ export const BaseAssertionTypesSchema = z.enum([
   'contains',
   'contains-all',
   'contains-any',
+  'contains-html',
   'contains-json',
   'contains-sql',
   'contains-xml',
   'context-faithfulness',
   'context-recall',
   'context-relevance',
+  'conversation-relevance',
   'cost',
   'equals',
   'factuality',
@@ -434,6 +441,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'icontains',
   'icontains-all',
   'icontains-any',
+  'is-html',
   'is-json',
   'is-refusal',
   'is-sql',
@@ -470,9 +478,11 @@ type NotPrefixed<T extends string> = `not-${T}`;
 // The 'human' assertion type is added via the web UI to allow manual grading.
 // The 'select-best' assertion type compares all variations for a given test case
 // and selects the highest scoring one after all other assertions have completed.
-export type SpecialAssertionTypes = 'select-best' | 'human';
+// The 'max-score' assertion type selects the output with the highest aggregate score
+// from other assertions.
+export type SpecialAssertionTypes = 'select-best' | 'human' | 'max-score';
 
-export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human']);
+export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human', 'max-score']);
 
 export const NotPrefixedAssertionTypesSchema = BaseAssertionTypesSchema.transform(
   (baseType) => `not-${baseType}` as NotPrefixed<BaseAssertionTypes>,
@@ -1136,12 +1146,23 @@ export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
 export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
 
+export interface OutputMetadata {
+  promptfooVersion: string;
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  exportedAt: string;
+  evaluationCreatedAt?: string;
+  author?: string;
+}
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
   results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
+  metadata?: OutputMetadata;
 }
 
 // Live eval job state
@@ -1155,7 +1176,16 @@ export interface Job {
 }
 
 // used for writing eval results
-export const OutputFileExtension = z.enum(['csv', 'html', 'json', 'jsonl', 'txt', 'yaml', 'yml']);
+export const OutputFileExtension = z.enum([
+  'csv',
+  'html',
+  'json',
+  'jsonl',
+  'txt',
+  'xml',
+  'yaml',
+  'yml',
+]);
 export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
 
 export interface LoadApiProviderContext {

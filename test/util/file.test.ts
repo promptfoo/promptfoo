@@ -1,19 +1,20 @@
 import * as fs from 'fs';
+import path from 'path';
+
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import path from 'path';
 import cliState from '../../src/cliState';
 import {
-  maybeLoadFromExternalFile,
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
+  maybeLoadFromExternalFile,
 } from '../../src/util/file';
-import { safeResolve, safeJoin } from '../../src/util/file.node';
+import { safeJoin, safeResolve } from '../../src/util/file.node';
 import {
-  isJavascriptFile,
-  isImageFile,
-  isVideoFile,
   isAudioFile,
+  isImageFile,
+  isJavascriptFile,
+  isVideoFile,
 } from '../../src/util/fileExtensions';
 
 jest.mock('fs', () => ({

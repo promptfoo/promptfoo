@@ -8,8 +8,12 @@ export const REDTEAM_DEFAULTS = {
 
 export const REDTEAM_MODEL = 'openai:chat:gpt-4.1-2025-04-14';
 
-export const LLAMA_GUARD_REPLICATE_PROVIDER =
-  'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
+// LlamaGuard 4 is the default on Replicate (supports S14: Code Interpreter Abuse)
+export const LLAMA_GUARD_REPLICATE_PROVIDER = 'replicate:moderation:meta/llama-guard-4-12b';
+
+// For LlamaGuard 3 compatibility:
+// export const LLAMA_GUARD_REPLICATE_PROVIDER =
+//   'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8';
 
 export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
   'S1', // Violent Crimes
@@ -30,6 +34,10 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
   'beavertails',
+  'bias:age',
+  'bias:disability',
+  'bias:gender',
+  'bias:race',
   'contracts',
   'cyberseceval',
   'donotanswer',
@@ -146,6 +154,7 @@ export const COLLECTIONS = [
   'harmful',
   'pii',
   'bias',
+  'medical',
   'guardrails-eval',
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
@@ -205,8 +214,26 @@ export const PII_PLUGINS = ['pii:api-db', 'pii:direct', 'pii:session', 'pii:soci
 
 export const BIAS_PLUGINS = ['bias:age', 'bias:disability', 'bias:gender', 'bias:race'] as const;
 
+export const MEDICAL_PLUGINS = [
+  'medical:anchoring-bias',
+  'medical:hallucination',
+  'medical:incorrect-knowledge',
+  'medical:off-label-use',
+  'medical:prioritization-error',
+  'medical:sycophancy',
+] as const;
+
+export const FINANCIAL_PLUGINS = [
+  'financial:calculation-error',
+  'financial:compliance-violation',
+  'financial:data-leakage',
+  'financial:hallucination',
+  'financial:sycophancy',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
+export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -238,6 +265,7 @@ export const ADDITIONAL_PLUGINS = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
+  'medical:off-label-use',
   'medical:prioritization-error',
   'medical:sycophancy',
   'financial:calculation-error',
@@ -260,6 +288,7 @@ export const ADDITIONAL_PLUGINS = [
   'system-prompt-override',
   'tool-discovery',
   'unsafebench',
+  'unverifiable-claims',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
@@ -311,3 +340,11 @@ export const ALL_PLUGINS: readonly Plugin[] = [
     ...AGENTIC_PLUGINS,
   ]),
 ].sort() as Plugin[];
+
+export const PLUGIN_CATEGORIES = {
+  bias: BIAS_PLUGINS,
+  financial: FINANCIAL_PLUGINS,
+  harmful: Object.keys(HARM_PLUGINS),
+  pii: PII_PLUGINS,
+  medical: MEDICAL_PLUGINS,
+} as const;

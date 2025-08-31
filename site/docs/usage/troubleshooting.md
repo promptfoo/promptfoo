@@ -1,5 +1,6 @@
 ---
 sidebar_position: 60
+description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, and native builds in your LLM testing pipeline
 ---
 
 # Troubleshooting
@@ -14,7 +15,11 @@ Follow **all** of these steps:
 
 1. Do not use the `--no-write` flag. We need to write to disk to avoid memory issues.
 2. Use the `--no-table` flag.
-3. Only output to `jsonl` ex: `--output results.jsonl`
+3. **Use JSONL format**: `--output results.jsonl`
+
+:::tip
+JSONL format processes results in batches, avoiding memory limits that cause JSON export to fail on large datasets.
+:::
 
 ### Granular memory optimization
 
@@ -71,7 +76,7 @@ tests:
 
 **Default solution:** Objects are automatically converted to JSON strings:
 
-```
+```text
 Product: {"name":"Headphones","price":99.99}
 ```
 
@@ -110,7 +115,7 @@ prompts:
 
 When running `npx promptfoo@latest`, you might encounter this error:
 
-```
+```text
 Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
 was compiled against a different Node.js version using
 NODE_MODULE_VERSION 115. This version of Node.js requires

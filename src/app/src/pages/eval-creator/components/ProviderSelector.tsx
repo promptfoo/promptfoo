@@ -1,4 +1,5 @@
 import React from 'react';
+
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -7,10 +8,10 @@ import Chip from '@mui/material/Chip';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import type { ProviderOptions } from '@promptfoo/types';
 import { useProvidersStore } from '../../../store/providersStore';
 import AddLocalProviderDialog from './AddLocalProviderDialog';
 import ProviderConfigDialog from './ProviderConfigDialog';
+import type { ProviderOptions } from '@promptfoo/types';
 
 const defaultProviders: ProviderOptions[] = (
   [] as (ProviderOptions & { id: string; label?: string })[]
@@ -123,6 +124,14 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
+      id: 'anthropic:messages:claude-opus-4-1-20250805',
+      label: 'Anthropic: Claude 4.1 Opus',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
       id: 'anthropic:messages:claude-opus-4-20250514',
       label: 'Anthropic: Claude 4 Opus',
       config: {
@@ -193,6 +202,15 @@ const defaultProviders: ProviderOptions[] = (
     {
       id: 'bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0',
       label: 'Bedrock: Claude 4 Sonnet',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+        region: 'us-east-1',
+      },
+    },
+    {
+      id: 'bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0',
+      label: 'Bedrock: Claude 4.1 Opus',
       config: {
         max_tokens: 2048,
         temperature: 0.5,
@@ -464,6 +482,16 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
+      id: 'vertex:claude-opus-4-1@20250805',
+      label: 'Vertex: Claude 4.1 Opus',
+      config: {
+        region: 'global',
+        anthropic_version: 'vertex-2024-10-22',
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
       id: 'vertex:claude-opus-4@20250514',
       label: 'Vertex: Claude 4 Opus',
       config: {
@@ -524,6 +552,14 @@ const defaultProviders: ProviderOptions[] = (
     {
       id: 'openrouter:anthropic/claude-sonnet-4-20250514',
       label: 'OpenRouter: Claude 4 Sonnet',
+      config: {
+        temperature: 0.7,
+        max_tokens: 4096,
+      },
+    },
+    {
+      id: 'openrouter:anthropic/claude-opus-4-1-20250805',
+      label: 'OpenRouter: Claude 4.1 Opus',
       config: {
         temperature: 0.7,
         max_tokens: 4096,

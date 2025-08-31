@@ -1,11 +1,11 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { normalizeFinishReason, FINISH_REASON_MAP } from '../../util/finishReason';
+import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import invariant from '../../util/invariant';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
@@ -13,8 +13,11 @@ import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;
+  private functionCallbackHandler = new FunctionCallbackHandler();
 
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
@@ -267,8 +270,29 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         }
 
         if (output == null) {
-          // Restore tool_calls and function_call handling
-          output = message.tool_calls ?? message.function_call;
+          // Handle tool_calls and function_call
+          const toolCalls = message.tool_calls;
+          const functionCall = message.function_call;
+
+          // Process function/tool calls if callbacks are configured
+          if (config.functionToolCallbacks && (toolCalls || functionCall)) {
+            // Combine all calls into a single array for processing
+            const allCalls = [];
+            if (toolCalls) {
+              allCalls.push(...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]));
+            }
+            if (functionCall) {
+              allCalls.push(functionCall);
+            }
+
+            output = await this.functionCallbackHandler.processCalls(
+              allCalls.length === 1 ? allCalls[0] : allCalls,
+              config.functionToolCallbacks,
+            );
+          } else {
+            // No callbacks configured, return raw tool/function calls
+            output = toolCalls ?? functionCall;
+          }
         } else if (
           config.response_format?.type === 'json_schema' ||
           config.response_format?.type === 'json_object'

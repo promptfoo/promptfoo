@@ -1,10 +1,9 @@
-import { render, fireEvent, screen } from '@testing-library/react';
-import React from 'react';
-import { MemoryRouter } from 'react-router-dom';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import RedTeamSetupPage from './page';
@@ -38,10 +37,15 @@ vi.mock('./hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: vi.fn(),
   DEFAULT_HTTP_TARGET: { id: 'http' },
 }));
-vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
 
 // Mock child components to isolate the page component
-vi.mock('@app/components/CrispChat', () => ({ default: () => <div>CrispChat</div> }));
+vi.mock('@app/components/PylonChat', () => ({ default: () => <div>PylonChat</div> }));
 vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
 vi.mock('./components/Purpose', () => ({ default: () => <div>Purpose</div> }));
 vi.mock('./components/Plugins', () => ({ default: () => <div>Plugins</div> }));
@@ -90,7 +94,7 @@ describe('RedTeamSetupPage', () => {
         </MemoryRouter>,
       );
 
-      expect(mockedUsePageMeta).toHaveBeenCalledTimes(1);
+      expect(mockedUsePageMeta).toHaveBeenCalledTimes(2);
       expect(mockedUsePageMeta).toHaveBeenCalledWith({
         title: 'Red team setup',
         description: 'Configure red team testing',
@@ -119,12 +123,12 @@ describe('RedTeamSetupPage', () => {
         </MemoryRouter>,
       );
 
-      // Simulate a tab change by clicking the "Plugins" tab (index 2)
+      // Simulate a tab change by clicking the "Plugins" tab (index 3)
       const pluginsTab = screen.getByRole('tab', { name: /Plugins/i });
       fireEvent.click(pluginsTab);
 
       // Assert that useNavigate is called with the correct hash
-      expect(mockNavigate).toHaveBeenCalledWith('#2');
+      expect(mockNavigate).toHaveBeenCalledWith('#3');
     });
   });
 

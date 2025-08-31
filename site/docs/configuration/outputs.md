@@ -35,6 +35,9 @@ promptfoo eval --output results.json
 
 # Create CSV for spreadsheet analysis
 promptfoo eval --output results.csv
+
+# Generate XML for integration with other tools
+promptfoo eval --output results.xml
 ```
 
 ## Available Formats
@@ -109,6 +112,49 @@ promptfoo eval --output results.yaml
 ```
 
 **Use when:** Reviewing results in a text editor or version control.
+
+### JSONL Format
+
+Each line contains one JSON result:
+
+```bash
+promptfoo eval --output results.jsonl
+```
+
+**Use when:** Working with very large evaluations or when JSON export fails with memory errors.
+
+```jsonl
+{"testIdx": 0, "promptIdx": 0, "output": "Response 1", "success": true, "score": 1.0}
+{"testIdx": 1, "promptIdx": 0, "output": "Response 2", "success": true, "score": 0.9}
+```
+
+### XML Format
+
+Structured data for enterprise integrations:
+
+```bash
+promptfoo eval --output results.xml
+```
+
+**Structure:**
+
+```xml
+<promptfoo>
+  <evalId>abc-123-def</evalId>
+  <results>
+    <version>3</version>
+    <timestamp>2024-01-15T10:30:00Z</timestamp>
+    <prompts>...</prompts>
+    <providers>...</providers>
+    <outputs>...</outputs>
+    <stats>...</stats>
+  </results>
+  <config>...</config>
+  <shareableUrl>...</shareableUrl>
+</promptfoo>
+```
+
+**Use when:** Integrating with enterprise systems, XML-based workflows, or when XML is a requirement.
 
 ## Configuration Options
 
@@ -212,7 +258,7 @@ print(summary)
 
 ### 1. Organize Output Files
 
-```
+```text
 project/
 ├── promptfooconfig.yaml
 ├── evaluations/
@@ -314,10 +360,10 @@ LANG=en_US.UTF-8 promptfoo eval --output results.csv
 
 ### Performance Tips
 
-1. **Use JSON for large datasets** - Most efficient format
-2. **Generate HTML for presentations** - Best visual format
-3. **Use CSV for data analysis** - Easy Excel/Sheets integration
-4. **Stream outputs for huge evaluations** - Process results incrementally
+1. **Use JSONL for large datasets** - avoids memory issues
+2. **Use JSON for standard datasets** - complete data structure
+3. **Generate HTML for presentations** - best visual format
+4. **Use CSV for data analysis** - Excel/Sheets compatible
 
 ## Related Documentation
 

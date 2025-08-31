@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
+import { BaseTokenUsageSchema } from '../types/shared';
+import { PromptSchema } from './prompts';
+import { NunjucksFilterMapSchema } from './shared';
+
 import type {
   CallApiFunction,
   ProviderClassificationResponse,
@@ -8,8 +12,6 @@ import type {
   ProviderLabel,
   ProviderResponse,
 } from '../types/providers';
-import { PromptSchema } from './prompts';
-import { NunjucksFilterMapSchema } from './shared';
 
 export const ProviderOptionsSchema = z
   .object({
@@ -64,6 +66,38 @@ export const ApiProviderSchema = z.object({
   transform: z.string().optional(),
   delay: z.number().optional(),
   config: z.any().optional(),
+});
+
+export const ProviderResponseSchema = z.object({
+  cached: z.boolean().optional(),
+  cost: z.number().optional(),
+  error: z.string().optional(),
+  logProbs: z.array(z.number()).optional(),
+  metadata: z
+    .object({
+      redteamFinalPrompt: z.string().optional(),
+    })
+    .catchall(z.any())
+    .optional(),
+  output: z.union([z.string(), z.any()]).optional(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
+});
+
+export const ProviderEmbeddingResponseSchema = z.object({
+  error: z.string().optional(),
+  embedding: z.array(z.number()).optional(),
+  tokenUsage: BaseTokenUsageSchema.partial().optional(),
+});
+
+export const ProviderSimilarityResponseSchema = z.object({
+  error: z.string().optional(),
+  similarity: z.number().optional(),
+  tokenUsage: BaseTokenUsageSchema.partial().optional(),
+});
+
+export const ProviderClassificationResponseSchema = z.object({
+  error: z.string().optional(),
+  classification: z.record(z.number()).optional(),
 });
 
 export const ProvidersSchema = z.union([

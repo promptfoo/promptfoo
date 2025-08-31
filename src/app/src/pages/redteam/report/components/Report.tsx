@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -10,6 +10,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
@@ -22,24 +23,28 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   type EvaluateResult,
+  type EvaluateSummaryV2,
+  type GradingResult,
+  isProviderOptions,
+  ResultFailureReason,
+  type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
-  type GradingResult,
-  type ResultLightweightWithLabel,
-  type EvaluateSummaryV2,
-  isProviderOptions,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import './Report.css';
+
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 
 const App: React.FC = () => {
   const navigate = useNavigate();
@@ -49,6 +54,14 @@ const App: React.FC = () => {
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
   const { recordEvent } = useTelemetry();
+
+  // Vulnerabilities DataGrid
+  const vulnerabilitiesDataGridRef = React.useRef<HTMLDivElement>(null);
+  const [vulnerabilitiesDataGridFilterModel, setVulnerabilitiesDataGridFilterModel] =
+    React.useState<GridFilterModel>({
+      items: [],
+      logicOperator: GridLogicOperator.Or,
+    });
 
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
@@ -116,6 +129,11 @@ const App: React.FC = () => {
         return;
       }
 
+      // Exclude results with errors from being counted as failures
+      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
+        return;
+      }
+
       if (!result.success || !result.gradingResult?.pass) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
@@ -151,6 +169,11 @@ const App: React.FC = () => {
         return;
       }
 
+      // Exclude results with errors from being counted
+      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
+        return;
+      }
+
       if (result.success && result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
@@ -176,6 +199,11 @@ const App: React.FC = () => {
       (acc, row) => {
         const pluginId = getPluginIdFromResult(row);
         if (!pluginId) {
+          return acc;
+        }
+
+        // Exclude results with errors from statistics
+        if (row.error && row.failureReason === ResultFailureReason.ERROR) {
           return acc;
         }
 
@@ -243,7 +271,21 @@ const App: React.FC = () => {
   });
 
   if (!evalData || !evalId) {
-    return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '9rem',
+        }}
+      >
+        <CircularProgress size={22} />
+        <Box>Waiting for report data</Box>
+      </Box>
+    );
   }
 
   if (!evalData.config.redteam) {
@@ -417,7 +459,12 @@ const App: React.FC = () => {
             )}
           </Box>
         </Card>
-        <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
+        <Overview
+          categoryStats={categoryStats}
+          plugins={evalData.config.redteam.plugins || []}
+          vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
+          setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
+        />
         <StrategyStats
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
@@ -434,6 +481,9 @@ const App: React.FC = () => {
           evalId={evalId}
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
+          vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
+          vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
+          setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
         />
         <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
       </Stack>

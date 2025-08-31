@@ -1,8 +1,8 @@
-import type { Command } from 'commander';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { writeOutput } from '../util';
+import { writeOutput, createOutputMetadata } from '../util';
+import type { Command } from 'commander';
 
 export function exportCommand(program: Command) {
   program
@@ -22,13 +22,25 @@ export function exportCommand(program: Command) {
           logger.error(`No eval found with ID ${evalId}`);
           process.exit(1);
         }
-        const summary = await result.toEvaluateSummary();
-        const jsonData = JSON.stringify(summary, null, 2);
+
         if (cmdObj.output) {
           await writeOutput(cmdObj.output, result, null);
 
           logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
+          const summary = await result.toEvaluateSummary();
+          const metadata = createOutputMetadata(result);
+          const jsonData = JSON.stringify(
+            {
+              evalId: result.id,
+              results: summary,
+              config: result.config,
+              shareableUrl: null,
+              metadata,
+            },
+            null,
+            2,
+          );
           logger.info(jsonData);
         }
 

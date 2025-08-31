@@ -1,9 +1,10 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
+import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -15,8 +16,9 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import type { ResultLightweightWithLabel } from '@promptfoo/types';
 import fuzzysearch from 'fuzzysearch';
+import { useNavigate } from 'react-router-dom';
+import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 type SortField = 'description' | 'createdAt' | 'evalId';
 
@@ -94,7 +96,21 @@ const ReportIndex: React.FC = () => {
   }, [filteredAndSortedEvals, page]);
 
   if (isLoading) {
-    return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '9rem',
+        }}
+      >
+        <CircularProgress size={22} />
+        <Box>Waiting for reports</Box>
+      </Box>
+    );
   }
 
   if (recentEvals.length === 0) {

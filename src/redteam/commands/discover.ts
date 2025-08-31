@@ -1,9 +1,10 @@
+import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { type Command } from 'commander';
-import { randomUUID } from 'crypto';
 import dedent from 'dedent';
-import * as fs from 'fs';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
@@ -12,12 +13,14 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { loadApiProvider, loadApiProviders } from '../../providers';
+import { HttpProvider } from '../../providers/http';
 import telemetry from '../../telemetry';
-import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 
 // ========================================================
 // Schemas
@@ -25,10 +28,10 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration
 
 const TargetPurposeDiscoveryStateSchema = z.object({
   currentQuestionIndex: z.number(),
-  answers: z.array(z.string()),
+  answers: z.array(z.any()),
 });
 
-const TargetPurposeDiscoveryRequestSchema = z.object({
+export const TargetPurposeDiscoveryRequestSchema = z.object({
   state: TargetPurposeDiscoveryStateSchema,
   task: z.literal('target-purpose-discovery'),
   version: z.string(),
@@ -56,7 +59,7 @@ const TargetPurposeDiscoveryResultSchema = z.object({
   ),
 });
 
-const TargetPurposeDiscoveryTaskResponseSchema = z.object({
+export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
   done: z.boolean(),
   question: z.string().optional(),
   purpose: TargetPurposeDiscoveryResultSchema.optional(),
@@ -240,6 +243,19 @@ export async function doTargetPurposeDiscovery(
         logger.debug(
           `${LOG_PREFIX} Received response from target: ${JSON.stringify(targetResponse, null, 2)}`,
         );
+
+        // If the target is an HTTP provider and has no transformResponse defined, and the response is an object,
+        // prompt the user to define a transformResponse.
+        if (
+          target instanceof HttpProvider &&
+          target.config.transformResponse === undefined &&
+          typeof targetResponse.output === 'object' &&
+          targetResponse.output !== null
+        ) {
+          logger.warn(
+            `${LOG_PREFIX} Target response is an object; should a \`transformResponse\` function be defined?`,
+          );
+        }
 
         state.answers.push(targetResponse.output);
       }

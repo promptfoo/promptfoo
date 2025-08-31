@@ -1,13 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type {
-  ApiProvider,
-  ProviderResponse,
-  CallApiContextParams,
-  GuardrailResponse,
-} from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
@@ -15,13 +8,21 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
-import type { CompletionOptions } from './types';
 import {
-  loadFile,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  loadFile,
 } from './util';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  GuardrailResponse,
+  ProviderResponse,
+} from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -92,8 +93,10 @@ class AIStudioGenericProvider implements ApiProvider {
   getApiKey(): string | undefined {
     const apiKey =
       this.config.apiKey ||
+      this.env?.GEMINI_API_KEY ||
       this.env?.GOOGLE_API_KEY ||
       this.env?.PALM_API_KEY ||
+      getEnvString('GEMINI_API_KEY') ||
       getEnvString('GOOGLE_API_KEY') ||
       getEnvString('PALM_API_KEY');
     if (apiKey) {
@@ -136,7 +139,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
     if (!this.getApiKey()) {
       throw new Error(
-        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
@@ -195,20 +198,36 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     try {
       const output = data.candidates[0].content;
+      const tokenUsage = cached
+        ? {
+            cached: data.usageMetadata?.totalTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 0,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          }
+        : {
+            prompt: data.usageMetadata?.promptTokenCount,
+            completion: data.usageMetadata?.candidatesTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 1,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          };
+
       return {
         output,
-        tokenUsage: cached
-          ? {
-              cached: data.usageMetadata?.totalTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 0,
-            }
-          : {
-              prompt: data.usageMetadata?.promptTokenCount,
-              completion: data.usageMetadata?.candidatesTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 1,
-            },
+        tokenUsage,
         raw: data,
         cached,
       };
@@ -223,10 +242,23 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     if (this.initializationPromise) {
       await this.initializationPromise;
     }
+    if (!this.getApiKey()) {
+      throw new Error(
+        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
-      this.config.systemInstruction,
+      config.systemInstruction,
+      { useAssistantRole: config.useAssistantRole },
     );
 
     // Determine API version based on model
@@ -234,33 +266,30 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const allTools = [
-      ...mcpTools,
-      ...(this.config.tools ? loadFile(this.config.tools, context?.vars) : []),
-    ];
+    const allTools = [...mcpTools, ...(config.tools ? loadFile(config.tools, context?.vars) : [])];
     // --- End MCP tool injection logic ---
 
     const body: Record<string, any> = {
       contents,
       generationConfig: {
-        ...(this.config.temperature !== undefined && { temperature: this.config.temperature }),
-        ...(this.config.topP !== undefined && { topP: this.config.topP }),
-        ...(this.config.topK !== undefined && { topK: this.config.topK }),
-        ...(this.config.stopSequences !== undefined && {
-          stopSequences: this.config.stopSequences,
+        ...(config.temperature !== undefined && { temperature: config.temperature }),
+        ...(config.topP !== undefined && { topP: config.topP }),
+        ...(config.topK !== undefined && { topK: config.topK }),
+        ...(config.stopSequences !== undefined && {
+          stopSequences: config.stopSequences,
         }),
-        ...(this.config.maxOutputTokens !== undefined && {
-          maxOutputTokens: this.config.maxOutputTokens,
+        ...(config.maxOutputTokens !== undefined && {
+          maxOutputTokens: config.maxOutputTokens,
         }),
-        ...this.config.generationConfig,
+        ...config.generationConfig,
       },
-      safetySettings: this.config.safetySettings,
-      ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
+      safetySettings: config.safetySettings,
+      ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
-    if (this.config.responseSchema) {
+    if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
         throw new Error(
           '`responseSchema` provided but `generationConfig.response_schema` already set.',
@@ -268,7 +297,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       }
 
       const schema = maybeLoadFromExternalFile(
-        renderVarsInObject(this.config.responseSchema, context?.vars),
+        renderVarsInObject(config.responseSchema, context?.vars),
       );
 
       body.generationConfig.response_schema = schema;
@@ -333,20 +362,36 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         };
       }
 
+      const tokenUsage = cached
+        ? {
+            cached: data.usageMetadata?.totalTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 0,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          }
+        : {
+            prompt: data.usageMetadata?.promptTokenCount,
+            completion: data.usageMetadata?.candidatesTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 1,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          };
+
       return {
         output,
-        tokenUsage: cached
-          ? {
-              cached: data.usageMetadata?.totalTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 0,
-            }
-          : {
-              prompt: data.usageMetadata?.promptTokenCount,
-              completion: data.usageMetadata?.candidatesTokenCount,
-              total: data.usageMetadata?.totalTokenCount,
-              numRequests: 1,
-            },
+        tokenUsage,
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
@@ -372,3 +417,15 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
   }
 }
+
+export const DefaultGradingProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultGradingJsonProvider = new AIStudioGenericProvider('gemini-2.5-pro', {
+  config: {
+    generationConfig: {
+      response_mime_type: 'application/json',
+    },
+  },
+});
+export const DefaultLlmRubricProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultSuggestionsProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultSynthesizeProvider = new AIStudioGenericProvider('gemini-2.5-pro');

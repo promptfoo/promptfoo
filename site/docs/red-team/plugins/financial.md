@@ -1,7 +1,7 @@
 ---
 sidebar_label: Finance Plugins
 title: Financial Red-Teaming Plugins - AI Security for Finance
-description: Comprehensive guide to medical red-teaming plugins for testing AI systems in finance contexts.
+description: Test AI systems for financial sector vulnerabilities including fraud, market manipulation, and regulatory compliance risks
 ---
 
 # Financial Red-Teaming Plugins

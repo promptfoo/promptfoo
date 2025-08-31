@@ -1,11 +1,12 @@
 import logger from '../../logger';
+import { MCPClient } from './client';
+
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types';
-import { MCPClient } from './client';
 import type { MCPConfig } from './types';
 
 interface MCPProviderOptions {

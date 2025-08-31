@@ -1,4 +1,5 @@
 import React from 'react';
+
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -206,8 +207,14 @@ const RiskCard: React.FC<{
             failures={failuresByPlugin[selectedCategory] || []}
             passes={passesByPlugin[selectedCategory] || []}
             evalId={evalId}
-            numPassed={testTypes.find((t) => t.name === selectedCategory)?.numPassed || 0}
-            numFailed={testTypes.find((t) => t.name === selectedCategory)?.numFailed || 0}
+            numPassed={(() => {
+              const testType = testTypes.find((t) => t.name === selectedCategory);
+              return testType?.numPassed ?? 0;
+            })()}
+            numFailed={(() => {
+              const testType = testTypes.find((t) => t.name === selectedCategory);
+              return testType?.numFailed ?? 0;
+            })()}
             strategyStats={strategyStats}
           />
         )}

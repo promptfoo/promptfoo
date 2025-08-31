@@ -16,7 +16,7 @@ keywords:
   ]
 date: 2025-06-27
 authors: [ian]
-tags: [comparison, security, red-teaming, tools]
+tags: [tool-comparison, red-teaming, pyrit]
 ---
 
 # Promptfoo vs PyRIT: A Practical Comparison of LLM Red Teaming Tools
@@ -35,6 +35,8 @@ As enterprises deploy AI applications at scale, red teaming has become essential
 | **Reporting**         | Visual dashboards, OWASP mapping | Raw outputs              |
 | **Learning Curve**    | Low                              | High                     |
 | **Best For**          | Continuous security testing      | Custom deep-dives        |
+
+<!-- truncate -->
 
 PyRIT interface:
 
@@ -151,8 +153,8 @@ results = orchestrator.run(attacker, target)
 
 ### Promptfoo
 
-- 100,000+ users since 2023
-- Used by 27 Fortune 500 companies
+- 125,000+ users since 2023
+- Used by 44 Fortune 500 companies
 - Featured in OpenAI, Anthropic, AWS course materials
 - Regular updates for new attack techniques
 - Active Discord and GitHub community

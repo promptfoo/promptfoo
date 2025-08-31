@@ -1,7 +1,7 @@
 ---
 sidebar_label: Iterative Jailbreaks
 title: Iterative Jailbreaks Strategy
-description: Systematically probe and bypass AI system constraints by repeatedly refining prompts through multiple iterations
+description: Apply iterative refinement techniques to systematically evolve prompts that probe and bypass AI safety constraints effectively
 ---
 
 # Iterative Jailbreaks Strategy
@@ -47,6 +47,16 @@ The Iterative Jailbreaks strategy works by:
 :::warning
 This strategy is medium cost since it makes multiple API calls per test. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
+
+## Session Management
+
+When using `transformVars` with `context.uuid`, each iteration automatically gets a new UUID. This prevents conversation history from affecting subsequent attempts.
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+```
 
 ## Example Scenario
 

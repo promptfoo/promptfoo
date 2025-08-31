@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -13,8 +14,8 @@ import {
 } from '@promptfoo/redteam/constants';
 import FrameworkCard from './FrameworkCard';
 import {
-  expandPluginCollections,
   categorizePlugins,
+  expandPluginCollections,
   getProgressColor,
 } from './FrameworkComplianceUtils';
 import CSVExporter from './FrameworkCsvExporter';

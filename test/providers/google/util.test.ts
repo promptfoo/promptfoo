@@ -1,16 +1,18 @@
 import * as fs from 'fs';
+
 import { GoogleAuth } from 'google-auth-library';
 import * as nunjucks from 'nunjucks';
 import logger from '../../../src/logger';
-import type { Tool } from '../../../src/providers/google/types';
 import {
-  maybeCoerceToGeminiFormat,
   geminiFormatAndSystemInstructions,
   loadFile,
+  maybeCoerceToGeminiFormat,
+  normalizeTools,
   parseStringObject,
   validateFunctionCall,
-  normalizeTools,
 } from '../../../src/providers/google/util';
+
+import type { Tool } from '../../../src/providers/google/types';
 
 jest.mock('google-auth-library');
 
@@ -250,6 +252,58 @@ describe('util', () => {
       });
     });
 
+    it('should map assistant role to model role by default', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'model', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant mapped to model
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should preserve assistant role when useAssistantRole is true', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'assistant', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant preserved
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should map assistant to model when useAssistantRole is false', () => {
+      const input = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'Hello' }] },
+          { role: 'model', parts: [{ text: 'Hi there' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
     it('should handle OpenAI chat format with array content', () => {
       const input = [
         {
@@ -268,6 +322,21 @@ describe('util', () => {
         coerced: true,
         systemInstruction: undefined,
       });
+    });
+
+    it('should respect useAssistantRole flag with array content', () => {
+      const input = [
+        { role: 'user', content: [{ type: 'text', text: 'Question' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'Answer' }] },
+      ];
+
+      // Test with useAssistantRole: true
+      const resultWithAssistant = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(resultWithAssistant.contents[1].role).toBe('assistant');
+
+      // Test with useAssistantRole: false (default)
+      const resultWithModel = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(resultWithModel.contents[1].role).toBe('model');
     });
 
     it('should handle OpenAI chat format with object content', () => {
@@ -927,6 +996,416 @@ describe('util', () => {
 
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
       expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
+    });
+
+    describe('support for images in contents', () => {
+      const validBase64Image =
+        '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=';
+
+      it('should preserve text formatting when no images are present', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          someVar: 'not an image',
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should preserve text formatting when no context variables are provided', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
+              },
+            ],
+          },
+        ]);
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Hello world!\n\n  This is indented text.\n\nAnd this has multiple\n\n\nEmpty lines.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should convert base64 images from context variables while preserving other text', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Here is some text before the image:\n\n${validBase64Image}\n\nAnd here is some text after the image.`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: validBase64Image,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Here is some text before the image:\n',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: validBase64Image,
+                },
+              },
+              {
+                text: 'And here is some text after the image.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should handle multiple images mixed with text', () => {
+        const image1 = validBase64Image;
+        const image2 =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAGA5w5EQwA7BHigu/QKBgAAAABJRU5ErkJggg==';
+
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `First line of text.\n${image1}\nMiddle text line.\n${image2}\nLast line of text.`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: image1,
+          image2: image2,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'First line of text.',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: image1,
+                },
+              },
+              {
+                text: 'Middle text line.',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/png',
+                  data: image2,
+                },
+              },
+              {
+                text: 'Last line of text.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should preserve complex formatting with whitespace and empty lines', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Title\n\n    Indented paragraph with spaces\n\n\n    Another indented paragraph\n        with more indentation\n\n',
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          notAnImage: 'just text',
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Title\n\n    Indented paragraph with spaces\n\n\n    Another indented paragraph\n        with more indentation\n\n',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should handle edge case with image at the beginning', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `${validBase64Image}\nText after image`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: validBase64Image,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: validBase64Image,
+                },
+              },
+              {
+                text: 'Text after image',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should handle edge case with image at the end', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Text before image\n${validBase64Image}`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: validBase64Image,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Text before image',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: validBase64Image,
+                },
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should handle non-text parts without modification', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Some text',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/png',
+                  data: 'existing-image-data',
+                },
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: validBase64Image,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Some text',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/png',
+                  data: 'existing-image-data',
+                },
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should handle empty text parts', () => {
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: '',
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          image1: validBase64Image,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: '',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should correctly detect and process WebP images', () => {
+        // WebP file starts with "RIFF" (UklGR in base64) followed by file size
+        // This is a longer base64 string to meet the 100 character minimum requirement
+        const webpBase64 =
+          'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vuUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `Here is a WebP image:\n${webpBase64}\nEnd of image.`,
+              },
+            ],
+          },
+        ]);
+
+        const contextVars = {
+          webpImage: webpBase64,
+        };
+
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+        expect(contents).toEqual([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Here is a WebP image:',
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/webp',
+                  data: webpBase64,
+                },
+              },
+              {
+                text: 'End of image.',
+              },
+            ],
+          },
+        ]);
+      });
+
+      it('should correctly detect WebP images with variable file sizes', () => {
+        // Different valid WebP base64 strings that start with UklGR (not UklGRg)
+        // These represent "RIFF" followed by different file size bytes
+        // Each is padded to be over 100 characters to meet the minimum requirement
+        const webpVariants = [
+          'UklGRjAAAABXRUJQVlA4IBQAAAAwAQCdASoBAAEAAQAcJaACdLoB/AAAA0AA/v359OAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+          'UklGRkAAAABXRUJQVlA4IEQAAAAwAgCdASoCAAIAAQAcJaACdLoD/AAAA8AAAAj17Zs+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+          'UklGRlAAAABXRUJQVlA4IEQAAAAwAgCdASoCAAIAAQAcJaACdLoD/AAAA8AAAAj17Zs+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+        ];
+
+        webpVariants.forEach((webpData, index) => {
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: webpData,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            [`webpImage${index}`]: webpData,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts).toEqual([
+            {
+              inlineData: {
+                mimeType: 'image/webp',
+                data: webpData,
+              },
+            },
+          ]);
+        });
+      });
     });
   });
 
