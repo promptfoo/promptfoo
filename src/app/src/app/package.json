@@ -45,7 +45,7 @@
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.0",
     "jsdom": "^26.1.0",
-    "posthog-js": "^1.261.0",
+    "posthog-js": "^1.260.2",
     "prismjs": "^1.30.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -62,10 +62,5 @@
     "vite-plugin-node-polyfills": "^0.24.0",
     "vitest": "^3.2.4",
     "zustand": "^5.0.8"
-  },
-  "dependencies": {
-    "redent": "^3.0.0",
-    "reselect": "^5.1.1",
-    "set-cookie-parser": "^2.7.1"
   }
 }
