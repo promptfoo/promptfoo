@@ -307,9 +307,6 @@ jobs:
           # Kill any existing processes on port 8500
           pkill -f "API_PORT=8500" || true
           
-          # Run database migrations first
-          PROMPTFOO_CONFIG_DIR=/tmp/promptfoo-ci node dist/main.cjs db:migrate
-          
           # Start server
           PROMPTFOO_CONFIG_DIR=/tmp/promptfoo-ci LOG_LEVEL=DEBUG API_PORT=8500 node dist/server/index.cjs &
           SERVER_PID=$!
