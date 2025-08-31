@@ -1,0 +1,54 @@
+# Multimodal chat with Llama 4 models
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Image understanding capabilities with Llama 4 multimodal models
+
+providers:
+  # Only multimodal Llama 4 models support image inputs
+  - id: llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8
+    config:
+      temperature: 0.3
+      max_tokens: 1500
+
+  - id: llamaapi:Llama-4-Scout-17B-16E-Instruct-FP8
+    config:
+      temperature: 0.3
+      max_tokens: 1500
+
+prompts:
+  - role: user
+    content:
+      - type: text
+        text: '{{question}}'
+      - type: image_url
+        image_url:
+          url: '{{image_url}}'
+
+tests:
+  - vars:
+      question: 'What do you see in this image? Describe it in detail.'
+      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg'
+    assert:
+      - type: llm-rubric
+        value: 'The response accurately describes the natural scene with boardwalk'
+
+  - vars:
+      question: 'What colors are prominent in this image?'
+      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Vd-Orig.png/256px-Vd-Orig.png'
+    assert:
+      - type: llm-rubric
+        value: 'The response identifies colors present in the image'
+
+  - vars:
+      question: 'Can you read any text in this image?'
+      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Hello_world.svg/500px-Hello_world.svg.png'
+    assert:
+      - type: llm-rubric
+        value: 'The response attempts to identify text if present'
+
+  - vars:
+      question: 'What objects or items can you identify in this image?'
+      image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Cat_August_2010-4.jpg/1200px-Cat_August_2010-4.jpg'
+    assert:
+      - type: llm-rubric
+        value: 'The response identifies a cat and describes its appearance'

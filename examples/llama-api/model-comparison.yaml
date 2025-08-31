@@ -1,0 +1,98 @@
+# Model comparison across different Llama API models
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Compare performance across different Llama API models
+
+providers:
+  # Meta-hosted models
+  - id: llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8
+    label: 'Llama 4 Maverick'
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+  - id: llamaapi:Llama-4-Scout-17B-16E-Instruct-FP8
+    label: 'Llama 4 Scout'
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+  - id: llamaapi:Llama-3.3-70B-Instruct
+    label: 'Llama 3.3 70B'
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+  - id: llamaapi:Llama-3.3-8B-Instruct
+    label: 'Llama 3.3 8B'
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+  # Accelerated variants
+  - id: llamaapi:Cerebras-Llama-4-Maverick-17B-128E-Instruct
+    label: 'Cerebras Llama 4'
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+  - id: llamaapi:Groq-Llama-4-Maverick-17B-128E-Instruct
+    label: 'Groq Llama 4'
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+prompts:
+  - '{{task}}'
+
+tests:
+  - vars:
+      task: 'Write a concise explanation of machine learning in exactly 100 words.'
+    assert:
+      - type: word-count
+        value: 100
+        threshold: 10
+      - type: contains
+        value: 'machine learning'
+      - type: llm-rubric
+        value: 'The explanation is accurate and informative'
+
+  - vars:
+      task: 'Solve this problem step by step: If a train travels 120 miles in 2 hours, and then 180 miles in 3 hours, what is its average speed for the entire journey?'
+    assert:
+      - type: contains
+        value: '60' # Expected average speed
+      - type: llm-rubric
+        value: 'The solution shows clear step-by-step reasoning'
+      - type: llm-rubric
+        value: 'The final answer is mathematically correct'
+
+  - vars:
+      task: 'Create a haiku about artificial intelligence.'
+    assert:
+      - type: llm-rubric
+        value: 'The response follows the traditional 5-7-5 syllable pattern of a haiku'
+      - type: contains-any
+        value: ['AI', 'artificial', 'intelligence', 'machine', 'robot']
+      - type: llm-rubric
+        value: 'The haiku is creative and relevant to AI'
+
+  - vars:
+      task: 'List 5 pros and 5 cons of remote work.'
+    assert:
+      - type: llm-rubric
+        value: 'Lists exactly 5 advantages and 5 disadvantages'
+      - type: contains-any
+        value: ['flexibility', 'commute', 'productivity', 'isolation']
+      - type: llm-rubric
+        value: 'The points are realistic and well-reasoned'
+
+  - vars:
+      task: 'Explain the difference between recursion and iteration in programming with a simple example.'
+    assert:
+      - type: contains-all
+        value: ['recursion', 'iteration']
+      - type: llm-rubric
+        value: 'Provides clear definitions of both concepts'
+      - type: llm-rubric
+        value: 'Includes at least one code example or pseudo-code'

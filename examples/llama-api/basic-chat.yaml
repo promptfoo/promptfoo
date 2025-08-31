@@ -1,0 +1,68 @@
+# Basic chat completion with Llama API
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Basic chat completion with Meta Llama models via Llama API
+
+providers:
+  # Llama 4 models (multimodal)
+  - id: llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+  # Llama 3.3 models (text-only)
+  - id: llamaapi:Llama-3.3-70B-Instruct
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+  - id: llamaapi:Llama-3.3-8B-Instruct
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+  # Accelerated variants
+  - id: llamaapi:Cerebras-Llama-4-Maverick-17B-128E-Instruct
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+prompts:
+  - '{{prompt}}'
+
+tests:
+  - vars:
+      prompt: 'Explain the concept of artificial intelligence in simple terms.'
+    assert:
+      - type: contains
+        value: 'artificial intelligence'
+      - type: contains
+        value: 'machine'
+
+  - vars:
+      prompt: 'Write a short poem about the ocean.'
+    assert:
+      - type: contains
+        value: 'ocean'
+      - type: llm-rubric
+        value: 'The response is a poem with appropriate structure and imagery'
+
+  - vars:
+      prompt: 'What are the main differences between Python and JavaScript?'
+    assert:
+      - type: contains
+        value: 'Python'
+      - type: contains
+        value: 'JavaScript'
+      - type: llm-rubric
+        value: 'The response accurately compares the two programming languages'
+
+  - vars:
+      prompt: 'Explain quantum computing in one paragraph.'
+    assert:
+      - type: contains
+        value: 'quantum'
+      - type: length
+        max: 500
+      - type: llm-rubric
+        value: 'The explanation is accurate and concise'
