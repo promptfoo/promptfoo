@@ -302,12 +302,12 @@ jobs:
       - name: Run local server
         run: |
           npm run build
-          PROMPTFOO_CONFIG_DIR=~/tmp LOG_LEVEL=DEBUG API_PORT=8500 node dist/cjs/src/server/index.cjs &
+          PROMPTFOO_CONFIG_DIR=~/tmp LOG_LEVEL=DEBUG API_PORT=8500 node dist/server/index.cjs &
 
       - name: run promptfoo eval
         id: eval
         run: |
-          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/cjs/src/main.cjs eval -c .github/assets/promptfooconfig.yaml --share
+          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/main.cjs eval -c .github/assets/promptfooconfig.yaml --share
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1
 
@@ -331,8 +331,8 @@ jobs:
         env:
           PROMPTFOO_STAGING_API_KEY: ${{ secrets.PROMPTFOO_STAGING_API_KEY }}
         run: |
-          node dist/cjs/src/main.cjs auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
-          node dist/cjs/src/main.cjs eval -c .github/assets/promptfooconfig.yaml --share
+          node dist/main.cjs auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
+          node dist/main.cjs eval -c .github/assets/promptfooconfig.yaml --share
 
   redteam:
     name: Redteam

@@ -96,8 +96,8 @@ export function isMainModule(importMetaUrl?: string): boolean {
       }
     }
 
-    // In bundled context, default to false unless we're sure it's main CLI code
-    return false;
+    // In bundled context, fall back to CJS detection if stack-based detection fails
+    // Don't return false immediately - let it fall through to CJS logic below
   }
 
   const url = importMetaUrl || getImportMetaUrl();
