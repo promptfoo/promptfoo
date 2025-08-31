@@ -261,13 +261,13 @@ describe('ResultsView', () => {
           vars: ['Variable 1'],
         },
         body: [
-          ({
+          {
             outputs: [{ pass: true, score: 1, text: 'test output' }],
             test: {},
             vars: ['test var'],
             description: 'Test description',
             testIdx: 0,
-          } as EvaluateTableRow),
+          } as EvaluateTableRow,
         ],
       },
     };
