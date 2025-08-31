@@ -22,11 +22,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
 
-    // Only initialize the callback handler after MCP is ready (if enabled)
+    // Initialize callback handler immediately (will be replaced if MCP is enabled)
+    this.functionCallbackHandler = new FunctionCallbackHandler();
+
+    // Initialize MCP if enabled
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
-    } else {
-      this.functionCallbackHandler = new FunctionCallbackHandler();
     }
   }
 
