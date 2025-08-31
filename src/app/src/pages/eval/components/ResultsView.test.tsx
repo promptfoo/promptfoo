@@ -248,6 +248,51 @@ describe('ResultsView', () => {
     };
   });
 
+  // [Tusk] FAILING TEST
+  it('ResultsView should default to all columns visible and selected if neither a specific column state nor last used column settings exist for the current evaluation', () => {
+    const allColumns = ['description', 'Variable 1', 'Prompt 1'];
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      table: {
+        head: {
+          prompts: [{ provider: 'test-provider' }],
+          vars: ['Variable 1'],
+        },
+        body: [
+          {
+            outputs: [{ pass: true, score: 1, text: 'test output' }],
+            test: {},
+            vars: ['test var'],
+          },
+        ],
+      },
+    };
+
+    mockResultsViewSettingsStoreData = {
+      ...mockResultsViewSettingsStoreData,
+      getColumnState: vi.fn(() => undefined) as any,
+      setColumnState: vi.fn(),
+    };
+
+    vi.mock('./store', () => ({
+      useTableStore: vi.fn(() => mockTableStoreData),
+      useResultsViewSettingsStore: vi.fn(() => mockResultsViewSettingsStoreData),
+    }));
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(mockResultsViewSettingsStoreData.setColumnState).toHaveBeenCalledWith('1', {
+      selectedColumns: allColumns,
+      columnVisibility: {
+        description: true,
+        'Variable 1': true,
+        'Prompt 1': true,
+      },
+    });
+  });
+
   it('renders ResultsCharts when table, config, and more than one prompt are present and viewport height is at least 1100px', () => {
     Object.defineProperty(window, 'innerHeight', {
       writable: true,

@@ -172,6 +172,31 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
       const retrievedState1 = useResultsViewSettingsStore.getState().getColumnState(evalId1);
       expect(retrievedState1).toEqual(columnState1);
     });
+
+    it('should handle lastUsedColumnSettings containing columns that do not exist in the new evaluation', () => {
+      const evalId = 'test-eval-1';
+      const lastUsedColumnSettings: ColumnState = {
+        selectedColumns: ['col1', 'col2', 'nonExistentColumn'],
+        columnVisibility: { col1: true, col2: false, nonExistentColumn: true },
+      };
+
+      act(() => {
+        useResultsViewSettingsStore.setState({ lastUsedColumnSettings });
+      });
+
+      const retrievedState = useResultsViewSettingsStore.getState().getColumnState(evalId);
+
+      const _expectedState: ColumnState = {
+        selectedColumns: ['col1', 'col2'],
+        columnVisibility: { col1: true, col2: false },
+      };
+
+      expect(retrievedState).toEqual({
+        selectedColumns: expect.arrayContaining(['col1', 'col2']),
+        columnVisibility: { col1: true, col2: false },
+      });
+      expect(retrievedState?.selectedColumns.length).toBe(2);
+    });
   });
 
   describe('column state persistence behavior', () => {
@@ -236,6 +261,48 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
 
       const retrievedState = useResultsViewSettingsStore.getState().getColumnState(evalId);
       expect(retrievedState).toEqual(complexState);
+    });
+  });
+
+  describe('corrupted lastUsedColumnSettings', () => {
+    it('should handle corrupted lastUsedColumnSettings in localStorage gracefully', () => {
+      localStorage.setItem(
+        'eval-settings',
+        '{"lastUsedColumnSettings": "this is not valid JSON", "version": 1}',
+      );
+
+      const store = useResultsViewSettingsStore.getState();
+
+      expect(store.lastUsedColumnSettings).toBeNull();
+
+      const evalId = 'nonexistent-eval';
+      const retrievedState = store.getColumnState(evalId);
+      expect(retrievedState).toBeNull();
+
+      localStorage.removeItem('eval-settings');
+    });
+  });
+
+  describe('getColumnState - Data Migration', () => {
+    it('should handle migration of persisted column state data when the ColumnState interface is updated', () => {
+      const evalId = 'test-eval-1';
+
+      const oldColumnState = {
+        selectedColumns: ['col1', 'col2'],
+      };
+
+      act(() => {
+        useResultsViewSettingsStore.setState((state) => ({
+          ...state,
+          lastUsedColumnSettings: oldColumnState as any,
+        }));
+      });
+
+      const retrievedState = useResultsViewSettingsStore.getState().getColumnState(evalId);
+
+      expect(retrievedState).toBeDefined();
+      expect(retrievedState?.selectedColumns).toEqual(oldColumnState.selectedColumns);
+      expect(retrievedState?.columnVisibility).toEqual(undefined);
     });
   });
 });
