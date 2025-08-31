@@ -57,7 +57,7 @@
     ]
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "swiper": "^11.2.10"
