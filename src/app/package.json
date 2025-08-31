@@ -15,7 +15,10 @@
   },
   "dependencies": {
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "redent": "^3.0.0",
+    "reselect": "^5.1.1",
+    "set-cookie-parser": "^2.7.1"
   },
   "overrides": {
     "react": "$react",
@@ -83,10 +86,5 @@
     "vite-plugin-node-polyfills": "^0.24.0",
     "vitest": "^3.2.4",
     "zustand": "^5.0.8"
-  },
-  "dependencies": {
-    "redent": "^3.0.0",
-    "reselect": "^5.1.1",
-    "set-cookie-parser": "^2.7.1"
   }
 }
