@@ -2,7 +2,10 @@
 
 // Set a global flag to indicate we're in the main CLI bundle
 // This helps isMainModule() detect bundled contexts properly
-(global as any).__PROMPTFOO_CLI_BUNDLE__ = true;
+// Only set this flag when running from an actual bundled file
+if (process.argv[1] && (process.argv[1].endsWith('main.cjs') || process.argv[1].includes('main.cjs'))) {
+  (global as any).__PROMPTFOO_CLI_BUNDLE__ = true;
+}
 
 import { Command } from 'commander';
 import packageJson from '../package.json' with { type: 'json' };
@@ -147,7 +150,7 @@ async function main() {
 }
 
 // Cross-compatible main check
-if (isMainModule()) {
+if (isMainModule(import.meta.url)) {
   checkNodeVersion();
   main();
 }
