@@ -4,21 +4,10 @@ import { fileURLToPath, pathToFileURL } from 'url';
 /**
  * Cross-compatible helper to get import.meta.url equivalent
  * Works in both ESM and CJS environments
+ *
+ * Note: In ESM, pass import.meta.url directly to getDirname() instead
  */
 export function getImportMetaUrl(): string {
-  try {
-    // In ESM: import.meta.url is available
-    if (typeof globalThis !== 'undefined' && 'import' in globalThis) {
-      // Use eval to avoid syntax error during build time
-      const importMeta = eval('import.meta');
-      if (importMeta?.url) {
-        return importMeta.url;
-      }
-    }
-  } catch {
-    // Fall through to CJS approach
-  }
-
   // In CJS: derive from __filename
   // @ts-ignore - __filename exists in CJS
   if (typeof __filename !== 'undefined') {

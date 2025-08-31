@@ -53,6 +53,16 @@ function fixCjsImports(dir) {
       content = content.replace(/export\s+function\s+(\w+)/g, 'function $1');
       content = content.replace(/export\s+class\s+(\w+)/g, 'class $1');
 
+      // Fix package.json imports to account for dist/cjs/src depth
+      content = content.replace(
+        /require\(["']\.\.\/package\.json["']\)/g,
+        'require("../../../package.json")',
+      );
+      content = content.replace(
+        /require\(["']\.\.\/\.\.\/package\.json["']\)/g,
+        'require("../../../../package.json")',
+      );
+
       // Replace relative require statements to use .cjs extensions
       content = content.replace(/require\(["'](\.[^"']*?)["']\)/g, (match, relativePath) => {
         // Don't modify already processed paths, absolute imports, or JSON files

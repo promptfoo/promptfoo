@@ -11,47 +11,47 @@
     "url": "git+https://github.com/promptfoo/promptfoo.git"
   },
   "main": "dist/cjs/src/index.cjs",
-  "types": "dist/types/src/index.d.ts",
+  "types": "dist/types/index.d.ts",
   "typesVersions": {
     "*": {
       "assertions": [
-        "./dist/types/src/assertions/index.d.ts"
+        "./dist/types/assertions/index.d.ts"
       ],
       "assertions/*": [
-        "./dist/types/src/assertions/*"
+        "./dist/types/assertions/*"
       ],
       "providers": [
-        "./dist/types/src/providers/index.d.ts"
+        "./dist/types/providers/index.d.ts"
       ],
       "providers/*": [
-        "./dist/types/src/providers/*"
+        "./dist/types/providers/*"
       ],
       "redteam": [
-        "./dist/types/src/redteam/index.d.ts"
+        "./dist/types/redteam/index.d.ts"
       ],
       "redteam/*": [
-        "./dist/types/src/redteam/*"
+        "./dist/types/redteam/*"
       ],
       "types": [
-        "./dist/types/src/types/index.d.ts"
+        "./dist/types/types/index.d.ts"
       ],
       "types/*": [
-        "./dist/types/src/types/*"
+        "./dist/types/types/*"
       ],
       "util": [
-        "./dist/types/src/util/index.d.ts"
+        "./dist/types/util/index.d.ts"
       ],
       "util/*": [
-        "./dist/types/src/util/*"
+        "./dist/types/util/*"
       ],
       "cache": [
-        "./dist/types/src/cache.d.ts"
+        "./dist/types/cache.d.ts"
       ],
       "evaluator": [
-        "./dist/types/src/evaluator.d.ts"
+        "./dist/types/evaluator.d.ts"
       ],
       "logger": [
-        "./dist/types/src/logger.d.ts"
+        "./dist/types/logger.d.ts"
       ]
     }
   },
@@ -137,7 +137,7 @@
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
     "build:esm": "tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.cjs fix",
-    "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"require('fs').readdirSync('dist/cjs', {recursive: true}).forEach(f => { if (f.endsWith('.js')) { const oldPath = 'dist/cjs/' + f; const newPath = oldPath.replace(/\\.js$/, '.cjs'); require('fs').renameSync(oldPath, newPath); } })\" && node scripts/fix-cjs-imports.cjs",
+    "build:cjs": "node scripts/prepare-cjs-src.cjs && tsc -p tsconfig.cjs.json && node scripts/rename-js-to-cjs.cjs && node scripts/fix-cjs-imports.cjs && shx rm -rf .cjs-src .cjs-test",
     "build:types": "tsc -p tsconfig.types.json",
     "build:watch": "tsc --watch",
     "build": "npm run generate-constants && npm run build:clean && npm run build:esm && npm run build:cjs && npm run build:types && shx cp src/*.html dist/esm/src && shx cp src/*.html dist/cjs/src && shx cp src/python/wrapper.py dist/esm/src/python && shx cp src/python/wrapper.py dist/cjs/src/python && shx mkdir -p dist/esm/src/golang && shx mkdir -p dist/cjs/src/golang && shx cp src/golang/wrapper.go dist/esm/src/golang && shx cp src/golang/wrapper.go dist/cjs/src/golang && shx rm -rf dist/esm/drizzle && shx rm -rf dist/cjs/drizzle && shx cp -r drizzle dist/esm/drizzle && shx cp -r drizzle dist/cjs/drizzle && npm run build:app && shx chmod +x dist/cjs/src/main.cjs && node scripts/fix-esm-imports.cjs validate",

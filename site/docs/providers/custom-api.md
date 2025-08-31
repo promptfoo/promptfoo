@@ -35,9 +35,9 @@ export default class EchoProvider {
 You can optionally use a constructor to initialize the provider, for example:
 
 ```javascript title="openaiProvider.js"
-const promptfoo = require('promptfoo').default;
+import promptfoo from 'promptfoo';
 
-module.exports = class OpenAIProvider {
+export default class OpenAIProvider {
   constructor(options) {
     this.providerId = options.id || 'openai-custom';
     this.config = options.config;
@@ -70,7 +70,7 @@ module.exports = class OpenAIProvider {
       tokenUsage: data.usage,
     };
   }
-};
+}
 ```
 
 `callApi` returns a `ProviderResponse` object. The `ProviderResponse` object format:
@@ -108,9 +108,9 @@ The `context` parameter contains:
 ### Two-Stage Provider
 
 ```javascript title="twoStageProvider.js"
-const promptfoo = require('promptfoo').default;
+import promptfoo from 'promptfoo';
 
-module.exports = class TwoStageProvider {
+export default class TwoStageProvider {
   constructor(options) {
     this.providerId = options.id || 'two-stage';
     this.config = options.config;
@@ -159,7 +159,7 @@ module.exports = class TwoStageProvider {
       output: data.choices[0].message.content,
     };
   }
-};
+}
 ```
 
 ### TypeScript Implementation

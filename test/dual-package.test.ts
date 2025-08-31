@@ -137,16 +137,19 @@ describe('Dual Package Publishing', () => {
     it('should handle JSON imports with correct attributes', async () => {
       // Test that JSON imports work in ESM build by checking file content directly
       const fs = require('fs');
-      const constantsFile = fs.readFileSync(esmIndexPath.replace('index.js', 'constants.js'), 'utf8');
+      const constantsFile = fs.readFileSync(
+        esmIndexPath.replace('index.js', 'constants.js'),
+        'utf8',
+      );
       const hasJsonAttribute = constantsFile.includes("with { type: 'json' }");
-      
+
       expect(hasJsonAttribute).toBe(true);
     });
 
     it('should validate ESM JSON import syntax is Node 20+ compatible', async () => {
       const nodeVersion = process.version;
       const majorVersion = parseInt(nodeVersion.match(/v(\d+)/)?.[1] || '0', 10);
-      
+
       // This test ensures we're using the correct JSON import syntax for Node 20+
       if (majorVersion >= 20) {
         const testScript = `
@@ -180,7 +183,9 @@ describe('Dual Package Publishing', () => {
       const nodeVersion = process.version;
       const majorVersion = parseInt(nodeVersion.match(/v(\d+)/)?.[1] || '0', 10);
       if (majorVersion < 20) {
-        console.log(`Skipping JSON import assertion test on Node ${nodeVersion} (requires Node 20+)`);
+        console.log(
+          `Skipping JSON import assertion test on Node ${nodeVersion} (requires Node 20+)`,
+        );
         return;
       }
 
@@ -238,13 +243,13 @@ describe('Dual Package Publishing', () => {
       const packageJson = require('../package.json');
       const expectedExports = [
         './assertions',
-        './providers', 
+        './providers',
         './redteam',
         './types',
         './util',
         './cache',
         './evaluator',
-        './logger'
+        './logger',
       ];
 
       for (const exportPath of expectedExports) {
@@ -252,26 +257,26 @@ describe('Dual Package Publishing', () => {
         expect(packageJson.exports[exportPath]).toMatchObject({
           types: expect.stringMatching(/\.d\.ts$/),
           import: expect.stringMatching(/\.js$/),
-          require: expect.stringMatching(/\.cjs$/)
+          require: expect.stringMatching(/\.cjs$/),
         });
       }
     });
 
     it('should have good package hygiene', () => {
       const packageJson = require('../package.json');
-      
+
       // Should have sideEffects: false for tree shaking
       expect(packageJson.sideEffects).toBe(false);
-      
+
       // Should have comprehensive files field
       expect(packageJson.files).toBeInstanceOf(Array);
       expect(packageJson.files.length).toBeGreaterThan(5);
-      
+
       // Should include built files
       expect(packageJson.files).toContain('dist/cjs/**/*.cjs');
       expect(packageJson.files).toContain('dist/esm/**/*.js');
       expect(packageJson.files).toContain('dist/types/**/*.d.ts');
-      
+
       // Should exclude test files
       expect(packageJson.files.some((f: string) => f.includes('!dist/test/**'))).toBe(true);
       expect(packageJson.files.some((f: string) => f.includes('!dist/**/*.test.*'))).toBe(true);
@@ -281,10 +286,10 @@ describe('Dual Package Publishing', () => {
       const packageJson = require('../package.json');
       const currentNodeVersion = process.version;
       const majorVersion = parseInt(currentNodeVersion.match(/v(\d+)/)?.[1] || '0', 10);
-      
+
       // Package should require Node 20+
       expect(packageJson.engines.node).toBe('>=20.0.0');
-      
+
       // Current test environment should meet this requirement
       expect(majorVersion).toBeGreaterThanOrEqual(20);
     });
@@ -296,7 +301,7 @@ describe('Dual Package Publishing', () => {
       const fs = require('fs');
       const indexFile = fs.readFileSync(esmIndexPath, 'utf8');
       const hasExplicitIndexImports = indexFile.includes('./assertions/index.js');
-      
+
       expect(hasExplicitIndexImports).toBe(true);
     });
 
@@ -305,7 +310,7 @@ describe('Dual Package Publishing', () => {
       const fs = require('fs');
       const indexFile = fs.readFileSync(cjsIndexPath, 'utf8');
       const hasDirectoryImports = indexFile.includes('./assertions');
-      
+
       expect(hasDirectoryImports).toBe(true);
     });
   });
@@ -360,6 +365,133 @@ describe('Dual Package Publishing', () => {
 
       expect(parsed.hasAssertions).toBe(true);
       expect(parsed.hasTypes).toBe(true);
+    });
+
+    it('should support CJS consumer importing all subpath exports', () => {
+      // This tests package.json exports field from a consumer perspective
+      const packagePath = path.resolve(__dirname, '..');
+      const testScript = `
+        const path = require('path');
+        
+        // Test all major subpath exports work from consumer perspective
+        const assertions = require('${packagePath}/dist/cjs/src/assertions/index.cjs');
+        const providers = require('${packagePath}/dist/cjs/src/providers/index.cjs'); 
+        const redteam = require('${packagePath}/dist/cjs/src/redteam/index.cjs');
+        const types = require('${packagePath}/dist/cjs/src/types/index.cjs');
+        const util = require('${packagePath}/dist/cjs/src/util/index.cjs');
+        const cache = require('${packagePath}/dist/cjs/src/cache.cjs');
+        const evaluator = require('${packagePath}/dist/cjs/src/evaluator.cjs');
+        const logger = require('${packagePath}/dist/cjs/src/logger.cjs');
+        
+        console.log(JSON.stringify({
+          assertions: typeof assertions,
+          providers: typeof providers,
+          redteam: typeof redteam,
+          types: typeof types,
+          util: typeof util,
+          cache: typeof cache,
+          evaluator: typeof evaluator,
+          logger: typeof logger
+        }));
+      `;
+
+      const result = execSync(`node -e "${testScript}"`, { encoding: 'utf-8' });
+      const parsed = JSON.parse(result.trim());
+
+      expect(parsed.assertions).toBe('object');
+      expect(parsed.providers).toBe('object');
+      expect(parsed.redteam).toBe('object');
+      expect(parsed.types).toBe('object');
+      expect(parsed.util).toBe('object');
+      expect(parsed.cache).toBe('object');
+      expect(parsed.evaluator).toBe('object');
+      expect(parsed.logger).toBe('object');
+    });
+
+    it('should support ESM consumer importing all subpath exports', () => {
+      const packagePath = path.resolve(__dirname, '..');
+      const testScript = `
+        Promise.all([
+          import('${packagePath}/dist/esm/src/assertions/index.js'),
+          import('${packagePath}/dist/esm/src/providers/index.js'),
+          import('${packagePath}/dist/esm/src/redteam/index.js'),
+          import('${packagePath}/dist/esm/src/types/index.js'),
+          import('${packagePath}/dist/esm/src/util/index.js'),
+          import('${packagePath}/dist/esm/src/cache.js'),
+          import('${packagePath}/dist/esm/src/evaluator.js'),
+          import('${packagePath}/dist/esm/src/logger.js')
+        ]).then(([assertions, providers, redteam, types, util, cache, evaluator, logger]) => {
+          console.log(JSON.stringify({
+            assertions: typeof assertions,
+            providers: typeof providers,
+            redteam: typeof redteam,
+            types: typeof types,
+            util: typeof util,
+            cache: typeof cache,
+            evaluator: typeof evaluator,
+            logger: typeof logger
+          }));
+        });
+      `;
+
+      const result = execSync(`node -e "${testScript}"`, { encoding: 'utf-8' });
+      const parsed = JSON.parse(result.trim());
+
+      expect(parsed.assertions).toBe('object');
+      expect(parsed.providers).toBe('object');
+      expect(parsed.redteam).toBe('object');
+      expect(parsed.types).toBe('object');
+      expect(parsed.util).toBe('object');
+      expect(parsed.cache).toBe('object');
+      expect(parsed.evaluator).toBe('object');
+      expect(parsed.logger).toBe('object');
+    });
+
+    it('should support named exports from subpaths in CJS', () => {
+      const packagePath = path.resolve(__dirname, '..');
+      const testScript = `
+        // Test named exports work correctly from subpaths
+        const { evaluate } = require('${packagePath}/dist/cjs/src/index.cjs');
+        const { runAssertion } = require('${packagePath}/dist/cjs/src/assertions/index.cjs');
+        const { loadApiProvider } = require('${packagePath}/dist/cjs/src/providers/index.cjs');
+        
+        console.log(JSON.stringify({
+          evaluate: typeof evaluate,
+          runAssertion: typeof runAssertion,
+          loadApiProvider: typeof loadApiProvider
+        }));
+      `;
+
+      const result = execSync(`node -e "${testScript}"`, { encoding: 'utf-8' });
+      const parsed = JSON.parse(result.trim());
+
+      expect(parsed.evaluate).toBe('function');
+      expect(parsed.runAssertion).toBe('function');
+      expect(parsed.loadApiProvider).toBe('function');
+    });
+
+    it('should support named exports from subpaths in ESM', () => {
+      const packagePath = path.resolve(__dirname, '..');
+      const testScript = `
+        Promise.all([
+          import('${packagePath}/dist/esm/src/index.js').then(m => ({ evaluate: m.evaluate })),
+          import('${packagePath}/dist/esm/src/assertions/index.js').then(m => ({ runAssertion: m.runAssertion })),
+          import('${packagePath}/dist/esm/src/providers/index.js').then(m => ({ loadApiProvider: m.loadApiProvider }))
+        ]).then(([main, assertions, providers]) => {
+          console.log(JSON.stringify({
+            evaluate: typeof main.evaluate,
+            runAssertion: typeof assertions.runAssertion,
+            loadApiProvider: typeof providers.loadApiProvider
+          }));
+        });
+      `;
+
+      const result = execSync(`node -e "${testScript}"`, { encoding: 'utf-8' });
+      const parsed = JSON.parse(result.trim());
+
+      expect(parsed.evaluate).toBe('function');
+      expect(parsed.runAssertion).toBe('function');
+      expect(parsed.loadApiProvider).toBe('function');
     });
   });
 

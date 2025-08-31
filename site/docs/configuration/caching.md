@@ -119,7 +119,7 @@ promptfoo cache clear
 2. Through the Node.js API:
 
 ```javascript
-const promptfoo = require('promptfoo');
+import promptfoo from 'promptfoo';
 await promptfoo.cache.clearCache();
 ```
 

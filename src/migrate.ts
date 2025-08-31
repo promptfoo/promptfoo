@@ -6,6 +6,40 @@ import logger from './logger';
 import { getDirname, isMainModule } from './util/module-paths';
 
 /**
+ * Robustly find the drizzle migrations folder
+ */
+function findMigrationsFolder(): string {
+  // Allow environment override for tests
+  if (process.env.DRIZZLE_MIGRATIONS_DIR) {
+    return process.env.DRIZZLE_MIGRATIONS_DIR;
+  }
+
+  // Try multiple resolution strategies
+  const candidates = [
+    // Relative to module directory (runtime ESM)
+    getDirname().endsWith('/src') ? path.resolve(getDirname(), '..', 'drizzle') : null,
+    // Relative to current working directory (Jest/CI)
+    path.resolve(process.cwd(), 'drizzle'),
+    // Fallback for CJS environments
+    typeof __dirname !== 'undefined' ? path.resolve(__dirname, '..', 'drizzle') : null,
+  ].filter(Boolean) as string[];
+
+  // Return the first path that exists
+  for (const candidate of candidates) {
+    try {
+      if (require('fs').existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {
+      // Continue to next candidate
+    }
+  }
+
+  // Default fallback
+  return path.resolve(process.cwd(), 'drizzle');
+}
+
+/**
  * Run migrations on the database, skipping the ones already applied. Also creates the sqlite db if it doesn't exist.
  *
  * Note: While the underlying drizzle-orm migrate() function is synchronous, we wrap it in a Promise
@@ -18,10 +52,8 @@ export async function runDbMigrations(): Promise<void> {
     setImmediate(() => {
       try {
         const db = getDb();
-        // Cross-compatible directory resolution
-        const currentDir = getDirname();
-        const migrationsFolder = path.join(currentDir, '..', 'drizzle');
-        logger.debug(`Running database migrations...`);
+        const migrationsFolder = findMigrationsFolder();
+        logger.debug(`Running database migrations from: ${migrationsFolder}`);
         migrate(db, { migrationsFolder });
         logger.debug('Database migrations completed');
         resolve();

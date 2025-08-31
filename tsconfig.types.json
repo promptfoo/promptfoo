@@ -1,12 +1,12 @@
 {
-  "extends": "./tsconfig.base.json",
+  "extends": "./tsconfig.esm.json",
   "compilerOptions": {
-    "module": "Node20",
-    "moduleResolution": "Node16",
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationMap": true,
     "outDir": "dist/types",
-    "rootDir": "."
-  }
+    "rootDir": "src"
+  },
+  "include": ["src/**/*", "src/**/*.json"],
+  "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*", "test/**/*"]
 }
