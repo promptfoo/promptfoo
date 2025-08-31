@@ -134,6 +134,7 @@
   },
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
+    "bin": "dist/cjs/src/main.cjs",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
     "build:esm": "tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.cjs fix",

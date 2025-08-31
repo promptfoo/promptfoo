@@ -10,12 +10,17 @@ describe('TypeScript Types Coverage', () => {
   const { exports, typesVersions } = packageJson;
 
   beforeAll(() => {
-    // Check if type files exist, build if not
+    // Check if type files exist, build types only if not
     const typesPath = path.resolve(__dirname, '../dist/types/index.d.ts');
 
     if (!existsSync(typesPath)) {
-      console.log('Type files missing, running build...');
-      execSync('npm run build', { stdio: 'inherit' });
+      console.log('Type files missing, running types build...');
+      // Run only the types build to reduce memory usage
+      execSync('npm run generate-constants && npm run build:types', { 
+        stdio: 'inherit',
+        // Set memory limit to avoid OOM on CI
+        env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=4096' }
+      });
     }
   }, 300000); // 5 minute timeout for build
 
