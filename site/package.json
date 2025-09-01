@@ -66,6 +66,8 @@
     "@mui/system": "^7.2.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "react-router": "^5.3.4",
+    "react-router-dom": "^5.3.4",
     "swiper": "^11.2.10"
   },
   "resolutions": {

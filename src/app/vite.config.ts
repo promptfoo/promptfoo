@@ -103,6 +103,13 @@ export default defineConfig({
         ) {
           return;
         }
+        // Suppress MUI import warnings - these are handled by optimizeDeps.include
+        if (
+          warning.code === 'UNRESOLVED_IMPORT' &&
+          warning.id?.includes('@mui/')
+        ) {
+          return;
+        }
         warn(warning);
       },
       output: {
