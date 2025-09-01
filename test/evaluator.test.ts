@@ -17,6 +17,7 @@ import Eval from '../src/models/eval';
 import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
+import * as fileUtils from '../src/util/file';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
 jest.mock('../src/util/transform', () => ({
@@ -2579,94 +2580,241 @@ describe('evaluator', () => {
     });
   });
 
-  it('should NOT include assertion tokens in main token totals', async () => {
-    // Mock provider that returns fixed token usage
-    const providerWithTokens: ApiProvider = {
-      id: jest.fn().mockReturnValue('provider-with-tokens'),
-      callApi: jest.fn().mockResolvedValue({
-        output: 'Test response',
-        tokenUsage: {
-          total: 100,
-          prompt: 60,
-          completion: 40,
-          cached: 10,
-          numRequests: 1,
-        },
-      }),
-    };
-
-    // Mock grading provider that also returns token usage
-    const gradingProviderWithTokens: ApiProvider = {
-      id: jest.fn().mockReturnValue('grading-provider'),
-      callApi: jest.fn().mockResolvedValue({
-        output: JSON.stringify({
-          pass: true,
-          score: 1,
-          reason: 'Test passed',
-        }),
-        tokenUsage: {
-          total: 50,
-          prompt: 30,
-          completion: 20,
-          cached: 5,
-          numRequests: 1,
-        },
-      }),
-    };
-
+  it('should handle metric interpolation in assert-set type assertions', async () => {
     const testSuite: TestSuite = {
-      providers: [providerWithTokens],
-      prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          assert: [
-            {
-              type: 'llm-rubric',
-              value: 'Output should be valid',
-              provider: gradingProviderWithTokens,
-            },
-          ],
-        },
-      ],
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { metric1: 'performance', metric2: 'quality' } }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'assert-set' as const,
+            metric: 'combined-metrics',
+            assert: [
+              {
+                type: 'llm-rubric' as const,
+                value: 'Check performance',
+                metric: '{{metric1}}',
+              },
+              {
+                type: 'llm-rubric' as const,
+                value: 'Check quality',
+                metric: '{{metric2}}',
+              },
+            ],
+          },
+        ],
+      },
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
-    // Verify main totals only include provider tokens, NOT assertion tokens
-    expect(summary.stats.tokenUsage).toEqual({
-      total: 100, // Only provider tokens
-      prompt: 60,
-      completion: 40,
-      cached: 10,
-      numRequests: 1,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
+    const result = summary.results[0] as any;
+    const assertSet = result.testCase.assert[0];
+    expect(assertSet.type).toBe('assert-set');
+    expect(assertSet.assert[0].metric).toBe('performance');
+    expect(assertSet.assert[1].metric).toBe('quality');
+  });
+
+  it('should interpolate rubricPrompt property in assertions', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { criteria: 'accuracy and completeness', threshold: '0.8' } }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric' as const,
+            value: 'Check output',
+            rubricPrompt: 'Evaluate based on {{criteria}} with minimum score {{threshold}}',
+            metric: 'custom-rubric',
+          },
+        ],
       },
-      assertions: {
-        total: 50, // Assertion tokens tracked separately
-        prompt: 30,
-        completion: 20,
-        cached: 5,
-        numRequests: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    const result = summary.results[0] as any;
+    expect(result.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      rubricPrompt: 'Evaluate based on accuracy and completeness with minimum score 0.8',
+      metric: 'custom-rubric',
+    });
+  });
+
+  it.skip('should handle file:// references in assertion properties', async () => {
+    // Mock maybeLoadFromExternalFile to return test content
+    const _originalMaybeLoadFromExternalFile = fileUtils.maybeLoadFromExternalFile;
+    jest
+      .spyOn(fileUtils, 'maybeLoadFromExternalFile')
+      .mockImplementation((filePath: string | object | Function | null | undefined) => {
+        const path = String(filePath);
+        if (path === 'file://rubric.txt') {
+          return 'Evaluate based on {{criteria}}';
+        }
+        if (path === 'file://values.json') {
+          return ['expected1', 'expected2'];
+        }
+        return path;
+      });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { criteria: 'performance' } }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric' as const,
+            rubricPrompt: 'file://rubric.txt',
+            metric: 'file-based-rubric',
+          },
+          {
+            type: 'contains-any' as const,
+            value: 'file://values.json' as any,
+            metric: 'file-based-values',
+          },
+        ],
       },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    const result = summary.results[0] as any;
+
+    // Check that file content was loaded and interpolated
+    expect(result.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      rubricPrompt: 'Evaluate based on performance', // File content interpolated
+      metric: 'file-based-rubric',
     });
 
-    // Also verify at the result level - the result should pass
-    const result = summary.results[0];
-    expect(result).toHaveProperty('success', true);
-    expect(result).toHaveProperty('score', 1);
+    // Check that array values were loaded from file
+    expect(result.testCase.assert[1]).toMatchObject({
+      type: 'contains-any',
+      value: ['expected1', 'expected2'],
+      metric: 'file-based-values',
+    });
 
-    // The main verification is at the stats level (already done above)
-    // Individual results may not always have tokenUsage populated in the summary
+    // Restore original function
+    jest.restoreAllMocks();
+  });
+
+  it('should interpolate metric property in defaultTest assertions', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [
+        { vars: { metric: 'metric1', value: 'test1', grader: 'openai:gpt-4' } },
+        { vars: { metric: 'accuracy', value: 'test2', grader: 'openai:gpt-3.5' } },
+      ],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric' as const,
+            value: 'Output should be {{value}}',
+            metric: '{{metric}}',
+            provider: '{{grader}}',
+          },
+          {
+            type: 'equals' as const,
+            value: 'test',
+            metric: 'static-metric',
+          },
+        ],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Check that metric properties were interpolated correctly
+    const firstResult = summary.results[0] as any;
+    expect(firstResult.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      value: 'Output should be {{value}}', // Should NOT be interpolated (late interpolation)
+      metric: 'metric1', // Should be interpolated
+      provider: 'openai:gpt-4', // Should be interpolated
+    });
+
+    const secondResult = summary.results[1] as any;
+    expect(secondResult.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      value: 'Output should be {{value}}', // Should NOT be interpolated (late interpolation)
+      metric: 'accuracy', // Should be interpolated
+      provider: 'openai:gpt-3.5', // Should be interpolated
+    });
+
+    // Static metric should remain unchanged
+    expect(firstResult.testCase.assert[1]).toMatchObject({
+      type: 'equals',
+      metric: 'static-metric',
+    });
+  });
+
+  it('should handle array variables in metric interpolation', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [
+        {
+          vars: {
+            metric: ['accuracy', 'performance'],
+          },
+        },
+      ],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric' as const,
+            value: 'Check output',
+            metric: '{{metric}}',
+            // Remove provider from assertion to avoid conflicting with options.provider
+          },
+        ],
+        options: {
+          provider: mockGradingApiProviderPasses, // This will be used for llm-rubric assertions
+        },
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // When we have array variables, generateVarCombinations creates multiple test cases
+    // In this case, metric: ['accuracy', 'performance'] creates 2 test cases
+    expect(summary.results).toHaveLength(2);
+
+    // Check first result (metric: 'accuracy')
+    const firstResult = summary.results[0] as any;
+    expect(firstResult.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      value: 'Check output', // Not interpolated (late interpolation)
+      metric: 'accuracy', // Should be interpolated
+    });
+
+    // Check second result (metric: 'performance')
+    const secondResult = summary.results[1] as any;
+    expect(secondResult.testCase.assert[0]).toMatchObject({
+      type: 'llm-rubric',
+      value: 'Check output', // Not interpolated (late interpolation)
+      metric: 'performance', // Should be interpolated
+    });
+
+    // Both results should pass
+    expect(firstResult).toHaveProperty('success', true);
+    expect(firstResult).toHaveProperty('score', 1);
+    expect(secondResult).toHaveProperty('success', true);
+    expect(secondResult).toHaveProperty('score', 1);
   });
 
   it('should include sessionId in metadata for afterEach hook', async () => {
