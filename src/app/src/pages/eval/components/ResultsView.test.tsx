@@ -266,6 +266,11 @@ describe('ResultsView', () => {
             test: {},
             vars: ['test var'],
           },
+          {
+            outputs: [{ pass: false, score: 0, text: 'second output' }],
+            test: {},
+            vars: ['test var 2'],
+          },
         ],
       },
       config: { description: 'Test Config', tags: {} },
@@ -510,5 +515,31 @@ describe('ResultsView', () => {
 
     const showChartsButton = screen.getByText('Show Charts');
     expect(showChartsButton).toBeInTheDocument();
+  });
+
+  it('does not render charts toggle when scores are identical', () => {
+    mockTableStoreData.table = {
+      head: { prompts: [{ provider: 'test' }, { provider: 'test2' }], vars: [] },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 1' }],
+          test: {},
+          vars: [],
+        },
+        {
+          outputs: [{ pass: false, score: 1, text: 'output 2' }],
+          test: {},
+          vars: [],
+        },
+      ],
+    };
+    mockTableStoreData.config = { description: 'Test Config', tags: {} };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.queryByText('Show Charts')).not.toBeInTheDocument();
+    expect(screen.queryByText('Hide Charts')).not.toBeInTheDocument();
   });
 });
