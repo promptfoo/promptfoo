@@ -326,7 +326,7 @@ jobs:
             sleep 2
             
             # Check if server process is still running
-            if ! ps -p $SERVER_PID > /dev/null; then
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
               echo "ERROR: Server process died, PID $SERVER_PID no longer exists"
               exit 1
             fi
@@ -336,7 +336,7 @@ jobs:
           if ! curl -s http://localhost:8500/ > /dev/null 2>&1; then
             echo "ERROR: Server failed to start after 60 seconds"
             # Show server logs for debugging
-            ps aux | grep node || echo "No node processes found"
+            pgrep -l node || echo "No node processes found"
             exit 1
           fi
 
