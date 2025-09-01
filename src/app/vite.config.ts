@@ -67,6 +67,7 @@ export default defineConfig({
       'react-dom',
       '@testing-library/react',
       '@mui/material',
+      '@mui/material/styles',
       '@mui/system',
       '@mui/icons-material',
       '@mui/x-data-grid',
