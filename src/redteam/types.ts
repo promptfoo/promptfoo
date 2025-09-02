@@ -123,6 +123,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
   progressBar?: boolean;
+  liveRedteamConfig?: RedteamObjectConfig;
 }
 
 export interface RedteamFileConfig extends CommonOptions {

@@ -169,12 +169,31 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
   }
 }
 
+export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
+  const response = await makeRequest(`/users/me/teams`, 'GET');
+  if (!response.ok) {
+    throw new Error(`Failed to get default team id: ${response.statusText}`);
+  }
+
+  const body = await response.json();
+
+  // get the oldest team -- this matches the logic of the enterprise app
+  const oldestTeam = body.sort((a: { createdAt: string }, b: { createdAt: string }) => {
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  })[0];
+
+  return oldestTeam;
+}
+
 /**
  * Given a list of policy IDs, fetches custom policies from Promptfoo Cloud.
  * @param ids - The IDs of the policies to fetch.
  * @returns A record of policy IDs to policy texts.
  */
-export async function getPoliciesFromCloud(ids: string[]): Promise<Record<string, string>> {
+export async function getPoliciesFromCloud(
+  ids: string[],
+  teamId: string,
+): Promise<Record<string, string>> {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
       `Could not fetch policies from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
@@ -186,7 +205,10 @@ export async function getPoliciesFromCloud(ids: string[]): Promise<Record<string
     ids.forEach((id) => {
       searchParams.append('id', id);
     });
-    const response = await makeRequest(`/custom-policies/?${searchParams.toString()}`, 'GET');
+    const response = await makeRequest(
+      `/custom-policies/?${searchParams.toString()}&teamId=${teamId}`,
+      'GET',
+    );
     if (!response.ok) {
       const errorMessage = await response.text();
       throw new Error(

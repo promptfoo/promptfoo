@@ -20,6 +20,7 @@ import telemetry from '../../telemetry';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
   getCloudDatabaseId,
+  getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
   getPoliciesFromCloud,
   isCloudProvider,
@@ -110,6 +111,7 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   const configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
+  let resolvedConfigMetadata: Record<string, any> | undefined;
 
   // Check for updates to the config file and decide whether to generate
   let shouldGenerate = options.force;
@@ -146,6 +148,7 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+    resolvedConfigMetadata = resolved.config.metadata;
 
     try {
       // If the provider is a cloud provider, check for plugin severity overrides:
@@ -275,8 +278,14 @@ export async function doGenerateRedteam(
   if (policyPluginsWithRefs.length > 0) {
     logger.debug(`Resolving policy references for ${policyPluginsWithRefs.length} plugins`);
     const ids = policyPluginsWithRefs.map((p) => (p.config!.policy! as PolicyObject).id);
+
     // Load the policy texts
-    const policyTexts = await getPoliciesFromCloud(ids);
+    const teamId =
+      resolvedConfigMetadata?.teamId ??
+      (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
+      (await getDefaultTeam()).id;
+
+    const policyTexts = await getPoliciesFromCloud(ids, teamId);
     // Overwrite the policy texts to the plugins
     for (const policyPlugin of policyPluginsWithRefs) {
       const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
