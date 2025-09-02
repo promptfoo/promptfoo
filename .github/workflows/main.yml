@@ -26,16 +26,10 @@ jobs:
       matrix:
         node: ['20.x', '22.x', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        exclude:
-          # Remove when https://github.com/nodejs/node/issues/51766 is resolved
-          - node: '22.x'
-            os: windows-latest
-          - node: '24.x'
-            os: windows-latest
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@v4
@@ -67,7 +61,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@v4
@@ -104,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node
         uses: actions/setup-node@v4
@@ -147,7 +141,7 @@ jobs:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: luizm/action-sh-checker@17bd25a6ee188d2b91f677060038f4ba37ba14b2
         env:
           SHFMT_OPTS: '-i 2' # 2 space indent
@@ -160,7 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node
         uses: actions/setup-node@v4
@@ -193,7 +187,7 @@ jobs:
         python-version: [3.9, 3.13]
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -220,7 +214,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node
         uses: actions/setup-node@v4
@@ -246,7 +240,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node
         uses: actions/setup-node@v4
@@ -266,7 +260,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node
         uses: actions/setup-node@v4
@@ -294,7 +288,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Dependencies
         run: npm ci
@@ -378,7 +372,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Dependencies
         run: npm ci
@@ -395,7 +389,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Dependencies
         run: npm ci
@@ -424,7 +418,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Run actionlint
         id: actionlint
@@ -436,7 +430,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
