@@ -18,7 +18,8 @@ import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
-import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { PLUGIN_CATEGORIES, Severity } from '../redteam/constants';
+import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -485,6 +486,37 @@ export default class Eval {
           } else {
             // Strategy ID is stored in metadata.strategyId
             condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
+          }
+        } else if (type === 'severity' && operator === 'equals') {
+          const sanitizedValue = value.replace(/'/g, "''");
+          // Get the severity map for all plugins
+          const severityMap = getRiskCategorySeverityMap(this.config?.redteam?.plugins);
+
+          // Find all plugin IDs that match the requested severity
+          const matchingPluginIds: string[] = [];
+          for (const [pluginId, severity] of Object.entries(severityMap)) {
+            if (severity === sanitizedValue) {
+              matchingPluginIds.push(pluginId);
+            }
+          }
+
+          if (matchingPluginIds.length > 0) {
+            // Build SQL condition to check if pluginId matches any of the plugins with this severity
+            const pluginConditions = matchingPluginIds.map((pluginId) => {
+              const sanitizedPluginId = pluginId.replace(/'/g, "''");
+              // Check for exact match or category match (e.g., 'harmful:*')
+              if (pluginId.includes(':')) {
+                // It's a specific subcategory
+                return `json_extract(metadata, '$.pluginId') = '${sanitizedPluginId}'`;
+              } else {
+                // It's a category, match any plugin starting with this prefix
+                return `json_extract(metadata, '$.pluginId') LIKE '${sanitizedPluginId}:%'`;
+              }
+            });
+            condition = `(${pluginConditions.join(' OR ')})`;
+          } else {
+            // No plugins match this severity, return a condition that matches nothing
+            condition = '0 = 1';
           }
         }
 

@@ -61,6 +61,7 @@ describe('useTableStore', () => {
             metadata: [],
             plugin: [],
             strategy: [],
+            severity: [],
           },
         },
         shouldHighlightSearchText: false,
@@ -853,6 +854,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              severity: [],
             },
           },
         });
@@ -901,6 +903,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              severity: [],
             },
           },
         });
@@ -963,6 +966,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              severity: [],
             },
           },
         });
@@ -1007,6 +1011,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              severity: [],
             },
           },
         });
@@ -1046,6 +1051,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              severity: [],
             },
           },
         });
