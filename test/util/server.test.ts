@@ -64,7 +64,12 @@ describe('Server Utilities', () => {
 
       const result = await checkServerRunning();
 
-      expect(mockFetch).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/health`);
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:${getDefaultPort()}/health`,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+        }),
+      );
       expect(result).toBe(true);
     });
 
@@ -107,7 +112,12 @@ describe('Server Utilities', () => {
 
       await checkServerRunning(customPort);
 
-      expect(mockFetch).toHaveBeenCalledWith(`http://localhost:${customPort}/health`);
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:${customPort}/health`,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+        }),
+      );
     });
   });
 
