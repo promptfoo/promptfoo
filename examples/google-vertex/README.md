@@ -18,7 +18,7 @@ npx promptfoo@latest init --example google-vertex
 
 - Google Cloud account with Vertex AI API enabled
 - API credentials
-- Node.js 18+
+- Node.js 20+
 
 ## Environment Variables
 
