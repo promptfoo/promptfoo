@@ -1,8 +1,8 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, fireEvent, queryByRole } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, queryByRole, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetConfiguration from './TargetConfiguration';
 
 vi.mock('@app/hooks/useTelemetry', () => ({

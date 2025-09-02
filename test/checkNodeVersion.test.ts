@@ -3,7 +3,7 @@ import { checkNodeVersion } from '../src/checkNodeVersion';
 import logger from '../src/logger';
 
 jest.mock('../package.json', () => ({
-  engines: { node: '>=20.0.1' },
+  engines: { node: '>=20.0.0' },
 }));
 
 const setNodeVersion = (version: string) => {
@@ -21,15 +21,15 @@ describe('checkNodeVersion', () => {
   });
 
   it('should handle version strings correctly and throw if required version is not met', () => {
-    setNodeVersion('v20.0.0');
+    setNodeVersion('v19.9.0');
 
     expect(() => checkNodeVersion()).toThrow(
-      'You are using Node.js 20.0.0. This version is not supported. Please use Node.js >=20.0.1.',
+      'You are using Node.js 19.9.0. This version is not supported. Please use Node.js >=20.0.0.',
     );
   });
 
   it('should not throw if Node.js version is supported', () => {
-    setNodeVersion('v20.0.1');
+    setNodeVersion('v20.0.0');
 
     expect(() => checkNodeVersion()).not.toThrow();
   });
@@ -39,7 +39,7 @@ describe('checkNodeVersion', () => {
 
     checkNodeVersion();
     expect(logger.warn).toHaveBeenCalledWith(
-      chalk.yellow('Unexpected Node.js version format: v20. Please use Node.js >=20.0.1.'),
+      chalk.yellow('Unexpected Node.js version format: v20. Please use Node.js >=20.0.0.'),
     );
   });
 });

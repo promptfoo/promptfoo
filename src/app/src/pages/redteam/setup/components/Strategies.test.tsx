@@ -1,6 +1,6 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';

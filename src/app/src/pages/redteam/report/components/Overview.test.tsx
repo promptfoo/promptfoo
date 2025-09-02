@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { GridLogicOperator, GridFilterModel } from '@mui/x-data-grid';
+import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

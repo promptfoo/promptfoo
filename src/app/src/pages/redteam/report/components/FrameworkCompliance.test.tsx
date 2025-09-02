@@ -1,10 +1,9 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-import FrameworkCompliance from './FrameworkCompliance';
-import { useReportStore } from './store';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
+import FrameworkCompliance from './FrameworkCompliance';
 import CSVExporter from './FrameworkCsvExporter';
+import { useReportStore } from './store';
 
 vi.mock('./store');
 vi.mock('./FrameworkCard');

@@ -6,6 +6,7 @@ import { Presets, SingleBar } from 'cli-progress';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
+import { isMainModule } from '../../util/module-paths';
 import { neverGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types';
@@ -237,6 +238,11 @@ export async function writeVideoFile(base64Video: string, outputFilePath: string
 }
 
 async function main(): Promise<void> {
+  // Skip execution if we're in the CLI bundle
+  if ((global as any).__PROMPTFOO_CLI_BUNDLE__) {
+    return;
+  }
+
   const textToConvert = process.argv[2] || 'This is a test of the video encoding strategy.';
 
   logger.info(`Converting text to video: "${textToConvert}"`);
@@ -260,7 +266,9 @@ async function main(): Promise<void> {
     const processedPrompt = processedTestCases[0].vars?.prompt as string;
     logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
-    if (require.main === module) {
+    // Cross-compatible module main check
+    // Skip if we're in the CLI bundle to avoid conflicts
+    if (isMainModule() && !(global as any).__PROMPTFOO_CLI_BUNDLE__) {
       await writeVideoFile(base64Video, 'test-video.mp4');
       logger.info(`You can open it with any video player to verify the conversion.`);
     }
@@ -269,6 +277,12 @@ async function main(): Promise<void> {
   }
 }
 
-if (require.main === module) {
+// Cross-compatible module main check
+// Skip if we're in any bundled context to avoid conflicts
+if (
+  isMainModule() &&
+  !process.argv[1]?.includes('dist/') &&
+  !(global as any).__PROMPTFOO_CLI_BUNDLE__
+) {
   main();
 }

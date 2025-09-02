@@ -1,12 +1,13 @@
 // These metrics are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import { getAndCheckProvider, fail } from '../../matchers';
+import { fail, getAndCheckProvider } from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
-import type { GradingConfig, GradingResult, TokenUsage } from '../../types';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { ConversationRelevancyTemplate, type MessageRole } from './conversationRelevancyTemplate';
+
+import type { GradingConfig, GradingResult, TokenUsage } from '../../types';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 

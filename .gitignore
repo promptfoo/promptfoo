@@ -12,7 +12,9 @@ dist
 .aider*
 .vite
 *.tsbuildinfo
+*.map
 src/generated/
+*.tgz
 
 # pnpm-specific
 .pnpm-store/

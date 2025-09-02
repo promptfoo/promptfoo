@@ -4,55 +4,149 @@
   "author": "Ian Webster",
   "version": "0.118.1",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
+  "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/promptfoo/promptfoo.git"
   },
-  "main": "dist/src/index.js",
+  "main": "dist/index.cjs",
+  "types": "dist/types/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "assertions": [
+        "./dist/types/assertions/index.d.ts"
+      ],
+      "assertions/*": [
+        "./dist/types/assertions/*"
+      ],
+      "providers": [
+        "./dist/types/providers/index.d.ts"
+      ],
+      "providers/*": [
+        "./dist/types/providers/*"
+      ],
+      "redteam": [
+        "./dist/types/redteam/index.d.ts"
+      ],
+      "redteam/*": [
+        "./dist/types/redteam/*"
+      ],
+      "types": [
+        "./dist/types/types/index.d.ts"
+      ],
+      "types/*": [
+        "./dist/types/types/*"
+      ],
+      "util": [
+        "./dist/types/util/index.d.ts"
+      ],
+      "util/*": [
+        "./dist/types/util/*"
+      ],
+      "cache": [
+        "./dist/types/cache.d.ts"
+      ],
+      "evaluator": [
+        "./dist/types/evaluator.d.ts"
+      ],
+      "logger": [
+        "./dist/types/logger.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
-      "import": "./dist/src/index.js",
-      "require": "./dist/src/index.js"
-    }
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./assertions": {
+      "types": "./dist/types/assertions/index.d.ts",
+      "import": "./dist/assertions/index.js",
+      "require": "./dist/assertions/index.cjs"
+    },
+    "./providers": {
+      "types": "./dist/types/providers/index.d.ts",
+      "import": "./dist/providers/index.js",
+      "require": "./dist/providers/index.cjs"
+    },
+    "./redteam": {
+      "types": "./dist/types/redteam/index.d.ts",
+      "import": "./dist/redteam/index.js",
+      "require": "./dist/redteam/index.cjs"
+    },
+    "./types": {
+      "types": "./dist/types/types/index.d.ts",
+      "import": "./dist/types/index.js",
+      "require": "./dist/types/index.cjs"
+    },
+    "./util": {
+      "types": "./dist/types/util/index.d.ts",
+      "import": "./dist/util/index.js",
+      "require": "./dist/util/index.cjs"
+    },
+    "./cache": {
+      "types": "./dist/types/cache.d.ts",
+      "import": "./dist/cache.js",
+      "require": "./dist/cache.cjs"
+    },
+    "./evaluator": {
+      "types": "./dist/types/evaluator.d.ts",
+      "import": "./dist/evaluator.js",
+      "require": "./dist/evaluator.cjs"
+    },
+    "./logger": {
+      "types": "./dist/types/logger.d.ts",
+      "import": "./dist/logger.js",
+      "require": "./dist/logger.cjs"
+    },
+    "./package.json": "./package.json"
   },
   "workspaces": [
     "src/app",
     "site"
   ],
-  "types": "dist/src/index.d.ts",
-  "typings": "dist/src/index.d.ts",
   "files": [
-    "dist",
-    "!dist/test",
-    "!dist/src/__mocks__"
+    "dist/**",
+    "!dist/test/**",
+    "!dist/*/test/**",
+    "!dist/**/__mocks__/**",
+    "!dist/**/*.test.*",
+    "!dist/**/*.spec.*",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20.0.0"
   },
   "bin": {
-    "promptfoo": "dist/src/main.js",
-    "pf": "dist/src/main.js"
+    "promptfoo": "dist/main.cjs",
+    "pf": "dist/main.cjs"
   },
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
-    "bin": "dist/src/main.js",
+    "bin": "dist/main.cjs",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
+    "build:copy-assets": "shx mkdir -p dist/python dist/golang drizzle && shx cp src/*.html dist/ && shx cp src/python/wrapper.py dist/python/ && shx cp src/golang/wrapper.go dist/golang/ && shx cp -r drizzle dist/",
+    "build:esm": "tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.cjs fix",
+    "build:cjs": "node scripts/prepare-cjs-src.cjs && tsc -p tsconfig.cjs.json && node scripts/rename-js-to-cjs.cjs && node scripts/fix-cjs-imports.cjs && shx rm -rf .cjs-src .cjs-test",
+    "build:types": "tsc -p tsconfig.types.json",
     "build:watch": "tsc --watch",
-    "build": "npm run generate-constants && tsc && shx cp src/*.html dist/src && shx cp src/python/wrapper.py dist/src/python && shx mkdir -p dist/src/golang && shx cp src/golang/wrapper.go dist/src/golang && shx rm -rf dist/drizzle && shx cp -r drizzle dist/drizzle && npm run build:app && shx chmod +x dist/src/main.js",
-    "citation:generate": "ts-node scripts/generateCitation.ts",
+    "build": "npm run generate-constants && NODE_OPTIONS=\"--max-old-space-size=8192\" tsup && node scripts/fix-esm-imports.cjs fix && npm run build:copy-assets && npm run build:app && shx chmod +x dist/main.cjs",
+    "citation:generate": "node scripts/dev-runner.cjs scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
-    "db:migrate": "node --require tsx/cjs src/migrate.ts",
+    "db:migrate": "node scripts/dev-runner.cjs src/migrate.ts",
     "db:studio": "npx drizzle-kit studio",
     "dev:app": "npm run dev --prefix src/app",
-    "dev:server": "nodemon -P 1000 src/server/index.ts",
+    "dev:server": "nodemon --exec \"node scripts/dev-runner.cjs\" src/server/index.ts",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\"",
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json)$' | xargs npx @biomejs/biome format --write && git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(css|scss|html|md|mdc|mdx|yaml|yml)$' | xargs prettier --write",
     "format:check": "npx @biomejs/biome format && prettier --check '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
     "format": "npx @biomejs/biome format --write . && prettier --write '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
-    "generate-constants": "node scripts/generate-constants.js",
-    "jsonSchema:generate": "npx -y tsx scripts/generateJsonSchema.ts > site/static/config-schema.json && npx @biomejs/biome format --write site/static/config-schema.json",
+    "generate-constants": "node scripts/generate-constants.cjs",
+    "jsonSchema:generate": "node --import @swc-node/register/esm-register scripts/generateJsonSchema.ts > site/static/config-schema.json && npx @biomejs/biome format --write site/static/config-schema.json",
     "knip": "knip",
     "l": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|ts|tsx)$' | xargs npx @biomejs/biome lint --write",
     "lint:site": "npx @biomejs/biome lint site",
@@ -60,7 +154,7 @@
     "lint:tests": "npx @biomejs/biome lint test",
     "lint": "npm run lint:src",
     "local:web": "npm run dev --prefix src/app",
-    "local": "ts-node --cwdMode --transpileOnly src/main.ts",
+    "local": "node --import @swc-node/register/esm-register src/main.ts",
     "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "postversion": "npm run citation:generate && git add CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
@@ -70,8 +164,8 @@
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
     "test": "jest",
     "tsc": "tsc",
-    "mcp": "node dist/src/main.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy\" --ignore-dirs=\"dist,site,examples,node_modules\""
+    "mcp": "node dist/main.cjs mcp",
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,@swc-node/register\" --ignore-dirs=\"dist,site,examples,node_modules\""
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
@@ -144,6 +238,7 @@
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@jest/globals": "^30.1.1",
     "@libsql/client": "^0.15.14",
+    "@swc-node/register": "^1.11.1",
     "@swc/core": "^1.13.5",
     "@swc/jest": "^0.2.39",
     "@types/async": "^3.2.25",
@@ -192,6 +287,7 @@
     "supertest": "^7.1.4",
     "ts-dedent": "^2.2.0",
     "ts-node": "^10.9.2",
+    "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "winston-transport": "^4.9.0",
     "zod-to-json-schema": "^3.24.6"

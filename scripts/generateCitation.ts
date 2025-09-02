@@ -1,6 +1,7 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
 import path from 'path';
+import { getDirname, isMainModule } from '../src/util/module-paths';
 
 /**
  * Represents the structure of package.json file
@@ -87,8 +88,9 @@ async function getReleaseDate(version: string): Promise<string | null> {
  * @throws {Error} If there's an issue reading or writing files
  */
 export const updateCitation = async (): Promise<void> => {
-  const packageJsonPath: string = path.join(__dirname, '../package.json');
-  const citationPath: string = path.join(__dirname, '../CITATION.cff');
+  const currentDir = getDirname();
+  const packageJsonPath: string = path.join(currentDir, '../package.json');
+  const citationPath: string = path.join(currentDir, '../CITATION.cff');
 
   const packageJson: PackageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
@@ -108,6 +110,6 @@ export const updateCitation = async (): Promise<void> => {
   console.log('CITATION.cff file has been updated.');
 };
 
-if (require.main === module) {
+if (isMainModule()) {
   updateCitation().catch(console.error);
 }

@@ -1,4 +1,4 @@
-import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';

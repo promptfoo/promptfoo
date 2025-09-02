@@ -1,9 +1,10 @@
+import React from 'react';
+
+import { useStore } from '@app/stores/evalConfig';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
-import { describe, it, expect, beforeEach } from 'vitest';
-import { useStore } from '@app/stores/evalConfig';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { beforeEach, describe, expect, it } from 'vitest';
 import ConfigureEnvButton from './ConfigureEnvButton';
 
 const renderWithTheme = (component: React.ReactNode) => {

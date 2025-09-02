@@ -22,6 +22,10 @@ const config: Config = {
   transform: {
     '^.+\\.m?[tj]sx?$': '@swc/jest',
   },
+  // Handle .js extensions in TypeScript imports
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
   // Use a more conservative worker pool configuration to prevent segmentation faults
   maxWorkers: '50%',
   workerIdleMemoryLimit: '1GB',

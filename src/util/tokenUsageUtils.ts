@@ -1,4 +1,4 @@
-import type { TokenUsage, CompletionTokenDetails } from '../types/shared';
+import type { CompletionTokenDetails, TokenUsage } from '../types/shared';
 
 /**
  * Helper to create empty completion details

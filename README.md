@@ -20,6 +20,11 @@
   <a href="https://discord.gg/promptfoo">Discord</a>
 </p>
 
+## Requirements
+
+- Node.js 20.0.0 or higher
+- npm or yarn package manager
+
 ## Quick Start
 
 ```sh

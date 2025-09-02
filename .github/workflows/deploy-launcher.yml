@@ -37,4 +37,4 @@ jobs:
         with:
           apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist/src/app/ --project-name=promptfoo-launcher
+          command: pages deploy dist/esm/src/app/ --project-name=promptfoo-launcher

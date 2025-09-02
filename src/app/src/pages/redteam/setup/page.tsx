@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-import PylonChat from '@app/components/PylonChat';
 import ErrorBoundary from '@app/components/ErrorBoundary';
+import PylonChat from '@app/components/PylonChat';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';

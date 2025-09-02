@@ -39,8 +39,8 @@ import { convertTestResultsToTableRow } from '../util/exportToFile';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import EvalResult from './evalResult';
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
+import EvalResult from './evalResult';
 
 interface FilteredCountRow {
   count: number | null;

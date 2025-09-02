@@ -4,6 +4,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { getDirname, isMainModule } from '../../src/util/module-paths';
 
 /**
  * Structure of the HuggingFace API response for TruthfulQA dataset
@@ -74,7 +75,8 @@ export async function generate_tests(cfg: DatasetLoaderConfig = {}): Promise<Pro
   } = cfg;
 
   // Define cache directory and file path
-  const cacheDir = path.join(__dirname, '.cache');
+  const currentDir = getDirname();
+  const cacheDir = path.join(currentDir, '.cache');
   const cacheFile = path.join(
     cacheDir,
     `${dataset.replace('/', '_')}_${configName}_${split}_${maxRows}.json`,
@@ -166,7 +168,7 @@ export async function generate_tests(cfg: DatasetLoaderConfig = {}): Promise<Pro
 }
 
 // When this module is run directly
-if (require.main === module) {
+if (isMainModule()) {
   generate_tests()
     .then((tests) => {
       console.log('\nSample test case:');

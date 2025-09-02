@@ -14,36 +14,21 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
-import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  TokenUsage,
-} from '../../types';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import {
+  accumulateGraderTokenUsage,
+  accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import type { BaseRedteamMetadata } from '../types';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -56,6 +41,21 @@ import {
   getTargetResponse,
   redteamProviderManager,
 } from './shared';
+import type { Environment } from 'nunjucks';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  TokenUsage,
+} from '../../types';
+import type { BaseRedteamMetadata } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 

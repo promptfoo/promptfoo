@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Clean up any existing output files to ensure clean test run
+rm -f redteam.yaml promptfoo-errors.log
+
 # Run the CLI tool and capture the output
 output=$(npm run bin redteam generate -- -c test/redteam/integration/promptfooconfig.yaml)
 

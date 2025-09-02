@@ -1,6 +1,20 @@
-import { PorterStemmer, WordNet } from 'natural';
 import invariant from '../util/invariant';
-import type { DataRecord, Stemmer } from 'natural';
+
+// Conditional import for natural package
+let PorterStemmer: any;
+let WordNet: any;
+let _DataRecord: any;
+let _Stemmer: any;
+
+try {
+  const natural = require('natural');
+  PorterStemmer = natural.PorterStemmer;
+  WordNet = natural.WordNet;
+  _DataRecord = natural.DataRecord;
+  _Stemmer = natural.Stemmer;
+} catch (_error) {
+  // natural package not available
+}
 
 import type { AssertionParams, GradingResult } from '../types';
 
@@ -66,10 +80,15 @@ function matchExactEnums(
 function matchStemEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  stemmer: Stemmer = PorterStemmer,
+  stemmer: any = PorterStemmer,
 ): [MatchPair[], WordPair[], WordPair[]] {
   const candidateCopy = [...enumCandidateList];
   const referenceCopy = [...enumReferenceList];
+
+  // If stemmer is not available, return empty matches
+  if (!stemmer) {
+    return [[], candidateCopy, referenceCopy];
+  }
 
   // Create stemmed versions of words
   const candidateStems = candidateCopy.map(
@@ -88,18 +107,23 @@ function matchStemEnums(
 async function matchSynonymEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  wordnet: WordNet = new WordNet(),
+  wordnet: any = WordNet ? new WordNet() : null,
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
   const wordMatch: MatchPair[] = [];
   const candidateCopy = [...enumCandidateList];
   const referenceCopy = [...enumReferenceList];
 
+  // If wordnet is not available, return empty matches
+  if (!wordnet) {
+    return [[], candidateCopy, referenceCopy];
+  }
+
   for (let i = candidateCopy.length - 1; i >= 0; i--) {
     const candidateWord = candidateCopy[i][1];
 
     // Get all synsets and their synonyms
-    const candidateSynsets = await new Promise<DataRecord[]>((resolve) => {
-      wordnet.lookup(candidateWord, (results: DataRecord[]) => resolve(results));
+    const candidateSynsets = await new Promise<any[]>((resolve) => {
+      wordnet.lookup(candidateWord, (results: any[]) => resolve(results));
     });
 
     // Create set of synonyms, filtering out ones with underscores
@@ -232,6 +256,17 @@ export async function handleMeteorAssertion({
   renderedValue,
   test,
 }: AssertionParams): Promise<GradingResult> {
+  // Check if natural package is available
+  if (!PorterStemmer || !WordNet) {
+    return {
+      pass: false,
+      score: 0,
+      reason:
+        'METEOR assertion requires the natural package. Please install it using: npm install natural',
+      assertion,
+    };
+  }
+
   // Validate inputs
   invariant(
     typeof renderedValue === 'string' ||

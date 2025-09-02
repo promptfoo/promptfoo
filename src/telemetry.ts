@@ -3,9 +3,9 @@ import { randomUUID } from 'crypto';
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
+import { POSTHOG_KEY } from './constants/build';
 import { getEnvBool, isCI } from './envars';
 import { fetchWithTimeout } from './fetch';
-import { POSTHOG_KEY } from './constants/build';
 import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
 

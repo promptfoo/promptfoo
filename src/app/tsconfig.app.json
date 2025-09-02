@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "outDir": "../../dist/src/app",
+    "outDir": "../../dist/esm/src/app",
     "paths": {
       "@app/*": ["./src/*"],
       "@promptfoo/*": ["../*"]

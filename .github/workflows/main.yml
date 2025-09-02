@@ -83,10 +83,10 @@ jobs:
           elif [[ -z "$PROMPTFOO_POSTHOG_KEY" ]]; then
             echo "PostHog key not available (running without secret), skipping check"
           else
-            if ! grep -q "exports\.POSTHOG_KEY = 'phc_" dist/src/generated/constants.js; then
-              echo "Error: PostHog key not properly replaced in generated/constants.js"
-              echo "Content of generated/constants.js:"
-              cat dist/src/generated/constants.js
+            if ! grep -q "POSTHOG_KEY.*phc_" dist/index.js; then
+              echo "Error: PostHog key not properly replaced in bundled files"
+              echo "Checking for POSTHOG_KEY in dist/index.js:"
+              grep -n "POSTHOG_KEY" dist/index.js | head -3
               exit 1
             fi
             echo "PostHog key replacement verified successfully"
@@ -296,12 +296,51 @@ jobs:
       - name: Run local server
         run: |
           npm run build
-          PROMPTFOO_CONFIG_DIR=~/tmp LOG_LEVEL=DEBUG API_PORT=8500 node dist/src/server/index.js &
+          mkdir -p /tmp/promptfoo-ci
+
+          # Copy migrations to temp directory for CI
+          cp -r drizzle /tmp/drizzle
+
+          # Kill any existing processes on port 8500
+          pgrep -f "API_PORT=8500" | xargs -r kill || true
+
+          # Start server
+          PROMPTFOO_CONFIG_DIR=/tmp/promptfoo-ci DRIZZLE_MIGRATIONS_DIR=/tmp/drizzle LOG_LEVEL=DEBUG API_PORT=8500 node dist/server/index.cjs &
+          SERVER_PID=$!
+          echo "Started server with PID: $SERVER_PID"
+
+          # Wait for server to be ready
+          echo "Waiting for server to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8500/health > /dev/null 2>&1 || curl -s http://localhost:8500/ > /dev/null 2>&1; then
+              echo "Server is ready!"
+              break
+            fi
+            echo "Attempt $i: Server not ready yet, waiting 2 seconds..."
+            sleep 2
+            
+            # Check if server process is still running
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "ERROR: Server process died, PID $SERVER_PID no longer exists"
+              exit 1
+            fi
+          done
+
+          # Final check
+          if ! curl -s http://localhost:8500/ > /dev/null 2>&1; then
+            echo "ERROR: Server failed to start after 60 seconds"
+            # Show server logs for debugging
+            pgrep -l node || echo "No node processes found"
+            exit 1
+          fi
 
       - name: run promptfoo eval
         id: eval
         run: |
-          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
+          PROMPTFOO_REMOTE_API_BASE_URL=http://localhost:8500 PROMPTFOO_SHARING_APP_BASE_URL=http://localhost:8500  node dist/main.cjs eval -c .github/assets/promptfooconfig.yaml --share
+
+          # Give the upload a moment to complete before checking
+          sleep 2
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1
 
@@ -325,8 +364,8 @@ jobs:
         env:
           PROMPTFOO_STAGING_API_KEY: ${{ secrets.PROMPTFOO_STAGING_API_KEY }}
         run: |
-          node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
-          node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
+          node dist/main.cjs auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
+          node dist/main.cjs eval -c .github/assets/promptfooconfig.yaml --share
 
   redteam:
     name: Redteam

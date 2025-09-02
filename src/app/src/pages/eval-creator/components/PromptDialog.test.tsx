@@ -1,7 +1,8 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptDialog from './PromptDialog';
 
 describe('PromptDialog', () => {

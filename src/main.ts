@@ -1,7 +1,17 @@
 #!/usr/bin/env node
 
+// Set a global flag to indicate we're in the main CLI bundle
+// This helps isMainModule() detect bundled contexts properly
+// Only set this flag when running from an actual bundled file
+if (
+  process.argv[1] &&
+  (process.argv[1].endsWith('main.cjs') || process.argv[1].includes('main.cjs'))
+) {
+  (global as any).__PROMPTFOO_CLI_BUNDLE__ = true;
+}
+
 import { Command } from 'commander';
-import { version } from '../package.json';
+import packageJson from '../package.json' with { type: 'json' };
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -35,6 +45,7 @@ import { simbaCommand } from './redteam/commands/simba';
 import { checkForUpdates } from './updates';
 import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
+import { isMainModule } from './util/module-paths';
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -80,7 +91,7 @@ async function main() {
 
   const program = new Command('promptfoo');
   program
-    .version(version)
+    .version(packageJson.version)
     .showHelpAfterError()
     .showSuggestionAfterError()
     .on('option:*', function () {
@@ -138,7 +149,8 @@ async function main() {
   program.parse();
 }
 
-if (require.main === module) {
+// Cross-compatible main check
+if (isMainModule(import.meta.url)) {
   checkNodeVersion();
   main();
 }

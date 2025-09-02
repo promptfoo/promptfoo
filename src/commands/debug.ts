@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 
 import chalk from 'chalk';
-import { version } from '../../package.json';
+import packageJson from '../../package.json' with { type: 'json' };
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { printBorder } from '../util';
@@ -19,7 +19,7 @@ interface DebugOptions {
 
 async function doDebug(options: DebugOptions): Promise<void> {
   const debugInfo = {
-    version,
+    version: packageJson.version,
     platform: {
       os: os.platform(),
       release: os.release(),

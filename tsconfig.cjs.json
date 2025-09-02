@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "dist/cjs/src",
+    "rootDir": ".cjs-src",
+    "declarationMap": false,
+    "sourceMap": false,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true
+  },
+  "include": [".cjs-src/**/*", ".cjs-src/**/*.json"],
+  "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*", "test/site/"]
+}

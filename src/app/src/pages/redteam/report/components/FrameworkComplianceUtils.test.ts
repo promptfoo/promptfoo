@@ -1,13 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  expandPluginCollections,
-  categorizePlugins,
-  getPluginDisplayName,
-  getSeverityColor,
-  getProgressColor,
-} from './FrameworkComplianceUtils';
-import type { CategoryStats } from './FrameworkComplianceUtils';
 import { displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  categorizePlugins,
+  expandPluginCollections,
+  getPluginDisplayName,
+  getProgressColor,
+  getSeverityColor,
+} from './FrameworkComplianceUtils';
+
+import type { CategoryStats } from './FrameworkComplianceUtils';
 
 describe('expandPluginCollections', () => {
   it('should return an empty set when the plugins array is empty', () => {
