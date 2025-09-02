@@ -119,7 +119,6 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
           onClick={handleOpen} 
           startIcon={<ViewColumnIcon />} 
           variant="text"
-          color={allColumnsVisible ? 'inherit' : 'warning'}
           sx={allColumnsVisible ? {} : { fontWeight: 'bold' }}
         >
           Columns ({allColumnsVisible ? columnData.length : `${selectedColumns.length}/${columnData.length}`})
