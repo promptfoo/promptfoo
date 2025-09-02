@@ -44,22 +44,22 @@ export const ANTHROPIC_MODELS = [
   ...['claude-3-haiku-20240307', 'claude-3-haiku-latest'].map((model) => ({
     id: model,
     cost: {
-      input: 0.25 / 1e6, // $0.25 / MTok
-      output: 1.25 / 1e6, // $1.25 / MTok
+      input: 0.00025 / 1000,
+      output: 0.00125 / 1000,
     },
   })),
   ...['claude-3-opus-20240229', 'claude-3-opus-latest'].map((model) => ({
     id: model,
     cost: {
-      input: 15 / 1e6, // $15 / MTok
-      output: 75 / 1e6, // $75 / MTok
+      input: 0.015 / 1000,
+      output: 0.075 / 1000,
     },
   })),
   ...['claude-3-5-haiku-20241022', 'claude-3-5-haiku-latest'].map((model) => ({
     id: model,
     cost: {
-      input: 0.80 / 1e6, // $0.80 / MTok
-      output: 4 / 1e6, // $4 / MTok
+      input: 0.8 / 1e6,
+      output: 4 / 1e6,
     },
   })),
   ...[
