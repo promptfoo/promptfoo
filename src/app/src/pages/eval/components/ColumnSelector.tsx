@@ -106,11 +106,25 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
     {} as Record<string, ColumnData[]>,
   );
 
+  const allColumnsVisible = selectedColumns.length === columnData.length;
+  const hiddenCount = columnData.length - selectedColumns.length;
+
   return (
     <>
-      <Button onClick={handleOpen} startIcon={<ViewColumnIcon />} variant="text">
-        Columns ({selectedColumns.length === columnData.length ? columnData.length : `${selectedColumns.length}/${columnData.length}`})
-      </Button>
+      <Tooltip 
+        title={allColumnsVisible ? '' : `${hiddenCount} column${hiddenCount === 1 ? '' : 's'} hidden`}
+        placement="bottom"
+      >
+        <Button 
+          onClick={handleOpen} 
+          startIcon={<ViewColumnIcon />} 
+          variant="text"
+          color={allColumnsVisible ? 'inherit' : 'warning'}
+          sx={allColumnsVisible ? {} : { fontWeight: 'bold' }}
+        >
+          Columns ({allColumnsVisible ? columnData.length : `${selectedColumns.length}/${columnData.length}`})
+        </Button>
+      </Tooltip>
 
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle>
