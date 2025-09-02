@@ -205,10 +205,9 @@ interface SettingsState {
   stickyHeader: boolean;
   setStickyHeader: (stickyHeader: boolean) => void;
 
-  columnStates: Record<string, ColumnState>;
-  lastUsedColumnSettings: ColumnState | null;
-  setColumnState: (evalId: string, state: ColumnState) => void;
-  getColumnState: (evalId: string, validColumns?: string[]) => ColumnState | null;
+  globalColumnSettings: ColumnState | null;
+  setColumnState: (state: ColumnState) => void;
+  getColumnState: (validColumns?: string[]) => ColumnState | null;
 
   maxImageWidth: number;
   setMaxImageWidth: (maxImageWidth: number) => void;
@@ -242,19 +241,14 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       stickyHeader: true,
       setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
 
-      columnStates: {},
-      lastUsedColumnSettings: null,
-      setColumnState: (evalId: string, state: ColumnState) =>
-        set((prevState) => ({
-          columnStates: {
-            ...prevState.columnStates,
-            [evalId]: state,
-          },
-          lastUsedColumnSettings: state,
+      globalColumnSettings: null,
+      setColumnState: (state: ColumnState) =>
+        set(() => ({
+          globalColumnSettings: state,
         })),
-      getColumnState: (evalId: string, validColumns?: string[]) => {
+      getColumnState: (validColumns?: string[]) => {
         const state = get();
-        const columnState = state.columnStates[evalId] || state.lastUsedColumnSettings;
+        const columnState = state.globalColumnSettings;
 
         if (!columnState || !validColumns) {
           return columnState;

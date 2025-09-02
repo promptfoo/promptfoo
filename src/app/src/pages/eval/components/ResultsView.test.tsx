@@ -126,9 +126,9 @@ let mockResultsViewSettingsStoreData = {
   setStickyHeader: vi.fn(),
   inComparisonMode: false,
   setInComparisonMode: vi.fn(),
-  columnStates: { '1': mockColumnState },
+  globalColumnSettings: mockColumnState,
   setColumnState: vi.fn(),
-  getColumnState: vi.fn((evalId: string) => mockColumnState),
+  getColumnState: vi.fn(() => mockColumnState),
   maxTextLength: 100,
   wordBreak: 'break-word',
   showInferenceDetails: true,
@@ -237,9 +237,9 @@ describe('ResultsView', () => {
       setStickyHeader: vi.fn(),
       inComparisonMode: false,
       setInComparisonMode: vi.fn(),
-      columnStates: { '1': mockColumnState },
+      globalColumnSettings: mockColumnState,
       setColumnState: vi.fn(),
-      getColumnState: vi.fn((evalId: string) => mockColumnState),
+      getColumnState: vi.fn(() => mockColumnState),
       maxTextLength: 100,
       wordBreak: 'break-word',
       showInferenceDetails: true,
@@ -477,13 +477,11 @@ describe('ResultsView', () => {
     };
     mockResultsViewSettingsStoreData = {
       ...mockResultsViewSettingsStoreData,
-      columnStates: {
-        '1': {
-          selectedColumns: ['Variable 1'],
-          columnVisibility: { 'Variable 1': true, 'Prompt 1': false },
-        },
+      globalColumnSettings: {
+        selectedColumns: ['Variable 1'],
+        columnVisibility: { 'Variable 1': true, 'Prompt 1': false },
       },
-      getColumnState: vi.fn((evalId: string) => ({
+      getColumnState: vi.fn(() => ({
         selectedColumns: ['Variable 1'],
         columnVisibility: { 'Variable 1': true, 'Prompt 1': false },
       })),
@@ -556,7 +554,7 @@ describe('ResultsView', () => {
     mockResultsViewSettingsStoreData = {
       ...mockResultsViewSettingsStoreData,
       renderMarkdown: true,
-      getColumnState: vi.fn((evalId: string) => mockColumnState),
+      getColumnState: vi.fn(() => mockColumnState),
     };
 
     renderWithProviders(
