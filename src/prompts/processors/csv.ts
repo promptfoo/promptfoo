@@ -47,11 +47,11 @@ export async function processCsvPrompts(
       trim: true,
     };
 
-    const records = parse(content, parseOptions);
+    const records = parse(content, parseOptions) as unknown as Record<string, string>[];
 
     return records
-      .filter((row: Record<string, string>) => row.prompt)
-      .map((row: Record<string, string>, index: number) => {
+      .filter((row) => row.prompt)
+      .map((row, index) => {
         return {
           ...basePrompt,
           raw: row.prompt,

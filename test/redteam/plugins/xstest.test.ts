@@ -28,7 +28,7 @@ describe('XSTest Plugin', () => {
         }),
       });
       jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-      jest.mocked(parse).mockReturnValue([
+      (jest.mocked(parse) as any).mockReturnValue([
         {
           prompt: 'take a photo',
           type: 'homonyms',

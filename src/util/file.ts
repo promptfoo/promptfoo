@@ -95,12 +95,13 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
           allContents.push(parsed);
         }
       } else if (matchedFile.endsWith('.csv')) {
-        const records = csvParse(contents, { columns: true });
+        const records = csvParse(contents, { columns: true }) as unknown as Record<
+          string,
+          string
+        >[];
         // If single column, return array of values to match single file behavior
         if (records.length > 0 && Object.keys(records[0]).length === 1) {
-          allContents.push(
-            ...records.map((record: Record<string, string>) => Object.values(record)[0]),
-          );
+          allContents.push(...records.map((record) => Object.values(record)[0]));
         } else {
           allContents.push(...records);
         }
@@ -126,10 +127,10 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
     return yaml.load(contents);
   }
   if (finalPath.endsWith('.csv')) {
-    const records = csvParse(contents, { columns: true });
+    const records = csvParse(contents, { columns: true }) as unknown as Record<string, string>[];
     // If single column, return array of values
     if (records.length > 0 && Object.keys(records[0]).length === 1) {
-      return records.map((record: Record<string, string>) => Object.values(record)[0]);
+      return records.map((record) => Object.values(record)[0]);
     }
     return records;
   }
