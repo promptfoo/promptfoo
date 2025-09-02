@@ -22,8 +22,9 @@ export const MetricFilterSelector: React.FC<{}> = () => {
       if (value) {
         addFilter({
           type: 'metric',
-          operator: 'equals',
-          value,
+          operator: 'is_defined',
+          field: value,
+          value: '',
         });
       }
     },
@@ -31,7 +32,7 @@ export const MetricFilterSelector: React.FC<{}> = () => {
   );
 
   const selectedMetric =
-    Object.keys(filters.values).length > 0 ? Object.values(filters.values)[0].value : null;
+    Object.keys(filters.values).length > 0 ? Object.values(filters.values)[0].field : null;
 
   return (
     <Box>

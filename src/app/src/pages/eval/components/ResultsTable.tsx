@@ -41,7 +41,7 @@ import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { isFilterApplied, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
@@ -430,9 +430,7 @@ function ResultsTable({
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
-      .filter((filter) =>
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
-      )
+      .filter((filter) => isFilterApplied(filter))
       .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
     // Create a stable string representation of applied filters
     return JSON.stringify(
@@ -485,11 +483,8 @@ function ResultsTable({
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
-      // Only pass the filters that have been applied (have a value).
-      // For metadata filters, both field and value must be present.
-      filters: Object.values(filters.values).filter((filter) =>
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
-      ),
+      // Only pass the filters that have been applied
+      filters: Object.values(filters.values).filter((filter) => isFilterApplied(filter)),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -730,8 +725,9 @@ function ResultsTable({
 
       const filter = {
         type: 'metric' as const,
-        operator: 'equals' as const,
-        value: metric,
+        operator: 'is_defined' as const,
+        field: metric,
+        value: '',
         logicOperator: 'or' as const,
       };
 
@@ -740,7 +736,7 @@ function ResultsTable({
         Object.values(filters.values).find(
           (f) =>
             f.type === filter.type &&
-            f.value === filter.value &&
+            f.field === filter.field &&
             f.operator === filter.operator &&
             f.logicOperator === filter.logicOperator,
         )

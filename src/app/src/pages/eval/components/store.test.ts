@@ -77,8 +77,9 @@ describe('useTableStore', () => {
 
       const newFilter = {
         type: 'metric' as const,
-        operator: 'equals' as const,
-        value: 'test-metric-value',
+        operator: 'greater_than' as const,
+        field: 'latency',
+        value: '5',
       };
 
       act(() => {
@@ -107,8 +108,9 @@ describe('useTableStore', () => {
 
       const newFilter = {
         type: 'metric' as const,
-        operator: 'equals' as const,
-        value: 'test-metric-value',
+        operator: 'greater_than' as const,
+        field: 'latency',
+        value: '5',
       };
 
       act(() => {
@@ -131,8 +133,9 @@ describe('useTableStore', () => {
 
       const newFilter = {
         type: 'metric' as const,
-        operator: 'equals' as const,
-        value: 'test-metric-value',
+        operator: 'greater_than' as const,
+        field: 'latency',
+        value: '5',
       };
 
       act(() => {
@@ -155,8 +158,9 @@ describe('useTableStore', () => {
       const initialFilter = {
         id: mockFilterId,
         type: 'metric' as const,
-        operator: 'equals' as const,
-        value: 'test-metric-value',
+        operator: 'greater_than' as const,
+        field: 'latency',
+        value: '5',
         logicOperator: 'and' as const,
         sortIndex: 0,
       };
@@ -228,6 +232,7 @@ describe('useTableStore', () => {
         id: 'test-filter-id',
         type: 'metric',
         operator: 'equals',
+        field: 'metricKey',
         value: filterValue,
         logicOperator: 'and',
         sortIndex: 0,
@@ -238,6 +243,7 @@ describe('useTableStore', () => {
         type: filter.type,
         operator: filter.operator,
         value: filter.value,
+        field: filter.field,
       });
 
       const mockCallApi = vi.mocked(callApi).mockResolvedValue({

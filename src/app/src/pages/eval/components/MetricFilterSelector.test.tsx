@@ -81,8 +81,9 @@ describe('MetricFilterSelector', () => {
           metricFilter: {
             id: 'metricFilter',
             type: 'metric',
-            operator: 'equals',
-            value: selectedMetric,
+            operator: 'is_defined',
+            field: selectedMetric,
+            value: '',
             logicOperator: 'and',
           },
         },
@@ -125,8 +126,9 @@ describe('MetricFilterSelector', () => {
     expect(mockAddFilter).toHaveBeenCalledTimes(1);
     expect(mockAddFilter).toHaveBeenCalledWith({
       type: 'metric',
-      operator: 'equals',
-      value: selectedMetric,
+      operator: 'is_defined',
+      field: selectedMetric,
+      value: '',
     });
   });
 
@@ -139,8 +141,9 @@ describe('MetricFilterSelector', () => {
         values: {
           metricFilter: {
             type: 'metric',
-            operator: 'equals',
-            value: 'latency',
+            operator: 'is_defined',
+            field: 'latency',
+            value: '',
             id: 'metricFilter',
             logicOperator: 'and',
           },

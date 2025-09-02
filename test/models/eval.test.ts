@@ -473,8 +473,9 @@ describe('evaluator', () => {
           JSON.stringify({
             logicOperator: 'and',
             type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
+            operator: 'is_defined',
+            field: 'accuracy',
+            value: '',
           }),
         ],
       });
@@ -496,8 +497,9 @@ describe('evaluator', () => {
           JSON.stringify({
             logicOperator: 'and',
             type: 'metric',
-            operator: 'equals',
-            value: 'relevance',
+            operator: 'is_defined',
+            field: 'relevance',
+            value: '',
           }),
         ],
         limit: 10,
@@ -514,14 +516,16 @@ describe('evaluator', () => {
           JSON.stringify({
             logicOperator: 'or',
             type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
+            operator: 'is_defined',
+            field: 'accuracy',
+            value: '',
           }),
           JSON.stringify({
             logicOperator: 'or',
             type: 'metric',
-            operator: 'equals',
-            value: 'relevance',
+            operator: 'is_defined',
+            field: 'relevance',
+            value: '',
           }),
         ],
       });

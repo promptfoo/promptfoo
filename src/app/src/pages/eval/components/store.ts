@@ -70,7 +70,15 @@ export interface PaginationState {
 
 export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy';
 
-export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
+export type ResultsFilterOperator =
+  | 'equals'
+  | 'contains'
+  | 'not_contains'
+  | 'greater_than'
+  | 'less_than'
+  | 'greater_than_or_equal'
+  | 'less_than_or_equal'
+  | 'is_defined';
 
 export type ResultsFilter = {
   /**
@@ -90,6 +98,18 @@ export type ResultsFilter = {
    */
   sortIndex: number;
 };
+
+export function isFilterApplied(filter: ResultsFilter): boolean {
+  if (filter.type === 'metadata') {
+    return Boolean(filter.value && filter.field);
+  }
+  if (filter.type === 'metric') {
+    return filter.operator === 'is_defined'
+      ? Boolean(filter.field)
+      : Boolean(filter.field && filter.value);
+  }
+  return Boolean(filter.value);
+}
 
 interface TableState {
   evalId: string | null;
@@ -453,9 +473,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
     const filterId = uuidv4();
 
     set((prevState) => {
-      // For metadata filters, only count as applied if both field and value are present
-      const isApplied =
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value);
+      const isApplied = isFilterApplied(filter);
       const appliedCount = prevState.filters.appliedCount + (isApplied ? 1 : 0);
 
       // Calculate the next sortIndex
@@ -488,9 +506,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
   removeFilter: (id: ResultsFilter['id']) => {
     set((prevState) => {
       const target = prevState.filters.values[id];
-      // For metadata filters, only count as applied if both field and value were present
-      const wasApplied =
-        target.type === 'metadata' ? Boolean(target.value && target.field) : Boolean(target.value);
+      const wasApplied = isFilterApplied(target);
       const appliedCount = prevState.filters.appliedCount - (wasApplied ? 1 : 0);
       const values = { ...prevState.filters.values };
       delete values[id];
@@ -538,11 +554,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
   updateFilter: (filter: ResultsFilter) => {
     set((prevState) => {
       const target = prevState.filters.values[filter.id];
-      // For metadata filters, only count as applied if both field and value are present
-      const targetWasApplied =
-        target.type === 'metadata' ? Boolean(target.value && target.field) : Boolean(target.value);
-      const filterIsApplied =
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value);
+      const targetWasApplied = isFilterApplied(target);
+      const filterIsApplied = isFilterApplied(filter);
       const appliedCount =
         prevState.filters.appliedCount - (targetWasApplied ? 1 : 0) + (filterIsApplied ? 1 : 0);
 
