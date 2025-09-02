@@ -91,13 +91,11 @@ export class LlamaApiProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
+    const { apiKey: _redacted, ...restConfig } = this.config ?? {};
     return {
       provider: 'llamaapi',
       model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config?.apiKey && { apiKey: undefined }),
-      },
+      config: restConfig,
     };
   }
 
@@ -134,10 +132,18 @@ export function createLlamaApiProvider(
 
   if (splits[1] === 'chat') {
     const modelName = splits.slice(2).join(':');
-    return new LlamaApiProvider(modelName, options.config || {});
+    return new LlamaApiProvider(modelName, {
+      ...options.config,
+      id: options.id,
+      env: options.env,
+    });
   } else {
     // Default to chat for llamaapi provider
     const modelName = splits.slice(1).join(':');
-    return new LlamaApiProvider(modelName, options.config || {});
+    return new LlamaApiProvider(modelName, {
+      ...options.config,
+      id: options.id,
+      env: options.env,
+    });
   }
 }

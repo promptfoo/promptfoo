@@ -7,7 +7,6 @@ import {
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
 import type { ProviderOptions } from '../../src/types';
-import type { EnvOverrides } from '../../src/types/env';
 
 jest.mock('../../src/providers/openai/chat', () => {
   return {
@@ -145,6 +144,36 @@ describe('LlamaApiProvider', () => {
       });
     });
   });
+
+  describe('toJSON()', () => {
+    it('should redact apiKey and set provider', () => {
+      const p = new LlamaApiProvider('Llama-3.3-8B-Instruct', {
+        config: { temperature: 0.5 },
+      });
+
+      // Mock the internal config to include an apiKey for testing
+      (p as any).config = { apiKey: 'secret', temperature: 0.5 };
+
+      const originalToJSON = LlamaApiProvider.prototype.toJSON;
+      const json = originalToJSON.call(p);
+
+      expect(json.provider).toBe('llamaapi');
+      expect(json.config).not.toHaveProperty('apiKey');
+      expect(json.config.temperature).toBe(0.5);
+    });
+  });
+
+  describe('id()', () => {
+    it('should include llamaapi prefix', () => {
+      const p = new LlamaApiProvider('Llama-3.3-8B-Instruct');
+
+      // Test the actual implementation
+      const originalId = LlamaApiProvider.prototype.id;
+      const result = originalId.call(p);
+
+      expect(result).toBe('llamaapi:Llama-3.3-8B-Instruct');
+    });
+  });
 });
 
 describe('createLlamaApiProvider', () => {
@@ -188,7 +217,7 @@ describe('createLlamaApiProvider', () => {
         },
       },
       id: 'custom-id',
-      env: { LLAMA_API_KEY: 'test-key' } as any,
+      env: { LLAMA_API_KEY: 'dummy' } as any,
     };
 
     createLlamaApiProvider('llamaapi:Llama-4-Scout-17B-16E-Instruct-FP8', options);
@@ -199,7 +228,11 @@ describe('createLlamaApiProvider', () => {
         config: expect.objectContaining({
           temperature: 0.8,
           max_tokens: 2048,
+          apiBaseUrl: 'https://api.llama.com/compat/v1',
+          apiKeyEnvar: 'LLAMA_API_KEY',
         }),
+        id: 'custom-id',
+        env: expect.objectContaining({ LLAMA_API_KEY: 'dummy' }),
       }),
     );
   });
