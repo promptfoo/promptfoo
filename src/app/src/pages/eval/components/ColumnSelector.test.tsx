@@ -76,7 +76,7 @@ describe('ColumnSelector', () => {
     );
 
     const button = screen.getByRole('button', { name: /columns/i });
-    expect(button).toHaveTextContent('Columns (5/5)');
+    expect(button).toHaveTextContent('Columns (5)');
   });
 
   it('groups columns with the same group value under the same header in the dialog', () => {

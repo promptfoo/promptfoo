@@ -132,7 +132,7 @@ describe('useResultsViewSettingsStore - Global Column State Management', () => {
       // Any call to getColumnState should return the same global settings
       const settings1 = useResultsViewSettingsStore.getState().getColumnState();
       const settings2 = useResultsViewSettingsStore.getState().getColumnState();
-      
+
       expect(settings1).toEqual(sharedSettings);
       expect(settings2).toEqual(sharedSettings);
       expect(settings1).toBe(settings2); // Same reference

@@ -111,17 +111,21 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
 
   return (
     <>
-      <Tooltip 
-        title={allColumnsVisible ? '' : `${hiddenCount} column${hiddenCount === 1 ? '' : 's'} hidden`}
+      <Tooltip
+        title={
+          allColumnsVisible ? '' : `${hiddenCount} column${hiddenCount === 1 ? '' : 's'} hidden`
+        }
         placement="bottom"
       >
-        <Button 
-          onClick={handleOpen} 
-          startIcon={<ViewColumnIcon />} 
+        <Button
+          onClick={handleOpen}
+          startIcon={<ViewColumnIcon />}
           variant="text"
           sx={allColumnsVisible ? {} : { fontWeight: 'bold' }}
         >
-          Columns ({allColumnsVisible ? columnData.length : `${selectedColumns.length}/${columnData.length}`})
+          Columns (
+          {allColumnsVisible ? columnData.length : `${selectedColumns.length}/${columnData.length}`}
+          )
         </Button>
       </Tooltip>
 
