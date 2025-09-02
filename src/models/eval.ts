@@ -18,7 +18,7 @@ import { getEnvBool } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
-import { PLUGIN_CATEGORIES, Severity } from '../redteam/constants';
+import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import {
   type CompletedPrompt,
