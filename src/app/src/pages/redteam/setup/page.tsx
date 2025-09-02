@@ -120,7 +120,7 @@ const TabPanel = styled(Box)(({ theme }) => ({
 }));
 
 interface TabPanelProps {
-  children?: React.ReactNode;
+  children?: React.ReactElement | React.ReactElement[];
   index: number;
   value: number;
 }
@@ -137,7 +137,7 @@ function CustomTabPanel(props: TabPanelProps) {
       sx={{ padding: 0 }}
       {...other}
     >
-      {value === index && children}
+      {value === index && (children as React.ReactNode)}
     </TabPanel>
   );
 }

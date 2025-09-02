@@ -1,7 +1,7 @@
 import './syntax-highlighting.css';
 
 import React, { useCallback, useState } from 'react';
-
+import Editor from 'react-simple-code-editor';
 import AddIcon from '@mui/icons-material/Add';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckIcon from '@mui/icons-material/Check';
@@ -15,7 +15,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/GridLegacy';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
@@ -26,7 +26,6 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import yaml from 'js-yaml';
-import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -63,7 +62,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
   urlError,
   setUrlError,
   updateFullTarget,
-}): JSX.Element => {
+}): React.ReactElement => {
   const theme = useTheme();
   const darkMode = theme.palette.mode === 'dark';
 

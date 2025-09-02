@@ -101,7 +101,7 @@ describe('FrameworkCompliance', () => {
         framework: 'framework-1',
         isCompliant: true,
       }),
-      expect.anything(),
+      undefined,
     );
 
     expect(mockFrameworkCard).toHaveBeenCalledWith(
@@ -109,7 +109,7 @@ describe('FrameworkCompliance', () => {
         framework: 'framework-2',
         isCompliant: false,
       }),
-      expect.anything(),
+      undefined,
     );
 
     expect(mockFrameworkCard).toHaveBeenCalledWith(
@@ -117,7 +117,7 @@ describe('FrameworkCompliance', () => {
         framework: 'framework-3',
         isCompliant: false,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -161,7 +161,7 @@ describe('FrameworkCompliance', () => {
         isCompliant: false,
         frameworkSeverity: 'high',
       }),
-      expect.anything(),
+      undefined,
     );
   });
 
@@ -184,7 +184,7 @@ describe('FrameworkCompliance', () => {
         categoryStats: categoryStats,
         pluginPassRateThreshold: pluginPassRateThreshold,
       }),
-      expect.anything(),
+      undefined,
     );
   });
 

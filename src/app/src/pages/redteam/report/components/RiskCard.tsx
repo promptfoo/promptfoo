@@ -6,7 +6,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/GridLegacy';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -109,16 +109,17 @@ const RiskCard: React.FC<{
                 value={progressValue}
                 // @ts-ignore
                 max={100}
-                thickness={10}
-                arc={{
-                  startAngle: -90,
-                  endAngle: 90,
-                  color: 'primary.main',
-                }}
+                innerRadius="70%"
+                outerRadius="100%"
+                startAngle={-90}
+                endAngle={90}
                 text={Number.isNaN(progressValue) ? '-' : `${Math.round(progressValue)}%`}
                 sx={{
                   width: '100%',
                   height: '100%',
+                  '& .MuiGauge-arc': {
+                    fill: 'primary.main',
+                  },
                 }}
               />
             </Box>

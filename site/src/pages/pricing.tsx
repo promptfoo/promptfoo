@@ -404,7 +404,7 @@ function DemoCTA() {
   );
 }
 
-export default function Pricing(): JSX.Element {
+export default function Pricing(): React.ReactElement {
   return (
     <Layout
       title="Pricing"

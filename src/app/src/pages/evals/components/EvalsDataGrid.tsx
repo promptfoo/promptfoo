@@ -10,17 +10,18 @@ import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
   DataGrid,
-  type GridCellParams,
   type GridColDef,
-  GridCsvExportMenuItem,
-  type GridRenderCellParams,
-  type GridRowSelectionModel,
-  GridToolbarColumnsButton,
   GridToolbarContainer,
-  GridToolbarDensitySelector,
-  GridToolbarExportContainer,
+  GridToolbarColumnsButton,
   GridToolbarFilterButton,
+  GridToolbarDensitySelector,
   GridToolbarQuickFilter,
+  type GridRowId,
+  type GridRowSelectionModel,
+  type GridRenderCellParams,
+  type GridCellParams,
+  GridCsvExportMenuItem,
+  GridToolbarExportContainer,
   type GridToolbarQuickFilterProps,
 } from '@mui/x-data-grid';
 import invariant from '@promptfoo/util/invariant';
@@ -54,16 +55,25 @@ const GridToolbarExport = () => (
 const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((props, ref) => {
   const theme = useTheme();
   return (
-    <GridToolbarQuickFilter
-      {...props}
-      inputRef={ref}
+    <Box
       sx={{
-        '& .MuiInputBase-root': {
-          borderRadius: 2,
-          backgroundColor: theme.palette.background.paper,
+        '& .MuiTextField-root': {
+          '& .MuiInputBase-root': {
+            borderRadius: 2,
+            backgroundColor: theme.palette.background.paper,
+          },
         },
       }}
-    />
+    >
+      <GridToolbarQuickFilter
+        {...props}
+        slotProps={{
+          root: {
+            inputRef: ref,
+          } as any,
+        }}
+      />
+    </Box>
   );
 });
 
@@ -130,7 +140,7 @@ export default function EvalsDataGrid({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowId[]>(
     focusedEvalId ? [focusedEvalId] : [],
   );
 
@@ -444,8 +454,8 @@ export default function EvalsDataGrid({
           },
           '--DataGrid-overlayHeight': '300px',
         }}
-        onRowSelectionModelChange={setRowSelectionModel}
-        rowSelectionModel={rowSelectionModel}
+        onRowSelectionModelChange={(model) => setRowSelectionModel(model as unknown as GridRowId[])}
+        rowSelectionModel={rowSelectionModel as unknown as GridRowSelectionModel}
         initialState={{
           sorting: {
             sortModel: [{ field: 'createdAt', sort: 'desc' }],

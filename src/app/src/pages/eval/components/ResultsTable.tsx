@@ -159,7 +159,7 @@ function ResultsTableHeader({
   tableWidth: number;
   maxTextLength: number;
   wordBreak: 'break-word' | 'break-all';
-  theadRef: React.RefObject<HTMLTableSectionElement>;
+  theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
   zoom: number;

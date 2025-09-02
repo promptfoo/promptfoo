@@ -1,7 +1,6 @@
-import React from 'react';
-
+import { fireEvent, screen } from '@app/test-utils';
+import { render } from '@testing-library/react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import type { ProviderOptions } from '@promptfoo/types';
@@ -38,7 +37,7 @@ vi.mock('dedent', () => ({
   default: vi.fn((strings: TemplateStringsArray) => strings.join('')),
 }));
 
-const renderWithTheme = (ui: React.ReactElement) => {
+const renderWithTheme = (ui: React.ReactElement<any>) => {
   const theme = createTheme({ palette: { mode: 'light' } });
   return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
 };

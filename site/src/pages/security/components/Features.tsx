@@ -52,7 +52,7 @@ const features = [
   },
 ];
 
-export default function Features(): JSX.Element {
+export default function Features(): React.ReactElement {
   return (
     <section className={`${styles.section} ${styles.featuresSection}`}>
       <div className={styles.container}>

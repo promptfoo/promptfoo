@@ -3,10 +3,7 @@ import Link from '@docusaurus/Link';
 import { useLocation } from '@docusaurus/router';
 import styles from './styles.module.css';
 
-export default function EventsBanner(): JSX.Element | null {
-  // No events currently scheduled.
-  return null;
-
+export default function EventsBanner(): React.ReactElement | null {
   const [isVisible, setIsVisible] = useState(true);
   const location = useLocation();
 
@@ -31,7 +28,9 @@ export default function EventsBanner(): JSX.Element | null {
     sessionStorage.setItem('eventsBannerDismissed', 'true');
   };
 
-  if (!isVisible) return null;
+  if (!isVisible) {
+    return null;
+  }
 
   return (
     <div className={styles.banner}>

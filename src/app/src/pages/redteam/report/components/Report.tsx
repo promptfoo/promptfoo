@@ -56,7 +56,7 @@ const App: React.FC = () => {
   const { recordEvent } = useTelemetry();
 
   // Vulnerabilities DataGrid
-  const vulnerabilitiesDataGridRef = React.useRef<HTMLDivElement>(null);
+  const vulnerabilitiesDataGridRef = React.useRef<HTMLDivElement | null>(null);
   const [vulnerabilitiesDataGridFilterModel, setVulnerabilitiesDataGridFilterModel] =
     React.useState<GridFilterModel>({
       items: [],

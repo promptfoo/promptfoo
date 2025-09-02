@@ -276,19 +276,19 @@ export default function ChecksSection({
                 }
                 sx={{
                   '& .failed-check-row': {
-                    bgcolor: (theme) =>
+                    bgcolor: (theme: any) =>
                       theme.palette.mode === 'dark'
                         ? 'rgba(244, 67, 54, 0.05)'
                         : 'rgba(244, 67, 54, 0.02)',
                   },
                   '& .passed-check-row': {
-                    bgcolor: (theme) =>
+                    bgcolor: (theme: any) =>
                       theme.palette.mode === 'dark'
                         ? 'rgba(76, 175, 80, 0.05)'
                         : 'rgba(76, 175, 80, 0.02)',
                   },
                   '& .skipped-check-row': {
-                    bgcolor: (theme) =>
+                    bgcolor: (theme: any) =>
                       theme.palette.mode === 'dark'
                         ? 'rgba(158, 158, 158, 0.05)'
                         : 'rgba(158, 158, 158, 0.02)',

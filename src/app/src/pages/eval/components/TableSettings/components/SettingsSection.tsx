@@ -1,15 +1,10 @@
 import React from 'react';
-
-import Box from '@mui/material/Box';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import { alpha, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { Box, Typography, Stack, useTheme, Paper, alpha } from '@mui/material';
 import { tokens } from '../tokens';
 
 interface SettingsSectionProps {
   title: string;
-  icon?: JSX.Element | null;
+  icon?: React.ReactElement | null;
   children: React.ReactNode;
   description?: string;
 }
@@ -55,7 +50,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
             py: tokens.spacing.padding.tiny,
           }}
         >
-          {icon && (
+          {icon ? (
             <Box
               sx={{
                 color: theme.palette.primary.main,
@@ -66,7 +61,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
             >
               {icon}
             </Box>
-          )}
+          ) : null}
           <Typography
             variant="subtitle1"
             fontWeight={600}
@@ -105,7 +100,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
           role: 'list',
         }}
       >
-        {children}
+        {children as React.ReactNode}
       </Box>
     </Box>
   );

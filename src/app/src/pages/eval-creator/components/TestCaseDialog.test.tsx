@@ -209,12 +209,13 @@ describe('TestCaseForm', () => {
       </ThemeProvider>,
     );
 
-    // Get the last call since it was re-rendered with new props
-    expect(mockVarsForm.mock.lastCall?.[0]).toMatchObject({
+    const lastVarsCall = mockVarsForm.mock.calls[mockVarsForm.mock.calls.length - 1][0];
+    expect(lastVarsCall).toMatchObject({
       initialValues: initialValues2.vars,
     });
 
-    expect(mockAssertsForm.mock.lastCall?.[0]).toMatchObject({
+    const lastAssertsCall = mockAssertsForm.mock.calls[mockAssertsForm.mock.calls.length - 1][0];
+    expect(lastAssertsCall).toMatchObject({
       initialValues: initialValues2.assert,
     });
   });

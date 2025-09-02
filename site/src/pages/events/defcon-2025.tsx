@@ -5,7 +5,7 @@ import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './defcon-2025.module.css';
 
-export default function Defcon2025(): JSX.Element {
+export default function Defcon2025(): React.ReactElement {
   useEffect(() => {
     // Force dark theme for this page
     document.documentElement.setAttribute('data-theme', 'dark');

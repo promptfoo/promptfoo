@@ -1,5 +1,5 @@
 import Cal, { getCalApi } from '@calcom/embed-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, type ReactNode } from 'react';
 import { useColorMode } from '@docusaurus/theme-common';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -41,7 +41,7 @@ function Calendar() {
 }
 
 interface TabPanelProps {
-  children?: React.ReactNode;
+  children?: ReactNode;
   index: number;
   value: number;
 }
@@ -62,7 +62,7 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-function Contact(): JSX.Element {
+function Contact(): React.ReactElement {
   const isDarkTheme = useColorMode().colorMode === 'dark';
   const [tabValue, setTabValue] = useState(0);
 
@@ -406,7 +406,7 @@ function Contact(): JSX.Element {
   );
 }
 
-export default function Page(): JSX.Element {
+export default function Page(): React.ReactElement {
   return (
     <Layout
       title="Contact Enterprise Sales"

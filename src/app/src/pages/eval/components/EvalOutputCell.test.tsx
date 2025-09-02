@@ -20,7 +20,7 @@ vi.mock('./EvalOutputPromptDialog', () => ({
   )),
 }));
 
-const renderWithProviders = (ui: React.ReactElement) => {
+const renderWithProviders = (ui: React.ReactElement<any>) => {
   return render(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
 };
 

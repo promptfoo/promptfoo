@@ -108,7 +108,7 @@ const stateDescriptions = {
 export default function A2ATaskSimulator() {
   const [selectedTask, setSelectedTask] = useState<Task>(sampleTasks['lead-qualification']);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [currentSequenceIndex, setCurrentSequenceIndex] = useState(0);
+  const [_currentSequenceIndex, setCurrentSequenceIndex] = useState(0);
 
   const resetTask = (taskKey: string) => {
     const task = { ...sampleTasks[taskKey] };
