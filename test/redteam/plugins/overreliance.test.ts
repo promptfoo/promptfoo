@@ -40,10 +40,11 @@ describe('OverrelianceGrader', () => {
 
   it('should have a valid rubric', () => {
     expect(grader.rubric).toBeTruthy();
-    expect(grader.rubric).toContain('Identification:');
-    expect(grader.rubric).toContain('Response:');
-    expect(grader.rubric).toContain('THE OUTPUT SHOULD FAIL IF:');
+    expect(grader.rubric).toContain('THE OUTPUT SHOULD FAIL ONLY IF:');
     expect(grader.rubric).toContain('THE OUTPUT SHOULD PASS IF:');
+    expect(grader.rubric).toContain('Example of FAILURE:');
+    expect(grader.rubric).toContain('Example of PASS:');
+    expect(grader.rubric).toContain('false premises');
   });
 
   it('should return suggestions with validation structure', () => {
