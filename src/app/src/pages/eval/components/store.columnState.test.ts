@@ -3,78 +3,34 @@ import { describe, beforeEach, it, expect } from 'vitest';
 import { useResultsViewSettingsStore } from './store';
 import type { ColumnState } from './store';
 
-describe('useResultsViewSettingsStore - Column State Management', () => {
+describe('useResultsViewSettingsStore - Global Column State Management', () => {
   beforeEach(() => {
     act(() => {
       // Reset store to initial state
       const initialState = useResultsViewSettingsStore.getState();
       useResultsViewSettingsStore.setState({
         ...initialState,
-        columnStates: {},
-        lastUsedColumnSettings: null,
+        globalColumnSettings: null,
       });
     });
   });
 
   describe('setColumnState', () => {
-    it('should set column state for specific eval ID', () => {
-      const evalId = 'test-eval-1';
+    it('should set global column state', () => {
       const columnState: ColumnState = {
         selectedColumns: ['col1', 'col2'],
         columnVisibility: { col1: true, col2: false, col3: true },
       };
 
       act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId, columnState);
+        useResultsViewSettingsStore.getState().setColumnState(columnState);
       });
 
       const state = useResultsViewSettingsStore.getState();
-      expect(state.columnStates[evalId]).toEqual(columnState);
+      expect(state.globalColumnSettings).toEqual(columnState);
     });
 
-    it('should update lastUsedColumnSettings when setting column state', () => {
-      const evalId = 'test-eval-1';
-      const columnState: ColumnState = {
-        selectedColumns: ['col1', 'col2'],
-        columnVisibility: { col1: true, col2: false },
-      };
-
-      act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId, columnState);
-      });
-
-      const state = useResultsViewSettingsStore.getState();
-      expect(state.lastUsedColumnSettings).toEqual(columnState);
-    });
-
-    it('should allow setting column state for multiple eval IDs', () => {
-      const evalId1 = 'test-eval-1';
-      const evalId2 = 'test-eval-2';
-
-      const columnState1: ColumnState = {
-        selectedColumns: ['col1', 'col2'],
-        columnVisibility: { col1: true, col2: false },
-      };
-
-      const columnState2: ColumnState = {
-        selectedColumns: ['col3', 'col4'],
-        columnVisibility: { col3: false, col4: true },
-      };
-
-      act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId1, columnState1);
-        useResultsViewSettingsStore.getState().setColumnState(evalId2, columnState2);
-      });
-
-      const state = useResultsViewSettingsStore.getState();
-      expect(state.columnStates[evalId1]).toEqual(columnState1);
-      expect(state.columnStates[evalId2]).toEqual(columnState2);
-      expect(state.lastUsedColumnSettings).toEqual(columnState2);
-    });
-
-    it('should overwrite existing column state for the same eval ID', () => {
-      const evalId = 'test-eval-1';
-
+    it('should overwrite existing global column state', () => {
       const initialState: ColumnState = {
         selectedColumns: ['col1'],
         columnVisibility: { col1: true },
@@ -86,127 +42,78 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
       };
 
       act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId, initialState);
+        useResultsViewSettingsStore.getState().setColumnState(initialState);
       });
 
       let state = useResultsViewSettingsStore.getState();
-      expect(state.columnStates[evalId]).toEqual(initialState);
+      expect(state.globalColumnSettings).toEqual(initialState);
 
       act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId, updatedState);
+        useResultsViewSettingsStore.getState().setColumnState(updatedState);
       });
 
       state = useResultsViewSettingsStore.getState();
-      expect(state.columnStates[evalId]).toEqual(updatedState);
-      expect(state.lastUsedColumnSettings).toEqual(updatedState);
+      expect(state.globalColumnSettings).toEqual(updatedState);
     });
   });
 
   describe('getColumnState', () => {
-    it('should return column state for specific eval ID when it exists', () => {
-      const evalId = 'test-eval-1';
+    it('should return global column state when it exists', () => {
       const columnState: ColumnState = {
         selectedColumns: ['col1', 'col2'],
         columnVisibility: { col1: true, col2: false },
       };
 
       act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId, columnState);
+        useResultsViewSettingsStore.getState().setColumnState(columnState);
       });
 
-      const retrievedState = useResultsViewSettingsStore.getState().getColumnState(evalId);
+      const retrievedState = useResultsViewSettingsStore.getState().getColumnState();
       expect(retrievedState).toEqual(columnState);
     });
 
-    it('should return lastUsedColumnSettings when eval ID does not exist', () => {
-      const evalId1 = 'test-eval-1';
-      const evalId2 = 'test-eval-2';
-      const evalId3 = 'nonexistent-eval';
-
-      const columnState1: ColumnState = {
-        selectedColumns: ['col1'],
-        columnVisibility: { col1: true },
-      };
-
-      const columnState2: ColumnState = {
-        selectedColumns: ['col2', 'col3'],
-        columnVisibility: { col2: true, col3: false },
-      };
-
-      act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId1, columnState1);
-        useResultsViewSettingsStore.getState().setColumnState(evalId2, columnState2);
-      });
-
-      const retrievedState = useResultsViewSettingsStore.getState().getColumnState(evalId3);
-      expect(retrievedState).toEqual(columnState2); // Should be the last used settings
-    });
-
-    it('should return null when no column state exists and no last used settings', () => {
-      const evalId = 'nonexistent-eval';
-
-      const retrievedState = useResultsViewSettingsStore.getState().getColumnState(evalId);
+    it('should return null when no global column state exists', () => {
+      const retrievedState = useResultsViewSettingsStore.getState().getColumnState();
       expect(retrievedState).toBeNull();
     });
 
-    it('should prioritize specific eval column state over last used settings', () => {
-      const evalId1 = 'test-eval-1';
-      const evalId2 = 'test-eval-2';
-
-      const columnState1: ColumnState = {
-        selectedColumns: ['col1'],
-        columnVisibility: { col1: true },
-      };
-
-      const columnState2: ColumnState = {
-        selectedColumns: ['col2', 'col3'],
-        columnVisibility: { col2: true, col3: false },
-      };
-
-      act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId1, columnState1);
-        useResultsViewSettingsStore.getState().setColumnState(evalId2, columnState2);
-      });
-
-      // Should return specific state for evalId1, not the last used settings
-      const retrievedState1 = useResultsViewSettingsStore.getState().getColumnState(evalId1);
-      expect(retrievedState1).toEqual(columnState1);
-    });
-
-    it('should handle lastUsedColumnSettings containing columns that do not exist in the new evaluation', () => {
-      const evalId = 'test-eval-1';
-      const lastUsedColumnSettings: ColumnState = {
+    it('should filter out columns that do not exist in validColumns', () => {
+      const columnState: ColumnState = {
         selectedColumns: ['col1', 'col2', 'nonExistentColumn'],
         columnVisibility: { col1: true, col2: false, nonExistentColumn: true },
       };
 
       act(() => {
-        useResultsViewSettingsStore.setState({ lastUsedColumnSettings });
+        useResultsViewSettingsStore.getState().setColumnState(columnState);
       });
 
       const validColumns = ['col1', 'col2'];
-      const retrievedState = useResultsViewSettingsStore
-        .getState()
-        .getColumnState(evalId, validColumns);
-
-      const _expectedState: ColumnState = {
-        selectedColumns: ['col1', 'col2'],
-        columnVisibility: { col1: true, col2: false },
-      };
+      const retrievedState = useResultsViewSettingsStore.getState().getColumnState(validColumns);
 
       expect(retrievedState).toEqual({
-        selectedColumns: expect.arrayContaining(['col1', 'col2']),
+        selectedColumns: ['col1', 'col2'],
         columnVisibility: { col1: true, col2: false },
       });
-      expect(retrievedState?.selectedColumns.length).toBe(2);
+      expect(retrievedState?.selectedColumns).not.toContain('nonExistentColumn');
+    });
+
+    it('should return unfiltered state when validColumns is not provided', () => {
+      const columnState: ColumnState = {
+        selectedColumns: ['col1', 'col2', 'col3'],
+        columnVisibility: { col1: true, col2: false, col3: true },
+      };
+
+      act(() => {
+        useResultsViewSettingsStore.getState().setColumnState(columnState);
+      });
+
+      const retrievedState = useResultsViewSettingsStore.getState().getColumnState();
+      expect(retrievedState).toEqual(columnState);
     });
   });
 
-  describe('column state persistence behavior', () => {
-    it('should persist column visibility settings across different evaluations', () => {
-      const evalId1 = 'test-eval-1';
-      const evalId2 = 'test-eval-2';
-
+  describe('global column state behavior', () => {
+    it('should share column visibility settings across all evaluations', () => {
       const sharedSettings: ColumnState = {
         selectedColumns: ['Variable 1', 'Prompt 1', 'Output'],
         columnVisibility: {
@@ -217,33 +124,35 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
         },
       };
 
-      // Set settings for first eval
+      // Set global settings
       act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId1, sharedSettings);
+        useResultsViewSettingsStore.getState().setColumnState(sharedSettings);
       });
 
-      // New eval should get the last used settings
-      const newEvalSettings = useResultsViewSettingsStore.getState().getColumnState(evalId2);
-      expect(newEvalSettings).toEqual(sharedSettings);
+      // Any call to getColumnState should return the same global settings
+      const settings1 = useResultsViewSettingsStore.getState().getColumnState();
+      const settings2 = useResultsViewSettingsStore.getState().getColumnState();
+      
+      expect(settings1).toEqual(sharedSettings);
+      expect(settings2).toEqual(sharedSettings);
+      expect(settings1).toBe(settings2); // Same reference
     });
 
     it('should handle empty selectedColumns and columnVisibility', () => {
-      const evalId = 'test-eval-1';
       const emptyState: ColumnState = {
         selectedColumns: [],
         columnVisibility: {},
       };
 
       act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId, emptyState);
+        useResultsViewSettingsStore.getState().setColumnState(emptyState);
       });
 
-      const retrievedState = useResultsViewSettingsStore.getState().getColumnState(evalId);
+      const retrievedState = useResultsViewSettingsStore.getState().getColumnState();
       expect(retrievedState).toEqual(emptyState);
     });
 
     it('should handle complex column visibility states', () => {
-      const evalId = 'test-eval-1';
       const complexState: ColumnState = {
         selectedColumns: ['Variable 1', 'Variable 2', 'Prompt 1', 'Output', 'Score'],
         columnVisibility: {
@@ -259,53 +168,11 @@ describe('useResultsViewSettingsStore - Column State Management', () => {
       };
 
       act(() => {
-        useResultsViewSettingsStore.getState().setColumnState(evalId, complexState);
+        useResultsViewSettingsStore.getState().setColumnState(complexState);
       });
 
-      const retrievedState = useResultsViewSettingsStore.getState().getColumnState(evalId);
+      const retrievedState = useResultsViewSettingsStore.getState().getColumnState();
       expect(retrievedState).toEqual(complexState);
-    });
-  });
-
-  describe('corrupted lastUsedColumnSettings', () => {
-    it('should handle corrupted lastUsedColumnSettings in localStorage gracefully', () => {
-      localStorage.setItem(
-        'eval-settings',
-        '{"lastUsedColumnSettings": "this is not valid JSON", "version": 1}',
-      );
-
-      const store = useResultsViewSettingsStore.getState();
-
-      expect(store.lastUsedColumnSettings).toBeNull();
-
-      const evalId = 'nonexistent-eval';
-      const retrievedState = store.getColumnState(evalId);
-      expect(retrievedState).toBeNull();
-
-      localStorage.removeItem('eval-settings');
-    });
-  });
-
-  describe('getColumnState - Data Migration', () => {
-    it('should handle migration of persisted column state data when the ColumnState interface is updated', () => {
-      const evalId = 'test-eval-1';
-
-      const oldColumnState = {
-        selectedColumns: ['col1', 'col2'],
-      };
-
-      act(() => {
-        useResultsViewSettingsStore.setState((state) => ({
-          ...state,
-          lastUsedColumnSettings: oldColumnState as any,
-        }));
-      });
-
-      const retrievedState = useResultsViewSettingsStore.getState().getColumnState(evalId);
-
-      expect(retrievedState).toBeDefined();
-      expect(retrievedState?.selectedColumns).toEqual(oldColumnState.selectedColumns);
-      expect(retrievedState?.columnVisibility).toEqual(undefined);
     });
   });
 });
