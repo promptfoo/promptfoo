@@ -45,7 +45,9 @@ describe('PFX signature paths (generateSignature)', () => {
       signatureValidityMs: 300000,
     };
 
-    await expect(generateSignature(signatureAuth, Date.now())).rejects.toThrow(/PFX file not found/);
+    await expect(generateSignature(signatureAuth, Date.now())).rejects.toThrow(
+      /PFX file not found/,
+    );
   });
 
   it('throws when PFX content has wrong password', async () => {
@@ -75,7 +77,10 @@ describe('PFX signature paths (generateSignature)', () => {
       __esModule: true,
       default: {
         readPkcs12: (_buf: Buffer, _opts: any, cb: any) =>
-          cb(null, { key: '-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----', cert: 'CERT' }),
+          cb(null, {
+            key: '-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----',
+            cert: 'CERT',
+          }),
       },
     }));
 
@@ -99,5 +104,3 @@ describe('PFX signature paths (generateSignature)', () => {
     expect(result.length).toBeGreaterThan(0);
   });
 });
-
-
