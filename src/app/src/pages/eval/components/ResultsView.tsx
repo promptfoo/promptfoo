@@ -642,6 +642,11 @@ export default function ResultsView({
                           displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
                           filter.value;
                         label = `Strategy: ${displayName}`;
+                      } else if (filter.type === 'severity') {
+                        // Capitalize the first letter of severity value for display
+                        const severityDisplay =
+                          filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
+                        label = `Severity: ${severityDisplay}`;
                       } else {
                         // metadata type
                         label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
