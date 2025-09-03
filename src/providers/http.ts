@@ -1145,15 +1145,16 @@ function parseRawRequest(input: string) {
 
 export async function createTransformRequest(
   transform: string | Function | undefined,
-): Promise<(prompt: string) => any> {
+): Promise<(prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any> {
   if (!transform) {
     return (prompt) => prompt;
   }
 
   if (typeof transform === 'function') {
-    return async (prompt) => {
+    return async (prompt, vars, context) => {
       try {
-        return await transform(prompt);
+        // Pass prompt, vars, and context to user-provided function (extra args are safe)
+        return await (transform as any)(prompt, vars, context);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
@@ -1178,9 +1179,9 @@ export async function createTransformRequest(
         functionName,
       );
       if (typeof requiredModule === 'function') {
-        return async (prompt) => {
+        return async (prompt, vars, context) => {
           try {
-            return await requiredModule(prompt);
+            return await requiredModule(prompt, vars, context);
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             const wrappedError = new Error(
@@ -1196,10 +1197,14 @@ export async function createTransformRequest(
       );
     }
     // Handle string template
-    return async (prompt) => {
+    return async (prompt, vars, context) => {
       try {
-        const rendered = getNunjucksEngine().renderString(transform, { prompt });
-        return await new Function('prompt', `${rendered}`)(prompt);
+        const rendered = getNunjucksEngine().renderString(transform, { prompt, vars, context });
+        return await new Function('prompt', 'vars', 'context', `${rendered}`)(
+          prompt,
+          vars,
+          context,
+        );
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wrappedError = new Error(
@@ -1484,7 +1489,9 @@ export class HttpProvider implements ApiProvider {
     (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
   >;
   private sessionParser: Promise<(data: SessionParserData) => string>;
-  private transformRequest: Promise<(prompt: string) => any>;
+  private transformRequest: Promise<
+    (prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any
+  >;
   private validateStatus: Promise<(status: number) => boolean>;
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
@@ -1719,7 +1726,7 @@ export class HttpProvider implements ApiProvider {
     this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
-    const transformedPrompt = await (await this.transformRequest)(prompt);
+    const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
     logger.debug(
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
@@ -1864,7 +1871,7 @@ export class HttpProvider implements ApiProvider {
     // Transform prompt using request transform
     const prompt = vars.prompt;
     const transformFn = await this.transformRequest;
-    const transformedPrompt = await transformFn(prompt);
+    const transformedPrompt = await transformFn(prompt, vars, context);
     logger.debug(
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
