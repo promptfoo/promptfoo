@@ -66,6 +66,7 @@ jest.mock('../src/globalConfig/accounts', () => ({
 
 jest.mock('../src/util/cloud', () => ({
   makeRequest: jest.fn(),
+  checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/envars', () => ({

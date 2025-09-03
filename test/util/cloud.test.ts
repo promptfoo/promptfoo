@@ -50,7 +50,7 @@ describe('cloud utils', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
         body: JSON.stringify(body),
-        headers: { Authorization: 'Bearer test-api-key' },
+        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
     });
 
@@ -63,7 +63,7 @@ describe('cloud utils', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
         body: undefined,
-        headers: { Authorization: 'Bearer test-api-key' },
+        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
     });
 
@@ -78,7 +78,7 @@ describe('cloud utils', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
         body: undefined,
-        headers: { Authorization: 'Bearer undefined' },
+        headers: { Authorization: 'Bearer undefined', 'Content-Type': 'application/json' },
       });
     });
 
@@ -91,7 +91,7 @@ describe('cloud utils', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/', {
         method: 'GET',
         body: undefined,
-        headers: { Authorization: 'Bearer test-api-key' },
+        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
     });
 
@@ -132,7 +132,7 @@ describe('cloud utils', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
         body: undefined,
-        headers: { Authorization: 'Bearer test-api-key' },
+        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
     });
 
@@ -154,7 +154,7 @@ describe('cloud utils', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
         body: JSON.stringify(body),
-        headers: { Authorization: 'Bearer test-api-key' },
+        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
     });
 
@@ -168,7 +168,7 @@ describe('cloud utils', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
         body: JSON.stringify(body),
-        headers: { Authorization: 'Bearer test-api-key' },
+        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
     });
 
@@ -180,14 +180,14 @@ describe('cloud utils', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
         body: 'null',
-        headers: { Authorization: 'Bearer test-api-key' },
+        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
 
       await makeRequest(path, method, undefined);
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
         body: undefined,
-        headers: { Authorization: 'Bearer test-api-key' },
+        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
     });
   });
@@ -217,7 +217,8 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/providers/test-provider',
         {
           method: 'GET',
-          headers: { Authorization: 'Bearer test-api-key' },
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
     });
@@ -285,7 +286,8 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/redteam/configs/test-config/unified',
         {
           method: 'GET',
-          headers: { Authorization: 'Bearer test-api-key' },
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
     });
@@ -310,7 +312,8 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/redteam/configs/test-config/unified?providerId=test-provider',
         {
           method: 'GET',
-          headers: { Authorization: 'Bearer test-api-key' },
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
     });
@@ -574,7 +577,8 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/users/me/teams',
         {
           method: 'GET',
-          headers: { Authorization: 'Bearer test-api-key' },
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
     });

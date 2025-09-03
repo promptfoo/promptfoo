@@ -5,6 +5,7 @@ import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
+import { getDefaultTeam } from '../../src/util/cloud';
 import { createMockResponse } from '../util/utils';
 
 const mockCloudUser = {
@@ -35,6 +36,7 @@ jest.mock('../../src/globalConfig/cloud');
 jest.mock('../../src/logger');
 jest.mock('../../src/telemetry');
 jest.mock('../../src/fetch');
+jest.mock('../../src/util/cloud');
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -215,6 +217,12 @@ describe('auth command', () => {
       jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
       jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
       jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+
+      jest.mocked(getDefaultTeam).mockResolvedValueOnce({
+        id: 'team-1',
+        name: 'Default Team',
+        createdAt: '2023-01-01T00:00:00Z',
+      });
 
       jest.mocked(fetchWithProxy).mockResolvedValueOnce(
         createMockResponse({
