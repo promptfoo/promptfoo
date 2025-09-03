@@ -23,7 +23,7 @@ vi.mock('./components/ReportIndex', () => ({
   default: () => <div>ReportIndex Component</div>,
 }));
 
-vi.mock('@app/components/CrispChat', () => ({
+vi.mock('@app/components/PylonChat', () => ({
   default: () => null,
 }));
 

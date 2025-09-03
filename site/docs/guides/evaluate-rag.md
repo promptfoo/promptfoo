@@ -380,6 +380,22 @@ assert:
     threshold: 0.8
 ```
 
+:::tip Important for RAG evaluations
+The `contextTransform` and `options.transform` both receive the provider's output directly. This ensures that context extraction works reliably even when the main output is transformed for other assertions.
+
+For example, if you have:
+
+```yaml
+options:
+  transform: 'output.answer' # Extract just the answer for assertions
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.documents' # Still has access to documents
+```
+
+Both transforms receive the full response object, allowing independent extraction of answer and context.
+:::
+
 For complex response structures, you can use JavaScript expressions:
 
 ```yaml

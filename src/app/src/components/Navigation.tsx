@@ -75,24 +75,34 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-function CreateDropdown() {
+type ActiveMenu = 'create' | 'evals' | null;
+
+function CreateDropdown({
+  activeMenu,
+  setActiveMenu,
+}: {
+  activeMenu: ActiveMenu;
+  setActiveMenu: (menu: ActiveMenu) => void;
+}) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
+    setActiveMenu('create');
   };
 
   const handleClose = () => {
-    setAnchorEl(null);
+    setActiveMenu(null);
   };
 
   const handleMouseEnter = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
+    setActiveMenu('create');
   };
 
   const handleMouseLeave = () => {
-    setAnchorEl(null);
+    setActiveMenu(null);
   };
 
   const isActive = ['/setup', '/redteam/setup'].some((route) =>
@@ -112,16 +122,17 @@ function CreateDropdown() {
     },
   ];
 
+  const isOpen = activeMenu === 'create';
+
   return (
     <>
       <Button
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
         endIcon={
           <ExpandMoreIcon
             sx={{
-              transform: anchorEl ? 'rotate(180deg)' : 'none',
+              transform: isOpen ? 'rotate(180deg)' : 'none',
               transition: 'transform 0.3s',
               fontSize: '1rem',
               opacity: 0.5,
@@ -131,12 +142,12 @@ function CreateDropdown() {
         sx={{
           color: 'text.primary',
           position: 'relative',
-          borderRadius: Boolean(anchorEl) ? '4px 4px 0 0' : '4px',
+          borderRadius: isOpen ? '4px 4px 0 0' : '4px',
           transition: 'all 0.2s ease',
           '&:hover': {
             backgroundColor: 'action.hover',
           },
-          ...(Boolean(anchorEl) && {
+          ...(isOpen && {
             backgroundColor: 'background.paper',
             boxShadow: (theme) =>
               `0 -2px 8px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
@@ -151,7 +162,7 @@ function CreateDropdown() {
       </Button>
       <Popper
         anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
+        open={isOpen}
         placement="bottom-start"
         onMouseLeave={handleMouseLeave}
         sx={{ zIndex: 1300 }}
@@ -236,24 +247,32 @@ function CreateDropdown() {
   );
 }
 
-function EvalsDropdown() {
+function EvalsDropdown({
+  activeMenu,
+  setActiveMenu,
+}: {
+  activeMenu: ActiveMenu;
+  setActiveMenu: (menu: ActiveMenu) => void;
+}) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
+    setActiveMenu('evals');
   };
 
   const handleClose = () => {
-    setAnchorEl(null);
+    setActiveMenu(null);
   };
 
   const handleMouseEnter = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
+    setActiveMenu('evals');
   };
 
   const handleMouseLeave = () => {
-    setAnchorEl(null);
+    setActiveMenu(null);
   };
 
   const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));
@@ -271,16 +290,17 @@ function EvalsDropdown() {
     },
   ];
 
+  const isOpen = activeMenu === 'evals';
+
   return (
     <>
       <Button
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
         endIcon={
           <ExpandMoreIcon
             sx={{
-              transform: anchorEl ? 'rotate(180deg)' : 'none',
+              transform: isOpen ? 'rotate(180deg)' : 'none',
               transition: 'transform 0.3s',
               fontSize: '1rem',
               opacity: 0.5,
@@ -290,12 +310,12 @@ function EvalsDropdown() {
         sx={{
           color: 'text.primary',
           position: 'relative',
-          borderRadius: Boolean(anchorEl) ? '4px 4px 0 0' : '4px',
+          borderRadius: isOpen ? '4px 4px 0 0' : '4px',
           transition: 'all 0.2s ease',
           '&:hover': {
             backgroundColor: 'action.hover',
           },
-          ...(Boolean(anchorEl) && {
+          ...(isOpen && {
             backgroundColor: 'background.paper',
             boxShadow: (theme) =>
               `0 -2px 8px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
@@ -310,7 +330,7 @@ function EvalsDropdown() {
       </Button>
       <Popper
         anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
+        open={isOpen}
         placement="bottom-start"
         onMouseLeave={handleMouseLeave}
         sx={{ zIndex: 1300 }}
@@ -402,6 +422,7 @@ export default function Navigation({
   darkMode: boolean;
   onToggleDarkMode: () => void;
 }) {
+  const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
 
@@ -414,8 +435,8 @@ export default function Navigation({
         <NavToolbar>
           <NavSection>
             <Logo />
-            <CreateDropdown />
-            <EvalsDropdown />
+            <CreateDropdown activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
+            <EvalsDropdown activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
             <NavLink href="/history" label="History" />

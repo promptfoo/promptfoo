@@ -111,6 +111,7 @@ type CommonOptions = {
 export interface RedteamCliGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
+  target?: string;
   defaultConfig: Record<string, unknown>;
   defaultConfigPath?: string;
   envFile?: string;
@@ -124,6 +125,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   burpEscapeJson?: boolean;
   progressBar?: boolean;
   liveRedteamConfig?: RedteamObjectConfig;
+  configFromCloud?: any;
 }
 
 export interface RedteamFileConfig extends CommonOptions {

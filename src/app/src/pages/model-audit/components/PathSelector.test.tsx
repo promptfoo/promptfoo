@@ -230,9 +230,30 @@ describe('PathSelector', () => {
       </ThemeProvider>,
     );
 
-    const clearButton = screen.getByText('Clear');
+    const clearButton = screen.getByText('Clear All');
     fireEvent.click(clearButton);
 
     expect(clearRecentScansMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should display the "Clear All" button even when there are fewer than 4 recent scans', () => {
+    mockUseModelAuditStore.mockReturnValue({
+      recentScans: [
+        { id: '1', paths: [{ path: 'path1', type: 'file', name: 'file1' }], timestamp: 1 },
+      ],
+      clearRecentScans: vi.fn(),
+      addRecentScan: vi.fn(),
+      removeRecentScan: vi.fn(),
+      getRecentScans: () => [],
+    });
+
+    render(
+      <ThemeProvider theme={theme}>
+        <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+      </ThemeProvider>,
+    );
+
+    const clearButton = screen.getByText('Clear All');
+    expect(clearButton).toBeInTheDocument();
   });
 });

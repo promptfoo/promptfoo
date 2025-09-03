@@ -155,11 +155,8 @@ export default function TargetTypeSelection({
         <Alert
           severity="info"
           sx={{
-            backgroundColor: 'primary.50',
-            borderColor: 'primary.200',
             alignItems: 'center',
             '& .MuiAlert-icon': {
-              color: 'primary.main',
               mt: 0.25,
             },
             '& .MuiAlert-message': {
