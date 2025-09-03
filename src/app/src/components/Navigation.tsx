@@ -82,10 +82,38 @@ function CreateDropdown({
   setActiveMenu,
 }: {
   activeMenu: ActiveMenu;
-  setActiveMenu: (menu: ActiveMenu) => void;
+  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>;
 }) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
+  const closeTimerRef = React.useRef<number | null>(null);
+  const closeDelay = 150;
+
+  const scheduleClose = () => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      setActiveMenu((current) => (current === 'create' ? null : current));
+      closeTimerRef.current = null;
+    }, closeDelay);
+  };
+
+  const cancelClose = () => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  React.useEffect(
+    () => () => {
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -102,10 +130,7 @@ function CreateDropdown({
   };
 
   const handleMouseLeave = () => {
-    // Add a small delay to allow mouse to move to dropdown
-    setTimeout(() => {
-      setActiveMenu((current) => (current === 'create' ? null : current));
-    }, 100);
+    scheduleClose();
   };
 
   const isActive = ['/setup', '/redteam/setup'].some((route) =>
@@ -128,7 +153,11 @@ function CreateDropdown({
   const isOpen = activeMenu === 'create';
 
   return (
-    <Box onMouseLeave={handleMouseLeave} sx={{ position: 'relative', display: 'inline-block' }}>
+    <Box
+      onMouseLeave={handleMouseLeave}
+      onMouseEnter={cancelClose}
+      sx={{ position: 'relative', display: 'inline-block' }}
+    >
       <Button
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
@@ -179,6 +208,8 @@ function CreateDropdown({
       >
         <Box sx={{ pt: 1 }}>
           <Paper
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
             elevation={3}
             sx={{
               width: 320,
@@ -254,10 +285,38 @@ function EvalsDropdown({
   setActiveMenu,
 }: {
   activeMenu: ActiveMenu;
-  setActiveMenu: (menu: ActiveMenu) => void;
+  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>;
 }) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
+  const closeTimerRef = React.useRef<number | null>(null);
+  const closeDelay = 150;
+
+  const scheduleClose = () => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      setActiveMenu((current) => (current === 'evals' ? null : current));
+      closeTimerRef.current = null;
+    }, closeDelay);
+  };
+
+  const cancelClose = () => {
+    if (closeTimerRef.current != null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  React.useEffect(
+    () => () => {
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -274,10 +333,7 @@ function EvalsDropdown({
   };
 
   const handleMouseLeave = () => {
-    // Add a small delay to allow mouse to move to dropdown
-    setTimeout(() => {
-      setActiveMenu((current) => (current === 'evals' ? null : current));
-    }, 100);
+    scheduleClose();
   };
 
   const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));
@@ -298,7 +354,11 @@ function EvalsDropdown({
   const isOpen = activeMenu === 'evals';
 
   return (
-    <Box onMouseLeave={handleMouseLeave} sx={{ position: 'relative', display: 'inline-block' }}>
+    <Box
+      onMouseLeave={handleMouseLeave}
+      onMouseEnter={cancelClose}
+      sx={{ position: 'relative', display: 'inline-block' }}
+    >
       <Button
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
@@ -349,6 +409,8 @@ function EvalsDropdown({
       >
         <Box sx={{ pt: 1 }}>
           <Paper
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
             elevation={3}
             sx={{
               width: 320,
