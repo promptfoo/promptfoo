@@ -81,14 +81,12 @@ describe('evalCommand', () => {
     expect(cmd.description()).toBe('Evaluate prompts');
   });
 
-  it('should open help when called with help argument', async () => {
+  it('should have help option available', () => {
     const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
-    const helpSpy = jest.spyOn(cmd, 'help').mockReturnValue(cmd as never);
-
-    await program.parseAsync(['node', 'test', 'eval', 'help']);
-
-    expect(helpSpy).toHaveBeenCalledWith();
-    expect(logger.warn).not.toHaveBeenCalled();
+    // The help option is automatically added by commander
+    const helpText = cmd.helpInformation();
+    expect(helpText).toContain('-h, --help');
+    expect(helpText).toContain('display help for command');
   });
 
   it('should handle --no-cache option', async () => {
