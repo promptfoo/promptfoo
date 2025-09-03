@@ -515,8 +515,7 @@ export default class Eval {
             });
             condition = `(${pluginConditions.join(' OR ')})`;
           } else {
-            // No plugins match this severity, return a condition that matches nothing
-            condition = '0 = 1';
+            // No plugins match this severity, leave condition undefined so it's excluded by the if (condition) check below
           }
         }
 
