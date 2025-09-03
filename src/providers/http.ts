@@ -1,9 +1,11 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
+import https from 'https';
 import path from 'path';
 
 import httpZ from 'http-z';
+import { Agent } from 'undici';
 import { z } from 'zod';
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -757,6 +759,61 @@ const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
   keyContent: z.string().optional(),
 }).passthrough();
 
+// TLS Certificate configuration schema for HTTPS connections
+const TlsCertificateSchema = z
+  .object({
+    // CA certificate for verifying server certificates
+    ca: z.union([z.string(), z.array(z.string())]).optional(),
+    caPath: z.string().optional(),
+
+    // Client certificate for mutual TLS
+    cert: z.union([z.string(), z.array(z.string())]).optional(),
+    certPath: z.string().optional(),
+
+    // Private key for client certificate
+    key: z.union([z.string(), z.array(z.string())]).optional(),
+    keyPath: z.string().optional(),
+
+    // PFX/PKCS12 certificate bundle
+    pfx: z.union([z.string(), z.instanceof(Buffer)]).optional(),
+    pfxPath: z.string().optional(),
+    passphrase: z.string().optional(),
+
+    // Security options
+    rejectUnauthorized: z.boolean().default(true),
+    servername: z.string().optional(),
+
+    // Cipher configuration
+    ciphers: z.string().optional(),
+    secureProtocol: z.string().optional(),
+    minVersion: z.string().optional(),
+    maxVersion: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      // Ensure that if cert is provided, key is also provided (and vice versa)
+      const hasCert = data.cert || data.certPath;
+      const hasKey = data.key || data.keyPath;
+      const hasPfx = data.pfx || data.pfxPath;
+
+      // If using PFX, don't need separate cert/key
+      if (hasPfx) {
+        return true;
+      }
+
+      // If using cert/key, both must be provided
+      if (hasCert || hasKey) {
+        return hasCert && hasKey;
+      }
+
+      return true;
+    },
+    {
+      message:
+        'Both certificate and key must be provided for client certificate authentication (unless using PFX)',
+    },
+  );
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
@@ -792,6 +849,8 @@ export const HttpProviderConfigSchema = z.object({
     ])
     .optional()
     .transform(preprocessSignatureAuthConfig),
+  // TLS Certificate configuration for HTTPS connections
+  tls: TlsCertificateSchema.optional(),
 });
 
 type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -1236,6 +1295,82 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
   return Math.ceil(words.length * multiplier);
 }
 
+/**
+ * Creates an HTTPS agent with TLS configuration for secure connections
+ */
+function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Agent {
+  const tlsOptions: https.AgentOptions = {};
+
+  // Load CA certificates
+  if (tlsConfig.ca) {
+    tlsOptions.ca = tlsConfig.ca;
+  } else if (tlsConfig.caPath) {
+    const resolvedPath = resolveFilePath(tlsConfig.caPath);
+    tlsOptions.ca = fs.readFileSync(resolvedPath, 'utf8');
+    logger.debug(`[HTTP Provider] Loaded CA certificate from ${resolvedPath}`);
+  }
+
+  // Load client certificate
+  if (tlsConfig.cert) {
+    tlsOptions.cert = tlsConfig.cert;
+  } else if (tlsConfig.certPath) {
+    const resolvedPath = resolveFilePath(tlsConfig.certPath);
+    tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
+    logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
+  }
+
+  // Load private key
+  if (tlsConfig.key) {
+    tlsOptions.key = tlsConfig.key;
+  } else if (tlsConfig.keyPath) {
+    const resolvedPath = resolveFilePath(tlsConfig.keyPath);
+    tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
+    logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
+  }
+
+  // Load PFX certificate
+  if (tlsConfig.pfx) {
+    tlsOptions.pfx = tlsConfig.pfx;
+  } else if (tlsConfig.pfxPath) {
+    const resolvedPath = resolveFilePath(tlsConfig.pfxPath);
+    tlsOptions.pfx = fs.readFileSync(resolvedPath);
+    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
+  }
+
+  // Set passphrase if provided
+  if (tlsConfig.passphrase) {
+    tlsOptions.passphrase = tlsConfig.passphrase;
+  }
+
+  // Set security options
+  tlsOptions.rejectUnauthorized = tlsConfig.rejectUnauthorized !== false;
+
+  if (tlsConfig.servername) {
+    tlsOptions.servername = tlsConfig.servername;
+  }
+
+  // Set cipher configuration
+  if (tlsConfig.ciphers) {
+    tlsOptions.ciphers = tlsConfig.ciphers;
+  }
+  if (tlsConfig.secureProtocol) {
+    tlsOptions.secureProtocol = tlsConfig.secureProtocol;
+  }
+  if (tlsConfig.minVersion) {
+    tlsOptions.minVersion = tlsConfig.minVersion as any;
+  }
+  if (tlsConfig.maxVersion) {
+    tlsOptions.maxVersion = tlsConfig.maxVersion as any;
+  }
+
+  logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
+
+  // Create an undici Agent with the TLS options
+  return new Agent({
+    connect: tlsOptions,
+  });
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -1247,6 +1382,7 @@ export class HttpProvider implements ApiProvider {
   private validateStatus: Promise<(status: number) => boolean>;
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
+  private httpsAgent?: Agent;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
@@ -1260,6 +1396,12 @@ export class HttpProvider implements ApiProvider {
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
     this.validateStatus = createValidateStatus(this.config.validateStatus);
+
+    // Initialize HTTPS agent if TLS configuration is provided
+    if (this.config.tls) {
+      this.httpsAgent = createHttpsAgent(this.config.tls);
+      logger.debug('[HTTP Provider] HTTPS agent created with TLS configuration');
+    }
 
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
@@ -1493,19 +1635,28 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with config: ${safeJsonStringify(sanitizeConfigForLogging(renderedConfig))}`,
     );
 
+    // Prepare fetch options with dispatcher if HTTPS agent is configured
+    const fetchOptions: any = {
+      method: renderedConfig.method,
+      headers: renderedConfig.headers,
+      ...(method !== 'GET' && {
+        body: contentTypeIsJson(headers)
+          ? typeof renderedConfig.body === 'string'
+            ? renderedConfig.body // Already a JSON string, use as-is
+            : JSON.stringify(renderedConfig.body) // Object, needs stringifying
+          : String(renderedConfig.body)?.trim(),
+      }),
+    };
+
+    // Add HTTPS agent as dispatcher if configured
+    if (this.httpsAgent) {
+      fetchOptions.dispatcher = this.httpsAgent;
+      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+    }
+
     const response = await fetchWithCache(
       url,
-      {
-        method: renderedConfig.method,
-        headers: renderedConfig.headers,
-        ...(method !== 'GET' && {
-          body: contentTypeIsJson(headers)
-            ? typeof renderedConfig.body === 'string'
-              ? renderedConfig.body // Already a JSON string, use as-is
-              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
-            : String(renderedConfig.body)?.trim(),
-        }),
-      },
+      fetchOptions,
       REQUEST_TIMEOUT_MS,
       'text',
       context?.bustCache ?? context?.debug,
@@ -1598,13 +1749,23 @@ export class HttpProvider implements ApiProvider {
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(sanitizeConfigForLogging({ headers: parsedRequest.headers }).headers)}`,
     );
+
+    // Prepare fetch options with dispatcher if HTTPS agent is configured
+    const fetchOptions: any = {
+      method: parsedRequest.method,
+      headers: parsedRequest.headers,
+      ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
+    };
+
+    // Add HTTPS agent as dispatcher if configured
+    if (this.httpsAgent) {
+      fetchOptions.dispatcher = this.httpsAgent;
+      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+    }
+
     const response = await fetchWithCache(
       url,
-      {
-        method: parsedRequest.method,
-        headers: parsedRequest.headers,
-        ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
-      },
+      fetchOptions,
       REQUEST_TIMEOUT_MS,
       'text',
       context?.debug,
