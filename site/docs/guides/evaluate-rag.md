@@ -459,7 +459,7 @@ These metrics fail when languages don't match:
 
 This metric attempts to verify that the context contains specific expected information by matching text. When your expected answer is "The capital is Paris" but your context says "La capital es París," the metric fails to recognize the match. **Use `llm-rubric` instead** to check for concept coverage.
 
-#### [String-based metrics (Levenshtein, ROUGE, BLEU)](../configuration/expected-outputs/deterministic.md#deterministic-metrics)
+#### [String-based metrics (Levenshtein, ROUGE, BLEU)](../configuration/expected-outputs/deterministic.md)
 
 These traditional NLP metrics measure surface-level text similarity - comparing characters, words, or n-grams. They have no understanding that "dog" and "perro" mean the same thing. They'll report near-zero similarity for semantically identical content in different languages.
 
