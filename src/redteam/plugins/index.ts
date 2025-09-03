@@ -104,6 +104,8 @@ async function fetchRemoteTestCases(
       if (data && typeof data === 'object' && 'error' in data && 'message' in data) {
         if (data.error === 'Internal Server Error') {
           errorDisplay = data.message as string;
+          // If present, remove the "Plugin action execution failed:" prefix
+          errorDisplay = errorDisplay.replace('Plugin action execution failed:', '');
         } else {
           errorDisplay = JSON.stringify(data);
         }
