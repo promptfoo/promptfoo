@@ -474,6 +474,15 @@ export async function generateSignature(
           (signatureAuth.certPath && signatureAuth.keyPath) ||
           (signatureAuth.certContent && signatureAuth.keyContent);
 
+        // Add detailed, safe debug logging for PFX configuration sources
+        logger.debug(
+          `[Signature Auth][PFX] Source detection: hasPfxContent=${Boolean(hasPfxContent)}, hasPfxPath=${Boolean(
+            hasPfxPath,
+          )}, hasCertAndKey=${Boolean(hasCertAndKey)}; filename=${
+            signatureAuth.certificateFilename || signatureAuth.pfxPath || 'n/a'
+          }`,
+        );
+
         if (hasPfxPath || hasPfxContent) {
           // Check for PFX password in config first, then fallback to environment variable
           const pfxPassword =
@@ -505,6 +514,10 @@ export async function generateSignature(
               logger.debug(`[Signature Auth] Loading PFX from base64 content`);
               const pfxBuffer = Buffer.from(content, 'base64');
 
+              logger.debug(
+                `[Signature Auth][PFX] Base64 content length: ${content.length}, decoded bytes: ${pfxBuffer.byteLength}`,
+              );
+
               result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
                 pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
                   if (err) {
@@ -518,6 +531,12 @@ export async function generateSignature(
               // Use file path (existing behavior)
               const resolvedPath = resolveFilePath(signatureAuth.pfxPath);
               logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
+              try {
+                const stat = await fs.promises.stat(resolvedPath);
+                logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
+              } catch (e) {
+                logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
+              }
 
               result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
                 pem.readPkcs12(
@@ -535,6 +554,7 @@ export async function generateSignature(
             }
 
             if (!result.key) {
+              logger.error('[Signature Auth][PFX] No private key extracted from PFX');
               throw new Error('No private key found in PFX file');
             }
 
@@ -563,6 +583,9 @@ export async function generateSignature(
               // Use base64 encoded content from database
               logger.debug(`[Signature Auth] Loading private key from base64 content`);
               privateKey = Buffer.from(signatureAuth.keyContent, 'base64').toString('utf8');
+              logger.debug(
+                `[Signature Auth][PFX] Decoded keyContent length: ${privateKey.length} characters`,
+              );
             } else {
               // Use file paths (existing behavior)
               const resolvedCertPath = resolveFilePath(signatureAuth.certPath);
@@ -580,6 +603,9 @@ export async function generateSignature(
               }
 
               privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
+              logger.debug(
+                `[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`,
+              );
             }
             logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
           } catch (err) {
@@ -605,11 +631,25 @@ export async function generateSignature(
       })
       .replace(/\\n/g, '\n');
 
+    // Pre-sign validation logging
+    logger.debug(
+      `[Signature Auth] Preparing to sign with algorithm=${signatureAuth.signatureAlgorithm}, dataLength=${data.length}, keyProvided=${Boolean(
+        privateKey,
+      )}`,
+    );
+
     const sign = crypto.createSign(signatureAuth.signatureAlgorithm);
     sign.update(data);
     sign.end();
-    const signature = sign.sign(privateKey);
-    return signature.toString('base64');
+    try {
+      const signature = sign.sign(privateKey);
+      return signature.toString('base64');
+    } catch (e) {
+      logger.error(
+        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length || 0}, algorithm=${signatureAuth.signatureAlgorithm}`,
+      );
+      throw e;
+    }
   } catch (err) {
     logger.error(`Error generating signature: ${String(err)}`);
     throw new Error(`Failed to generate signature: ${String(err)}`);
