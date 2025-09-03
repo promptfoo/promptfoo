@@ -34,7 +34,7 @@
     "canvas-confetti": "^1.9.3",
     "clsx": "^2.1.1",
     "dedent": "^1.6.0",
-    "docusaurus-plugin-image-zoom": "^2.0.0",
+    "docusaurus-plugin-image-zoom": "^3.0.1",
     "framer-motion": "^11.18.2",
     "gray-matter": "^4.0.3",
     "lucide-react": "^0.542.0",

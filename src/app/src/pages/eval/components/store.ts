@@ -1,4 +1,6 @@
 import { callApi } from '@app/utils/api';
+import { Severity } from '@promptfoo/redteam/constants';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
@@ -48,6 +50,31 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
   return Array.from(new Set([...strategyIds, 'basic']));
 }
 
+function computeAvailableSeverities(
+  plugins?: Array<string | { id: string; severity?: string }> | null,
+): string[] {
+  if (!plugins || plugins.length === 0) {
+    return [];
+  }
+
+  // Get the risk category severity map with any overrides from plugins
+  const severityMap = getRiskCategorySeverityMap(
+    plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)) as any,
+  );
+
+  // Extract unique severities from the map
+  const severities = new Set<string>();
+  Object.values(severityMap).forEach((severity) => {
+    if (severity) {
+      severities.add(severity);
+    }
+  });
+
+  // Return sorted array of severity values (in order of criticality)
+  const severityOrder = [Severity.Critical, Severity.High, Severity.Medium, Severity.Low];
+  return severityOrder.filter((sev) => severities.has(sev));
+}
+
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
@@ -68,7 +95,7 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy';
+export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy' | 'severity';
 
 export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
 
@@ -298,6 +325,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metadata: [],
             plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
             strategy: extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies),
+            severity: computeAvailableSeverities(resultsFile.config?.redteam?.plugins),
           },
         },
       }));
@@ -314,6 +342,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metadata: [],
             plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
             strategy: extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies),
+            severity: computeAvailableSeverities(resultsFile.config?.redteam?.plugins),
           },
         },
       }));
@@ -416,6 +445,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
               metadata: [],
               plugin: data.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
               strategy: extractUniqueStrategyIds(data.config?.redteam?.strategies),
+              severity: computeAvailableSeverities(data.config?.redteam?.plugins),
             },
           },
         }));
@@ -446,6 +476,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
       metadata: [],
       plugin: [],
       strategy: [],
+      severity: [],
     },
   },
 

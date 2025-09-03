@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ quiet: true });
 
 import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
@@ -242,6 +243,9 @@ type EnvVars = {
 
   // LLaMa
   LLAMA_BASE_URL?: string;
+
+  // Llama API
+  LLAMA_API_KEY?: string;
 
   // Local AI
   LOCALAI_BASE_URL?: string;

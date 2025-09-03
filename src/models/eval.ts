@@ -19,6 +19,7 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -446,18 +447,21 @@ export default class Eval {
     // Add filters
     if (opts.filters && opts.filters.length > 0) {
       const filterConditions: string[] = [];
+      // Helper function to sanitize SQL string values
+      const sanitizeValue = (val: string) => val.replace(/'/g, "''");
+
       opts.filters.forEach((filter) => {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
         if (type === 'metric' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
           // in double quotes.
           condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
         } else if (type === 'metadata' && field) {
-          const sanitizedValue = value.replace(/'/g, "''");
-          const sanitizedField = field.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
+          const sanitizedField = sanitizeValue(field);
 
           if (operator === 'equals') {
             condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
@@ -467,18 +471,19 @@ export default class Eval {
             condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
           }
         } else if (type === 'plugin' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           // Is the value a category? e.g. `harmful` or `bias`
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
+          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
 
           // Plugin ID is stored in metadata.pluginId
           if (isCategory) {
-            condition = `json_extract(metadata, '$.pluginId') LIKE '${sanitizedValue}:%'`;
+            condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
           } else {
-            condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+            condition = `${pluginIdPath} = '${sanitizedValue}'`;
           }
         } else if (type === 'strategy' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           if (sanitizedValue === 'basic') {
             // Basic is represented by NULL in the metadata.strategyId field
             condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
@@ -486,12 +491,37 @@ export default class Eval {
             // Strategy ID is stored in metadata.strategyId
             condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
           }
+        } else if (type === 'severity' && operator === 'equals') {
+          const sanitizedValue = sanitizeValue(value);
+          // Get the severity map for all plugins
+          const severityMap = getRiskCategorySeverityMap(this.config?.redteam?.plugins);
+
+          // Find all plugin IDs that match the requested severity
+          const matchingPluginIds = Object.entries(severityMap)
+            .filter(([, severity]) => severity === sanitizedValue)
+            .map(([pluginId]) => pluginId);
+
+          if (matchingPluginIds.length > 0) {
+            const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+            // Build SQL condition to check if pluginId matches any of the plugins with this severity
+            const pluginConditions = matchingPluginIds.map((pluginId) => {
+              const sanitizedPluginId = sanitizeValue(pluginId);
+              // Check for exact match or category match (e.g., 'harmful:*')
+              if (pluginId.includes(':')) {
+                // It's a specific subcategory
+                return `${pluginIdPath} = '${sanitizedPluginId}'`;
+              } else {
+                // It's a category, match any plugin starting with this prefix
+                return `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
+              }
+            });
+            condition = `(${pluginConditions.join(' OR ')})`;
+          }
         }
 
         if (condition) {
-          // Logic operator can only be applied if there are already conditions
+          // Apply logic operator if there are already existing filter conditions
           filterConditions.push(
-            // Logic operator can only be applied if there are already conditions
             filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
           );
         }

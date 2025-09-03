@@ -1,6 +1,7 @@
 import compression from 'compression';
 import cors from 'cors';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ quiet: true });
 
 import http from 'node:http';
 import path from 'node:path';

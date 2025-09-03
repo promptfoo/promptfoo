@@ -5,7 +5,7 @@
 const OpenAI = require('openai');
 const dotenv = require('dotenv');
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 // Initialize OpenAI client
 const openai = new OpenAI({

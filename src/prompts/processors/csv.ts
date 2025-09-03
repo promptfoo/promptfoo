@@ -1,9 +1,13 @@
 import fs from 'fs';
 
-import { parse } from 'csv-parse/sync';
+import { parse, type Options } from 'csv-parse/sync';
 import { getEnvBool, getEnvString } from '../../envars';
 
 import type { Prompt } from '../../types';
+
+type CsvParseOptionsWithColumns<T> = Omit<Options<T>, 'columns'> & {
+  columns: Exclude<Options['columns'], undefined | false>;
+};
 
 /**
  * Process a CSV file containing prompts
@@ -38,8 +42,8 @@ export async function processCsvPrompts(
   }
 
   try {
-    const parseOptions = {
-      columns: true,
+    const parseOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+      columns: true as const,
       bom: true,
       delimiter,
       relax_quotes: !enforceStrict,
@@ -47,11 +51,11 @@ export async function processCsvPrompts(
       trim: true,
     };
 
-    const records = parse(content, parseOptions);
+    const records = parse<Record<string, string>>(content, parseOptions);
 
     return records
-      .filter((row: Record<string, string>) => row.prompt)
-      .map((row: Record<string, string>, index: number) => {
+      .filter((row) => row.prompt)
+      .map((row, index) => {
         return {
           ...basePrompt,
           raw: row.prompt,
