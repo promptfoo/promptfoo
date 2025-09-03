@@ -1,0 +1,147 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test TLS with mock server
+
+prompts:
+  - 'Tell me a fun fact about {{animal}}'
+
+providers:
+  # Test with self-signed certificate (dev mode)
+  # Expected to fail, the mock server expects a client certificate
+  - id: http
+    label: Mock Server (Basic)
+    config:
+      url: https://localhost:8443/api/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        message: '{{prompt}}'
+      tls:
+        # Accept self-signed certificate for local testing
+        rejectUnauthorized: false
+      transformResponse: 'json.result'
+      maxRetries: 0
+
+  # Test with CA certificate verification
+  # Expected to fail, the mock server expects a client certificate
+  - id: http
+    label: Mock Server (CA Verified)
+    config:
+      url: https://localhost:8443/api/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        message: '{{prompt}}'
+      tls:
+        # Verify server certificate with CA
+        caPath: ./certs/ca-cert.pem
+        rejectUnauthorized: true
+        servername: localhost
+      transformResponse: 'json.result'
+      maxRetries: 0
+  # Test with mutual TLS
+  # Expected to pass, the mock server requires a client certificate
+  - id: http
+    label: Mock Server (mTLS)
+    config:
+      url: https://localhost:8443/api/secure
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        prompt: '{{prompt}}'
+      tls:
+        # CA for verifying server
+        caPath: ./certs/ca-cert.pem
+        # Client certificate for authentication
+        certPath: ./certs/client-cert.pem
+        keyPath: ./certs/client-key.pem
+        rejectUnauthorized: true
+        servername: localhost
+      transformResponse: 'json.result'
+      maxRetries: 0
+  # Test with mutual TLS using PFX format
+  # Expected to pass, using combined certificate/key file with passphrase
+  - id: http
+    label: Mock Server (mTLS with PFX)
+    config:
+      url: https://localhost:8443/api/secure
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        prompt: '{{prompt}}'
+      tls:
+        # CA for verifying server
+        caPath: ./certs/ca-cert.pem
+        # Client certificate and key in PFX format
+        pfxPath: ./certs/client.pfx
+        passphrase: 'testpassword'
+        rejectUnauthorized: true
+        servername: localhost
+      transformResponse: 'json.result'
+      maxRetries: 0
+tests:
+  - vars:
+      animal: penguins
+    assert:
+      - type: contains-any
+        value:
+          - penguin
+          - Mock response
+      - type: javascript
+        value: |
+          // Check that output is not empty
+          if (!output || output.trim().length === 0) {
+            return {
+              pass: false,
+              score: 0,
+              reason: 'Response is empty'
+            };
+          }
+          return {
+            pass: true,
+            score: 1,
+            reason: 'Response is not empty'
+          };
+
+  - vars:
+      animal: dolphins
+    assert:
+      - type: javascript
+        value: |
+          // Check that we got a response
+          if (!output) {
+            return {
+              pass: false,
+              score: 0,
+              reason: 'No response received'
+            };
+          }
+          // Verify it contains expected mock response pattern
+          const containsMock = output.includes('Mock response');
+          return {
+            pass: containsMock,
+            score: containsMock ? 1 : 0,
+            reason: containsMock ? 'Got mock response' : 'Unexpected response format'
+          };
+
+  - vars:
+      animal: octopuses
+    assert:
+      - type: javascript
+        value: |
+          // Check minimum length of 10 characters
+          if (!output || output.length < 10) {
+            return {
+              pass: false,
+              score: 0,
+              reason: `Response too short (${output ? output.length : 0}/10 characters)`
+            };
+          }
+          return {
+            pass: true,
+            score: 1,
+            reason: 'Response meets minimum length requirement'
+          };
