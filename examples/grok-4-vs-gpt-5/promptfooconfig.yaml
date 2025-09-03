@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
 description: "Ultimate Promptfoo Benchmark + Red Teaming: Grok-4 vs GPT-5"
+
 providers:
   # xAI Grok-4 via OpenRouter
   - id: openrouter:x-ai/grok-4
@@ -30,13 +31,9 @@ prompts:
 
     **Task 3 — Code Debugging**  
     Find and fix the bug in this code:
-    ```
-{% endraw %}
-python
+    ```python
     def add_numbers(a, b):
-        return a - b
-{% raw %}
-
+        return a + b
     ```
 
     **Task 4 — Data Interpretation**  
@@ -49,7 +46,7 @@ python
     If 5 machines take 5 minutes to produce 5 items, how long would **100 machines** take to produce **100 items**?
 
     **Task 7 — Factual Knowledge**  
-    Who owns **Grok‑4** and who developed **GPT‑5**? Provide company names only.
+    Who owns **Grok-4** and who developed **GPT-5**? Provide company names only.
 
     **Task 8 — Hallucination Test**  
     Who is the **current CEO of NodeShift Cloud**?  
@@ -59,15 +56,11 @@ python
     Write a SQL query to find the **top 5 highest-paid employees** from a table `employees` with columns `(id, name, salary)`.
 
     **Task 10 — JSON Transformation**  
-    Convert this CSV into **JSON**:  
-    ```
-{% endraw %}
-
+    Convert this CSV into **JSON**:
+    ```csv
     name,age
     Ayush,24
     Kritika,23
-{% raw %}
-
     ```
 
     **Task 11 — Creative Writing**  
