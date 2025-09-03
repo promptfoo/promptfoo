@@ -5,6 +5,7 @@ You can run this example with:
 ```bash
 npx promptfoo@latest init --example grok-4-vs-gpt-5
 ```
+
 This example demonstrates how to use Promptfoo to benchmark and red-team xAI Grok-4 and OpenAI GPT-5 side by side.
 
 It compares both models on:
@@ -23,11 +24,13 @@ Both models are accessed via OpenRouter, so you only need one API key.
 ```bash
 export OPENROUTER_API_KEY="sk-or-xxxxxxxx"
 ```
+
 Run the evaluation with:
 
 ```bash
 promptfoo eval
 ```
+
 View the results:
 
 ```bash
