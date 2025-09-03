@@ -11,9 +11,8 @@ import {
 } from '../src/share';
 import { makeRequest } from '../src/util/cloud';
 
-import type EvalResult from '../src/models/evalResult';
-
 import type Eval from '../src/models/eval';
+import type EvalResult from '../src/models/evalResult';
 
 function buildMockEval(): Partial<Eval> {
   return {
@@ -71,6 +70,7 @@ jest.mock('../src/envars', () => ({
   getEnvBool: jest.fn(),
   getEnvInt: jest.fn(),
   getEnvString: jest.fn().mockReturnValue(''),
+  getEnvFloat: jest.fn(),
   isCI: jest.fn(),
 }));
 
