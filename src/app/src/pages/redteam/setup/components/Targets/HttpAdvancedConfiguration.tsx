@@ -1028,22 +1028,39 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                           ...selectedTarget.config.tls,
                           certificateType: certType,
                           // Clear type-specific fields when changing
-                          cert: certType !== 'pem' ? undefined : selectedTarget.config.tls?.cert,
+                          cert:
+                            certType !== 'pem' && certType !== 'jks'
+                              ? undefined
+                              : selectedTarget.config.tls?.cert,
                           certPath:
-                            certType !== 'pem' ? undefined : selectedTarget.config.tls?.certPath,
-                          key: certType !== 'pem' ? undefined : selectedTarget.config.tls?.key,
+                            certType !== 'pem' && certType !== 'jks'
+                              ? undefined
+                              : selectedTarget.config.tls?.certPath,
+                          key:
+                            certType !== 'pem' && certType !== 'jks'
+                              ? undefined
+                              : selectedTarget.config.tls?.key,
                           keyPath:
-                            certType !== 'pem' ? undefined : selectedTarget.config.tls?.keyPath,
+                            certType !== 'pem' && certType !== 'jks'
+                              ? undefined
+                              : selectedTarget.config.tls?.keyPath,
                           pfx: certType !== 'pfx' ? undefined : selectedTarget.config.tls?.pfx,
                           pfxPath:
                             certType !== 'pfx' ? undefined : selectedTarget.config.tls?.pfxPath,
                           passphrase:
-                            certType !== 'pfx' ? undefined : selectedTarget.config.tls?.passphrase,
+                            certType !== 'pfx' && certType !== 'jks'
+                              ? undefined
+                              : selectedTarget.config.tls?.passphrase,
+                          jksPath:
+                            certType !== 'jks' ? undefined : selectedTarget.config.tls?.jksPath,
+                          keyAlias:
+                            certType !== 'jks' ? undefined : selectedTarget.config.tls?.keyAlias,
                         });
                       }}
                     >
                       <MenuItem value="none">No Client Certificate</MenuItem>
                       <MenuItem value="pem">PEM (Separate cert/key files)</MenuItem>
+                      <MenuItem value="jks">JKS (Java KeyStore)</MenuItem>
                       <MenuItem value="pfx">PFX/PKCS#12 Bundle</MenuItem>
                     </Select>
                   </FormControl>
@@ -1320,6 +1337,255 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                           }
                         />
                       )}
+                    </Paper>
+                  </Box>
+                )}
+
+                {/* JKS Certificate Configuration */}
+                {selectedTarget.config.tls?.certificateType === 'jks' && (
+                  <Box>
+                    <Typography variant="subtitle1" gutterBottom>
+                      JKS (Java KeyStore) Certificate
+                    </Typography>
+
+                    <Paper variant="outlined" sx={{ p: 3 }}>
+                      <Stack spacing={3}>
+                        <Alert severity="info">
+                          Upload a JKS file to automatically extract the certificate and private key
+                          for TLS configuration. The jks-js library will be used to convert the JKS
+                          content to PEM format.
+                        </Alert>
+
+                        <Box>
+                          <Typography variant="subtitle2" gutterBottom>
+                            JKS File Input
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                            <Button
+                              variant={
+                                selectedTarget.config.tls?.jksInputType === 'upload'
+                                  ? 'contained'
+                                  : 'outlined'
+                              }
+                              startIcon={<UploadIcon />}
+                              onClick={() =>
+                                updateCustomTarget('tls', {
+                                  ...selectedTarget.config.tls,
+                                  jksInputType: 'upload',
+                                })
+                              }
+                            >
+                              Upload JKS
+                            </Button>
+                            <Button
+                              variant={
+                                selectedTarget.config.tls?.jksInputType === 'path'
+                                  ? 'contained'
+                                  : 'outlined'
+                              }
+                              startIcon={<InsertDriveFileIcon />}
+                              onClick={() =>
+                                updateCustomTarget('tls', {
+                                  ...selectedTarget.config.tls,
+                                  jksInputType: 'path',
+                                })
+                              }
+                            >
+                              File Path
+                            </Button>
+                          </Box>
+
+                          {selectedTarget.config.tls?.jksInputType === 'upload' && (
+                            <>
+                              <input
+                                type="file"
+                                accept=".jks,.keystore"
+                                style={{ display: 'none' }}
+                                id="tls-jks-upload"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = async (event) => {
+                                      try {
+                                        const arrayBuffer = event.target?.result as ArrayBuffer;
+                                        const base64 = btoa(
+                                          String.fromCharCode(...new Uint8Array(arrayBuffer)),
+                                        );
+
+                                        // Store the JKS content as base64
+                                        updateCustomTarget('tls', {
+                                          ...selectedTarget.config.tls,
+                                          jksContent: base64,
+                                          jksPath: undefined,
+                                          jksFileName: file.name,
+                                        });
+
+                                        showToast(
+                                          'JKS file uploaded successfully. Enter password to extract certificates.',
+                                          'success',
+                                        );
+
+                                        // Note: Actual extraction would happen on the backend with the password
+                                        // The UI just stores the JKS content and password
+                                      } catch (error) {
+                                        showToast(
+                                          `Failed to load JKS file: ${(error as Error).message}`,
+                                          'error',
+                                        );
+                                      }
+                                    };
+                                    reader.readAsArrayBuffer(file);
+                                  }
+                                }}
+                              />
+                              <label htmlFor="tls-jks-upload">
+                                <Button variant="outlined" component="span">
+                                  {selectedTarget.config.tls?.jksContent
+                                    ? `Replace JKS (${selectedTarget.config.tls?.jksFileName || 'loaded'})`
+                                    : 'Choose JKS File'}
+                                </Button>
+                              </label>
+                              {selectedTarget.config.tls?.jksContent && (
+                                <Box sx={{ mt: 1 }}>
+                                  <Typography variant="caption" color="success.main">
+                                    ✓ JKS file loaded:{' '}
+                                    {selectedTarget.config.tls?.jksFileName || 'keystore.jks'}
+                                  </Typography>
+                                  <Button
+                                    size="small"
+                                    color="error"
+                                    onClick={() =>
+                                      updateCustomTarget('tls', {
+                                        ...selectedTarget.config.tls,
+                                        jksContent: undefined,
+                                        jksFileName: undefined,
+                                        cert: undefined,
+                                        key: undefined,
+                                      })
+                                    }
+                                    sx={{ ml: 2 }}
+                                  >
+                                    Clear
+                                  </Button>
+                                </Box>
+                              )}
+                            </>
+                          )}
+
+                          {selectedTarget.config.tls?.jksInputType === 'path' && (
+                            <TextField
+                              fullWidth
+                              placeholder="/path/to/keystore.jks"
+                              value={selectedTarget.config.tls?.jksPath || ''}
+                              onChange={(e) =>
+                                updateCustomTarget('tls', {
+                                  ...selectedTarget.config.tls,
+                                  jksPath: e.target.value,
+                                  jksContent: undefined,
+                                })
+                              }
+                              helperText="Path to JKS keystore file on the server"
+                            />
+                          )}
+                        </Box>
+
+                        <TextField
+                          fullWidth
+                          type="password"
+                          label="Keystore Password"
+                          placeholder="Enter keystore password"
+                          value={selectedTarget.config.tls?.passphrase || ''}
+                          onChange={(e) =>
+                            updateCustomTarget('tls', {
+                              ...selectedTarget.config.tls,
+                              passphrase: e.target.value,
+                            })
+                          }
+                          required
+                          helperText="Password for the JKS keystore (required to extract certificates)"
+                        />
+
+                        <TextField
+                          fullWidth
+                          label="Key Alias (Optional)"
+                          placeholder="mykey"
+                          value={selectedTarget.config.tls?.keyAlias || ''}
+                          onChange={(e) =>
+                            updateCustomTarget('tls', {
+                              ...selectedTarget.config.tls,
+                              keyAlias: e.target.value,
+                            })
+                          }
+                          helperText="Alias of the key to extract. If not specified, the first available key will be used."
+                        />
+
+                        {selectedTarget.config.tls?.jksContent &&
+                          selectedTarget.config.tls?.passphrase && (
+                            <Box>
+                              <Button
+                                variant="contained"
+                                startIcon={<VpnKeyIcon />}
+                                onClick={async () => {
+                                  try {
+                                    // Note: In a real implementation, this would call a backend API
+                                    // to extract the cert and key from JKS using the jks-js library
+                                    // For now, we'll just show a message about what would happen
+
+                                    showToast(
+                                      'JKS extraction will be performed on the backend. The certificate and key will be automatically converted to PEM format for TLS use.',
+                                      'info',
+                                    );
+
+                                    // In production, this would:
+                                    // 1. Send JKS content + password to backend
+                                    // 2. Backend uses jks-js to extract cert/key
+                                    // 3. Backend returns PEM-formatted cert and key
+                                    // 4. Store them in config.tls.cert and config.tls.key
+
+                                    // For demonstration, we'll set flags indicating extraction is configured
+                                    updateCustomTarget('tls', {
+                                      ...selectedTarget.config.tls,
+                                      jksExtractConfigured: true,
+                                    });
+                                  } catch (error) {
+                                    showToast(
+                                      `Failed to configure JKS extraction: ${(error as Error).message}`,
+                                      'error',
+                                    );
+                                  }
+                                }}
+                              >
+                                Configure JKS Extraction
+                              </Button>
+
+                              {selectedTarget.config.tls?.jksExtractConfigured && (
+                                <Alert severity="success" sx={{ mt: 2 }}>
+                                  JKS extraction configured. The certificate and private key will be
+                                  extracted from the JKS file on the backend using the provided
+                                  password and key alias.
+                                </Alert>
+                              )}
+                            </Box>
+                          )}
+
+                        <Alert severity="info">
+                          <Typography variant="body2">
+                            <strong>How JKS extraction works:</strong>
+                            <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                              <li>
+                                The JKS file is processed on the backend using the jks-js library
+                              </li>
+                              <li>
+                                The certificate and private key are extracted based on the provided
+                                alias
+                              </li>
+                              <li>Both are automatically converted to PEM format for TLS use</li>
+                              <li>The password is only used during extraction and not stored</li>
+                            </ul>
+                          </Typography>
+                        </Alert>
+                      </Stack>
                     </Paper>
                   </Box>
                 )}

@@ -800,6 +800,49 @@ providers:
         passphrase: '{{env.PFX_PASSPHRASE}}' # Optional: passphrase for PFX
 ```
 
+### Using JKS (Java KeyStore) Certificates
+
+For Java applications using JKS certificates, the provider can automatically extract the certificate and key for TLS:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://secure-api.example.com/v1'
+      tls:
+        # Option 1: Using a file path
+        jksPath: '/path/to/keystore.jks'
+        passphrase: '{{env.JKS_PASSWORD}}' # Required for JKS
+        keyAlias: 'mykey' # Optional: specific alias to use
+```
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://secure-api.example.com/v1'
+      tls:
+        # Option 2: Using inline base64-encoded JKS content
+        jksContent: 'MIIJKQIBAzCCCO8GCSqGSIb3DQEHA...' # Base64-encoded JKS content
+        passphrase: '{{env.JKS_PASSWORD}}'
+        keyAlias: 'client-cert' # Optional: defaults to first available key
+```
+
+The JKS file is processed using the `jks-js` library, which automatically:
+
+- Extracts the certificate and private key from the keystore
+- Converts them to PEM format for use with TLS
+- Selects the appropriate key based on the alias (or uses the first available)
+
+:::info
+JKS support requires the `jks-js` package. Install it with:
+
+```bash
+npm install jks-js
+```
+
+:::
+
 ### Advanced TLS Options
 
 Fine-tune TLS connection parameters:
@@ -929,7 +972,10 @@ providers:
 | keyPath            | string             | -       | Path to private key file                                                           |
 | pfx                | string \| Buffer   | -       | PFX/PKCS12 certificate bundle (base64-encoded string or Buffer for inline content) |
 | pfxPath            | string             | -       | Path to PFX/PKCS12 file                                                            |
-| passphrase         | string             | -       | Passphrase for encrypted private key or PFX                                        |
+| jksPath            | string             | -       | Path to JKS keystore file                                                          |
+| jksContent         | string             | -       | Base64-encoded JKS keystore content                                                |
+| keyAlias           | string             | -       | Alias of the key to use from JKS (defaults to first available)                     |
+| passphrase         | string             | -       | Passphrase for encrypted private key, PFX, or JKS                                  |
 | rejectUnauthorized | boolean            | true    | If true, verify server certificate against CA                                      |
 | servername         | string             | -       | Server name for SNI (Server Name Indication) TLS extension                         |
 | ciphers            | string             | -       | Cipher suite specification (OpenSSL format)                                        |
@@ -939,8 +985,8 @@ providers:
 
 :::info
 
-- When using client certificates, you must provide both certificate and key (unless using PFX)
-- File paths are resolved relative to the directory containing the promptfoo configuration file
+- When using client certificates, you must provide both certificate and key (unless using PFX or JKS)
+- PFX and JKS bundles contain both certificate and key, so only the bundle and passphrase are needed
 - The TLS configuration is applied to all HTTPS requests made by this provider
   :::
 

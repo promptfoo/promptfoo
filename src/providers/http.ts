@@ -1314,7 +1314,7 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
 /**
  * Creates an HTTPS agent with TLS configuration for secure connections
  */
-function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Agent {
+async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
   const tlsOptions: https.AgentOptions = {};
 
   // Load CA certificates
@@ -1326,22 +1326,97 @@ function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Agen
     logger.debug(`[HTTP Provider] Loaded CA certificate from ${resolvedPath}`);
   }
 
-  // Load client certificate
-  if (tlsConfig.cert) {
-    tlsOptions.cert = tlsConfig.cert;
-  } else if (tlsConfig.certPath) {
-    const resolvedPath = resolveFilePath(tlsConfig.certPath);
-    tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
-    logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
-  }
+  // Handle JKS certificates for TLS (extract cert and key)
+  if ((tlsConfig as any).jksPath || (tlsConfig as any).jksContent) {
+    try {
+      const jksModule = await import('jks-js').catch(() => {
+        throw new Error(
+          'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+        );
+      });
+      const jks = jksModule as any;
 
-  // Load private key
-  if (tlsConfig.key) {
-    tlsOptions.key = tlsConfig.key;
-  } else if (tlsConfig.keyPath) {
-    const resolvedPath = resolveFilePath(tlsConfig.keyPath);
-    tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
-    logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
+      let keystoreData: Buffer;
+      const keystorePassword =
+        (tlsConfig as any).keystorePassword ||
+        tlsConfig.passphrase ||
+        getEnvString('PROMPTFOO_JKS_PASSWORD');
+
+      if (!keystorePassword) {
+        throw new Error(
+          'JKS keystore password is required for TLS. Provide it via passphrase or PROMPTFOO_JKS_PASSWORD environment variable',
+        );
+      }
+
+      if ((tlsConfig as any).jksContent) {
+        // Use base64 encoded content
+        logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
+        keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
+      } else if ((tlsConfig as any).jksPath) {
+        // Use file path
+        const resolvedPath = resolveFilePath((tlsConfig as any).jksPath);
+        logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
+        keystoreData = fs.readFileSync(resolvedPath);
+      } else {
+        throw new Error('JKS content or path is required');
+      }
+
+      const keystore = jks.toPem(keystoreData, keystorePassword);
+      const aliases = Object.keys(keystore);
+
+      if (aliases.length === 0) {
+        throw new Error('No certificates found in JKS file');
+      }
+
+      const targetAlias = (tlsConfig as any).keyAlias || aliases[0];
+      const entry = keystore[targetAlias];
+
+      if (!entry) {
+        throw new Error(
+          `Alias '${targetAlias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
+        );
+      }
+
+      // Extract certificate and key from JKS entry
+      if (entry.cert) {
+        tlsOptions.cert = entry.cert;
+        logger.debug(
+          `[HTTP Provider] Extracted certificate from JKS for TLS (alias: ${targetAlias})`,
+        );
+      }
+
+      if (entry.key) {
+        tlsOptions.key = entry.key;
+        logger.debug(
+          `[HTTP Provider] Extracted private key from JKS for TLS (alias: ${targetAlias})`,
+        );
+      }
+
+      if (!tlsOptions.cert || !tlsOptions.key) {
+        throw new Error('Failed to extract both certificate and key from JKS file');
+      }
+    } catch (err) {
+      logger.error(`[HTTP Provider] Failed to load JKS certificate for TLS: ${String(err)}`);
+      throw new Error(`Failed to load JKS certificate: ${String(err)}`);
+    }
+  } else {
+    // Load client certificate (non-JKS)
+    if (tlsConfig.cert) {
+      tlsOptions.cert = tlsConfig.cert;
+    } else if (tlsConfig.certPath) {
+      const resolvedPath = resolveFilePath(tlsConfig.certPath);
+      tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
+      logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
+    }
+
+    // Load private key (non-JKS)
+    if (tlsConfig.key) {
+      tlsOptions.key = tlsConfig.key;
+    } else if (tlsConfig.keyPath) {
+      const resolvedPath = resolveFilePath(tlsConfig.keyPath);
+      tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
+      logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
+    }
   }
 
   // Load PFX certificate
@@ -1414,6 +1489,7 @@ export class HttpProvider implements ApiProvider {
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
   private httpsAgent?: Agent;
+  private httpsAgentPromise?: Promise<Agent>;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
@@ -1429,9 +1505,11 @@ export class HttpProvider implements ApiProvider {
     this.validateStatus = createValidateStatus(this.config.validateStatus);
 
     // Initialize HTTPS agent if TLS configuration is provided
+    // Note: We can't use async in constructor, so we'll initialize on first use
     if (this.config.tls) {
-      this.httpsAgent = createHttpsAgent(this.config.tls);
-      logger.debug('[HTTP Provider] HTTPS agent created with TLS configuration');
+      logger.debug(
+        '[HTTP Provider] TLS configuration detected, HTTPS agent will be created on first use',
+      );
     }
 
     if (this.config.request) {
@@ -1523,6 +1601,34 @@ export class HttpProvider implements ApiProvider {
 
     invariant(this.lastSignature, 'Signature should be defined at this point');
     invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+  }
+
+  private async getHttpsAgent(): Promise<Agent | undefined> {
+    if (!this.config.tls) {
+      return undefined;
+    }
+
+    // If agent is already created, return it
+    if (this.httpsAgent) {
+      return this.httpsAgent;
+    }
+
+    // If agent creation is in progress, wait for it
+    if (this.httpsAgentPromise) {
+      return this.httpsAgentPromise;
+    }
+
+    // Create the agent
+    this.httpsAgentPromise = createHttpsAgent(this.config.tls);
+    try {
+      this.httpsAgent = await this.httpsAgentPromise;
+      logger.debug('[HTTP Provider] HTTPS agent created successfully');
+      return this.httpsAgent;
+    } catch (err) {
+      // Clear the promise so we can retry
+      this.httpsAgentPromise = undefined;
+      throw err;
+    }
   }
 
   private getDefaultHeaders(body: any): Record<string, string> {
@@ -1667,6 +1773,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     // Prepare fetch options with dispatcher if HTTPS agent is configured
+    const httpsAgent = await this.getHttpsAgent();
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
@@ -1680,8 +1787,8 @@ export class HttpProvider implements ApiProvider {
     };
 
     // Add HTTPS agent as dispatcher if configured
-    if (this.httpsAgent) {
-      fetchOptions.dispatcher = this.httpsAgent;
+    if (httpsAgent) {
+      fetchOptions.dispatcher = httpsAgent;
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
@@ -1782,6 +1889,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     // Prepare fetch options with dispatcher if HTTPS agent is configured
+    const httpsAgent = await this.getHttpsAgent();
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
@@ -1789,8 +1897,8 @@ export class HttpProvider implements ApiProvider {
     };
 
     // Add HTTPS agent as dispatcher if configured
-    if (this.httpsAgent) {
-      fetchOptions.dispatcher = this.httpsAgent;
+    if (httpsAgent) {
+      fetchOptions.dispatcher = httpsAgent;
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
