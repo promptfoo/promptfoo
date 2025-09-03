@@ -152,6 +152,78 @@ describe('HttpProvider with TLS Configuration', () => {
       );
     });
 
+    it('should support inline PFX certificates as base64-encoded string', async () => {
+      // Create a base64-encoded PFX content (simulating a real PFX file)
+      const pfxBuffer = Buffer.from('PFX_BINARY_CONTENT');
+      const base64Pfx = pfxBuffer.toString('base64');
+
+      const provider = new HttpProvider('https://api.example.com', {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { prompt: '{{prompt}}' },
+          tls: {
+            pfx: base64Pfx,
+            passphrase: 'secret',
+          },
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      // Should not read from files when inline PFX is provided
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+
+      // Verify dispatcher was included
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          dispatcher: expect.objectContaining({
+            dispatcher: 'mock-agent',
+          }),
+        }),
+        expect.any(Number),
+        expect.any(String),
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should support inline PFX certificates as Buffer', async () => {
+      const pfxBuffer = Buffer.from('PFX_BINARY_CONTENT');
+
+      const provider = new HttpProvider('https://api.example.com', {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { prompt: '{{prompt}}' },
+          tls: {
+            pfx: pfxBuffer,
+            passphrase: 'secret',
+          },
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      // Should not read from files when inline PFX is provided
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+
+      // Verify dispatcher was included
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          dispatcher: expect.objectContaining({
+            dispatcher: 'mock-agent',
+          }),
+        }),
+        expect.any(Number),
+        expect.any(String),
+        undefined,
+        undefined,
+      );
+    });
+
     it('should support advanced TLS options', async () => {
       const provider = new HttpProvider('https://api.example.com', {
         config: {

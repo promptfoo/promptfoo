@@ -1,235 +1,124 @@
-# http-provider-tls
+# HTTP Provider with TLS PFX Certificates
 
-This example demonstrates how to configure the HTTP provider with TLS certificates for secure HTTPS connections, including custom CA certificates, client certificates for mutual TLS (mTLS), and advanced security configurations.
+This example demonstrates how to configure the HTTP provider with TLS/SSL certificates, specifically focusing on PFX (PKCS#12) certificate bundles.
 
-You can run this example with:
+## Overview
 
-```bash
-npx promptfoo@latest init --example http-provider-tls
-cd http-provider-tls
-```
+The HTTP provider supports multiple ways to provide PFX certificates for mutual TLS authentication:
 
-Then, you'll want to generate your example certs
+1. **File Path**: Reference a PFX file on disk
+2. **Inline Base64**: Embed the certificate as a base64-encoded string
+3. **Environment Variables**: Load certificates from environment variables
 
-```bash
-./generate-test-certs.sh
-```
+## PFX Certificate Options
 
-Start the mock server to simulate a server that requires tls certs
+### Using File Path
 
-```bash
-node mock-server.js
-```
-
-and then run the eval:
-
-```bash
-npx promptfoo@latest eval
-```
-
-## Features Demonstrated
-
-This example shows how to:
-
-1. **Use custom CA certificates** for APIs with private certificate authorities
-2. **Configure client certificates** for mutual TLS authentication
-3. **Work with PFX/PKCS12 bundles** as an alternative to separate cert/key files
-4. **Set advanced TLS options** like cipher suites and TLS versions
-5. **Handle self-signed certificates** in development environments
-
-## Configuration Examples
-
-### Basic CA Certificate
-
-For APIs using certificates signed by a private CA:
+The traditional approach - reference a PFX file on the filesystem:
 
 ```yaml
-providers:
-  - id: http
-    config:
-      url: ${API_ENDPOINT}
-      tls:
-        caPath: ./certs/ca-cert.pem
-        rejectUnauthorized: true
+tls:
+  pfxPath: '/path/to/certificate.pfx'
+  passphrase: 'your-passphrase'
 ```
 
-### Mutual TLS (mTLS)
+### Using Inline Base64 Content
 
-For APIs requiring client certificate authentication:
+Embed the certificate directly in your configuration:
 
 ```yaml
-providers:
-  - id: http
-    config:
-      url: ${API_ENDPOINT}
-      tls:
-        caPath: ./certs/ca-cert.pem
-        certPath: ./certs/client-cert.pem
-        keyPath: ./certs/client-key.pem
-        rejectUnauthorized: true
+tls:
+  pfx: 'MIIJKQIBAzCCCO8GCSqGSIb3DQEHA...' # Base64-encoded PFX
+  passphrase: 'your-passphrase'
 ```
 
-### PFX/PKCS12 Bundle
+### Using Environment Variables
 
-For using a PFX certificate bundle:
+Store sensitive certificates in environment variables:
 
 ```yaml
-providers:
-  - id: http
-    config:
-      url: ${API_ENDPOINT}
-      tls:
-        pfxPath: ./certs/client.pfx
-        passphrase: ${PFX_PASSPHRASE}
+tls:
+  pfx: '{{env.PFX_CERTIFICATE_BASE64}}'
+  passphrase: '{{env.PFX_PASSPHRASE}}'
 ```
 
-### Development with Self-Signed Certificates
+## Converting PFX to Base64
 
-For local development (NOT for production):
+To use inline PFX certificates, you need to convert your PFX file to base64:
 
-```yaml
-providers:
-  - id: http
-    config:
-      url: https://localhost:8443/api
-      tls:
-        rejectUnauthorized: false # Only for development!
-```
-
-## Testing with a Mock HTTPS Server
-
-This example includes a mock HTTPS server (`mock-server.js`) that you can use to test TLS configurations:
+### Linux/Mac
 
 ```bash
-# Start the mock server
-node mock-server.js
-
-# In another terminal, run the evaluation
-npm run local -- eval -c examples/http-provider-tls/promptfooconfig-mock.yaml
+base64 -i certificate.pfx -o certificate.b64
 ```
 
-The mock server supports:
+### Windows
 
-- Custom CA certificates
-- Client certificate verification (mTLS)
-- Configurable TLS options
+```cmd
+certutil -encode certificate.pfx certificate.b64
+```
 
-## Security Best Practices
+Then copy the content (excluding the BEGIN/END headers) to use as the `pfx` value.
 
-1. **Always verify certificates in production**: Set `rejectUnauthorized: true`
-2. **Protect private keys**: Never commit private keys to version control
-3. **Use environment variables**: Store sensitive data like passphrases in environment variables
-4. **Rotate certificates regularly**: Update certificates before they expire
-5. **Use strong TLS versions**: Prefer TLS 1.2 or higher
+## Security Considerations
+
+1. **Never commit certificates to version control**: Use environment variables or external secret management
+2. **Protect your private keys**: Ensure PFX files have appropriate file permissions
+3. **Use strong passphrases**: Always protect PFX files with strong passphrases
+4. **Certificate validation**: Keep `rejectUnauthorized: true` in production
+
+## Running the Example
+
+1. Replace the sample certificate values with your actual certificates
+2. Set the required environment variables:
+   ```bash
+   export PFX_PASSPHRASE="your-passphrase"
+   export PFX_CERTIFICATE_BASE64="your-base64-cert"
+   ```
+3. Run the evaluation:
+   ```bash
+   promptfoo eval
+   ```
+
+## TLS Configuration Options
+
+| Option               | Description                                              |
+| -------------------- | -------------------------------------------------------- |
+| `pfx`                | Inline PFX certificate (base64-encoded string or Buffer) |
+| `pfxPath`            | Path to PFX file on disk                                 |
+| `passphrase`         | Password for the PFX certificate                         |
+| `ca`                 | CA certificate for server verification                   |
+| `rejectUnauthorized` | Verify server certificates (always `true` in production) |
+| `minVersion`         | Minimum TLS version (e.g., 'TLSv1.2')                    |
+| `maxVersion`         | Maximum TLS version (e.g., 'TLSv1.3')                    |
+| `ciphers`            | Cipher suite specification                               |
 
 ## Troubleshooting
 
-### Certificate Verification Failed
+### Invalid PFX Format
 
-```
-Error: unable to verify the first certificate
-```
+If you get an error about invalid PFX format:
 
-**Solution**: Ensure you're providing the complete certificate chain in the CA file.
-
-### Client Certificate Not Accepted
-
-```
-Error: Server rejected client certificate
-```
-
-**Solutions**:
-
-- Verify the client certificate is signed by a CA the server trusts
-- Check that both certificate and private key are provided
-- Ensure the certificate hasn't expired
-
-### PFX Password Issues
-
-```
-Error: mac verify failure
-```
-
-**Solution**: Verify the PFX passphrase is correct and properly escaped in YAML.
+- Ensure the base64 encoding is correct
+- Verify the passphrase is correct
+- Check that the PFX file is not corrupted
 
 ### Connection Refused
 
-```
-Error: connect ECONNREFUSED
-```
+If the connection is refused:
 
-**Solutions**:
+- Verify the server requires client certificates
+- Ensure the certificate is valid and not expired
+- Check that the certificate is trusted by the server
 
-- Check the server is running and accessible
-- Verify the URL and port are correct
-- Check firewall rules
+### Certificate Verification Failed
 
-## Certificate Formats
+If certificate verification fails:
 
-### PEM Format
+- Add the server's CA certificate using `ca` or `caPath`
+- For development only: set `rejectUnauthorized: false` (never in production)
 
-Text format with headers:
+## Related Documentation
 
-```
------BEGIN CERTIFICATE-----
-MIIEpDCCA4ygAwIBAgI...
------END CERTIFICATE-----
-```
-
-### PFX/PKCS12 Format
-
-Binary format containing both certificate and private key. Usually has `.pfx` or `.p12` extension.
-
-### Converting Between Formats
-
-```bash
-# Convert PFX to PEM
-openssl pkcs12 -in cert.pfx -out cert.pem -nodes
-
-# Convert PEM to PFX
-openssl pkcs12 -export -out cert.pfx -in cert.pem -inkey key.pem
-
-# View certificate details
-openssl x509 -in cert.pem -text -noout
-```
-
-## Advanced Configuration
-
-### Custom Cipher Suites
-
-```yaml
-tls:
-  ciphers: 'TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256'
-  minVersion: 'TLSv1.2'
-  maxVersion: 'TLSv1.3'
-```
-
-### Server Name Indication (SNI)
-
-```yaml
-tls:
-  servername: api.example.com # Override the SNI hostname
-```
-
-### Certificate Arrays
-
-For providing multiple certificates in a chain:
-
-```yaml
-tls:
-  ca:
-    - file://certs/root-ca.pem
-    - file://certs/intermediate-ca.pem
-```
-
-## Related Examples
-
-- `http-provider` - Basic HTTP provider usage
-- `custom-provider` - Creating custom providers
-- `azure-openai` - Azure OpenAI with custom endpoints
-
-## Further Reading
-
-- [HTTP Provider Documentation](https://promptfoo.dev/docs/providers/http)
-- [TLS/SSL in Node.js](https://nodejs.org/api/tls.html)
-- [Understanding mTLS](https://www.cloudflare.com/learning/access-management/what-is-mutual-tls/)
+- [HTTP Provider Documentation](https://promptfoo.com/docs/providers/http)
+- [TLS/HTTPS Configuration](https://promptfoo.com/docs/providers/http#tlshttps-configuration)

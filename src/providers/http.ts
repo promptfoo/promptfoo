@@ -366,6 +366,16 @@ function resolveFilePath(filePath: string): string {
 }
 
 /**
+ * Detects if a string is likely base64-encoded
+ */
+function isBase64(str: string): boolean {
+  // Check for common base64 patterns
+  // Must be divisible by 4, only contain valid base64 chars, and optionally end with padding
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+  return str.length % 4 === 0 && base64Regex.test(str) && str.length > 100;
+}
+
+/**
  * Generate signature using different certificate types
  */
 export async function generateSignature(
@@ -775,9 +785,15 @@ const TlsCertificateSchema = z
     keyPath: z.string().optional(),
 
     // PFX/PKCS12 certificate bundle
-    pfx: z.union([z.string(), z.instanceof(Buffer)]).optional(),
-    pfxPath: z.string().optional(),
-    passphrase: z.string().optional(),
+    // Supports inline content as base64-encoded string or Buffer
+    pfx: z
+      .union([z.string(), z.instanceof(Buffer)])
+      .optional()
+      .describe(
+        'PFX/PKCS12 certificate bundle. Can be a file path via pfxPath, or inline as a base64-encoded string or Buffer',
+      ),
+    pfxPath: z.string().optional().describe('Path to PFX/PKCS12 certificate file'),
+    passphrase: z.string().optional().describe('Passphrase for PFX certificate'),
 
     // Security options
     rejectUnauthorized: z.boolean().default(true),
@@ -1330,7 +1346,22 @@ function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Agen
 
   // Load PFX certificate
   if (tlsConfig.pfx) {
-    tlsOptions.pfx = tlsConfig.pfx;
+    // Handle inline PFX content
+    if (typeof tlsConfig.pfx === 'string') {
+      // Check if it's base64-encoded (common for embedding binary data in config files)
+      if (isBase64(tlsConfig.pfx)) {
+        tlsOptions.pfx = Buffer.from(tlsConfig.pfx, 'base64');
+        logger.debug(`[HTTP Provider] Using base64-encoded inline PFX certificate`);
+      } else {
+        // Assume it's already in the correct format
+        tlsOptions.pfx = tlsConfig.pfx;
+        logger.debug(`[HTTP Provider] Using inline PFX certificate`);
+      }
+    } else {
+      // It's already a Buffer
+      tlsOptions.pfx = tlsConfig.pfx;
+      logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
+    }
   } else if (tlsConfig.pfxPath) {
     const resolvedPath = resolveFilePath(tlsConfig.pfxPath);
     tlsOptions.pfx = fs.readFileSync(resolvedPath);
