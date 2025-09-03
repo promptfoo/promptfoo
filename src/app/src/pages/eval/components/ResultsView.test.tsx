@@ -251,8 +251,6 @@ describe('ResultsView', () => {
 
   // [Tusk] Updated test to match current implementation
   it('ResultsView should default to all columns visible and selected if neither a specific column state nor last used column settings exist for the current evaluation', () => {
-    const allColumns = ['description', 'Variable 1', 'Prompt 1'];
-
     // Update the existing mock objects directly instead of reassigning
     mockTableStoreData.table = {
       head: {
