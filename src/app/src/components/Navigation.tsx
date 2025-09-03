@@ -102,7 +102,10 @@ function CreateDropdown({
   };
 
   const handleMouseLeave = () => {
-    setActiveMenu(null);
+    // Add a small delay to allow mouse to move to dropdown
+    setTimeout(() => {
+      setActiveMenu((current) => (current === 'create' ? null : current));
+    }, 100);
   };
 
   const isActive = ['/setup', '/redteam/setup'].some((route) =>
@@ -125,7 +128,7 @@ function CreateDropdown({
   const isOpen = activeMenu === 'create';
 
   return (
-    <>
+    <Box onMouseLeave={handleMouseLeave} sx={{ position: 'relative', display: 'inline-block' }}>
       <Button
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
@@ -164,7 +167,6 @@ function CreateDropdown({
         anchorEl={anchorEl}
         open={isOpen}
         placement="bottom-start"
-        onMouseLeave={handleMouseLeave}
         sx={{ zIndex: 1300 }}
         modifiers={[
           {
@@ -243,7 +245,7 @@ function CreateDropdown({
           </Paper>
         </Box>
       </Popper>
-    </>
+    </Box>
   );
 }
 
@@ -272,7 +274,10 @@ function EvalsDropdown({
   };
 
   const handleMouseLeave = () => {
-    setActiveMenu(null);
+    // Add a small delay to allow mouse to move to dropdown
+    setTimeout(() => {
+      setActiveMenu((current) => (current === 'evals' ? null : current));
+    }, 100);
   };
 
   const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));
@@ -293,7 +298,7 @@ function EvalsDropdown({
   const isOpen = activeMenu === 'evals';
 
   return (
-    <>
+    <Box onMouseLeave={handleMouseLeave} sx={{ position: 'relative', display: 'inline-block' }}>
       <Button
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
@@ -332,7 +337,6 @@ function EvalsDropdown({
         anchorEl={anchorEl}
         open={isOpen}
         placement="bottom-start"
-        onMouseLeave={handleMouseLeave}
         sx={{ zIndex: 1300 }}
         modifiers={[
           {
@@ -411,7 +415,7 @@ function EvalsDropdown({
           </Paper>
         </Box>
       </Popper>
-    </>
+    </Box>
   );
 }
 
