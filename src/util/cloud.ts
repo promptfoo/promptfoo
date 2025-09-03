@@ -6,7 +6,7 @@ import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
 
 import type { Plugin, Severity } from '../redteam/constants';
-import type { UnifiedConfig } from '../types';
+import type { PolicyObject, PolicyTexts, UnifiedConfig } from '../types';
 import type { ProviderOptions } from '../types/providers';
 
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
@@ -188,12 +188,10 @@ export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
 /**
  * Given a list of policy IDs, fetches custom policies from Promptfoo Cloud.
  * @param ids - The IDs of the policies to fetch.
- * @returns A record of policy IDs to policy texts.
+ * @param teamId - The ID of the team to fetch policies from. Note that all policies must belong to this team.
+ * @returns A record mapping policy IDs to their texts.
  */
-export async function getPoliciesFromCloud(
-  ids: string[],
-  teamId: string,
-): Promise<Record<string, string>> {
+export async function getPoliciesFromCloud(ids: string[], teamId: string): Promise<PolicyTexts> {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
       `Could not fetch policies from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
@@ -209,22 +207,23 @@ export async function getPoliciesFromCloud(
       `/custom-policies/?${searchParams.toString()}&teamId=${teamId}`,
       'GET',
     );
+
     if (!response.ok) {
       const errorMessage = await response.text();
       throw new Error(
         `Failed to fetch policies from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
       );
     }
+
     const body = await response.json();
     // Deserialize the body into a map of policy IDs to policy texts.
-    const policies = body.reduce(
-      (acc: Record<string, string>, policy: { id: string; text: string }) => {
-        acc[policy.id] = policy.text;
-        return acc;
-      },
+    return body.reduce(
+      (acc: PolicyTexts, policy: Required<PolicyObject>) => ({
+        ...acc,
+        [policy.id]: policy.text,
+      }),
       {},
     );
-    return policies;
   } catch (e) {
     logger.error(`Failed to fetch policies from cloud.`);
     logger.error(String(e));

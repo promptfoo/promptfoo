@@ -41,6 +41,7 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { isValidPolicyObject } from '../plugins/policy';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';
 
@@ -305,32 +306,40 @@ export async function doGenerateRedteam(
     logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
   }
 
-  // Resolve policy references
+  // Resolve policy references.
+  // Each reference is an id of the policy record stored in Promptfoo Cloud; load their respective texts.
   const policyPluginsWithRefs = plugins.filter(
-    (plugin) =>
-      plugin.id === 'policy' &&
-      typeof plugin.config?.policy === 'object' &&
-      plugin.config.policy.id &&
-      uuidValidate(plugin!.config!.policy!.id),
+    (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
   );
   if (policyPluginsWithRefs.length > 0) {
     logger.debug(`Resolving policy references for ${policyPluginsWithRefs.length} plugins`);
-    const ids = policyPluginsWithRefs.map((p) => (p.config!.policy! as PolicyObject).id);
 
-    // Load the policy texts
+    // Get the unique policy ids
+    const ids = Array.from(
+      new Set(policyPluginsWithRefs.map((p) => (p.config!.policy! as PolicyObject).id)),
+    );
+
+    // Load the calling user's team id; all policies must belong to the same team.
     const teamId =
       resolvedConfigMetadata?.teamId ??
       (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
       (await getDefaultTeam()).id;
 
+    // Load the policy texts
     const policyTexts = await getPoliciesFromCloud(ids, teamId);
-    // Overwrite the policy texts to the plugins
+
+    // Log a warning if some policies are not found
+    const notFoundPolicyIds = ids.filter((id) => !policyTexts[id]);
+    if (notFoundPolicyIds.length > 0) {
+      logger.warn(
+        `Unable to resolve ${notFoundPolicyIds.length} policies: ${notFoundPolicyIds.join(', ')}`,
+      );
+    }
+
+    // Assign, in-place, the policy texts to the plugins
     for (const policyPlugin of policyPluginsWithRefs) {
       const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
-      policyPlugin.config!.policy = {
-        id: policyId,
-        text: policyTexts[policyId],
-      } as PolicyObject;
+      policyPlugin.config!.policy = { id: policyId, text: policyTexts[policyId] } as PolicyObject;
     }
   }
 

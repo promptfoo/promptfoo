@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { validate as uuidValidate } from 'uuid';
 import invariant from '../../util/invariant';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -10,34 +11,58 @@ import type {
   PluginConfig,
   TestCase,
 } from '../../types';
-import type { PolicyObject } from '../types';
+import type { Policy, PolicyObject } from '../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 
+/**
+ * Checks whether a given Policy is a valid PolicyObject.
+ * @param policy - The policy to check.
+ * @returns True if the policy is a valid PolicyObject, false otherwise.
+ */
+export function isValidPolicyObject(policy: Policy): policy is PolicyObject {
+  return (
+    typeof policy === 'object' &&
+    'id' in policy &&
+    typeof policy.id === 'string' &&
+    uuidValidate(policy.id)
+  );
+}
+
 export class PolicyPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
-  private policy: string;
-  private policyId?: string;
+  /**
+   * The text of the policy.
+   */
+  private policy: Required<PolicyObject>['text'];
+  /**
+   * The ID of the policy; available if the policy is loaded from Promptfoo Cloud.
+   */
+  private policyId?: PolicyObject['id'];
 
   constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
     super(provider, purpose, injectVar, config);
     invariant(config.policy, 'A "policy" property is required for the policy plugin.');
 
-    // Handle both string and PolicyObject formats
-    if (typeof config.policy === 'string') {
-      this.policy = config.policy;
-    } else if (typeof config.policy === 'object' && 'text' in config.policy) {
-      // PolicyObject with resolved text
-      const policyObj = config.policy as PolicyObject;
-      this.policy = policyObj.text!;
-      this.policyId = policyObj.id;
-    } else if (typeof config.policy === 'object' && 'id' in config.policy) {
-      // PolicyObject without text (shouldn't happen after resolution, but handle gracefully)
+    if (isValidPolicyObject(config.policy)) {
+      // Edge case: PolicyObject should not be provided w/o text (i.e. it hasn't been "resolved" by something like
+      // utils/cloud.ts#getPoliciesFromCloud)
+      if (!config.policy.text) {
+        throw new Error(
+          `Policy with ID ${config.policy.id} has not been resolved. Please ensure policies are loaded from cloud.`,
+        );
+      }
+
+      this.policy = config.policy.text;
+      this.policyId = config.policy.id;
+    } else if (typeof config.policy === 'string') {
+      this.policy = config.policy; // The policy declaration is itself the policy text
+    }
+    // Edge case: Invalid policy format
+    else {
       throw new Error(
-        `Policy with ID ${(config.policy as PolicyObject).id} has not been resolved. Please ensure policies are loaded from cloud.`,
+        `Invalid policy format. Expected string or PolicyObject. Received ${JSON.stringify(config.policy)}`,
       );
-    } else {
-      throw new Error('Invalid policy format. Expected string or PolicyObject.');
     }
   }
 

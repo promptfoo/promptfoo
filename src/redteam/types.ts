@@ -6,8 +6,12 @@ import type { Plugin, Severity } from './constants';
 // and can be anything the user wants.
 export type Modifier = string | 'tone' | 'style' | 'context' | 'testGenerationInstructions';
 export type Intent = string | string[];
+
+// Policy Types
 export type PolicyObject = { id: string; text?: string };
 export type Policy = string | PolicyObject; // Policy Text or Policy ID
+export type PolicyTexts = Record<PolicyObject['id'], Required<PolicyObject>['text']>;
+
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
 export type PluginConfig = {
