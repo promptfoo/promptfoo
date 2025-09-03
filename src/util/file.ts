@@ -1,11 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { parse as csvParse } from 'csv-parse/sync';
+import { parse as csvParse, type Options as CsvOptions } from 'csv-parse/sync';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
+
+type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
+  columns: Exclude<CsvOptions['columns'], undefined | false>;
+};
 
 /**
  * Simple Nunjucks engine specifically for file paths
@@ -95,10 +99,10 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
           allContents.push(parsed);
         }
       } else if (matchedFile.endsWith('.csv')) {
-        const records = csvParse(contents, { columns: true }) as unknown as Record<
-          string,
-          string
-        >[];
+        const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+          columns: true as const,
+        };
+        const records = csvParse<Record<string, string>>(contents, csvOptions);
         // If single column, return array of values to match single file behavior
         if (records.length > 0 && Object.keys(records[0]).length === 1) {
           allContents.push(...records.map((record) => Object.values(record)[0]));
@@ -127,7 +131,10 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
     return yaml.load(contents);
   }
   if (finalPath.endsWith('.csv')) {
-    const records = csvParse(contents, { columns: true }) as unknown as Record<string, string>[];
+    const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+      columns: true as const,
+    };
+    const records = csvParse<Record<string, string>>(contents, csvOptions);
     // If single column, return array of values
     if (records.length > 0 && Object.keys(records[0]).length === 1) {
       return records.map((record) => Object.values(record)[0]);
