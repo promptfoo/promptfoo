@@ -39,35 +39,6 @@ function escapeXml(text) {
     .replace(/'/g, '&apos;');
 }
 
-// Smart text wrapping that preserves all content (currently unused but kept for future use)
-function _wrapText(text, maxWidth, fontSize) {
-  if (!text) {
-    return [];
-  }
-  const words = text.split(' ');
-  const lines = [];
-  let currentLine = '';
-  const avgCharWidth = fontSize * 0.5;
-
-  for (const word of words) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    const estimatedWidth = testLine.length * avgCharWidth;
-
-    if (estimatedWidth > maxWidth && currentLine) {
-      lines.push(currentLine);
-      currentLine = word;
-    } else {
-      currentLine = testLine;
-    }
-  }
-
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-
-  return lines;
-}
-
 // Helper function to truncate text with ellipsis
 function truncateText(text, maxLength) {
   if (text.length <= maxLength) {
@@ -81,55 +52,6 @@ function calculateFontSize(text, baseSize = 64, minSize = 40) {
   const lengthFactor = Math.max(1, text.length / 40);
   const fontSize = Math.max(minSize, Math.floor(baseSize / Math.sqrt(lengthFactor)));
   return fontSize;
-}
-
-// Dynamic font sizing - much more aggressive scaling (currently unused but kept for future use)
-function _calculateOptimalFontSize(text, hasImage = false, isTitle = true) {
-  if (!text) {
-    return 48;
-  }
-  const length = text.length;
-
-  if (isTitle) {
-    // Title sizing - MUCH larger when space allows
-    if (hasImage) {
-      // With image - slightly smaller
-      if (length <= 30) {
-        return 48;
-      }
-      if (length <= 50) {
-        return 42;
-      }
-      if (length <= 70) {
-        return 36;
-      }
-      if (length <= 100) {
-        return 32;
-      }
-      return 28;
-    } else {
-      // No image - we have lots of space
-      if (length <= 20) {
-        return 72;
-      }
-      if (length <= 30) {
-        return 64;
-      }
-      if (length <= 50) {
-        return 56;
-      }
-      if (length <= 70) {
-        return 48;
-      }
-      if (length <= 100) {
-        return 40;
-      }
-      return 32;
-    }
-  } else {
-    // Description sizing
-    return Math.min(22, Math.max(16, 24 - Math.floor(length / 60)));
-  }
 }
 
 // Helper function to convert SVG logo to base64 (cached)
