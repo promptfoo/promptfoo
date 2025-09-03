@@ -87,7 +87,7 @@ async function fetchRemoteTestCases(
     email: getUserEmail(),
   });
   try {
-    const { data, status, statusText } = await fetchWithCache(
+    const { data, status } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -98,9 +98,19 @@ async function fetchRemoteTestCases(
       },
       REQUEST_TIMEOUT_MS,
     );
-
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
-      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
+      // Parse error message with schema {error: string, message: string}
+      let errorDisplay: string;
+      if (data && typeof data === 'object' && 'error' in data && 'message' in data) {
+        if (data.error === 'Internal Server Error') {
+          errorDisplay = data.message as string;
+        } else {
+          errorDisplay = JSON.stringify(data);
+        }
+      } else {
+        errorDisplay = JSON.stringify(data);
+      }
+      logger.error(`Error generating test cases for ${key}: ${errorDisplay}`);
       return [];
     }
     const ret = (data as { result: TestCase[] }).result;
