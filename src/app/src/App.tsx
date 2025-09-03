@@ -67,7 +67,7 @@ const router = createBrowserRouter(
           <Route path="/model-audit" element={<ModelAuditPage />} />
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />
-          <Route path="/report" element={<ReportPage />} />
+          <Route path="/reports" element={<ReportPage />} />
           <Route path="/setup" element={<EvalCreatorPage />} />
           <Route path="/login" element={<LoginPage />} />
         </Route>

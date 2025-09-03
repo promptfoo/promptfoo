@@ -780,7 +780,7 @@ export default function ResultsView({
                       color="primary"
                       variant="contained"
                       startIcon={<EyeIcon />}
-                      onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
+                      onClick={() => navigate(`/reports/?evalId=${evalId || defaultEvalId}`)}
                     >
                       Vulnerability Report
                     </Button>

@@ -288,6 +288,11 @@ function EvalsDropdown({
       label: 'All Evals',
       description: 'Browse and manage all evaluation runs',
     },
+    {
+      href: '/reports',
+      label: 'Reports',
+      description: 'View red team reports',
+    },
   ];
 
   const isOpen = activeMenu === 'evals';
@@ -326,7 +331,7 @@ function EvalsDropdown({
           }),
         }}
       >
-        Evals
+        Results
       </Button>
       <Popper
         anchorEl={anchorEl}
