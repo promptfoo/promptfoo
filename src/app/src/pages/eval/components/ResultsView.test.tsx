@@ -246,6 +246,188 @@ describe('ResultsView', () => {
     };
   });
 
+  it('should display the chart toggle button when there are at least two prompts and more than one unique numeric score', () => {
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      table: {
+        head: {
+          prompts: [{ provider: 'test-provider' }, { provider: 'test-provider-2' }],
+          vars: ['Variable 1'],
+        },
+        body: [
+          {
+            outputs: [{ pass: true, score: 1, text: 'test output' }],
+            test: {},
+            vars: ['test var'],
+          },
+          {
+            outputs: [{ pass: false, score: 0, text: 'second output' }],
+            test: {},
+            vars: ['test var 2'],
+          },
+        ],
+      },
+      config: { description: 'Test Config', tags: {} },
+    };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    const showChartsButton = screen.queryByText('Show Charts');
+    const hideChartsButton = screen.queryByText('Hide Charts');
+
+    expect(showChartsButton || hideChartsButton).toBeInTheDocument();
+  });
+
+  it('should not display the chart toggle button if there are fewer than two prompts, even if there are multiple unique numeric scores', () => {
+    mockTableStoreData.table = {
+      head: { prompts: [{ provider: 'test' }], vars: [] },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 1' }],
+          test: {},
+          vars: [],
+        },
+        {
+          outputs: [{ pass: false, score: 0, text: 'output 2' }],
+          test: {},
+          vars: [],
+        },
+      ],
+    };
+    mockTableStoreData.config = { description: 'Test Config', tags: {} };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.queryByText('Show Charts')).not.toBeInTheDocument();
+    expect(screen.queryByText('Hide Charts')).not.toBeInTheDocument();
+  });
+
+  it('does not render charts toggle when outputs contain NaN score values mixed with numeric scores, resulting in only one unique numeric score after filtering', () => {
+    mockTableStoreData.table = {
+      head: { prompts: [{ provider: 'test' }, { provider: 'test2' }], vars: [] },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 1' }],
+          test: {},
+          vars: [],
+        },
+        {
+          outputs: [{ pass: false, score: NaN, text: 'output 2' }],
+          test: {},
+          vars: [],
+        },
+      ],
+    };
+    mockTableStoreData.config = { description: 'Test Config', tags: {} };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.queryByText('Show Charts')).not.toBeInTheDocument();
+    expect(screen.queryByText('Hide Charts')).not.toBeInTheDocument();
+  });
+
+  it('renders chart toggle when outputs contain string-based numeric scores', () => {
+    mockTableStoreData.table = {
+      head: { prompts: [{ provider: 'test' }, { provider: 'test2' }], vars: [] },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 1' }],
+          test: {},
+          vars: [],
+        },
+        {
+          outputs: [{ pass: false, score: 2, text: 'output 2' }],
+          test: {},
+          vars: [],
+        },
+      ],
+    };
+    mockTableStoreData.config = { description: 'Test Config', tags: {} };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.getByText('Show Charts')).toBeInTheDocument();
+  });
+
+  const useTableStoreSetState = vi.fn(
+    (fn: (prevState: typeof mockTableStoreData) => typeof mockTableStoreData) => {
+      mockTableStoreData = fn(mockTableStoreData);
+    },
+  );
+
+  it('updates chart toggle visibility when table data changes', () => {
+    const tableWithUniqueScores = {
+      head: { prompts: [{ provider: 'test' }, { provider: 'test2' }], vars: [] },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 1' }],
+          test: {},
+          vars: [],
+        },
+        {
+          outputs: [{ pass: false, score: 0, text: 'output 2' }],
+          test: {},
+          vars: [],
+        },
+      ],
+    };
+
+    const tableWithIdenticalScores = {
+      head: { prompts: [{ provider: 'test' }, { provider: 'test2' }], vars: [] },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 1' }],
+          test: {},
+          vars: [],
+        },
+        {
+          outputs: [{ pass: false, score: 1, text: 'output 2' }],
+          test: {},
+          vars: [],
+        },
+      ],
+    };
+
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      table: tableWithUniqueScores,
+      config: { description: 'Test Config', tags: {} },
+    };
+
+    vi.mock('./store', () => ({
+      useTableStore: vi.fn(() => ({
+        ...mockTableStoreData,
+        setState: useTableStoreSetState,
+      })),
+      useResultsViewSettingsStore: vi.fn(() => mockResultsViewSettingsStoreData),
+    }));
+
+    const { rerender } = renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.getByText('Show Charts')).toBeInTheDocument();
+
+    useTableStoreSetState((prevState) => ({
+      ...prevState,
+      table: tableWithIdenticalScores,
+    }));
+
+    rerender(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.queryByText('Show Charts')).not.toBeInTheDocument();
+  });
+
   it('renders ResultsCharts when table, config, and more than one prompt are present and viewport height is at least 1100px', () => {
     Object.defineProperty(window, 'innerHeight', {
       writable: true,
