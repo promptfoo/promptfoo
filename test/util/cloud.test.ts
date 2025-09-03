@@ -843,7 +843,7 @@ describe('cloud utils', () => {
         providers: ['provider1', 'provider2'],
         prompts: ['prompt1'],
         tests: [{ vars: { input: 'test' } }],
-        redteam: { plugins: ['plugin1'] },
+        redteam: { plugins: [{ id: 'plugin1' }] },
       };
 
       mockFetchWithProxy.mockResolvedValueOnce({
