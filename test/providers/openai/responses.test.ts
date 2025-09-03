@@ -4211,7 +4211,7 @@ describe('OpenAiResponsesProvider', () => {
       expect(result.error).toBeUndefined();
       // Should contain both function call JSONs
       expect(result.output).toContain('addNumbers');
-      expect(result.output).toContain('multiplyNumbers'); 
+      expect(result.output).toContain('multiplyNumbers');
       expect(result.output).toContain('no_arguments_provided');
       // Should have newline separator
       expect(result.output).toContain('\n');

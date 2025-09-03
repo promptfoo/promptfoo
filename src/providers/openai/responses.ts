@@ -342,7 +342,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         if (item.type === 'function_call') {
           // Handle OpenAI Responses API function calls
           let functionResult;
-          
+
           // Check if this is a meaningful function call or just a status update
           if (item.arguments === '{}' && item.status === 'completed') {
             // This appears to be a status update with no meaningful arguments
@@ -352,7 +352,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               type: 'function_call',
               name: item.name,
               status: 'no_arguments_provided',
-              note: 'Function called but no arguments were extracted. Consider using the correct Responses API tool format.'
+              note: 'Function called but no arguments were extracted. Consider using the correct Responses API tool format.',
             });
           } else {
             // Normal function call with arguments - execute the callback
@@ -361,7 +361,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               config.functionToolCallbacks,
             );
           }
-          
+
           if (result) {
             result += '\n' + functionResult;
           } else {
