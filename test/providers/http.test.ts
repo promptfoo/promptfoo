@@ -3844,7 +3844,7 @@ describe('RSA signature authentication', () => {
 
     expect(process.env.PROMPTFOO_JKS_PASSWORD).toBeUndefined();
     await expect(provider.callApi('test')).rejects.toThrow(
-      'JKS keystore password is required. Provide it via config keystorePassword or PROMPTFOO_JKS_PASSWORD environment variable',
+      'JKS keystore password is required. Provide it via config keystorePassword/certificatePassword or PROMPTFOO_JKS_PASSWORD environment variable',
     );
 
     // Clean up

@@ -59,11 +59,18 @@ describe('isEmptyResponse', () => {
     expect(isEmptyResponse('   ')).toBe(true);
     expect(isEmptyResponse('{}')).toBe(true);
     expect(isEmptyResponse('  {}  ')).toBe(true);
+    expect(isEmptyResponse('undefined')).toBe(true);
+    expect(isEmptyResponse('  undefined  ')).toBe(true);
+    expect(isEmptyResponse('UNDEFINED')).toBe(true);
+    expect(isEmptyResponse('null')).toBe(true);
+    expect(isEmptyResponse('  NULL  ')).toBe(true);
   });
 
   it('should return false for non-empty responses', () => {
     expect(isEmptyResponse('Hello')).toBe(false);
     expect(isEmptyResponse('{"key": "value"}')).toBe(false);
+    expect(isEmptyResponse('undefined behavior')).toBe(false);
+    expect(isEmptyResponse('null pointer')).toBe(false);
   });
 });
 
