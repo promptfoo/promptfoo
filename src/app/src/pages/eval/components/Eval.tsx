@@ -12,7 +12,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { isFilterApplied, useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import './Eval.css';
 
@@ -85,11 +85,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
-          filters: Object.values(filters.values).filter((filter) =>
-            filter.type === 'metadata'
-              ? Boolean(filter.value && filter.field)
-              : Boolean(filter.value),
-          ),
+          filters: Object.values(filters.values).filter((filter) => isFilterApplied(filter)),
         });
 
         if (!data) {
@@ -150,8 +146,9 @@ export default function Eval({ fetchId }: EvalOptions) {
       metricParams.forEach((metricParam) => {
         addFilter({
           type: 'metric',
-          operator: 'equals',
-          value: metricParam,
+          operator: 'is_defined',
+          field: metricParam,
+          value: '',
           logicOperator: 'or',
         });
       });

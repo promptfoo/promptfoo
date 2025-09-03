@@ -32,6 +32,11 @@ const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
   equals: 'Equals',
   contains: 'Contains',
   not_contains: 'Not Contains',
+  greater_than: '>',
+  less_than: '<',
+  greater_than_or_equal: '≥',
+  less_than_or_equal: '≤',
+  is_defined: 'Is Defined',
 };
 
 function Dropdown({
@@ -138,10 +143,10 @@ function Filter({
   const theme = useTheme();
   const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
 
-  // Get list of already selected metric values (excluding current filter)
-  const selectedMetricValues = Object.values(filters.values)
-    .filter((filter) => filter.id !== value.id && filter.type === 'metric' && filter.value)
-    .map((filter) => filter.value);
+  // Get list of already selected metric fields (excluding current filter)
+  const selectedMetricFields = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'metric' && filter.field)
+    .map((filter) => filter.field as string);
 
   // Compute selected plugin values (excluding current filter)
   const selectedPluginValues = Object.values(filters.values)
@@ -170,9 +175,9 @@ function Filter({
    */
   const handleTypeChange = useCallback(
     (filterType: ResultsFilter['type']) => {
-      // Clear field when switching away from metadata type
+      // Clear field when switching away from metadata or metric type
       const updatedFilter = { ...value, type: filterType };
-      if (filterType !== 'metadata') {
+      if (filterType !== 'metadata' && filterType !== 'metric') {
         updatedFilter.field = undefined;
       }
       // Clear value when switching between different filter types
@@ -180,9 +185,11 @@ function Filter({
       if (value.type !== filterType) {
         updatedFilter.value = '';
       }
-      // Reset operator to 'equals' when changing to types that only support 'equals'
-      if (
-        (filterType === 'metric' || filterType === 'plugin' || filterType === 'strategy') &&
+      // Reset operator based on filter type
+      if (filterType === 'metric') {
+        updatedFilter.operator = 'is_defined';
+      } else if (
+        (filterType === 'plugin' || filterType === 'strategy') &&
         value.operator !== 'equals'
       ) {
         updatedFilter.operator = 'equals';
@@ -317,6 +324,18 @@ function Filter({
           width={150}
         />
 
+        {value.type === 'metric' && (
+          <Dropdown
+            id={`${index}-metric-field-select`}
+            label="Metric"
+            values={filters.options.metric.map((m) => ({ label: m, value: m }))}
+            value={value.field || ''}
+            onChange={handleFieldChange}
+            width={180}
+            disabledValues={selectedMetricFields}
+          />
+        )}
+
         {value.type === 'metadata' && (
           <DebouncedTextField
             id={`${index}-field-input`}
@@ -334,13 +353,28 @@ function Filter({
           id={`${index}-operator-select`}
           label="Operator"
           values={
-            value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy'
-              ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
-              : [
+            value.type === 'metric'
+              ? [
+                  { label: OPERATOR_LABELS_BY_OPERATOR.is_defined, value: 'is_defined' },
                   { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
-                  { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
-                  { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.greater_than, value: 'greater_than' },
+                  {
+                    label: OPERATOR_LABELS_BY_OPERATOR.greater_than_or_equal,
+                    value: 'greater_than_or_equal',
+                  },
+                  { label: OPERATOR_LABELS_BY_OPERATOR.less_than, value: 'less_than' },
+                  {
+                    label: OPERATOR_LABELS_BY_OPERATOR.less_than_or_equal,
+                    value: 'less_than_or_equal',
+                  },
                 ]
+              : value.type === 'plugin' || value.type === 'strategy'
+                ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
+                : [
+                    { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
+                    { label: OPERATOR_LABELS_BY_OPERATOR.contains, value: 'contains' },
+                    { label: OPERATOR_LABELS_BY_OPERATOR.not_contains, value: 'not_contains' },
+                  ]
           }
           value={value.operator}
           onChange={(e) => handleOperatorChange(e as ResultsFilter['operator'])}
@@ -348,7 +382,7 @@ function Filter({
         />
 
         <Box sx={{ flex: 1, minWidth: 250 }}>
-          {value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy' ? (
+          {value.type === 'plugin' || value.type === 'strategy' ? (
             <Dropdown
               id={`${index}-value-select`}
               label={TYPE_LABELS_BY_TYPE[value.type]}
@@ -395,15 +429,26 @@ function Filter({
               onChange={(e) => handleValueChange(e)}
               width="100%"
               disabledValues={
-                value.type === 'metric'
-                  ? selectedMetricValues
-                  : value.type === 'plugin'
-                    ? selectedPluginValues
-                    : value.type === 'strategy'
-                      ? selectedStrategyValues
-                      : []
+                value.type === 'plugin'
+                  ? selectedPluginValues
+                  : value.type === 'strategy'
+                    ? selectedStrategyValues
+                    : []
               }
             />
+          ) : value.type === 'metric' ? (
+            value.operator === 'is_defined' ? null : (
+              <DebouncedTextField
+                id={`${index}-value-input`}
+                label="Value"
+                variant="outlined"
+                size="small"
+                value={value.value}
+                onChange={handleValueChange}
+                fullWidth
+                type="number"
+              />
+            )
           ) : (
             <DebouncedTextField
               id={`${index}-value-input`}
@@ -448,7 +493,7 @@ export default function FiltersForm({
 
     addFilter({
       type: defaultType,
-      operator: 'equals',
+      operator: defaultType === 'metric' ? 'is_defined' : 'equals',
       // By default, the value is empty, which means the filter is not applied.
       // In other words, the filter is not applied until the user selects a value.
       value: '',

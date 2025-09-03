@@ -46,7 +46,7 @@ import FiltersButton from './ResultsFilters/FiltersButton';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { isFilterApplied, useResultsViewSettingsStore, useTableStore, type ResultsFilter } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import type { StackProps } from '@mui/material/Stack';
@@ -58,6 +58,17 @@ import './ResultsView.css';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+
+const OPERATOR_SYMBOLS: Record<ResultsFilter['operator'], string> = {
+  equals: '=',
+  contains: 'contains',
+  not_contains: 'not contains',
+  greater_than: '>',
+  less_than: '<',
+  greater_than_or_equal: '≥',
+  less_than_or_equal: '≤',
+  is_defined: 'is defined',
+};
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -620,10 +631,7 @@ export default function ResultsView({
                   )}
                   {filters.appliedCount > 0 &&
                     Object.values(filters.values).map((filter) => {
-                      // For metadata filters, both field and value must be present
-                      if (
-                        filter.type === 'metadata' ? !filter.value || !filter.field : !filter.value
-                      ) {
+                      if (!isFilterApplied(filter)) {
                         return null;
                       }
                       const truncatedValue =
@@ -631,7 +639,11 @@ export default function ResultsView({
 
                       let label: string;
                       if (filter.type === 'metric') {
-                        label = `Metric: ${truncatedValue}`;
+                        const op = OPERATOR_SYMBOLS[filter.operator];
+                        label =
+                          filter.operator === 'is_defined'
+                            ? `Metric: ${filter.field} is defined`
+                            : `Metric: ${filter.field} ${op} ${truncatedValue}`;
                       } else if (filter.type === 'plugin') {
                         const displayName =
                           displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
@@ -652,7 +664,7 @@ export default function ResultsView({
                           key={filter.id}
                           size="small"
                           label={label}
-                          title={filter.value} // Show full value on hover
+                          title={filter.operator === 'is_defined' ? undefined : filter.value}
                           onDelete={() => removeFilter(filter.id)}
                           sx={{ marginLeft: '4px', height: '20px', fontSize: '0.75rem' }}
                         />

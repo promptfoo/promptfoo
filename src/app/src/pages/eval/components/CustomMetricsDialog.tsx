@@ -99,8 +99,9 @@ const MetricsTable: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
       const filter = {
         type: 'metric' as const,
-        operator: 'equals' as const,
-        value: metric,
+        operator: 'is_defined' as const,
+        field: metric,
+        value: '',
         logicOperator: 'or' as const,
       };
 
@@ -109,7 +110,7 @@ const MetricsTable: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         Object.values(filters.values).find(
           (f) =>
             f.type === filter.type &&
-            f.value === filter.value &&
+            f.field === filter.field &&
             f.operator === filter.operator &&
             f.logicOperator === filter.logicOperator,
         )
