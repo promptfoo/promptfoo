@@ -473,7 +473,25 @@ export default function ResultsView({
   );
 
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
-  const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
+  const canRenderResultsCharts = React.useMemo(() => {
+    if (!table || !config) {
+      return false;
+    }
+
+    if (table.head.prompts.length < 2) {
+      return false;
+    }
+
+    const scores = table.body
+      .flatMap((row) => row.outputs.map((output) => output?.score))
+      .filter(
+        (score): score is number => typeof score === 'number' && !Number.isNaN(score),
+      );
+
+    const uniqueScores = new Set(scores);
+
+    return uniqueScores.size > 1;
+  }, [table, config]);
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
