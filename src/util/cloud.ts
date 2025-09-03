@@ -2,13 +2,16 @@ import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { type UnifiedConfig } from '../types';
 import { ProviderOptionsSchema } from '../validators/providers';
 import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
 
 import type { Plugin, Severity } from '../redteam/constants';
-import type { UnifiedConfig } from '../types';
 import type { ProviderOptions } from '../types/providers';
+
+const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
+const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
 
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
   const apiHost = cloudConfig.getApiHost();
@@ -18,7 +21,7 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
     return fetchWithProxy(url, {
       method,
       body: JSON.stringify(body),
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     });
   } catch (e) {
     logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
@@ -186,62 +189,96 @@ export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
   return oldestTeam;
 }
 
-export async function checkIfCliTargetExists(id: string, teamId: string): Promise<boolean> {
-  const hasCliListEndpoint = await checkServerFeatureSupport(
-    'cli-list-endpoint',
-    '2025-08-28T14:49:11-07:00',
-  );
-  if (hasCliListEndpoint) {
-    try {
-      const response = await makeRequest(`providers/cli/${teamId}/${id}`, 'GET');
-
-      logger.debug(`[checkIfCliTargetExists] Response: ${response.status} ${response.statusText}`);
-
-      if (!response.ok) {
-        return false;
-      }
-
-      const body = await response.json();
-      logger.debug(`[checkIfCliTargetExists] Body: ${JSON.stringify(body, null, 2)}`);
-
-      return true;
-    } catch (error) {
-      logger.error(`[checkIfCliTargetExists] Error checking if target exists: ${String(error)}`);
-      return false;
-    }
-
-    // If we get a 404, the endpoint might not exist yet, fall back to legacy endpoint
-  } else {
-    logger.debug(
-      `[checkIfCliTargetExists] New endpoint not found, falling back to legacy dashboard/targets endpoint`,
-    );
-
-    try {
-      const legacyResponse = await makeRequest(`dashboard/targets?teamId=${teamId}`, 'GET');
-
-      if (!legacyResponse.ok) {
-        logger.debug(
-          `[checkIfCliTargetExists] Legacy endpoint failed: ${legacyResponse.status} ${legacyResponse.statusText}`,
-        );
-        return false;
-      }
-
-      const targets = await legacyResponse.json();
-      logger.debug(`[checkIfCliTargetExists] Legacy targets: ${JSON.stringify(targets, null, 2)}`);
-
-      // Check if the target exists in the array
-      const targetExists =
-        Array.isArray(targets) && targets.some((target: any) => target.id === id);
-      logger.debug(
-        `[checkIfCliTargetExists] Target ${id} exists in legacy response: ${targetExists}`,
-      );
-
-      return targetExists;
-    } catch (error) {
-      logger.error(`[checkIfCliTargetExists] Error checking legacy endpoint: ${error}`);
-      return false;
-    }
+export class ConfigPermissionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConfigPermissionError';
   }
+}
+
+function convertErrorsToReadableMessage(
+  errors: { type: string; id: string; message: string }[],
+): string {
+  return errors.map((error) => `${error.type} ${error.id}: ${error.message}`).join(', ');
+}
+
+export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Promise<void> {
+  if (!cloudConfig.isEnabled()) {
+    return;
+  }
+
+  if (!config.providers) {
+    logger.warn('No providers specified. Skipping permission check.');
+    return;
+  }
+
+  try {
+    const hasPermissionCheckServerFeature = await checkServerFeatureSupport(
+      PERMISSION_CHECK_SERVER_FEATURE_NAME,
+      PERMISSION_CHECK_SERVER_FEATURE_DATE,
+    );
+    if (!hasPermissionCheckServerFeature) {
+      logger.debug(
+        `[Config Permission Check] Server feature ${PERMISSION_CHECK_SERVER_FEATURE_NAME} is not supported. Skipping permission check.`,
+      );
+      return;
+    }
+    const response = await makeRequest('permissions/check', 'POST', {
+      config,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ errors: ['Unknown error'] }));
+      const errors: { type: string; id: string; message: string }[] = Array.isArray(
+        errorData.errors,
+      )
+        ? errorData.errors.map((error: any) => {
+            // Handle both new structured error format and legacy string format
+            if (typeof error === 'string') {
+              return { type: 'config', id: 'unknown', message: error };
+            }
+            return error;
+          })
+        : [
+            {
+              type: 'config',
+              id: 'unknown',
+              message: errorData.error || 'Permission check failed',
+            },
+          ];
+
+      if (response.status === 403) {
+        throw new ConfigPermissionError(
+          `Permission denied: ${convertErrorsToReadableMessage(errors)}`,
+        );
+      }
+
+      // For other errors, log and continue (existing behavior)
+      logger.warn(
+        `Error checking permissions: ${convertErrorsToReadableMessage(errors)}. Continuing anyway.`,
+      );
+      return;
+    }
+
+    const result = await response.json();
+    if (result.errors && result.errors.length > 0) {
+      throw new ConfigPermissionError(
+        `Not able to continue with config: ${convertErrorsToReadableMessage(result.errors)}`,
+      );
+    }
+
+    logger.debug('Permission check passed');
+  } catch (error) {
+    if (error instanceof ConfigPermissionError) {
+      throw error;
+    }
+
+    // If we can't check permissions, allow the operation to continue
+    // It will fail later with a proper error message if permissions are actually missing
+    logger.warn(`Error checking permissions: ${error}. Continuing anyway.`);
+  }
+
+  return;
 }
 
 export async function canCreateTargets(teamId: string | undefined): Promise<boolean> {
@@ -263,7 +300,6 @@ export async function canCreateTargets(teamId: string | undefined): Promise<bool
   if (!response.ok) {
     throw new Error(`Failed to check provider permissions: ${response.statusText}`);
   }
-
   const body = await response.json();
 
   logger.debug(

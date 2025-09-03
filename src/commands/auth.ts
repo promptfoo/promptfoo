@@ -107,10 +107,13 @@ export function authCommand(program: Command) {
 
         const { user, organization } = await response.json();
 
+        const defaultTeam = await getDefaultTeam();
+
         logger.info(dedent`
             ${chalk.green.bold('Currently logged in as:')}
             User: ${chalk.cyan(user.email)}
             Organization: ${chalk.cyan(organization.name)}
+            Default Team: ${chalk.cyan(defaultTeam.name)}
             App URL: ${chalk.cyan(cloudConfig.getAppUrl())}`);
 
         telemetry.record('command_used', {
@@ -119,30 +122,6 @@ export function authCommand(program: Command) {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get user info: ${errorMessage}`);
-        process.exitCode = 1;
-      }
-    });
-
-  authCommand
-    .command('default-team')
-    .description('Show default team for the current user')
-    .action(async () => {
-      try {
-        if (!cloudConfig.isEnabled()) {
-          logger.info(
-            chalk.yellow('PromptFoo Cloud is not enabled, run `promptfoo auth login` to enable it'),
-          );
-          return;
-        }
-
-        const teamId = await getDefaultTeam();
-        logger.info(chalk.green(`Default team: ${teamId}`));
-        telemetry.record('command_used', {
-          name: 'auth team',
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.error(`Failed to get default team: ${errorMessage}`);
         process.exitCode = 1;
       }
     });

@@ -16,7 +16,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
-import { canContinueWithTarget } from '../../src/util/cloud/canContinueWithTarget';
+import { checkCloudPermissions, ConfigPermissionError } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
@@ -37,17 +37,9 @@ jest.mock('../../src/redteam/shared', () => ({}));
 jest.mock('../../src/share');
 jest.mock('../../src/table');
 jest.mock('../../src/util/cloud', () => ({
+  ...jest.requireActual('../../src/util/cloud'),
   getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
-}));
-
-jest.mock('../../src/util/cloud/canContinueWithTarget', () => ({
-  TargetPermissionError: class TargetPermissionError extends Error {
-    constructor(message: string) {
-      super(message);
-      this.name = 'ProviderPermissionError';
-    }
-  },
-  canContinueWithTarget: jest.fn().mockResolvedValue(true),
+  checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('fs');
 jest.mock('path', () => {
@@ -248,19 +240,20 @@ describe('evalCommand', () => {
   });
 });
 
-describe('canContinueWithTarget permissions', () => {
+describe('checkCloudPermissions', () => {
   const defaultConfigPath = 'config.yaml';
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should fail when canContinueWithTarget returns false', async () => {
+  it('should fail when checkCloudPermissions throws an error', async () => {
     // Mock cloudConfig to be enabled
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
-    // Mock canContinueWithTarget to return false
-    jest.mocked(canContinueWithTarget).mockResolvedValueOnce(false);
+    // Mock checkCloudPermissions to throw an error
+    const permissionError = new ConfigPermissionError('Permission denied: insufficient access');
+    jest.mocked(checkCloudPermissions).mockRejectedValueOnce(permissionError);
 
     // Setup the test configuration
     const config = {
@@ -280,22 +273,22 @@ describe('canContinueWithTarget permissions', () => {
     const cmdObj = {};
 
     await expect(doEval(cmdObj, config, defaultConfigPath, {})).rejects.toThrow(
-      'This target does not exist in your team and you do not have permission to create targets. Please contact your administrator to get access.',
+      'Permission denied: insufficient access',
     );
 
-    // Verify canContinueWithTarget was called with the correct arguments
-    expect(canContinueWithTarget).toHaveBeenCalledWith(['openai:gpt-4'], 'test-team-id');
+    // Verify checkCloudPermissions was called with the correct arguments
+    expect(checkCloudPermissions).toHaveBeenCalledWith(config);
 
     // Verify that evaluate was not called
     expect(evaluate).not.toHaveBeenCalled();
   });
 
-  it('should call canContinueWithTarget and proceed when it returns true', async () => {
+  it('should call checkCloudPermissions and proceed when it succeeds', async () => {
     // Mock cloudConfig to be enabled
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
-    // Mock canContinueWithTarget to return true
-    jest.mocked(canContinueWithTarget).mockResolvedValueOnce(true);
+    // Mock checkCloudPermissions to succeed (resolve without throwing)
+    jest.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
 
     // Setup the test configuration
     const config = {
@@ -319,8 +312,8 @@ describe('canContinueWithTarget permissions', () => {
 
     const result = await doEval(cmdObj, config, defaultConfigPath, {});
 
-    // Verify canContinueWithTarget was called
-    expect(canContinueWithTarget).toHaveBeenCalledWith(['openai:gpt-4'], 'test-team-id');
+    // Verify checkCloudPermissions was called
+    expect(checkCloudPermissions).toHaveBeenCalledWith(config);
 
     // Verify that the function proceeded normally
     expect(result).not.toBeNull();
@@ -329,9 +322,12 @@ describe('canContinueWithTarget permissions', () => {
     expect(evaluate).toHaveBeenCalled();
   });
 
-  it('should not check permissions when cloudConfig is disabled', async () => {
+  it('should call checkCloudPermissions but skip permission check when cloudConfig is disabled', async () => {
     // Mock cloudConfig to be disabled
     jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+
+    // Mock checkCloudPermissions to succeed (it should return early due to disabled cloud)
+    jest.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
 
     // Setup the test configuration
     const config = {
@@ -355,8 +351,8 @@ describe('canContinueWithTarget permissions', () => {
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    // Verify canContinueWithTarget was NOT called
-    expect(canContinueWithTarget).not.toHaveBeenCalled();
+    // Verify checkCloudPermissions was called (but returns early due to disabled cloud)
+    expect(checkCloudPermissions).toHaveBeenCalledWith(config);
 
     // Verify that evaluate was called
     expect(evaluate).toHaveBeenCalled();

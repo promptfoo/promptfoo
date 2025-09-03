@@ -22,8 +22,7 @@ import telemetry from '../telemetry';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
 import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
-import { getDefaultTeam } from '../util/cloud';
-import { canContinueWithTarget, TargetPermissionError } from '../util/cloud/canContinueWithTarget';
+import { checkCloudPermissions } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -236,15 +235,7 @@ export async function doEval(
       cmdObj.filterProviders || cmdObj.filterTargets,
     );
 
-    if (cloudConfig.isEnabled()) {
-      const teamId = config.metadata?.teamId ?? (await getDefaultTeam()).id;
-      const canContinue = await canContinueWithTarget(config.providers, teamId);
-      if (!canContinue) {
-        throw new TargetPermissionError(
-          'This target does not exist in your team and you do not have permission to create targets. Please contact your administrator to get access.',
-        );
-      }
-    }
+    await checkCloudPermissions(config as UnifiedConfig);
 
     const options: EvaluateOptions = {
       ...evaluateOptions,
