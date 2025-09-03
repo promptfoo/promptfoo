@@ -77,34 +77,32 @@ function NavLink({ href, label }: { href: string; label: string }) {
 
 type ActiveMenu = 'create' | 'evals' | null;
 
-function CreateDropdown({
-  activeMenu,
-  setActiveMenu,
-}: {
-  activeMenu: ActiveMenu;
-  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>;
-}) {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const location = useLocation();
-  const closeTimerRef = React.useRef<number | null>(null);
-  const closeDelay = 150;
+// Shared constants
+const DROPDOWN_CLOSE_DELAY = 150;
 
-  const scheduleClose = () => {
+// Custom hook for delayed menu close functionality
+function useDelayedClose(
+  menuType: 'create' | 'evals',
+  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>,
+) {
+  const closeTimerRef = React.useRef<number | null>(null);
+
+  const scheduleClose = React.useCallback(() => {
     if (closeTimerRef.current != null) {
       window.clearTimeout(closeTimerRef.current);
     }
     closeTimerRef.current = window.setTimeout(() => {
-      setActiveMenu((current) => (current === 'create' ? null : current));
+      setActiveMenu((current) => (current === menuType ? null : current));
       closeTimerRef.current = null;
-    }, closeDelay);
-  };
+    }, DROPDOWN_CLOSE_DELAY);
+  }, [menuType, setActiveMenu]);
 
-  const cancelClose = () => {
+  const cancelClose = React.useCallback(() => {
     if (closeTimerRef.current != null) {
       window.clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
     }
-  };
+  }, []);
 
   React.useEffect(
     () => () => {
@@ -114,6 +112,20 @@ function CreateDropdown({
     },
     [],
   );
+
+  return { scheduleClose, cancelClose };
+}
+
+function CreateDropdown({
+  activeMenu,
+  setActiveMenu,
+}: {
+  activeMenu: ActiveMenu;
+  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>;
+}) {
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const location = useLocation();
+  const { scheduleClose, cancelClose } = useDelayedClose('create', setActiveMenu);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -289,34 +301,7 @@ function EvalsDropdown({
 }) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const location = useLocation();
-  const closeTimerRef = React.useRef<number | null>(null);
-  const closeDelay = 150;
-
-  const scheduleClose = () => {
-    if (closeTimerRef.current != null) {
-      window.clearTimeout(closeTimerRef.current);
-    }
-    closeTimerRef.current = window.setTimeout(() => {
-      setActiveMenu((current) => (current === 'evals' ? null : current));
-      closeTimerRef.current = null;
-    }, closeDelay);
-  };
-
-  const cancelClose = () => {
-    if (closeTimerRef.current != null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  };
-
-  React.useEffect(
-    () => () => {
-      if (closeTimerRef.current != null) {
-        window.clearTimeout(closeTimerRef.current);
-      }
-    },
-    [],
-  );
+  const { scheduleClose, cancelClose } = useDelayedClose('evals', setActiveMenu);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
