@@ -244,6 +244,9 @@ type EnvVars = {
   // LLaMa
   LLAMA_BASE_URL?: string;
 
+  // Llama API
+  LLAMA_API_KEY?: string;
+
   // Local AI
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
