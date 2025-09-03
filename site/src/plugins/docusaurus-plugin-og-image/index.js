@@ -8,22 +8,34 @@ const sharp = require('sharp');
 const WIDTH = 1200;
 const HEIGHT = 630;
 
-// Asset cache to avoid repeated file reads
+// Asset cache to avoid repeated file reads (only for logo/font, not large image buffers)
 const assetCache = {
   logo: null,
   font: null,
-  images: new Map(), // Cache processed images to avoid reprocessing
 };
 
 function resolveImageFullPath(imagePath) {
   const cwd = process.cwd();
-  const inSiteDir = cwd.endsWith('/site');
+  const inSiteDir = path.basename(cwd) === 'site';
+  const siteRoot = inSiteDir ? cwd : path.join(cwd, 'site');
+
   if (imagePath.startsWith('/')) {
-    return inSiteDir
-      ? path.join(cwd, 'static', imagePath)
-      : path.join(cwd, 'site/static', imagePath);
+    // Treat as site-root-relative, not filesystem-root
+    const rel = imagePath.replace(/^\/+/, '');
+    const full = path.resolve(siteRoot, 'static', rel);
+    const staticRoot = path.resolve(siteRoot, 'static');
+    if (!full.startsWith(staticRoot + path.sep)) {
+      throw new Error(`Invalid image path (outside static): ${imagePath}`);
+    }
+    return full;
   }
-  return inSiteDir ? path.join(cwd, imagePath) : path.join(cwd, 'site', imagePath);
+
+  // Relative path: resolve under site root
+  const full = path.resolve(siteRoot, imagePath);
+  if (!full.startsWith(siteRoot + path.sep)) {
+    throw new Error(`Invalid relative image path: ${imagePath}`);
+  }
+  return full;
 }
 
 // Helper function to escape HTML/XML entities
@@ -79,15 +91,8 @@ async function getLogoAsBase64() {
   }
 }
 
-// Helper function to convert image to base64 (with caching)
+// Helper function to convert image to base64 (no caching to avoid memory leaks)
 async function getImageAsBase64(imagePath, maxWidth = 520, maxHeight = 430) {
-  const cacheKey = `${imagePath}_${maxWidth}_${maxHeight}`;
-
-  // Check cache first
-  if (assetCache.images.has(cacheKey)) {
-    return assetCache.images.get(cacheKey);
-  }
-
   try {
     // Handle relative paths from frontmatter
     // Check if we're already in the site directory
@@ -98,17 +103,15 @@ async function getImageAsBase64(imagePath, maxWidth = 520, maxHeight = 430) {
       await fs.access(fullPath);
     } catch {
       console.warn(`❌ Image file not found: ${imagePath} (resolved to: ${fullPath})`);
-      assetCache.images.set(cacheKey, null);
       return null;
     }
 
     const ext = path.extname(fullPath).toLowerCase().replace('.', '');
 
-    let result;
     // For SVG files, don't use sharp
     if (ext === 'svg') {
       const imageBuffer = await fs.readFile(fullPath);
-      result = `data:image/svg+xml;base64,${imageBuffer.toString('base64')}`;
+      return `data:image/svg+xml;base64,${imageBuffer.toString('base64')}`;
     } else {
       // Use sharp to resize and resample images with high quality
       const resizedBuffer = await sharp(fullPath)
@@ -123,15 +126,10 @@ async function getImageAsBase64(imagePath, maxWidth = 520, maxHeight = 430) {
         })
         .toBuffer();
 
-      result = `data:image/png;base64,${resizedBuffer.toString('base64')}`;
+      return `data:image/png;base64,${resizedBuffer.toString('base64')}`;
     }
-
-    // Cache the result
-    assetCache.images.set(cacheKey, result);
-    return result;
   } catch (error) {
     console.warn(`❌ Failed to process image ${imagePath}: ${error.message}`);
-    assetCache.images.set(cacheKey, null);
     return null;
   }
 }
@@ -173,10 +171,18 @@ async function getFontAsBase64() {
     const fontBuffer = await fs.readFile(fontPath);
     assetCache.font = fontBuffer.toString('base64');
     return assetCache.font;
-  } catch (error) {
-    console.warn('Could not load Inter font for embedding:', error);
-    assetCache.font = null;
-    return null;
+  } catch (_error) {
+    // Fallback when running from repo root
+    try {
+      const fontPath = path.join(process.cwd(), 'site/static/fonts/Inter-SemiBold.ttf');
+      const fontBuffer = await fs.readFile(fontPath);
+      assetCache.font = fontBuffer.toString('base64');
+      return assetCache.font;
+    } catch (e) {
+      console.warn('Could not load Inter font for embedding:', e);
+      assetCache.font = null;
+      return null;
+    }
   }
 }
 
@@ -638,7 +644,7 @@ module.exports = function (context, options) {
       }
 
       // Process all documentation routes with conservative parallel processing
-      const BATCH_SIZE = 2; // Conservative: only 2 at a time due to CPU-intensive SVG rendering
+      const BATCH_SIZE = Number(process.env.OG_BATCH_SIZE) || 2; // Conservative default
       const routesToProcess = routesPaths.filter(
         (routePath) => routePath.startsWith('/docs/') || routePath.startsWith('/blog/'),
       );
