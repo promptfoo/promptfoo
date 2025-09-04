@@ -11,7 +11,6 @@ import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateGraderTokenUsage,
   accumulateResponseTokenUsage,
-  accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';

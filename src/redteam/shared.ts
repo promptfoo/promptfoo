@@ -10,7 +10,6 @@ import { createShareableUrl } from '../share';
 import { isRunningUnderNpx } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
-import { TokenUsageTracker } from '../util/tokenUsage';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
 

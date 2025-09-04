@@ -480,10 +480,8 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug(`[Custom] graderPassed: ${graderPassed}`);
 
-        const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse.output);
-        if (evalTokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, evalTokenUsage);
-        }
+        const [evalScore] = await this.getEvalScore(lastResponse.output);
+
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
         objectiveScore = {
