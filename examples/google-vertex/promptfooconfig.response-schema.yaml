@@ -8,7 +8,7 @@ providers:
     config:
       region: us-central1
       projectId: your-project-id # Replace with your actual project ID
-      responseSchema: file://schema.json
+      responseSchema: file://response-schema.json
 
 tests:
   - vars:

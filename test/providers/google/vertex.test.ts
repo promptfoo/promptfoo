@@ -1545,7 +1545,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     it('should handle responseSchema with file:// protocol', async () => {
       provider = new VertexChatProvider('gemini-2.5-flash', {
         config: {
-          responseSchema: 'file://test/__fixtures__/schemas/simple.json',
+          responseSchema: 'file://test/simple.json',
         },
       });
 
@@ -1596,7 +1596,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
       provider = new VertexChatProvider('gemini-2.5-flash', {
         config: {
-          responseSchema: 'file://test/__fixtures__/schemas/variable-content.json',
+          responseSchema: 'file://test/variable-content.json',
         },
       });
 
@@ -1703,7 +1703,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     it('should handle complex nested schemas from files', async () => {
       provider = new VertexChatProvider('gemini-2.5-flash', {
         config: {
-          responseSchema: 'file://test/__fixtures__/schemas/complex.json',
+          responseSchema: 'file://test/complex.json',
         },
       });
 
@@ -1766,7 +1766,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     it('should handle errors when schema file does not exist', async () => {
       provider = new VertexChatProvider('gemini-2.5-flash', {
         config: {
-          responseSchema: 'file://test/__fixtures__/schemas/nonexistent.json',
+          responseSchema: 'file://test/nonexistent.json',
         },
       });
 
