@@ -17,7 +17,6 @@ import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -332,16 +331,6 @@ export async function runEval({
 
     if (test.providerOutput) {
       response.output = test.providerOutput;
-    } else if (
-      typeof test.provider === 'object' &&
-      typeof test.provider.id === 'function' &&
-      test.provider.id() === 'promptfoo:redteam:pandamonium'
-    ) {
-      if (!isPandamoniumProvider(test.provider)) {
-        throw new Error('Provider identified as pandamonium but does not have required methods');
-      }
-
-      return await test.provider.runPandamonium(provider, test, allTests || [], concurrency);
     } else {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       logger.debug(`Provider type: ${activeProvider.id()}`);
