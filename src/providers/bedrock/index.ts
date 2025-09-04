@@ -310,7 +310,7 @@ interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   stop?: string[];
 }
 
-interface BedrockOpenAIGenerationOptions extends BedrockOptions {
+export interface BedrockOpenAIGenerationOptions extends BedrockOptions {
   max_completion_tokens?: number;
   temperature?: number;
   top_p?: number;
@@ -1290,7 +1290,7 @@ ${prompt}
       stop?: string[],
       modelName?: string,
     ) => {
-      let messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       
       // Handle reasoning_effort by adding it to system message
       if (config?.reasoning_effort) {
