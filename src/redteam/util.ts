@@ -170,7 +170,13 @@ const REFUSAL_SUBSTRINGS = [
 ].map((s) => s.toLowerCase());
 
 export function isEmptyResponse(response: string): boolean {
-  return !response || response.trim() === '' || response.trim() === '{}';
+  return (
+    !response ||
+    response.trim() === '' ||
+    response.trim() === '{}' ||
+    response.trim().toLowerCase() === 'undefined' ||
+    response.trim().toLowerCase() === 'null'
+  );
 }
 
 export function isBasicRefusal(response: string): boolean {

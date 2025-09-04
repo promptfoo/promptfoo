@@ -91,6 +91,7 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
+import { createLlamaApiProvider } from './llamaApi';
 
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -290,6 +291,12 @@ export const providerMap: ProviderFactory[] = [
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
+      // Handle AgentCore
+      if (modelType === 'agentcore' || modelType === 'agent-core') {
+        const { AwsBedrockAgentCoreProvider } = await import('./bedrock/agentcore');
+        return new AwsBedrockAgentCoreProvider(modelName, providerOptions);
+      }
+
       if (modelType === 'completion') {
         // Backwards compatibility: `completion` used to be required
         return new AwsBedrockCompletionProvider(modelName, providerOptions);
@@ -301,10 +308,9 @@ export const providerMap: ProviderFactory[] = [
         const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrock/knowledgeBase');
         return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
       }
-      return new AwsBedrockCompletionProvider(
-        `${modelType}${modelName ? `:${modelName}` : ''}`,
-        providerOptions,
-      );
+      // Reconstruct the full model name preserving the original format
+      const fullModelName = splits.slice(1).join(':');
+      return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
     },
   },
   {
@@ -805,6 +811,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createTogetherAiProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('llamaapi:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createLlamaApiProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
