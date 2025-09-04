@@ -186,22 +186,18 @@ tests:
     expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
     expect(mockSetupEnv).toHaveBeenNthCalledWith(2, envFile2);
   });
-   it('should handle multiple config files and use first envPath found', async () => {
-     // …existing setup and assertions…
-     expect(mockSetupEnv).toHaveBeenNthCalledWith(2, envFile2);
-   });
 
-   it('should resolve relative envPath against the config file directory', async () => {
-     const subDir = path.join(tempDir, 'sub');
-     fs.mkdirSync(subDir);
-     const relEnv = '.env.relative';
-     const relEnvAbs = path.join(subDir, relEnv);
-     fs.writeFileSync(relEnvAbs, 'REL=ok');
+  it('should resolve relative envPath against the config file directory', async () => {
+    const subDir = path.join(tempDir, 'sub');
+    fs.mkdirSync(subDir);
+    const relEnv = '.env.relative';
+    const relEnvAbs = path.join(subDir, relEnv);
+    fs.writeFileSync(relEnvAbs, 'REL=ok');
 
-     const subConfig = path.join(subDir, 'promptfooconfig.yaml');
-     fs.writeFileSync(
-       subConfig,
-       `
+    const subConfig = path.join(subDir, 'promptfooconfig.yaml');
+    fs.writeFileSync(
+      subConfig,
+      `
 commandLineOptions:
   envPath: ${relEnv}
 
@@ -212,16 +208,16 @@ providers:
 tests:
   - vars: { input: "t" }
 `,
-     );
+    );
 
-     try {
-       await doEval({ config: [subConfig] }, {}, undefined, {});
-     } catch {}
+    try {
+      await doEval({ config: [subConfig] }, {}, undefined, {});
+    } catch {}
 
-     expect(mockSetupEnv).toHaveBeenCalledTimes(2);
-     expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
-     // Expect absolute resolved path
-     expect(path.isAbsolute((mockSetupEnv as any).mock.calls[1][0])).toBe(true);
-     expect((mockSetupEnv as any).mock.calls[1][0]).toBe(relEnvAbs);
-   });
+    expect(mockSetupEnv).toHaveBeenCalledTimes(2);
+    expect(mockSetupEnv).toHaveBeenNthCalledWith(1, undefined);
+    // Expect absolute resolved path
+    expect(path.isAbsolute((mockSetupEnv as any).mock.calls[1][0])).toBe(true);
+    expect((mockSetupEnv as any).mock.calls[1][0]).toBe(relEnvAbs);
+  });
 });

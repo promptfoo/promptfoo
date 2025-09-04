@@ -483,7 +483,7 @@ export async function resolveConfigs(
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
   basePath: string;
-  commandLineOptions?: Record<string, any>;
+  commandLineOptions?: Partial<CommandLineOptions>;
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
@@ -703,7 +703,15 @@ export async function resolveConfigs(
   cliState.config = config;
 
   // Extract commandLineOptions from either explicit config files or default config
-  const commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
+  let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
+
+  // Resolve relative envPath against the config file directory
+  if (commandLineOptions?.envPath && !path.isAbsolute(commandLineOptions.envPath) && basePath) {
+    commandLineOptions = {
+      ...commandLineOptions,
+      envPath: path.resolve(basePath, commandLineOptions.envPath),
+    };
+  }
 
   return {
     config,
