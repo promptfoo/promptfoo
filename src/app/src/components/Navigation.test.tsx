@@ -61,14 +61,14 @@ describe('EvalsDropdown', () => {
     vi.useRealTimers();
   });
 
-  it('should open the dropdown and set activeMenu to "evals" when the Evals button is clicked', () => {
+  it('should open the dropdown and set activeMenu to "evals" when the Results button is clicked', () => {
     render(
       <MemoryRouter>
         <Navigation darkMode={false} onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
 
-    const evalsButton = screen.getByRole('button', { name: /Evals/i });
+    const evalsButton = screen.getByRole('button', { name: /Results/i });
     fireEvent.click(evalsButton);
 
     expect(screen.getByText('Latest Eval')).toBeInTheDocument();
@@ -82,7 +82,7 @@ describe('EvalsDropdown', () => {
       </MemoryRouter>,
     );
 
-    const evalsButton = screen.getByRole('button', { name: /Evals/i });
+    const evalsButton = screen.getByRole('button', { name: /Results/i });
 
     fireEvent.mouseEnter(evalsButton);
     expect(screen.getByText('Latest Eval')).toBeInTheDocument();
@@ -108,7 +108,7 @@ describe('EvalsDropdown', () => {
       </MemoryRouter>,
     );
 
-    const evalsButton = screen.getByRole('button', { name: /Evals/i });
+    const evalsButton = screen.getByRole('button', { name: /Results/i });
 
     fireEvent.mouseEnter(evalsButton);
     expect(screen.getByText('Latest Eval')).toBeInTheDocument();
@@ -134,7 +134,7 @@ describe('EvalsDropdown', () => {
       </MemoryRouter>,
     );
 
-    const evalsButton = screen.getByRole('button', { name: /Evals/i });
+    const evalsButton = screen.getByRole('button', { name: /Results/i });
     fireEvent.click(evalsButton);
 
     expect(screen.getByText('Latest Eval')).toBeInTheDocument();
@@ -156,7 +156,7 @@ describe('EvalsDropdown', () => {
       </MemoryRouter>,
     );
 
-    const evalsButton = screen.getByRole('button', { name: /Evals/i });
+    const evalsButton = screen.getByRole('button', { name: /Results/i });
     fireEvent.mouseEnter(evalsButton);
     const dropdownContainer = evalsButton.parentElement!;
     fireEvent.mouseLeave(dropdownContainer);
