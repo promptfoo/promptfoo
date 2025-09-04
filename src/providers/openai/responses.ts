@@ -204,11 +204,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
         this.modelName.startsWith('o4') ||
-<<<<<<< HEAD
-        this.modelName.startsWith('gpt-oss'))
-=======
+        this.modelName.startsWith('gpt-oss') ||
         this.modelName.startsWith('gpt-5'))
->>>>>>> origin/main
     ) {
       body.reasoning_effort = config.reasoning_effort;
     }
@@ -218,6 +215,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
         this.modelName.startsWith('o4') ||
+        this.modelName.startsWith('gpt-oss') ||
         this.modelName.startsWith('gpt-5'))
     ) {
       body.reasoning = config.reasoning;
