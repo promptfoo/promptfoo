@@ -387,8 +387,6 @@ async function runRedteamConversation({
             await sleep(visionProvider.delay);
           }
 
-          accumulateResponseTokenUsage(totalTokenUsage, visionResponse);
-
           if (visionResponse.error) {
             logger.warn(`Iteration ${i + 1}: Vision API error: ${visionResponse.error}`);
             continue;

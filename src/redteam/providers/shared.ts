@@ -333,7 +333,6 @@ export async function tryUnblocking({
       // Return a response that will not increment numRequests
       return {
         success: false,
-        tokenUsage: { numRequests: 0 } as Partial<TokenUsage> as TokenUsage,
       };
     }
 
@@ -341,7 +340,6 @@ export async function tryUnblocking({
       logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');
       return {
         success: false,
-        tokenUsage: { numRequests: 0 } as Partial<TokenUsage> as TokenUsage,
       };
     }
 

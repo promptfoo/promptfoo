@@ -3,7 +3,11 @@ import logger from '../logger';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateGraderTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 import type {
@@ -59,7 +63,7 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
-  ): Promise<Message[]> {
+  ): Promise<{ messages: Message[]; tokenUsage?: TokenUsage }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
     const flippedMessages = messages.map((message) => {
@@ -70,9 +74,11 @@ export class SimulatedUser implements ApiProvider {
     });
 
     const response = await userProvider.callApi(JSON.stringify(flippedMessages));
-    TokenUsageTracker.getInstance().trackUsage(userProvider.id(), response.tokenUsage);
     logger.debug(`User: ${response.output}`);
-    return [...messages, { role: 'user', content: String(response.output || '') }];
+    return {
+      messages: [...messages, { role: 'user', content: String(response.output || '') }],
+      tokenUsage: response.tokenUsage,
+    };
   }
 
   private async sendMessageToAgent(
@@ -126,8 +132,13 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
-      const messagesToUser = await this.sendMessageToUser(messages, userProvider);
+      const { messages: messagesToUser, tokenUsage: userTokenUsage } = await this.sendMessageToUser(
+        messages,
+        userProvider,
+      );
       const lastMessage = messagesToUser[messagesToUser.length - 1];
+
+      TokenUsageTracker.getInstance().trackUsage(userProvider.id(), userTokenUsage);
 
       // Check whether the judge has determined that the instruction goal is satisfied.
       if (
@@ -148,7 +159,6 @@ export class SimulatedUser implements ApiProvider {
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
 
-      // Track token usage
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 

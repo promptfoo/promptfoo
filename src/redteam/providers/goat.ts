@@ -166,8 +166,6 @@ export default class GoatProvider implements ApiProvider {
             purpose: context?.test?.metadata?.purpose,
           });
 
-          accumulateResponseTokenUsage(totalTokenUsage, unblockingResult);
-
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             logger.debug(
               `[GOAT] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
@@ -287,7 +285,6 @@ export default class GoatProvider implements ApiProvider {
           content: renderedAttackerPrompt,
         });
 
-        accumulateResponseTokenUsage(totalTokenUsage, data);
         logger.debug(
           dedent`
           ${chalk.bold.green(`GOAT turn ${turn} history:`)}
@@ -305,6 +302,7 @@ export default class GoatProvider implements ApiProvider {
           logger.debug(`Sleeping for ${targetProvider.delay}ms`);
           await sleep(targetProvider.delay);
         }
+        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         logger.debug(`GOAT turn ${turn} target response: ${safeJsonStringify(targetResponse)}`);
 
@@ -341,8 +339,6 @@ export default class GoatProvider implements ApiProvider {
 
         // Store the attack response for potential unblocking in next turn
         previousTargetOutput = stringifiedOutput;
-
-        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         lastTargetResponse = finalResponse;
 

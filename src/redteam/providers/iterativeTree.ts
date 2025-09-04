@@ -177,6 +177,7 @@ export async function evaluateResponse(
     },
     vars: {},
   });
+  TokenUsageTracker.getInstance().trackUsage(provider.id(), judgeResp.tokenUsage);
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
