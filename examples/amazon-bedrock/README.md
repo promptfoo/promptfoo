@@ -81,6 +81,25 @@ The example includes questions about promptfoo configuration, providers, and eva
 
 For detailed Knowledge Base setup instructions, see the [AWS Bedrock Knowledge Base Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html).
 
+## OpenAI Models Example
+
+The OpenAI example (`promptfooconfig.openai.yaml`) demonstrates OpenAI's GPT-OSS models available through AWS Bedrock:
+
+- **openai.gpt-oss-120b-1:0** - 120 billion parameter model with strong reasoning capabilities
+- **openai.gpt-oss-20b-1:0** - 20 billion parameter model, more cost-effective
+
+### Key Features
+
+- **Reasoning Effort**: Control reasoning depth with `low`, `medium`, or `high` settings
+- **OpenAI API Format**: Uses familiar OpenAI parameters like `max_completion_tokens`
+- **Available in us-west-2**: Ensure you have model access in the correct region
+
+Run the OpenAI example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.openai.yaml
+```
+
 ## Getting Started
 
 1. Run the evaluation:
