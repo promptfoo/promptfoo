@@ -223,7 +223,7 @@ export async function runPython(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { pythonExecutable?: string; pythonPath?: string } = {},
+  options: { pythonExecutable?: string } = {},
 ): Promise<any> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
@@ -234,8 +234,7 @@ export async function runPython(
     os.tmpdir(),
     `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
-  const customPath =
-    options.pythonExecutable || options.pythonPath || getEnvString('PROMPTFOO_PYTHON');
+  const customPath = options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON');
   let pythonPath = customPath || 'python';
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');

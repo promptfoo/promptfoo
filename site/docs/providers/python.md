@@ -438,8 +438,6 @@ providers:
   - id: 'file://my_provider.py'
     config:
       pythonExecutable: /path/to/venv/bin/python
-      # Alternative syntax (both work the same way)
-      pythonPath: /path/to/venv/bin/python
 ```
 
 **Option 2: Global environment variable**
@@ -455,7 +453,7 @@ npx promptfoo@latest eval
 Promptfoo automatically detects your Python installation in this priority order:
 
 1. **Environment variable**: `PROMPTFOO_PYTHON` (if set)
-2. **Provider config**: `pythonExecutable` or `pythonPath` in your config
+2. **Provider config**: `pythonExecutable` in your config
 3. **Windows smart detection**: Uses `where python` and filters out Microsoft Store stubs (Windows only)
 4. **Smart detection**: Uses `python -c "import sys; print(sys.executable)"` to find the actual Python path
 5. **Fallback commands**:
