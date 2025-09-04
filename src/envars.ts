@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ quiet: true });
 
 import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
@@ -173,6 +174,7 @@ type EnvVars = {
   ANTHROPIC_TEMPERATURE?: number;
 
   // AWS Bedrock
+  AWS_BEARER_TOKEN_BEDROCK?: string;
   AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
   AWS_BEDROCK_MAX_NEW_TOKENS?: number;
@@ -242,6 +244,9 @@ type EnvVars = {
 
   // LLaMa
   LLAMA_BASE_URL?: string;
+
+  // Llama API
+  LLAMA_API_KEY?: string;
 
   // Local AI
   LOCALAI_BASE_URL?: string;

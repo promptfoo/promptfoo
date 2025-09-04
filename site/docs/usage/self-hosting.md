@@ -368,7 +368,7 @@ docker run -d --name promptfoo_container -p 3000:3000 \
 - **GPU**: Not required
 - **RAM**: 4 GB+
 - **Storage**: 10 GB+
-- **Dependencies**: Node.js v18+, npm
+- **Dependencies**: Node.js v20+, npm
 
 ### Server Requirements (Hosting the Web UI/API)
 
