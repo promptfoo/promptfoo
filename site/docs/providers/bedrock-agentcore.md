@@ -465,5 +465,5 @@ aws bedrock-agent list-agent-knowledge-bases --agent-id YOUR_AGENT_ID
 - [Agent API Reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html)
 - [Knowledge Base Setup](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html)
 - [Guardrails Configuration](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html)
-- [Bedrock Provider Overview](./bedrock.md)
-- [Provider Configuration Guide](../configuration/providers.md)
+- [AWS Bedrock Provider Overview](./aws-bedrock.md)
+- [Configuration Reference](../configuration/reference.md)
