@@ -1310,9 +1310,9 @@ describe('BEDROCK_MODEL OPENAI', () => {
     });
 
     it('should handle reasoning_effort by adding it to system message', () => {
-      const config = { 
+      const config = {
         temperature: 0.7,
-        reasoning_effort: 'high' as const
+        reasoning_effort: 'high' as const,
       };
       const prompt = 'Test prompt';
 
@@ -1321,7 +1321,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       expect(params).toEqual({
         messages: [
           { role: 'system', content: 'Reasoning: high' },
-          { role: 'user', content: 'Test prompt' }
+          { role: 'user', content: 'Test prompt' },
         ],
         temperature: 0.7,
         top_p: 1.0,
@@ -1329,9 +1329,9 @@ describe('BEDROCK_MODEL OPENAI', () => {
     });
 
     it('should append reasoning_effort to existing system message', () => {
-      const config = { 
+      const config = {
         temperature: 0.7,
-        reasoning_effort: 'medium' as const
+        reasoning_effort: 'medium' as const,
       };
       const prompt = JSON.stringify([
         { role: 'system', content: 'You are a helpful assistant.' },
@@ -1343,7 +1343,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       expect(params).toEqual({
         messages: [
           { role: 'system', content: 'You are a helpful assistant.\n\nReasoning: medium' },
-          { role: 'user', content: 'What is machine learning?' }
+          { role: 'user', content: 'What is machine learning?' },
         ],
         temperature: 0.7,
         top_p: 1.0,

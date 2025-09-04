@@ -1291,13 +1291,13 @@ ${prompt}
       modelName?: string,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-      
+
       // Handle reasoning_effort by adding it to system message
       if (config?.reasoning_effort) {
         const reasoningInstruction = `Reasoning: ${config.reasoning_effort}`;
-        
+
         // Find existing system message or create one
-        const systemMessageIndex = messages.findIndex(msg => msg.role === 'system');
+        const systemMessageIndex = messages.findIndex((msg) => msg.role === 'system');
         if (systemMessageIndex >= 0) {
           // Append to existing system message
           messages[systemMessageIndex].content += `\n\n${reasoningInstruction}`;

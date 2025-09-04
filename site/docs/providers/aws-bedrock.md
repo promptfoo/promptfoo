@@ -399,7 +399,7 @@ config:
 OpenAI models support adjustable reasoning effort through the `reasoning_effort` parameter:
 
 - **`low`**: Faster responses with basic reasoning
-- **`medium`**: Balanced performance and reasoning depth  
+- **`medium`**: Balanced performance and reasoning depth
 - **`high`**: Thorough reasoning, slower but more accurate responses
 
 The reasoning effort is implemented via system prompt instructions, allowing the model to adjust its cognitive processing depth.
@@ -415,7 +415,7 @@ providers:
       temperature: 0.3
       top_p: 0.95
       reasoning_effort: 'high'
-  - id: bedrock:openai.gpt-oss-20b-1:0  
+  - id: bedrock:openai.gpt-oss-20b-1:0
     config:
       region: 'us-west-2'
       max_completion_tokens: 1024

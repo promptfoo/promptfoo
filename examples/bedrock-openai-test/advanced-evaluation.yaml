@@ -5,12 +5,12 @@ prompts:
   # Simple reasoning prompt
   - |
     You are an expert problem solver. 
-    
+
     Task: {{task}}
-    
+
     Please provide a step-by-step solution.
 
-  # JSON message format  
+  # JSON message format
   - |
     [
       {"role": "system", "content": "You are a helpful AI assistant."},
@@ -20,11 +20,11 @@ prompts:
   # Code analysis prompt
   - |
     Analyze this {{language}} code and identify any issues:
-    
+
     ```{{language}}
     {{code}}
     ```
-    
+
     Provide: bugs, improvements, security concerns.
 
 providers:
@@ -37,8 +37,8 @@ providers:
       temperature: 0.1
       top_p: 0.9
       reasoning_effort: low
-      
-  - id: bedrock:openai.gpt-oss-120b-1:0  
+
+  - id: bedrock:openai.gpt-oss-120b-1:0
     label: GPT-OSS 120B High Reasoning
     config:
       region: us-west-2
@@ -46,7 +46,7 @@ providers:
       temperature: 0.2
       top_p: 0.95
       reasoning_effort: high
-      
+
   - id: bedrock:openai.gpt-oss-20b-1:0
     label: GPT-OSS 20B Optimized
     config:
@@ -55,100 +55,100 @@ providers:
       temperature: 0.3
       top_p: 0.92
       reasoning_effort: medium
-      stop: ["END", "STOP"]
+      stop: ['END', 'STOP']
 
 tests:
   # Math reasoning test
-  - description: "Math Problem Solving"
+  - description: 'Math Problem Solving'
     vars:
       task: |
         Calculate: If a store sells 45 items per hour and operates 8 hours daily, 
         how many items are sold in one week? Show your work.
     assert:
       - type: contains
-        value: "2520"
+        value: '2520'
         weight: 0.6
       - type: contains-any
-        value: ["45", "8", "7", "calculation", "multiply"]
+        value: ['45', '8', '7', 'calculation', 'multiply']
         weight: 0.4
 
   # Logic test with JSON messages
-  - description: "Logical Reasoning"
+  - description: 'Logical Reasoning'
     vars:
       question: |
         If all cats are mammals, and all mammals have hearts, 
         do all cats have hearts? Explain your reasoning.
     assert:
       - type: contains
-        value: "yes"
+        value: 'yes'
         weight: 0.4
       - type: contains-any
-        value: ["syllogism", "logic", "therefore", "conclusion"]
+        value: ['syllogism', 'logic', 'therefore', 'conclusion']
         weight: 0.3
       - type: llm-rubric
-        value: "Response should use logical reasoning to reach correct conclusion"
+        value: 'Response should use logical reasoning to reach correct conclusion'
         weight: 0.3
 
   # Code analysis test
-  - description: "Python Code Analysis"
+  - description: 'Python Code Analysis'
     vars:
-      language: "python"
+      language: 'python'
       code: |
         def divide(a, b):
             return a / b
-        
+
         result = divide(10, 0)
         print(result)
     assert:
       - type: contains
-        value: "zero"
+        value: 'zero'
         weight: 0.5
       - type: contains-any
-        value: ["ZeroDivisionError", "exception", "error"]
+        value: ['ZeroDivisionError', 'exception', 'error']
         weight: 0.3
       - type: llm-rubric
-        value: "Should identify division by zero issue"
+        value: 'Should identify division by zero issue'
         weight: 0.2
 
   # Creative reasoning
-  - description: "Creative Problem Solving"  
+  - description: 'Creative Problem Solving'
     vars:
       task: |
         You have 3 jugs: 8L, 5L, and 3L capacity. The 8L jug is full of water.
         How can you measure exactly 4L using only these jugs?
     assert:
       - type: contains-any
-        value: ["pour", "transfer", "empty", "fill"]
+        value: ['pour', 'transfer', 'empty', 'fill']
         weight: 0.4
       - type: contains
-        value: "4"
+        value: '4'
         weight: 0.3
       - type: llm-rubric
-        value: "Should provide a valid step-by-step solution to measure 4L"
+        value: 'Should provide a valid step-by-step solution to measure 4L'
         weight: 0.3
 
   # Reasoning effort comparison
-  - description: "Complex Reasoning Challenge"
+  - description: 'Complex Reasoning Challenge'
     vars:
       task: |
         A farmer has chickens and cows. Together they have 30 heads and 74 legs.
         How many chickens and how many cows does the farmer have?
     assert:
       - type: contains-any
-        value: ["23", "7", "chicken", "cow"]
+        value: ['23', '7', 'chicken', 'cow']
         weight: 0.6
       - type: contains-any
-        value: ["equation", "algebra", "system", "solve"]
+        value: ['equation', 'algebra', 'system', 'solve']
         weight: 0.4
 
   # Parameter testing with stop sequences
-  - description: "Stop Sequence Effectiveness"
+  - description: 'Stop Sequence Effectiveness'
     vars:
-      task: "List numbers from 1 to 20, but stop when you see the word STOP"
+      task: 'List numbers from 1 to 20, but stop when you see the word STOP'
     assert:
       - type: not-contains
-        value: "STOP"
+        value: 'STOP'
         weight: 0.5
       - type: contains-any
-        value: ["1", "2", "3", "4", "5"]
+        value: ['1', '2', '3', '4', '5']
         weight: 0.5

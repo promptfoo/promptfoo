@@ -44,7 +44,7 @@ npm run local -- eval -c examples/bedrock-openai-test/promptfooconfig.yaml --out
 ## Key Parameters
 
 - `max_completion_tokens`: Maximum tokens for response (up to context limit)
-- `temperature`: Controls randomness (0.0 = deterministic, 1.0 = creative)  
+- `temperature`: Controls randomness (0.0 = deterministic, 1.0 = creative)
 - `top_p`: Nucleus sampling parameter
 - `frequency_penalty`: Reduces repetition of frequent tokens
 - `presence_penalty`: Reduces repetition of any tokens
@@ -55,7 +55,7 @@ npm run local -- eval -c examples/bedrock-openai-test/promptfooconfig.yaml --out
 The OpenAI gpt-oss models support adjustable reasoning effort:
 
 - `low`: Faster responses, basic reasoning
-- `medium`: Balanced performance and reasoning depth  
+- `medium`: Balanced performance and reasoning depth
 - `high`: Thorough reasoning, slower but more accurate
 
 This is implemented via system prompts in the Bedrock integration.

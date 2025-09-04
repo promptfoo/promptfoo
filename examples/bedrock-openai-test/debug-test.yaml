@@ -2,7 +2,7 @@
 description: 'Debug OpenAI Bedrock Issues'
 
 prompts:
-  - "What is {{question}}?"
+  - 'What is {{question}}?'
 
 providers:
   - id: bedrock:openai.gpt-oss-120b-1:0
@@ -13,7 +13,7 @@ providers:
 
 tests:
   - vars:
-      question: "the capital of France"
+      question: 'the capital of France'
     assert:
       - type: contains
-        value: "Paris"
+        value: 'Paris'
