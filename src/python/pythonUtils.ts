@@ -23,7 +23,15 @@ export const state: {
 async function tryWindowsWhere(): Promise<string | null> {
   try {
     const result = await execAsync('where python');
-    const paths = result.stdout.trim().split('\n');
+    const output = result.stdout.trim();
+
+    // Handle empty output
+    if (!output) {
+      logger.debug("Windows 'where python' returned empty output");
+      return null;
+    }
+
+    const paths = output.split('\n').filter((path) => path.trim());
 
     for (const pythonPath of paths) {
       const trimmedPath = pythonPath.trim();
@@ -39,9 +47,13 @@ async function tryWindowsWhere(): Promise<string | null> {
       }
     }
   } catch (error) {
-    logger.debug(
-      `Windows 'where python' failed: ${error instanceof Error ? error.message : error}`,
-    );
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    logger.debug(`Windows 'where python' failed: ${errorMsg}`);
+
+    // Log permission/access errors differently
+    if (errorMsg.includes('Access is denied') || errorMsg.includes('EACCES')) {
+      logger.warn(`Permission denied when searching for Python: ${errorMsg}`);
+    }
   }
 
   return null;
@@ -58,17 +70,25 @@ async function tryPythonCommands(commands: string[]): Promise<string | null> {
       if (executablePath && executablePath !== 'None') {
         // On Windows, ensure .exe suffix if missing (but only for Windows-style paths)
         if (process.platform === 'win32' && !executablePath.toLowerCase().endsWith('.exe')) {
-          // Only add .exe for Windows-style paths (contains \ or : or starts with C:)
-          if (executablePath.includes('\\') || executablePath.includes(':')) {
+          // Only add .exe for Windows-style paths (drive letter or UNC paths)
+          if (executablePath.includes('\\') || /^[A-Za-z]:/.test(executablePath)) {
             return executablePath + '.exe';
           }
         }
         return executablePath;
       }
     } catch (error) {
-      logger.debug(
-        `Python command "${cmd}" failed: ${error instanceof Error ? error.message : error}`,
-      );
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.debug(`Python command "${cmd}" failed: ${errorMsg}`);
+
+      // Log permission/access errors differently
+      if (
+        errorMsg.includes('Access is denied') ||
+        errorMsg.includes('EACCES') ||
+        errorMsg.includes('EPERM')
+      ) {
+        logger.warn(`Permission denied when trying Python command "${cmd}": ${errorMsg}`);
+      }
     }
   }
   return null;
@@ -85,9 +105,17 @@ async function tryDirectCommands(commands: string[]): Promise<string | null> {
         return validated;
       }
     } catch (error) {
-      logger.debug(
-        `Direct command "${cmd}" failed: ${error instanceof Error ? error.message : error}`,
-      );
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.debug(`Direct command "${cmd}" failed: ${errorMsg}`);
+
+      // Log permission/access errors differently
+      if (
+        errorMsg.includes('Access is denied') ||
+        errorMsg.includes('EACCES') ||
+        errorMsg.includes('EPERM')
+      ) {
+        logger.warn(`Permission denied when trying Python command "${cmd}": ${errorMsg}`);
+      }
     }
   }
   return null;
@@ -105,8 +133,8 @@ export async function getSysExecutable(): Promise<string | null> {
       return whereResult;
     }
 
-    // Then try py launcher and other commands
-    const sysResult = await tryPythonCommands(['py', 'py -3', 'python3']);
+    // Then try py launcher commands (removing python3 as it's uncommon on Windows)
+    const sysResult = await tryPythonCommands(['py', 'py -3']);
     if (sysResult) {
       return sysResult;
     }

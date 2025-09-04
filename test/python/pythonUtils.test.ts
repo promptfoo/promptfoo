@@ -158,7 +158,6 @@ describe('Python Utils', () => {
         .mockRejectedValueOnce(new Error('where failed'))
         .mockRejectedValueOnce(new Error('py failed'))
         .mockRejectedValueOnce(new Error('py -3 failed'))
-        .mockRejectedValueOnce(new Error('python3 failed'))
         .mockResolvedValueOnce({
           stdout: 'Python 3.9.0\n',
           stderr: '',
@@ -190,6 +189,33 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
+
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it('should handle empty where output gracefully', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      // Mock 'where python' to return empty output, then py to succeed
+      jest
+        .mocked(execAsync)
+        .mockResolvedValueOnce({
+          stdout: '',
+          stderr: '',
+          child: createMockChildProcess() as ChildProcess,
+        })
+        .mockResolvedValueOnce({
+          stdout: 'C:\\Python39\\python.exe\n',
+          stderr: '',
+          child: createMockChildProcess() as ChildProcess,
+        });
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBe('C:\\Python39\\python.exe');
+      expect(execAsync).toHaveBeenCalledWith('where python');
+      expect(execAsync).toHaveBeenCalledWith('py -c "import sys; print(sys.executable)"');
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -295,7 +321,6 @@ describe('Python Utils', () => {
           jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // where python fails
           jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // py -c sys.executable fails
           jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // py -3 -c sys.executable fails
-          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // python3 -c sys.executable fails
           // Final fallback (python) validation succeeds
           jest.mocked(execAsync).mockResolvedValueOnce({
             stdout: 'Python 3.9.5\n',
