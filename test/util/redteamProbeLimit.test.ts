@@ -5,6 +5,7 @@ import {
 } from '../../src/util/redteamProbeLimit';
 import { getDb } from '../../src/database';
 import { isEnterpriseCustomer } from '../../src/util/cloud';
+import { MONTHLY_PROBE_LIMIT } from '../../src/redteam/constants';
 
 jest.mock('../../src/database', () => ({
   getDb: jest.fn(),
@@ -86,52 +87,79 @@ describe('redteamProbeLimit', () => {
 
   describe('checkMonthlyProbeLimit', () => {
     it('should indicate when limit is not exceeded', async () => {
+      const usedProbes = Math.floor(MONTHLY_PROBE_LIMIT * 0.5); // Use 50% of limit
       mockDb.all.mockReturnValue([
         {
-          prompts: [{ metrics: { tokenUsage: { numRequests: 5000 } } }],
+          prompts: [{ metrics: { tokenUsage: { numRequests: usedProbes } } }],
         },
       ]);
 
       const status = await checkMonthlyProbeLimit();
       expect(status.hasExceeded).toBe(false);
-      expect(status.usedProbes).toBe(5000);
-      expect(status.remainingProbes).toBe(5000);
-      expect(status.limit).toBe(10000);
+      expect(status.usedProbes).toBe(usedProbes);
+      expect(status.remainingProbes).toBe(MONTHLY_PROBE_LIMIT - usedProbes);
+      expect(status.limit).toBe(MONTHLY_PROBE_LIMIT);
     });
 
     it('should indicate when limit is exceeded', async () => {
+      const usedProbes = MONTHLY_PROBE_LIMIT + 1; // Exceed limit by 1
       mockDb.all.mockReturnValue([
         {
-          prompts: [{ metrics: { tokenUsage: { numRequests: 10001 } } }],
+          prompts: [{ metrics: { tokenUsage: { numRequests: usedProbes } } }],
         },
       ]);
 
       const status = await checkMonthlyProbeLimit();
       expect(status.hasExceeded).toBe(true);
-      expect(status.usedProbes).toBe(10001);
+      expect(status.usedProbes).toBe(usedProbes);
       expect(status.remainingProbes).toBe(0);
-      expect(status.limit).toBe(10000);
+      expect(status.limit).toBe(MONTHLY_PROBE_LIMIT);
     });
   });
 
   describe('formatProbeUsageMessage', () => {
     it('should format message when limit is reached', () => {
-      const message = formatProbeUsageMessage(0);
+      const probeStatus = {
+        hasExceeded: true,
+        usedProbes: MONTHLY_PROBE_LIMIT,
+        remainingProbes: 0,
+        limit: MONTHLY_PROBE_LIMIT,
+        enabled: true,
+      };
+      const message = formatProbeUsageMessage(probeStatus);
       expect(message).toContain('Monthly redteam probe limit reached');
-      expect(message).toContain('10,000');
+      expect(message).toContain(MONTHLY_PROBE_LIMIT.toLocaleString());
     });
 
     it('should format warning message when probes are low', () => {
-      const message = formatProbeUsageMessage(2000);
+      const remainingProbes = Math.floor(MONTHLY_PROBE_LIMIT * 0.15); // 15% remaining (< 20% threshold)
+      const usedProbes = MONTHLY_PROBE_LIMIT - remainingProbes;
+      const probeStatus = {
+        hasExceeded: false,
+        usedProbes,
+        remainingProbes,
+        limit: MONTHLY_PROBE_LIMIT,
+        enabled: true,
+      };
+      const message = formatProbeUsageMessage(probeStatus);
       expect(message).toContain('Low on probes');
-      expect(message).toContain('2,000');
-      expect(message).toContain('20.0%');
+      expect(message).toContain(remainingProbes.toLocaleString());
+      expect(message).toContain('15.0%');
     });
 
     it('should format info message when probes are sufficient', () => {
-      const message = formatProbeUsageMessage(6000);
+      const remainingProbes = Math.floor(MONTHLY_PROBE_LIMIT * 0.6); // 60% remaining (> 20% threshold)
+      const usedProbes = MONTHLY_PROBE_LIMIT - remainingProbes;
+      const probeStatus = {
+        hasExceeded: false,
+        usedProbes,
+        remainingProbes,
+        limit: MONTHLY_PROBE_LIMIT,
+        enabled: true,
+      };
+      const message = formatProbeUsageMessage(probeStatus);
       expect(message).toContain('Redteam probes remaining');
-      expect(message).toContain('6,000');
+      expect(message).toContain(remainingProbes.toLocaleString());
       expect(message).toContain('60.0%');
     });
   });

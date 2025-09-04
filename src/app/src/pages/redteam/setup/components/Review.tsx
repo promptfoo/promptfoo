@@ -38,7 +38,11 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { isFoundationModelProvider } from '@promptfoo/constants';
+import {
+  isFoundationModelProvider,
+  PROBE_LIMIT_EMAIL,
+  PROBE_LIMIT_URL,
+} from '@promptfoo/constants';
 import {
   ALLOWED_PROBE_LIMIT_EXCEEDANCE,
   REDTEAM_DEFAULTS,
@@ -1105,12 +1109,12 @@ export default function Review({
               <Typography variant="body2">
                 Red teaming uses an LLM to generate probes and grade responses. Our community plan
                 includes 10,000 probes per month. Need more capacity? Contact our sales team at{' '}
-                <Link to="mailto:sales@promptfoo.dev" style={{ color: 'inherit' }}>
-                  sales@promptfoo.dev
+                <Link to={`mailto:${PROBE_LIMIT_EMAIL}`} style={{ color: 'inherit' }}>
+                  {PROBE_LIMIT_EMAIL}
                 </Link>{' '}
                 for enterprise options, or visit{' '}
-                <Link to="https://www.promptfoo.dev/pricing/" style={{ color: 'inherit' }}>
-                  https://www.promptfoo.dev/pricing/
+                <Link to={PROBE_LIMIT_URL} style={{ color: 'inherit' }}>
+                  {PROBE_LIMIT_URL}
                 </Link>{' '}
               </Typography>
             </Alert>

@@ -117,7 +117,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   // Display remaining probe usage after completion
   const probeStatus = await checkMonthlyProbeLimit();
-  logger.info('\n' + formatProbeUsageMessage(probeStatus.remainingProbes));
+  logger.info('\n' + formatProbeUsageMessage(probeStatus));
 
   const command = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
   if (options.loadedFromCloud) {
