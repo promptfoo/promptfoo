@@ -171,15 +171,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
-      this.modelName.startsWith('gpt-oss') ||
       this.modelName.startsWith('gpt-5')
     );
   }
 
   protected supportsTemperature(): boolean {
     // OpenAI's o1 and o3 models don't support temperature but some 3rd
-    // party reasoning models do. gpt-oss models support temperature.
-    return !this.isReasoningModel() || this.modelName.startsWith('gpt-oss');
+    // party reasoning models do.
+    return !this.isReasoningModel();
   }
 
   getOpenAiBody(

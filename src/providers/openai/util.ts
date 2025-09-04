@@ -280,23 +280,6 @@ export const OPENAI_CHAT_MODELS = [
       output: 6.0 / 1e6,
     },
   })),
-  // GPT-OSS open-weight models
-  ...['gpt-oss-120b'].map((model) => ({
-    id: model,
-    cost: {
-      // Pricing not yet announced - using placeholder values
-      input: 0 / 1e6,
-      output: 0 / 1e6,
-    },
-  })),
-  ...['gpt-oss-20b'].map((model) => ({
-    id: model,
-    cost: {
-      // Pricing not yet announced - using placeholder values
-      input: 0 / 1e6,
-      output: 0 / 1e6,
-    },
-  })),
 ];
 
 // Deep research models for Responses API
