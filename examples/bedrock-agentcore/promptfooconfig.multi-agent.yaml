@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Multi-Agent System Example with AWS Bedrock AgentCore
 # This example demonstrates testing multiple specialized agents working together
 
