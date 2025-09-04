@@ -505,6 +505,98 @@ const TestTargetConfiguration = ({
                   </Typography>
                 </>
               )}
+
+              {/* Display Request Configuration */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Request Configuration
+                </Typography>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2,
+                    bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
+                    maxHeight: '300px',
+                    overflow: 'auto',
+                  }}
+                >
+                  <Box
+                    component="pre"
+                    sx={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                  >
+                    <Typography component="span" sx={{ fontWeight: 'bold' }}>
+                      URL:
+                    </Typography>
+                    {'\n'}
+                    {selectedTarget.config.url || 'Not configured'}
+                    {'\n\n'}
+
+                    <Typography component="span" sx={{ fontWeight: 'bold' }}>
+                      Method:
+                    </Typography>
+                    {'\n'}
+                    {selectedTarget.config.method || 'POST'}
+                    {'\n\n'}
+
+                    {selectedTarget.config.headers &&
+                      Object.keys(selectedTarget.config.headers).length > 0 && (
+                        <>
+                          <Typography component="span" sx={{ fontWeight: 'bold' }}>
+                            Headers:
+                          </Typography>
+                          {'\n'}
+                          {JSON.stringify(selectedTarget.config.headers, null, 2)}
+                          {'\n\n'}
+                        </>
+                      )}
+
+                    {selectedTarget.config.body && (
+                      <>
+                        <Typography component="span" sx={{ fontWeight: 'bold' }}>
+                          Body Template:
+                        </Typography>
+                        {'\n'}
+                        {typeof selectedTarget.config.body === 'string'
+                          ? selectedTarget.config.body
+                          : JSON.stringify(selectedTarget.config.body, null, 2)}
+                        {'\n\n'}
+                      </>
+                    )}
+
+                    {selectedTarget.config.request && (
+                      <>
+                        <Typography component="span" sx={{ fontWeight: 'bold' }}>
+                          Raw Request Template:
+                        </Typography>
+                        {'\n'}
+                        {selectedTarget.config.request}
+                        {'\n\n'}
+                      </>
+                    )}
+
+                    {selectedTarget.config.queryParams &&
+                      Object.keys(selectedTarget.config.queryParams).length > 0 && (
+                        <>
+                          <Typography component="span" sx={{ fontWeight: 'bold' }}>
+                            Query Parameters:
+                          </Typography>
+                          {'\n'}
+                          {JSON.stringify(selectedTarget.config.queryParams, null, 2)}
+                          {'\n\n'}
+                        </>
+                      )}
+
+                    <Typography
+                      component="span"
+                      sx={{ fontWeight: 'bold', color: 'text.secondary' }}
+                    >
+                      Note: This shows the configuration template. The actual request sent uses
+                      "Hello, world!" as the test prompt and may have variables replaced.
+                    </Typography>
+                  </Box>
+                </Paper>
+              </Box>
+
               {/* If It's a redteam test show a header since we have two prompts */}
               {testResult.redteamProviderResult && (
                 <Typography variant="h6" gutterBottom>

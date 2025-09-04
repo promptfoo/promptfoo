@@ -14,6 +14,7 @@ import Tabs from '@mui/material/Tabs';
 import DigitalSignatureAuthTab from './tabs/DigitalSignatureAuthTab';
 import HttpStatusCodeTab from './tabs/HttpStatusCodeTab';
 import RequestTransformTab from './tabs/RequestTransformTab';
+import ResponseTransformTab from './tabs/ResponseTransformTab';
 import SessionsTab from './tabs/SessionsTab';
 import TlsHttpsConfigTab from './tabs/TlsHttpsConfigTab';
 import TokenEstimationTab from './tabs/TokenEstimationTab';
@@ -23,10 +24,11 @@ import type { ProviderOptions } from '@promptfoo/types';
 enum TabIndex {
   SessionManagement = 0,
   RequestTransform = 1,
-  TokenEstimation = 2,
-  DigitalSignatureAuth = 3,
-  TlsHttpsConfig = 4,
-  HttpStatusCode = 5,
+  ResponseTransform = 2,
+  TokenEstimation = 3,
+  DigitalSignatureAuth = 4,
+  TlsHttpsConfig = 5,
+  HttpStatusCode = 6,
 }
 
 interface HttpAdvancedConfigurationProps {
@@ -66,7 +68,7 @@ function a11yProps(index: number) {
   };
 }
 
-const HttpAdvancedConfiguration = ({
+const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
   selectedTarget,
   defaultRequestTransform,
   updateCustomTarget,
@@ -93,6 +95,7 @@ const HttpAdvancedConfiguration = ({
           >
             <Tab label="Session Management" {...a11yProps(TabIndex.SessionManagement)} />
             <Tab label="Request Transform" {...a11yProps(TabIndex.RequestTransform)} />
+            <Tab label="Response Transform" {...a11yProps(TabIndex.ResponseTransform)} />
             <Tab label="Token Estimation" {...a11yProps(TabIndex.TokenEstimation)} />
             <Tab label="Digital Signature Auth" {...a11yProps(TabIndex.DigitalSignatureAuth)} />
             <Tab label="TLS/HTTPS Config" {...a11yProps(TabIndex.TlsHttpsConfig)} />
@@ -115,6 +118,14 @@ const HttpAdvancedConfiguration = ({
             selectedTarget={selectedTarget}
             updateCustomTarget={updateCustomTarget}
             defaultRequestTransform={defaultRequestTransform}
+          />
+        </TabPanel>
+
+        {/* Response Transform Tab */}
+        <TabPanel value={activeTab} index={TabIndex.ResponseTransform}>
+          <ResponseTransformTab
+            selectedTarget={selectedTarget}
+            updateCustomTarget={updateCustomTarget}
           />
         </TabPanel>
 
