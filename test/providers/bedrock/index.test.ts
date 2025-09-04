@@ -33,7 +33,9 @@ const { BedrockRuntime } = jest.requireMock('@aws-sdk/client-bedrock-runtime');
 
 jest.mock('@smithy/node-http-handler', () => {
   return {
-    NodeHttpHandler: jest.fn(),
+    NodeHttpHandler: jest.fn().mockImplementation(() => ({
+      handle: jest.fn(),
+    })),
   };
 });
 
@@ -74,6 +76,7 @@ describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     // Ensure proxy environment variables do not force proxy-specific code paths
     // when running tests. The container sets HTTP_PROXY by default which causes
     // getBedrockInstance to require optional dependencies that are not
@@ -84,6 +87,7 @@ describe('AwsBedrockGenericProvider', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
     process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
   });
@@ -160,6 +164,99 @@ describe('AwsBedrockGenericProvider', () => {
       retryMode: 'adaptive',
       maxAttempts: 10,
     });
+  });
+
+  it('should create Bedrock instance with custom request handler for API key authentication', async () => {
+    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
+    const mockHandler = {
+      handle: jest.fn(),
+    };
+    NodeHttpHandler.mockReturnValue(mockHandler);
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', {
+          config: {
+            region: 'us-east-1',
+            apiKey: 'test-api-key',
+          },
+        });
+      }
+    })();
+
+    await provider.getBedrockInstance();
+
+    expect(NodeHttpHandler).toHaveBeenCalled();
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+      requestHandler: expect.any(Object),
+    });
+  });
+
+  it('should create custom request handler when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
+    process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
+    const mockHandler = {
+      handle: jest.fn(),
+    };
+    NodeHttpHandler.mockReturnValue(mockHandler);
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', { config: { region: 'us-east-1' } });
+      }
+    })();
+
+    await provider.getBedrockInstance();
+
+    expect(NodeHttpHandler).toHaveBeenCalled();
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+      requestHandler: expect.any(Object),
+    });
+
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+  });
+
+  it('should add Authorization header with Bearer token to requests when using API key', async () => {
+    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
+    const mockOriginalHandle = jest.fn().mockResolvedValue('response');
+    const mockHandler = {
+      handle: mockOriginalHandle,
+    };
+    NodeHttpHandler.mockReturnValue(mockHandler);
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', {
+          config: {
+            region: 'us-east-1',
+            apiKey: 'test-api-key',
+          },
+        });
+      }
+    })();
+
+    await provider.getBedrockInstance();
+
+    // Verify the handler was modified to add Bearer token
+    expect(mockHandler.handle).toBeDefined();
+
+    // Test that the modified handler adds the Authorization header
+    const mockRequest = {
+      headers: {},
+    };
+
+    await mockHandler.handle(mockRequest, {});
+
+    expect(mockRequest.headers).toEqual({
+      Authorization: 'Bearer test-api-key',
+    });
+    expect(mockOriginalHandle).toHaveBeenCalledWith(mockRequest, {});
   });
 
   describe('BEDROCK_MODEL CLAUDE_MESSAGES', () => {
@@ -491,6 +588,55 @@ describe('AwsBedrockGenericProvider', () => {
       const provider = new TestBedrockProvider({});
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined();
+    });
+
+    it('should return undefined for API key authentication when apiKey is provided in config', async () => {
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-api-key',
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined();
+    });
+
+    it('should return undefined for API key authentication when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
+      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      const provider = new TestBedrockProvider({});
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined();
+      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    });
+
+    it('should prioritize config apiKey over environment variable', async () => {
+      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-config-api-key',
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
+      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    });
+
+    it('should prioritize explicit credentials over API key', async () => {
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-api-key',
+        accessKeyId: 'test-access-key',
+        secretAccessKey: 'test-secret-key',
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toEqual({
+        accessKeyId: 'test-access-key',
+        secretAccessKey: 'test-secret-key',
+        sessionToken: undefined,
+      }); // Explicit credentials take priority
+    });
+
+    it('should use API key when no explicit credentials are provided', async () => {
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-api-key',
+        // No accessKeyId/secretAccessKey provided
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
     });
   });
 });

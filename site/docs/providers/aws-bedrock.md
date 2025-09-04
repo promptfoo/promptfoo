@@ -49,15 +49,16 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
 ## Authentication
 
-Amazon Bedrock follows a specific credential resolution order that prioritizes explicitly configured credentials over default AWS mechanisms.
+Amazon Bedrock supports multiple authentication methods, including the new API key authentication for simplified access. Credentials are resolved in this priority order:
 
 ### Credential Resolution Order
 
 When authenticating with AWS Bedrock, credentials are resolved in this sequence:
 
-1. **Config file credentials**: Explicitly provided `accessKeyId` and `secretAccessKey` in your promptfoo configuration
-2. **SSO profile**: When a `profile` is specified in your config
-3. **AWS default credential chain**:
+1. **Config file credentials**: Explicitly provided `accessKeyId` and `secretAccessKey` in your promptfoo configuration (highest priority)
+2. **API Key authentication**: Bedrock API keys via config or environment variable
+3. **SSO profile**: When a `profile` is specified in your config
+4. **AWS default credential chain**:
    - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
    - Shared credentials file (`~/.aws/credentials`)
    - EC2 instance profile or ECS task role
@@ -81,7 +82,50 @@ providers:
 
 This method overrides all other credential sources, including EC2 instance roles.
 
-#### 2. SSO profile authentication
+#### 2. API Key authentication
+
+Amazon Bedrock API keys provide a simplified authentication method that doesn't require managing AWS IAM credentials. This is especially useful for developers who want quick access to Bedrock models.
+
+**Using environment variables:**
+
+Set the `AWS_BEARER_TOKEN_BEDROCK` environment variable:
+
+```bash
+export AWS_BEARER_TOKEN_BEDROCK="your-api-key-here"
+```
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      region: 'us-east-1' # Optional, defaults to us-east-1
+```
+
+**Using config file:**
+
+Specify the API key directly in your configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      apiKey: 'your-api-key-here'
+      region: 'us-east-1' # Optional, defaults to us-east-1
+```
+
+:::note
+
+API keys are limited to Amazon Bedrock and Amazon Bedrock Runtime actions. They cannot be used with:
+
+- InvokeModelWithBidirectionalStream operations
+- Agents for Amazon Bedrock API operations
+- Data Automation for Amazon Bedrock API operations
+
+For these advanced features, use traditional AWS IAM credentials instead.
+
+:::
+
+#### 3. SSO profile authentication
 
 Use a profile from your AWS configuration:
 
@@ -93,7 +137,7 @@ providers:
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
-#### 3. Default credentials (lowest priority)
+#### 4. Default credentials (lowest priority)
 
 Rely on the AWS default credential chain:
 
@@ -151,7 +195,7 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -583,6 +627,12 @@ providers:
 
 The following environment variables can be used to configure the Bedrock provider:
 
+**Authentication:**
+
+- `AWS_BEARER_TOKEN_BEDROCK`: Bedrock API key for simplified authentication
+
+**Configuration:**
+
 - `AWS_BEDROCK_REGION`: Default region for Bedrock API calls
 - `AWS_BEDROCK_MAX_TOKENS`: Default maximum number of tokens to generate
 - `AWS_BEDROCK_TEMPERATURE`: Default temperature for generation
@@ -672,8 +722,8 @@ The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
 
 For example:
 
-- `bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0` (US region)
-- `bedrock:kb:eu.anthropic.claude-3-7-sonnet-20250219-v1:0` (EU region)
+- `bedrock:kb:us.anthropic.claude-3-5-sonnet-20241022-v2:0` (US region)
+- `bedrock:kb:eu.anthropic.claude-3-5-sonnet-20241022-v2:0` (EU region)
 
 Configuration options include:
 
@@ -703,7 +753,7 @@ providers:
       max_tokens: 1000
 
   # Regular Claude model for comparison
-  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-2'
       temperature: 0.0
