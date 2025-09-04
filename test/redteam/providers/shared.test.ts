@@ -14,10 +14,6 @@ import {
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { sleep } from '../../../src/util/time';
-import {
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../../src/util/tokenUsageUtils';
 
 import type {
   ApiProvider,
