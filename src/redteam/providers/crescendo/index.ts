@@ -41,8 +41,8 @@ import type {
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
 
-export const DEFAULT_MAX_TURNS = 10;
-export const DEFAULT_MAX_BACKTRACKS = 10;
+const DEFAULT_MAX_TURNS = 10;
+const DEFAULT_MAX_BACKTRACKS = 10;
 
 /**
  * Represents metadata for the Crescendo conversation process.
