@@ -751,14 +751,8 @@ export function evalCommand(
       '-j, --max-concurrency <number>',
       `Maximum number of concurrent API calls (default: ${DEFAULT_MAX_CONCURRENCY})`,
     )
-    .option(
-      '--repeat <number>',
-      'Number of times to run each test (default: 1)',
-    )
-    .option(
-      '--delay <number>',
-      'Delay between each test (in milliseconds) (default: 0)',
-    )
+    .option('--repeat <number>', 'Number of times to run each test (default: 1)')
+    .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
     .option(
       '--no-cache',
       'Do not read or write results to disk cache',
