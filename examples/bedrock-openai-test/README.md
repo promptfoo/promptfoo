@@ -25,8 +25,17 @@ This example showcases:
 ## Usage
 
 ```bash
-# Run the evaluation
+# Simple evaluation
+npm run local -- eval -c examples/bedrock-openai-test/simple-test.yaml
+
+# Basic comprehensive evaluation
 npm run local -- eval -c examples/bedrock-openai-test/promptfooconfig.yaml
+
+# Advanced evaluation with reasoning tests
+npm run local -- eval -c examples/bedrock-openai-test/advanced-evaluation.yaml
+
+# Debug/testing
+npm run local -- eval -c examples/bedrock-openai-test/debug-test.yaml
 
 # Run with specific output format
 npm run local -- eval -c examples/bedrock-openai-test/promptfooconfig.yaml --output results.json
@@ -44,6 +53,7 @@ npm run local -- eval -c examples/bedrock-openai-test/promptfooconfig.yaml --out
 ## Reasoning Effort
 
 The OpenAI gpt-oss models support adjustable reasoning effort:
+
 - `low`: Faster responses, basic reasoning
 - `medium`: Balanced performance and reasoning depth  
 - `high`: Thorough reasoning, slower but more accurate
