@@ -38,7 +38,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
        config:
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
@@ -72,7 +72,7 @@ Specify direct access keys in your config:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
     config:
       accessKeyId: 'YOUR_ACCESS_KEY_ID'
       secretAccessKey: 'YOUR_SECRET_ACCESS_KEY'
@@ -96,7 +96,7 @@ export AWS_BEARER_TOKEN_BEDROCK="your-api-key-here"
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
@@ -107,7 +107,7 @@ Specify the API key directly in your configuration:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       apiKey: 'your-api-key-here'
       region: 'us-east-1' # Optional, defaults to us-east-1
@@ -195,7 +195,7 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -551,7 +551,7 @@ For example:
 
 ```yaml
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       guardrailIdentifier: 'test-guardrail'
       guardrailVersion: 1 # The version number for the guardrail. The value can also be DRAFT.
@@ -590,7 +590,7 @@ These environment variables can be overridden by the configuration specified in 
 If you see this error:
 
 ```text
-ValidationException: Invocation of model ID anthropic.claude-3-5-haiku-20241022-v1:0 with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.
+ValidationException: Invocation of model ID anthropic.claude-3-5-sonnet-20241022-v2:0 with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.
 ```
 
 This usually means you need to use the region-specific model ID. Update your provider configuration to include the regional prefix:
@@ -656,8 +656,8 @@ The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
 
 For example:
 
-- `bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0` (US region)
-- `bedrock:kb:eu.anthropic.claude-3-7-sonnet-20250219-v1:0` (EU region)
+- `bedrock:kb:us.anthropic.claude-3-5-sonnet-20241022-v2:0` (US region)
+- `bedrock:kb:eu.anthropic.claude-3-5-sonnet-20241022-v2:0` (EU region)
 
 Configuration options include:
 
@@ -687,7 +687,7 @@ providers:
       max_tokens: 1000
 
   # Regular Claude model for comparison
-  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-2'
       temperature: 0.0
