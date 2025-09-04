@@ -39,7 +39,9 @@ async function tryWindowsWhere(): Promise<string | null> {
       }
     }
   } catch (error) {
-    logger.debug(`Windows 'where python' failed: ${error instanceof Error ? error.message : error}`);
+    logger.debug(
+      `Windows 'where python' failed: ${error instanceof Error ? error.message : error}`,
+    );
   }
 
   return null;
@@ -61,7 +63,9 @@ async function tryPythonCommands(commands: string[]): Promise<string | null> {
         return executablePath;
       }
     } catch (error) {
-      logger.debug(`Python command "${cmd}" failed: ${error instanceof Error ? error.message : error}`);
+      logger.debug(
+        `Python command "${cmd}" failed: ${error instanceof Error ? error.message : error}`,
+      );
     }
   }
   return null;
@@ -78,7 +82,9 @@ async function tryDirectCommands(commands: string[]): Promise<string | null> {
         return validated;
       }
     } catch (error) {
-      logger.debug(`Direct command "${cmd}" failed: ${error instanceof Error ? error.message : error}`);
+      logger.debug(
+        `Direct command "${cmd}" failed: ${error instanceof Error ? error.message : error}`,
+      );
     }
   }
   return null;
@@ -92,11 +98,15 @@ export async function getSysExecutable(): Promise<string | null> {
   if (process.platform === 'win32') {
     // Windows: Try 'where python' first to avoid Microsoft Store stubs
     const whereResult = await tryWindowsWhere();
-    if (whereResult) return whereResult;
+    if (whereResult) {
+      return whereResult;
+    }
 
     // Then try py launcher and other commands
     const sysResult = await tryPythonCommands(['py', 'py -3', 'python3']);
-    if (sysResult) return sysResult;
+    if (sysResult) {
+      return sysResult;
+    }
 
     // Final fallback to direct python command
     return await tryDirectCommands(['python']);

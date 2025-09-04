@@ -96,7 +96,7 @@ describe('Python Utils', () => {
       );
     });
 
-    it('should use Windows clean detection strategy first on Windows', async () => {
+    it('should use Windows where command first on Windows', async () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
@@ -125,7 +125,7 @@ describe('Python Utils', () => {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
 
-    it('should fall back to sys.executable strategy if Windows clean detection fails', async () => {
+    it('should fall back to py commands if Windows where fails', async () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
@@ -148,14 +148,14 @@ describe('Python Utils', () => {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
 
-    it('should try final fallback strategy if other strategies fail', async () => {
+    it('should try direct python command as final Windows fallback', async () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
-      // Mock 'where python' to fail, all py commands to fail, then final python to succeed
+      // Mock everything to fail except final direct python command
       jest
         .mocked(execAsync)
-        .mockRejectedValueOnce(new Error('where command failed'))
+        .mockRejectedValueOnce(new Error('where failed'))
         .mockRejectedValueOnce(new Error('py failed'))
         .mockRejectedValueOnce(new Error('py -3 failed'))
         .mockRejectedValueOnce(new Error('python3 failed'))
