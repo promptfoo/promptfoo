@@ -1290,7 +1290,23 @@ ${prompt}
       stop?: string[],
       modelName?: string,
     ) => {
-      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+      let messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+      
+      // Handle reasoning_effort by adding it to system message
+      if (config?.reasoning_effort) {
+        const reasoningInstruction = `Reasoning: ${config.reasoning_effort}`;
+        
+        // Find existing system message or create one
+        const systemMessageIndex = messages.findIndex(msg => msg.role === 'system');
+        if (systemMessageIndex >= 0) {
+          // Append to existing system message
+          messages[systemMessageIndex].content += `\n\n${reasoningInstruction}`;
+        } else {
+          // Add new system message at the beginning
+          messages.unshift({ role: 'system', content: reasoningInstruction });
+        }
+      }
+
       const params: any = {
         messages,
       };
@@ -1325,11 +1341,6 @@ ${prompt}
         config?.presence_penalty,
         getEnvFloat('AWS_BEDROCK_PRESENCE_PENALTY'),
       );
-
-      // Add reasoning_effort for o1-style models
-      if (config?.reasoning_effort) {
-        addConfigParam(params, 'reasoning_effort', config.reasoning_effort, undefined, undefined);
-      }
 
       return params;
     },
@@ -1463,7 +1474,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 
   // OpenAI Models via Bedrock
   'openai.gpt-oss-120b-1:0': BEDROCK_MODEL.OPENAI,
-  'openai:gpt-oss-120b-1:0': BEDROCK_MODEL.OPENAI,
+  'openai.gpt-oss-20b-1:0': BEDROCK_MODEL.OPENAI,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html

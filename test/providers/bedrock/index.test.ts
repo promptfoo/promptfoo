@@ -1243,7 +1243,6 @@ describe('BEDROCK_MODEL OPENAI', () => {
         frequency_penalty: 0.2,
         presence_penalty: 0.1,
         stop: ['END', 'STOP'],
-        reasoning_effort: 'medium',
       };
       const prompt = 'What is artificial intelligence?';
       const stop = ['FINISH'];
@@ -1258,7 +1257,6 @@ describe('BEDROCK_MODEL OPENAI', () => {
         frequency_penalty: 0.2,
         presence_penalty: 0.1,
         stop: ['FINISH'], // stop parameter takes precedence
-        reasoning_effort: 'medium',
       });
     });
 
@@ -1311,13 +1309,58 @@ describe('BEDROCK_MODEL OPENAI', () => {
       });
     });
 
-    it('should not include reasoning_effort when not specified', () => {
+    it('should handle reasoning_effort by adding it to system message', () => {
+      const config = { 
+        temperature: 0.7,
+        reasoning_effort: 'high' as const
+      };
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'Reasoning: high' },
+          { role: 'user', content: 'Test prompt' }
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should append reasoning_effort to existing system message', () => {
+      const config = { 
+        temperature: 0.7,
+        reasoning_effort: 'medium' as const
+      };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is machine learning?' },
+      ]);
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.\n\nReasoning: medium' },
+          { role: 'user', content: 'What is machine learning?' }
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should not modify messages when reasoning_effort is not specified', () => {
       const config = { temperature: 0.5 };
       const prompt = 'Test prompt';
 
       const params = modelHandler.params(config, prompt);
 
-      expect(params).not.toHaveProperty('reasoning_effort');
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Test prompt' }],
+        temperature: 0.5,
+        top_p: 1.0,
+      });
     });
   });
 
@@ -1910,7 +1953,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
 
   it('should include OpenAI models with OPENAI handler', () => {
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-120b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
-    expect(AWS_BEDROCK_MODELS['openai:gpt-oss-120b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-20b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
   });
 });
 
