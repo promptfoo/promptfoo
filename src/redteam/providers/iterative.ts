@@ -8,7 +8,7 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateGraderTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -288,6 +288,7 @@ export async function runRedteamConversation({
       iterationContext,
       options,
     );
+    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug(`[Iterative] Raw target response: ${JSON.stringify(targetResponse)}`);
     if (targetResponse.error) {
       logger.info(
@@ -339,7 +340,6 @@ export async function runRedteamConversation({
           additionalRubric,
         );
         storedGraderResult = grade;
-        accumulateGraderTokenUsage(totalTokenUsage, grade);
       }
     }
     // Calculate the score

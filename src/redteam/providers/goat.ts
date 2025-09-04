@@ -8,11 +8,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import {
-  accumulateGraderTokenUsage,
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
@@ -354,7 +350,6 @@ export default class GoatProvider implements ApiProvider {
           );
           graderPassed = grade.pass;
           storedGraderResult = grade;
-          accumulateGraderTokenUsage(totalTokenUsage, grade);
         }
 
         if (graderPassed === false) {

@@ -19,6 +19,7 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
+import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -1982,8 +1983,12 @@ export class HttpProvider implements ApiProvider {
         ...parsedOutput,
       };
       // Add estimated token usage if available and not already present
-      if (estimatedTokenUsage && !result.tokenUsage) {
-        result.tokenUsage = estimatedTokenUsage;
+      if (!result.tokenUsage) {
+        if (estimatedTokenUsage) {
+          result.tokenUsage = estimatedTokenUsage;
+        } else {
+          result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };
+        }
       }
       return result;
     }
@@ -1993,8 +1998,12 @@ export class HttpProvider implements ApiProvider {
       output: parsedOutput,
     };
     // Add estimated token usage if available
-    if (estimatedTokenUsage && !result.tokenUsage) {
-      result.tokenUsage = estimatedTokenUsage;
+    if (!result.tokenUsage) {
+      if (estimatedTokenUsage) {
+        result.tokenUsage = estimatedTokenUsage;
+      } else {
+        result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };
+      }
     }
     return result;
   }

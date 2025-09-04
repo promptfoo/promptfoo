@@ -463,7 +463,7 @@ export async function doEval(
             // Extract just the provider ID part (remove class name in parentheses)
             const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
             logger.info(
-              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())}`,
+              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())} (${usage.numRequests} requests)`,
             );
 
             // Show breakdown if there are individual components

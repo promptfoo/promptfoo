@@ -23,11 +23,7 @@ import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import {
-  accumulateGraderTokenUsage,
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -688,10 +684,6 @@ async function runRedteamConversation({
             );
             storedGraderResult = grade;
             graderPassed = grade.pass;
-
-            if (grade.tokensUsed) {
-              accumulateGraderTokenUsage(totalTokenUsage, grade);
-            }
           }
         }
 

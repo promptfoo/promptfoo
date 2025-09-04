@@ -1,8 +1,8 @@
 import crypto from 'crypto';
-import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 
+import dedent from 'dedent';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -959,7 +959,7 @@ describe('HttpProvider', () => {
         const body = `{
 "messages": [
   {
-    "role": "system", 
+    "role": "system",
     "content": "{{systemPrompt}}"
   },
   {
@@ -986,7 +986,7 @@ describe('HttpProvider', () => {
         expect(result).toBe(`{
 "messages": [
   {
-    "role": "system", 
+    "role": "system",
     "content": "You are a helpful assistant"
   },
   {
@@ -1735,13 +1735,15 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({
-        output: { chat_history: 'success' },
-        raw: JSON.stringify({ result: 'success' }),
-        metadata: {
-          http: { status: 200, statusText: 'OK', headers: {} },
-        },
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          output: { chat_history: 'success' },
+          raw: JSON.stringify({ result: 'success' }),
+          metadata: {
+            http: { status: 200, statusText: 'OK', headers: {} },
+          },
+        }),
+      );
     });
 
     it('should prefer transformResponse over responseParser when both are set', async () => {
@@ -1764,13 +1766,15 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({
-        output: { chat_history: 'from transformResponse' },
-        raw: JSON.stringify({ result: 'success' }),
-        metadata: {
-          http: { status: 200, statusText: 'OK', headers: {} },
-        },
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          output: { chat_history: 'from transformResponse' },
+          raw: JSON.stringify({ result: 'success' }),
+          metadata: {
+            http: { status: 200, statusText: 'OK', headers: {} },
+          },
+        }),
+      );
     });
 
     it('should handle string-based responseParser when transformResponse is not set', async () => {
@@ -1792,13 +1796,15 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({
-        output: 'success',
-        raw: JSON.stringify({ result: 'success' }),
-        metadata: {
-          http: { status: 200, statusText: 'OK', headers: {} },
-        },
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          output: 'success',
+          raw: JSON.stringify({ result: 'success' }),
+          metadata: {
+            http: { status: 200, statusText: 'OK', headers: {} },
+          },
+        }),
+      );
     });
   });
 
@@ -3310,7 +3316,11 @@ describe('HttpProvider with token estimation', () => {
 
     const result = await provider.callApi('Test prompt');
 
-    expect(result.tokenUsage).toBeUndefined();
+    expect(result.tokenUsage).toEqual(
+      expect.objectContaining({
+        numRequests: 1,
+      }),
+    );
   });
 
   it('should enable token estimation by default in redteam mode', async () => {
