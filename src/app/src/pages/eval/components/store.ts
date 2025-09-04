@@ -1,4 +1,6 @@
 import { callApi } from '@app/utils/api';
+import { Severity } from '@promptfoo/redteam/constants';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
@@ -41,12 +43,45 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   return Array.from(metrics).sort();
 }
 
+function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
+  const strategyIds =
+    strategies?.map((strategy) => (typeof strategy === 'string' ? strategy : strategy.id)) ?? [];
+
+  return Array.from(new Set([...strategyIds, 'basic']));
+}
+
+function computeAvailableSeverities(
+  plugins?: Array<string | { id: string; severity?: string }> | null,
+): string[] {
+  if (!plugins || plugins.length === 0) {
+    return [];
+  }
+
+  // Get the risk category severity map with any overrides from plugins
+  const severityMap = getRiskCategorySeverityMap(
+    plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)) as any,
+  );
+
+  // Extract unique severities from the map
+  const severities = new Set<string>();
+  Object.values(severityMap).forEach((severity) => {
+    if (severity) {
+      severities.add(severity);
+    }
+  });
+
+  // Return sorted array of severity values (in order of criticality)
+  const severityOrder = [Severity.Critical, Severity.High, Severity.Medium, Severity.Low];
+  return severityOrder.filter((sev) => severities.has(sev));
+}
+
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
   filterMode?: FilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
+  skipLoadingState?: boolean;
   filters?: ResultsFilter[];
 }
 
@@ -60,7 +95,7 @@ export interface PaginationState {
   pageSize: number;
 }
 
-export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy';
+export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy' | 'severity';
 
 export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
 
@@ -110,6 +145,10 @@ interface TableState {
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
+  isStreaming: boolean;
+  setIsStreaming: (isStreaming: boolean) => void;
+
+  shouldHighlightSearchText: boolean;
 
   /**
    * Adds a new filter to the filters array.
@@ -285,12 +324,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metric: computeAvailableMetrics(table),
             metadata: [],
             plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-            strategy: [
-              ...(resultsFile.config?.redteam?.strategies?.map((strategy) =>
-                typeof strategy === 'string' ? strategy : strategy.id,
-              ) ?? []),
-              'basic',
-            ],
+            strategy: extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies),
+            severity: computeAvailableSeverities(resultsFile.config?.redteam?.plugins),
           },
         },
       }));
@@ -306,12 +341,8 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metric: computeAvailableMetrics(results.table),
             metadata: [],
             plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-            strategy: [
-              ...(resultsFile.config?.redteam?.strategies?.map((strategy) =>
-                typeof strategy === 'string' ? strategy : strategy.id,
-              ) ?? []),
-              'basic',
-            ],
+            strategy: extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies),
+            severity: computeAvailableSeverities(resultsFile.config?.redteam?.plugins),
           },
         },
       }));
@@ -328,6 +359,10 @@ export const useTableStore = create<TableState>()((set, get) => ({
   highlightedResultsCount: 0,
 
   isFetching: false,
+  isStreaming: false,
+  setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
+
+  shouldHighlightSearchText: false,
 
   fetchEvalData: async (id: string, options: FetchEvalOptions = {}) => {
     const {
@@ -336,12 +371,17 @@ export const useTableStore = create<TableState>()((set, get) => ({
       filterMode = 'all',
       searchText = '',
       skipSettingEvalId = false,
+      skipLoadingState = false,
       filters = [],
     } = options;
 
     const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
-    set({ isFetching: true });
+    if (skipLoadingState) {
+      set({ shouldHighlightSearchText: false });
+    } else {
+      set({ isFetching: true, shouldHighlightSearchText: false });
+    }
 
     try {
       console.log(`Fetching data for eval ${id} with options:`, options);
@@ -396,19 +436,16 @@ export const useTableStore = create<TableState>()((set, get) => ({
           version: data.version,
           author: data.author,
           evalId: skipSettingEvalId ? get().evalId : id,
-          isFetching: false,
+          isFetching: skipLoadingState ? prevState.isFetching : false,
+          shouldHighlightSearchText: searchText !== '',
           filters: {
             ...prevState.filters,
             options: {
               metric: computeAvailableMetrics(data.table),
               metadata: [],
               plugin: data.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-              strategy: [
-                ...(data.config?.redteam?.strategies?.map((strategy) =>
-                  typeof strategy === 'string' ? strategy : strategy.id,
-                ) ?? []),
-                'basic',
-              ],
+              strategy: extractUniqueStrategyIds(data.config?.redteam?.strategies),
+              severity: computeAvailableSeverities(data.config?.redteam?.plugins),
             },
           },
         }));
@@ -416,11 +453,17 @@ export const useTableStore = create<TableState>()((set, get) => ({
         return data;
       }
 
-      set({ isFetching: false });
+      if (!skipLoadingState) {
+        set({ isFetching: false });
+      }
       return null;
     } catch (error) {
       console.error('Error fetching eval data:', error);
-      set({ isFetching: false });
+      if (skipLoadingState) {
+        set({ isStreaming: false });
+      } else {
+        set({ isFetching: false, isStreaming: false });
+      }
       return null;
     }
   },
@@ -433,6 +476,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
       metadata: [],
       plugin: [],
       strategy: [],
+      severity: [],
     },
   },
 

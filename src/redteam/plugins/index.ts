@@ -46,6 +46,7 @@ import { SqlInjectionPlugin } from './sqlInjection';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
+import { UnverifiableClaimsPlugin } from './unverifiableClaims';
 import { XSTestPlugin } from './xstest';
 
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
@@ -97,6 +98,7 @@ async function fetchRemoteTestCases(
       },
       REQUEST_TIMEOUT_MS,
     );
+
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
@@ -191,6 +193,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
+  createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {
@@ -315,6 +318,7 @@ const remotePlugins: PluginFactory[] = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
+  'medical:off-label-use',
   'medical:prioritization-error',
   'medical:sycophancy',
   'financial:calculation-error',

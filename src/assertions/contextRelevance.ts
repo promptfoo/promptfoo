@@ -36,16 +36,19 @@ export const handleContextRelevance = async ({
     providerResponse,
   );
 
+  const result = await matchesContextRelevance(
+    test.vars.query,
+    context,
+    assertion.threshold ?? 0,
+    test.options,
+  );
+
   return {
     assertion,
-    ...(await matchesContextRelevance(
-      test.vars.query,
-      context,
-      assertion.threshold ?? 0,
-      test.options,
-    )),
+    ...result,
     metadata: {
       context,
+      ...(result.metadata || {}),
     },
   };
 };

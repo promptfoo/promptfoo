@@ -1,5 +1,6 @@
 ---
 sidebar_label: Cloudflare Workers AI
+description: Configure Cloudflare Workers AI's edge-based inference platform with Mistral-7B for low-latency LLM testing and evaluation at the network edge using OpenAI-compatible APIs
 ---
 
 # Cloudflare Workers AI

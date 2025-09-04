@@ -1,5 +1,6 @@
 ---
 sidebar_label: Python Notebook
+description: Build and test LLM applications in Python using promptfoo's Jupyter/Colab integration. Run evals, compare models, and execute Python code in notebooks.
 ---
 
 # Python

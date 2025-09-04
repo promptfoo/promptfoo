@@ -1,3 +1,7 @@
+---
+description: Report security vulnerabilities in promptfoo responsibly - guidelines for disclosure, safe harbor provisions, and bug bounty information
+---
+
 ## Promptfoo Responsible Vulnerability Disclosure Policy
 
 Promptfoo values the security and privacy of our users, customers, and the broader community. We welcome responsible disclosure of vulnerabilities to help us ensure the ongoing security of our open source projects, cloud services, and on-premises deployments.

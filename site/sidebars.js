@@ -85,6 +85,7 @@ const redTeamSidebar = [
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
           'red-team/plugins/harmful',
+          'red-team/plugins/malicious-code',
           'red-team/plugins/pliny',
           'red-team/plugins/politics',
           'red-team/plugins/religion',
@@ -251,7 +252,7 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
-        label: 'Agentic Red Teaming',
+        label: 'Agent Red Teaming',
         id: 'red-team/agents',
       },
       {
@@ -401,6 +402,10 @@ const sidebars = {
     {
       type: 'doc',
       id: 'contributing',
+    },
+    {
+      type: 'doc',
+      id: 'write-for-promptfoo',
     },
     {
       type: 'doc',

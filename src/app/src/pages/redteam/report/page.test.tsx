@@ -23,7 +23,7 @@ vi.mock('./components/ReportIndex', () => ({
   default: () => <div>ReportIndex Component</div>,
 }));
 
-vi.mock('@app/components/CrispChat', () => ({
+vi.mock('@app/components/PylonChat', () => ({
   default: () => null,
 }));
 
@@ -61,7 +61,7 @@ describe('ReportPage', () => {
   });
 
   it("should set page metadata to 'Red team report' when evalId is present", () => {
-    const url = 'http://localhost/report?evalId=test-eval-123';
+    const url = 'http://localhost/reports?evalId=test-eval-123';
     Object.defineProperty(window, 'location', {
       writable: true,
       value: new URL(url),
@@ -84,7 +84,7 @@ describe('ReportPage', () => {
   });
 
   it('should render the Report component when evalId is present in the URL search parameters', () => {
-    const url = 'http://localhost/report?evalId=test-eval-123';
+    const url = 'http://localhost/reports?evalId=test-eval-123';
     Object.defineProperty(window, 'location', {
       writable: true,
       value: new URL(url),
@@ -101,7 +101,7 @@ describe('ReportPage', () => {
   });
 
   it('should render ReportIndex component when evalId is not present in URL search parameters', () => {
-    const url = 'http://localhost/report';
+    const url = 'http://localhost/reports';
     Object.defineProperty(window, 'location', {
       writable: true,
       value: new URL(url),
@@ -127,7 +127,7 @@ describe('ReportPage', () => {
       fetchEmail: vi.fn(),
     });
 
-    const url = 'http://localhost/report?evalId=test-eval-123';
+    const url = 'http://localhost/reports?evalId=test-eval-123';
     Object.defineProperty(window, 'location', {
       writable: true,
       value: new URL(url),
@@ -158,7 +158,7 @@ describe('ReportPage', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('Waiting for report data')).toBeInTheDocument();
     expect(screen.queryByText('Report Component')).not.toBeInTheDocument();
     expect(screen.queryByText('ReportIndex Component')).not.toBeInTheDocument();
   });
@@ -177,5 +177,58 @@ describe('ReportPage', () => {
     );
 
     expect(container.firstChild).toBeNull();
+  });
+
+  it('should properly encode the redirect URL when special characters are present in pathname and search', () => {
+    const navigate = vi.fn();
+    mockedUseNavigate.mockReturnValue(navigate);
+
+    mockedUseUserStore.mockReturnValue({
+      email: null,
+      isLoading: false,
+      fetchEmail: vi.fn(),
+    });
+
+    const pathname = '/reports/path with spaces';
+    const search = '?evalId=test with spaces&param2=value with spaces';
+    const url = `http://localhost${pathname}${search}`;
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: new URL(url),
+    });
+
+    render(
+      <MemoryRouter>
+        <ReportPage />
+      </MemoryRouter>,
+    );
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith(
+      `/login?type=report&redirect=/reports/path%20with%20spaces?evalId=test%20with%20spaces&param2=value%20with%20spaces`,
+    );
+  });
+
+  it('should handle malformed evalId values gracefully', () => {
+    const url = 'http://localhost/reports?evalId=malformed-eval-id!';
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: new URL(url),
+    });
+
+    render(
+      <MemoryRouter>
+        <ReportPage />
+      </MemoryRouter>,
+    );
+
+    expect(mockedUsePageMeta).toHaveBeenCalledTimes(1);
+    expect(mockedUsePageMeta).toHaveBeenCalledWith({
+      title: 'Red team report',
+      description: 'View or browse red team results',
+    });
+    expect(screen.getByText('Report Component')).toBeInTheDocument();
+    expect(screen.queryByText('ReportIndex Component')).not.toBeInTheDocument();
   });
 });

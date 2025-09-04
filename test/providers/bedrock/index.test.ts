@@ -17,6 +17,7 @@ import {
 import type {
   BedrockAI21GenerationOptions,
   BedrockClaudeMessagesCompletionOptions,
+  BedrockOpenAIGenerationOptions,
   IBedrockModel,
   LlamaMessage,
   TextGenerationOptions,
@@ -32,7 +33,9 @@ const { BedrockRuntime } = jest.requireMock('@aws-sdk/client-bedrock-runtime');
 
 jest.mock('@smithy/node-http-handler', () => {
   return {
-    NodeHttpHandler: jest.fn(),
+    NodeHttpHandler: jest.fn().mockImplementation(() => ({
+      handle: jest.fn(),
+    })),
   };
 });
 
@@ -73,6 +76,7 @@ describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     // Ensure proxy environment variables do not force proxy-specific code paths
     // when running tests. The container sets HTTP_PROXY by default which causes
     // getBedrockInstance to require optional dependencies that are not
@@ -83,6 +87,7 @@ describe('AwsBedrockGenericProvider', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
     process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
   });
@@ -159,6 +164,99 @@ describe('AwsBedrockGenericProvider', () => {
       retryMode: 'adaptive',
       maxAttempts: 10,
     });
+  });
+
+  it('should create Bedrock instance with custom request handler for API key authentication', async () => {
+    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
+    const mockHandler = {
+      handle: jest.fn(),
+    };
+    NodeHttpHandler.mockReturnValue(mockHandler);
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', {
+          config: {
+            region: 'us-east-1',
+            apiKey: 'test-api-key',
+          },
+        });
+      }
+    })();
+
+    await provider.getBedrockInstance();
+
+    expect(NodeHttpHandler).toHaveBeenCalled();
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+      requestHandler: expect.any(Object),
+    });
+  });
+
+  it('should create custom request handler when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
+    process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
+    const mockHandler = {
+      handle: jest.fn(),
+    };
+    NodeHttpHandler.mockReturnValue(mockHandler);
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', { config: { region: 'us-east-1' } });
+      }
+    })();
+
+    await provider.getBedrockInstance();
+
+    expect(NodeHttpHandler).toHaveBeenCalled();
+    expect(BedrockRuntime).toHaveBeenCalledWith({
+      region: 'us-east-1',
+      retryMode: 'adaptive',
+      maxAttempts: 10,
+      requestHandler: expect.any(Object),
+    });
+
+    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+  });
+
+  it('should add Authorization header with Bearer token to requests when using API key', async () => {
+    const { NodeHttpHandler } = jest.requireMock('@smithy/node-http-handler');
+    const mockOriginalHandle = jest.fn().mockResolvedValue('response');
+    const mockHandler = {
+      handle: mockOriginalHandle,
+    };
+    NodeHttpHandler.mockReturnValue(mockHandler);
+
+    const provider = new (class extends AwsBedrockGenericProvider {
+      constructor() {
+        super('test-model', {
+          config: {
+            region: 'us-east-1',
+            apiKey: 'test-api-key',
+          },
+        });
+      }
+    })();
+
+    await provider.getBedrockInstance();
+
+    // Verify the handler was modified to add Bearer token
+    expect(mockHandler.handle).toBeDefined();
+
+    // Test that the modified handler adds the Authorization header
+    const mockRequest = {
+      headers: {},
+    };
+
+    await mockHandler.handle(mockRequest, {});
+
+    expect(mockRequest.headers).toEqual({
+      Authorization: 'Bearer test-api-key',
+    });
+    expect(mockOriginalHandle).toHaveBeenCalledWith(mockRequest, {});
   });
 
   describe('BEDROCK_MODEL CLAUDE_MESSAGES', () => {
@@ -490,6 +588,55 @@ describe('AwsBedrockGenericProvider', () => {
       const provider = new TestBedrockProvider({});
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined();
+    });
+
+    it('should return undefined for API key authentication when apiKey is provided in config', async () => {
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-api-key',
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined();
+    });
+
+    it('should return undefined for API key authentication when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
+      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      const provider = new TestBedrockProvider({});
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined();
+      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    });
+
+    it('should prioritize config apiKey over environment variable', async () => {
+      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-config-api-key',
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
+      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    });
+
+    it('should prioritize explicit credentials over API key', async () => {
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-api-key',
+        accessKeyId: 'test-access-key',
+        secretAccessKey: 'test-secret-key',
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toEqual({
+        accessKeyId: 'test-access-key',
+        secretAccessKey: 'test-secret-key',
+        sessionToken: undefined,
+      }); // Explicit credentials take priority
+    });
+
+    it('should use API key when no explicit credentials are provided', async () => {
+      const provider = new TestBedrockProvider({
+        apiKey: 'test-api-key',
+        // No accessKeyId/secretAccessKey provided
+      });
+      const credentials = await provider.getCredentials();
+      expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
     });
   });
 });
@@ -1229,6 +1376,230 @@ describe('BEDROCK_MODEL MISTRAL', () => {
   });
 });
 
+describe('BEDROCK_MODEL OPENAI', () => {
+  const modelHandler = BEDROCK_MODEL.OPENAI;
+
+  describe('params', () => {
+    it('should include OpenAI-specific parameters', () => {
+      const config: BedrockOpenAIGenerationOptions = {
+        region: 'us-east-1',
+        max_completion_tokens: 150,
+        temperature: 0.8,
+        top_p: 0.95,
+        frequency_penalty: 0.2,
+        presence_penalty: 0.1,
+        stop: ['END', 'STOP'],
+      };
+      const prompt = 'What is artificial intelligence?';
+      const stop = ['FINISH'];
+
+      const params = modelHandler.params(config, prompt, stop);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'What is artificial intelligence?' }],
+        max_completion_tokens: 150,
+        temperature: 0.8,
+        top_p: 0.95,
+        frequency_penalty: 0.2,
+        presence_penalty: 0.1,
+        stop: ['FINISH'], // stop parameter takes precedence
+      });
+    });
+
+    it('should use config.stop when stop parameter is not provided', () => {
+      const config = {
+        stop: ['CONFIG_END'],
+        temperature: 0.5,
+      };
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Test prompt' }],
+        temperature: 0.5,
+        top_p: 1.0,
+        stop: ['CONFIG_END'],
+      });
+    });
+
+    it('should use default values when config is not provided', () => {
+      const config = {};
+      const prompt = 'Hello, how are you?';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Hello, how are you?' }],
+        temperature: 0.1,
+        top_p: 1.0,
+      });
+    });
+
+    it('should handle JSON message array input', () => {
+      const config = { temperature: 0.7 };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is machine learning?' },
+      ]);
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: 'What is machine learning?' },
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should handle reasoning_effort by adding it to system message', () => {
+      const config = {
+        temperature: 0.7,
+        reasoning_effort: 'high' as const,
+      };
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'Reasoning: high' },
+          { role: 'user', content: 'Test prompt' },
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should append reasoning_effort to existing system message', () => {
+      const config = {
+        temperature: 0.7,
+        reasoning_effort: 'medium' as const,
+      };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is machine learning?' },
+      ]);
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.\n\nReasoning: medium' },
+          { role: 'user', content: 'What is machine learning?' },
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should not modify messages when reasoning_effort is not specified', () => {
+      const config = { temperature: 0.5 };
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Test prompt' }],
+        temperature: 0.5,
+        top_p: 1.0,
+      });
+    });
+  });
+
+  describe('output', () => {
+    it('should extract output from OpenAI chat completion format', () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'This is a test response from OpenAI model.',
+            },
+          },
+        ],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        'This is a test response from OpenAI model.',
+      );
+    });
+
+    it('should throw an error for API errors', () => {
+      const mockErrorResponse = { error: 'API Error occurred' };
+      expect(() => modelHandler.output({}, mockErrorResponse)).toThrow(
+        'OpenAI API error: API Error occurred',
+      );
+    });
+
+    it('should return undefined for unrecognized formats', () => {
+      const mockResponse = { something: 'else' };
+      const result = modelHandler.output({}, mockResponse);
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from OpenAI response format', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 25,
+          completion_tokens: 75,
+          total_tokens: 100,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 75,
+        total: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle string token counts', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: '30',
+          completion_tokens: '60',
+          total_tokens: '90',
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 60,
+        total: 90,
+        numRequests: 1,
+      });
+    });
+
+    it('should return undefined token counts when usage is not provided', () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'Response without usage info',
+            },
+          },
+        ],
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
 describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
 
@@ -1724,6 +2095,11 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     }
 
     expect(handler).toBe(BEDROCK_MODEL.LLAMA4);
+  });
+
+  it('should include OpenAI models with OPENAI handler', () => {
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-120b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-20b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
   });
 });
 

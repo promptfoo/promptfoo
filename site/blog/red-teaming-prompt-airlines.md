@@ -27,7 +27,7 @@ In this blog, we'll demonstrate how to utilize Promptfoo's red team tool in a bl
 
 ## Prerequisites
 
-Before getting started, you'll need to install Node 18 or later in the IDE of your choice. You'll need an API key from your preferred LLM provider. Using a proxy such as Burp Suite may also help.
+Before getting started, you'll need to install Node 20 or later in the IDE of your choice. You'll need an API key from your preferred LLM provider. Using a proxy such as Burp Suite may also help.
 
 ## Initial Reconnaissance
 

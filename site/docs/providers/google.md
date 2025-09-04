@@ -1,5 +1,6 @@
 ---
 sidebar_label: Google AI / Gemini
+description: Configure Google's Gemini models with support for text, images, and video inputs through Google AI Studio API for comprehensive multimodal LLM testing and evaluation
 ---
 
 # Google AI / Gemini
@@ -302,6 +303,63 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:embedding:text-embedding-004` - Latest text embedding model (Recommended)
 - `google:embedding:embedding-001` - Legacy embedding model
 
+### Image Generation Models
+
+Imagen models are available through both **Google AI Studio** and **Vertex AI**. Use the `google:image:` prefix:
+
+#### Imagen 4 Models (Available in both Google AI Studio and Vertex AI)
+
+- `google:image:imagen-4.0-ultra-generate-preview-06-06` - Ultra quality ($0.06/image)
+- `google:image:imagen-4.0-generate-preview-06-06` - Standard quality ($0.04/image)
+- `google:image:imagen-4.0-fast-generate-preview-06-06` - Fast generation ($0.02/image)
+
+#### Imagen 3 Models (Vertex AI only)
+
+- `google:image:imagen-3.0-generate-002` - Imagen 3.0 ($0.04/image)
+- `google:image:imagen-3.0-generate-001` - Imagen 3.0 ($0.04/image)
+- `google:image:imagen-3.0-fast-generate-001` - Imagen 3.0 fast ($0.02/image)
+
+#### Authentication Options
+
+**Option 1: Google AI Studio** (Quick start, limited features)
+
+```bash
+export GOOGLE_API_KEY=your-api-key
+```
+
+- ✅ Simpler setup with API key
+- ✅ Supports Imagen 4 models
+- ❌ No support for Imagen 3 models
+- ❌ No support for `seed` or `addWatermark` parameters
+
+**Option 2: Vertex AI** (Full features)
+
+```bash
+gcloud auth application-default login
+export GOOGLE_PROJECT_ID=your-project-id
+```
+
+- ✅ All Imagen models supported
+- ✅ All configuration parameters supported
+- ❌ Requires Google Cloud project with billing
+
+The provider automatically selects the appropriate API based on available credentials.
+
+Configuration options:
+
+```yaml
+providers:
+  - google:image:imagen-3.0-generate-002
+    config:
+      projectId: 'your-project-id'  # Or set GOOGLE_PROJECT_ID
+      region: 'us-central1'          # Optional, defaults to us-central1
+      aspectRatio: '16:9'
+      seed: 42
+      addWatermark: false            # Must be false when using seed
+```
+
+See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen).
+
 ### Basic Configuration
 
 The provider supports various configuration options that can be used to customize the behavior of the model:
@@ -398,6 +456,24 @@ providers:
 ```
 
 System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+
+### Role Mapping Configuration
+
+Gemini models require specific role names in chat messages. By default, Promptfoo uses the `model` role for compatibility with newer Gemini versions (2.5+). For older Gemini versions that expect the `assistant` role, you can disable this:
+
+```yaml
+providers:
+  # Default behavior - maps 'assistant' to 'model' (for Gemini 2.5+)
+  - id: google:gemini-2.5-flash
+    config:
+      temperature: 0.7
+
+  # For older Gemini versions - preserve 'assistant' role
+  - id: google:gemini-1.5-pro
+    config:
+      useAssistantRole: true # Preserves 'assistant' role without mapping
+      temperature: 0.7
+```
 
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 

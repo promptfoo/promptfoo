@@ -311,11 +311,11 @@ export default function BlackHat2025(): JSX.Element {
             <h2 className={styles.sectionTitle}>Why Security Teams Choose Promptfoo</h2>
             <div className={styles.statsGrid}>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>100K+</div>
+                <div className={styles.statNumber}>{`${SITE_CONSTANTS.USER_COUNT_DISPLAY}+`}</div>
                 <div className={styles.statLabel}>Open Source Users</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>27</div>
+                <div className={styles.statNumber}>44</div>
                 <div className={styles.statLabel}>Fortune 500 Companies</div>
               </div>
               <div className={styles.stat}>

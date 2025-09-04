@@ -150,6 +150,12 @@
                             "DATABRICKS_WORKSPACE_URL": {
                               "type": "string"
                             },
+                            "DOCKER_MODEL_RUNNER_BASE_URL": {
+                              "type": "string"
+                            },
+                            "DOCKER_MODEL_RUNNER_API_KEY": {
+                              "type": "string"
+                            },
                             "FAL_KEY": {
                               "type": "string"
                             },
@@ -163,6 +169,15 @@
                               "type": "string"
                             },
                             "GOOGLE_API_KEY": {
+                              "type": "string"
+                            },
+                            "GOOGLE_PROJECT_ID": {
+                              "type": "string"
+                            },
+                            "GOOGLE_LOCATION": {
+                              "type": "string"
+                            },
+                            "GOOGLE_GENERATIVE_AI_API_KEY": {
                               "type": "string"
                             },
                             "GEMINI_API_KEY": {
@@ -530,12 +545,14 @@
                                               "contains",
                                               "contains-all",
                                               "contains-any",
+                                              "contains-html",
                                               "contains-json",
                                               "contains-sql",
                                               "contains-xml",
                                               "context-faithfulness",
                                               "context-recall",
                                               "context-relevance",
+                                              "conversation-relevance",
                                               "cost",
                                               "equals",
                                               "factuality",
@@ -546,6 +563,7 @@
                                               "icontains",
                                               "icontains-all",
                                               "icontains-any",
+                                              "is-html",
                                               "is-json",
                                               "is-refusal",
                                               "is-sql",
@@ -580,7 +598,7 @@
                                           },
                                           {
                                             "type": "string",
-                                            "enum": ["select-best", "human"]
+                                            "enum": ["select-best", "human", "max-score"]
                                           },
                                           {}
                                         ]
@@ -1168,6 +1186,7 @@
                           "medical:anchoring-bias",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
+                          "medical:off-label-use",
                           "medical:prioritization-error",
                           "medical:sycophancy",
                           "misinformation",
@@ -1254,6 +1273,7 @@
                           "toxic-chat",
                           "toxicity",
                           "unsafebench",
+                          "unverifiable-claims",
                           "xstest"
                         ]
                       },
@@ -1353,6 +1373,7 @@
                               "medical:anchoring-bias",
                               "medical:hallucination",
                               "medical:incorrect-knowledge",
+                              "medical:off-label-use",
                               "medical:prioritization-error",
                               "medical:sycophancy",
                               "misinformation",
@@ -1439,6 +1460,7 @@
                               "toxic-chat",
                               "toxicity",
                               "unsafebench",
+                              "unverifiable-claims",
                               "xstest"
                             ]
                           },
@@ -1767,6 +1789,9 @@
               "type": "boolean"
             },
             "share": {
+              "type": "boolean"
+            },
+            "noShare": {
               "type": "boolean"
             },
             "progressBar": {

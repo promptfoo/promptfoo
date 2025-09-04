@@ -4,6 +4,7 @@ import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
+import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -95,7 +96,21 @@ const ReportIndex: React.FC = () => {
   }, [filteredAndSortedEvals, page]);
 
   if (isLoading) {
-    return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '9rem',
+        }}
+      >
+        <CircularProgress size={22} />
+        <Box>Waiting for reports</Box>
+      </Box>
+    );
   }
 
   if (recentEvals.length === 0) {
@@ -168,7 +183,7 @@ const ReportIndex: React.FC = () => {
               <TableRow
                 key={eval_.evalId}
                 hover
-                onClick={() => navigate(`/report?evalId=${eval_.evalId}`)}
+                onClick={() => navigate(`/reports?evalId=${eval_.evalId}`)}
                 sx={{ cursor: 'pointer' }}
               >
                 <TableCell>

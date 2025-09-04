@@ -1,5 +1,6 @@
 ---
 sidebar_position: 1
+description: "Configure OpenAI's GPT models including GPT-4o, o1, GPT-3.5, embeddings, and assistants for comprehensive AI evaluations"
 ---
 
 # OpenAI
@@ -29,6 +30,19 @@ The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a
 or if you have a custom model.
 For example, if OpenAI releases `gpt-5` chat completion,
 you could begin using it immediately with `openai:chat:gpt-5`.
+
+```yaml title="GPT-5 only: verbosity and minimal reasoning"
+providers:
+  - id: openai:chat:gpt-5
+    config:
+      verbosity: high # low | medium | high
+      reasoning_effort: minimal
+  # For the Responses API, use a nested reasoning object:
+  - id: openai:responses:gpt-5
+    config:
+      reasoning:
+        effort: minimal
+```
 
 The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
 

@@ -124,6 +124,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [icontains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                  | output contains all list of substrings, case insensitive          |
 | [is-json](/docs/configuration/expected-outputs/deterministic/#is-json)                                             | output is valid json (optional json schema validation)            |
 | [contains-json](/docs/configuration/expected-outputs/deterministic/#contains-json)                                 | output contains valid json (optional json schema validation)      |
+| [contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)                                 | output contains HTML content                                      |
+| [is-html](/docs/configuration/expected-outputs/deterministic/#is-html)                                             | output is valid HTML                                              |
 | [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is valid sql                                               |
 | [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output contains valid sql                                         |
 | [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is valid xml                                               |
@@ -169,10 +171,12 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [context-faithfulness](/docs/configuration/expected-outputs/model-graded)             | Ensure that LLM output uses the context                                          |
 | [context-recall](/docs/configuration/expected-outputs/model-graded)                   | Ensure that ground truth appears in context                                      |
 | [context-relevance](/docs/configuration/expected-outputs/model-graded)                | Ensure that context is relevant to original query                                |
+| [conversation-relevance](/docs/configuration/expected-outputs/model-graded)           | Ensure that responses remain relevant throughout a conversation                  |
 | [factuality](/docs/configuration/expected-outputs/model-graded)                       | LLM output adheres to the given facts, using Factuality method from OpenAI eval  |
 | [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to given criteria, using Closed QA method from OpenAI eval    |
 | [pi](/docs/configuration/expected-outputs/model-graded/pi)                            | Alternative scoring approach that uses a dedicated model for evaluating criteria |
 | [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | Compare multiple outputs for a test case and pick the best one                   |
+| [max-score](/docs/configuration/expected-outputs/model-graded/max-score)              | Select output with highest aggregate score from other assertions                 |
 
 ## Weighted assertions
 

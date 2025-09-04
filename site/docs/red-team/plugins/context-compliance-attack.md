@@ -1,5 +1,6 @@
 ---
 sidebar_label: Context Compliance Attack
+description: Red team conversation integrity by simulating context compliance attacks to protect LLM systems from malicious history manipulation and unauthorized access
 ---
 
 # Context Compliance Attack Plugin

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Answer Relevance
+description: 'Score LLM response relevance and completeness against user queries using sophisticated AI-powered evaluation metrics'
 ---
 
 # Answer Relevance

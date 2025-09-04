@@ -9,7 +9,7 @@ import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
-import { useResultsViewSettingsStore } from './store';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 
@@ -35,6 +35,7 @@ export interface EvalOutputCellProps {
   evaluationId?: string;
   testCaseId?: string;
   onMetricFilter?: (metric: string | null) => void;
+  isRedteam?: boolean;
 }
 
 function EvalOutputCell({
@@ -50,13 +51,16 @@ function EvalOutputCell({
   evaluationId,
   testCaseId,
   onMetricFilter,
+  isRedteam,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
-  searchText: string;
+  searchText?: string;
 }) {
   const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
     useResultsViewSettingsStore();
+
+  const { shouldHighlightSearchText } = useTableStore();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -163,7 +167,7 @@ function EvalOutputCell({
     );
   }
 
-  if (searchText) {
+  if (searchText && shouldHighlightSearchText) {
     // Highlight search matches
     try {
       const regex = new RegExp(searchText, 'gi');
@@ -514,6 +518,11 @@ function EvalOutputCell({
 
   const detail = showStats ? (
     <div className="cell-detail">
+      {tokenUsage?.numRequests !== undefined && isRedteam && (
+        <div className="stat-item">
+          <strong>Probes:</strong> {tokenUsage.numRequests}
+        </div>
+      )}
       {tokenUsageDisplay && (
         <div className="stat-item">
           <strong>Tokens:</strong> {tokenUsageDisplay}
@@ -585,6 +594,8 @@ function EvalOutputCell({
               metadata={output.metadata}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
+              testIndex={rowIndex}
+              variables={output.testCase?.vars}
             />
           )}
         </>

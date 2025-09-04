@@ -1,12 +1,10 @@
+import { randomUUID } from 'crypto';
+import * as path from 'path';
+
 import async from 'async';
 import chalk from 'chalk';
-import type { MultiBar, SingleBar } from 'cli-progress';
 import cliProgress from 'cli-progress';
-import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
-import * as path from 'path';
-import type winston from 'winston';
-
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { getCache } from './cache';
 import cliState from './cliState';
@@ -15,7 +13,7 @@ import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
-import type Eval from './models/eval';
+import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
@@ -27,7 +25,6 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
-import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
   type AssertionType,
@@ -50,43 +47,43 @@ import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
-  createEmptyTokenUsage,
-  createEmptyAssertions,
   accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
+  createEmptyAssertions,
+  createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { transform, type TransformContext, TransformInputType } from './util/transform';
+import { type TransformContext, TransformInputType, transform } from './util/transform';
+import type { SingleBar } from 'cli-progress';
+import type winston from 'winston';
+
+import type Eval from './models/eval';
+import type {
+  EvalConversations,
+  EvalRegisters,
+  ProviderOptions,
+  ScoringFunction,
+  TokenUsage,
+  Vars,
+} from './types';
 
 /**
- * Manages progress bars for different execution phases of the evaluation
+ * Manages a single progress bar for the evaluation
  */
 class ProgressBarManager {
-  private multibar: MultiBar | undefined;
-  private serialBar: SingleBar | undefined;
-  private concurrentBars: SingleBar[] = [];
-  private comparisonBar: SingleBar | undefined;
+  private progressBar: SingleBar | undefined;
   private isWebUI: boolean;
 
-  // Track work distribution
-  private serialCount: number = 0;
-  private concurrentCount: number = 0;
-  private comparisonCount: number = 0;
-
-  // Track completion
-  private serialCompleted: number = 0;
-  private concurrentCompleted: number = 0;
-  private comparisonCompleted: number = 0;
-
-  // Map original indices to execution context
-  private indexToContext: Map<number, { phase: 'serial' | 'concurrent'; barIndex: number }> =
-    new Map();
+  // Track overall progress
+  private totalCount: number = 0;
+  private completedCount: number = 0;
+  private concurrency: number = 1;
 
   constructor(isWebUI: boolean) {
     this.isWebUI = isWebUI;
   }
 
   /**
-   * Initialize progress bars based on work distribution
+   * Initialize progress bar
    */
   async initialize(
     runEvalOptions: RunEvalOptions[],
@@ -97,75 +94,25 @@ class ProgressBarManager {
       return;
     }
 
-    // Calculate work distribution
-    const maxConcurrentBars = Math.min(concurrency, 20);
+    this.totalCount = runEvalOptions.length + compareRowsCount;
+    this.concurrency = concurrency;
 
-    for (let i = 0; i < runEvalOptions.length; i++) {
-      const evalOption = runEvalOptions[i];
-      if (evalOption.test.options?.runSerially) {
-        this.serialCount++;
-        this.indexToContext.set(i, { phase: 'serial', barIndex: 0 });
-      } else {
-        this.indexToContext.set(i, {
-          phase: 'concurrent',
-          barIndex: this.concurrentCount % maxConcurrentBars,
-        });
-        this.concurrentCount++;
-      }
-    }
-    this.comparisonCount = compareRowsCount;
-
-    // Create multibar
-    this.multibar = new cliProgress.MultiBar(
+    // Create single progress bar
+    this.progressBar = new cliProgress.SingleBar(
       {
-        format:
-          '{phase} [{bar}] {percentage}% | {value}/{total} | {status} | {provider} "{prompt}" {vars}',
+        format: 'Evaluating [{bar}] {percentage}% | {value}/{total} | {provider} {prompt} {vars}',
         hideCursor: true,
         gracefulExit: true,
       },
       cliProgress.Presets.shades_classic,
     );
 
-    // Create serial progress bar if needed
-    if (this.serialCount > 0) {
-      this.serialBar = this.multibar.create(this.serialCount, 0, {
-        phase: 'Serial (1 thread)',
-        status: 'Running',
-        provider: '',
-        prompt: '',
-        vars: '',
-      });
-    }
-
-    // Create concurrent progress bars
-    const numConcurrentBars = Math.min(concurrency, 20, this.concurrentCount);
-    const concurrentPerBar = Math.floor(this.concurrentCount / numConcurrentBars);
-    const concurrentRemainder = this.concurrentCount % numConcurrentBars;
-
-    for (let i = 0; i < numConcurrentBars; i++) {
-      const totalSteps = i < concurrentRemainder ? concurrentPerBar + 1 : concurrentPerBar;
-      if (totalSteps > 0) {
-        const bar = this.multibar.create(totalSteps, 0, {
-          phase: `Group ${i + 1}/${numConcurrentBars}`,
-          status: `${calculateThreadsPerBar(concurrency, numConcurrentBars, i)} threads`,
-          provider: '',
-          prompt: '',
-          vars: '',
-        });
-        this.concurrentBars.push(bar);
-      }
-    }
-
-    // Create comparison progress bar if needed
-    if (this.comparisonCount > 0) {
-      this.comparisonBar = this.multibar.create(this.comparisonCount, 0, {
-        phase: 'select-best',
-        status: 'Pending',
-        provider: 'Grading',
-        prompt: '',
-        vars: '',
-      });
-    }
+    // Start the progress bar
+    this.progressBar.start(this.totalCount, 0, {
+      provider: '',
+      prompt: '',
+      vars: '',
+    });
   }
 
   /**
@@ -176,125 +123,68 @@ class ProgressBarManager {
     evalStep: RunEvalOptions | undefined,
     phase: 'serial' | 'concurrent' = 'concurrent',
   ): void {
-    if (this.isWebUI || !evalStep) {
+    if (this.isWebUI || !evalStep || !this.progressBar) {
       return;
     }
 
-    const context = this.indexToContext.get(index);
-    if (!context) {
-      logger.warn(`No context found for index ${index}`);
-      return;
-    }
-
+    this.completedCount++;
     const provider = evalStep.provider.label || evalStep.provider.id();
-    const prompt = evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ');
+    const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
     const vars = formatVarsForDisplay(evalStep.test.vars, 10);
 
-    switch (context.phase) {
-      case 'serial':
-        this.serialCompleted++;
-        this.serialBar?.increment({
-          status: `Running (${this.serialCompleted}/${this.serialCount})`,
-          provider,
-          prompt,
-          vars,
-        });
-        break;
-
-      case 'concurrent':
-        this.concurrentCompleted++;
-        if (context.barIndex >= 0 && context.barIndex < this.concurrentBars.length) {
-          const bar = this.concurrentBars[context.barIndex];
-          bar.increment({
-            status: 'Running',
-            provider,
-            prompt,
-            vars,
-          });
-        } else {
-          logger.warn(`Invalid bar index ${context.barIndex} for concurrent progress update`);
-        }
-        break;
-    }
+    this.progressBar.increment({
+      provider,
+      prompt: prompt || '""',
+      vars: vars || '',
+    });
   }
 
   /**
    * Update comparison progress
    */
   updateComparisonProgress(prompt: string): void {
-    if (this.isWebUI || !this.comparisonBar) {
+    if (this.isWebUI || !this.progressBar) {
       return;
     }
 
-    // Validate we don't exceed the total
-    if (this.comparisonCompleted >= this.comparisonCount) {
-      logger.warn(
-        `Comparison progress already at maximum (${this.comparisonCompleted}/${this.comparisonCount})`,
-      );
-      return;
-    }
-
-    this.comparisonCompleted++;
-    this.comparisonBar.increment({
-      phase: 'select-best',
-      status: `Running (${this.comparisonCompleted}/${this.comparisonCount})`,
+    this.completedCount++;
+    this.progressBar.increment({
       provider: 'Grading',
-      prompt: prompt.slice(0, 10).replace(/\n/g, ' '),
+      prompt: `"${prompt.slice(0, 10).replace(/\n/g, ' ')}"`,
       vars: '',
     });
   }
 
   /**
-   * Create comparison progress bar dynamically when we know the actual count
+   * Update total count when comparison count is determined
    */
-  createComparisonBar(comparisonCount: number): void {
-    if (this.isWebUI || !this.multibar || comparisonCount <= 0) {
+  updateTotalCount(additionalCount: number): void {
+    if (this.isWebUI || !this.progressBar || additionalCount <= 0) {
       return;
     }
 
-    this.comparisonCount = comparisonCount;
-    this.comparisonBar = this.multibar.create(comparisonCount, 0, {
-      phase: 'select-best',
-      status: 'Running',
-      provider: 'Grading',
-      prompt: '',
-      vars: '',
-    });
+    this.totalCount += additionalCount;
+    this.progressBar.setTotal(this.totalCount);
   }
 
   /**
-   * Mark a phase as complete
+   * Mark evaluation as complete
    */
-  completePhase(phase: 'serial' | 'concurrent' | 'comparison'): void {
-    if (this.isWebUI) {
+  complete(): void {
+    if (this.isWebUI || !this.progressBar) {
       return;
     }
 
-    switch (phase) {
-      case 'serial':
-        if (this.serialBar) {
-          this.serialBar.update(this.serialCount, { status: 'Complete' });
-        }
-        break;
-      case 'concurrent':
-        this.concurrentBars.forEach((bar) => {
-          bar.update(bar.getTotal(), { status: 'Complete' });
-        });
-        break;
-      case 'comparison':
-        if (this.comparisonBar) {
-          this.comparisonBar.update(this.comparisonCount, { status: 'Complete' });
-        }
-        break;
-    }
+    // Just ensure we're at 100% - the bar will be stopped in stop()
+    this.progressBar.update(this.totalCount);
   }
 
   /**
-   * Stop all progress bars
+   * Stop the progress bar
    */
   stop(): void {
-    if (this.multibar) {
-      this.multibar.stop();
+    if (this.progressBar) {
+      this.progressBar.stop();
     }
   }
 }
@@ -578,17 +468,25 @@ export async function runEval({
     } else {
       // Create a copy of response so we can potentially mutate it.
       const processedResponse = { ...response };
-      const transforms: string[] = [
-        provider.transform, // Apply provider transform first
-        // NOTE: postprocess is deprecated. Use the first defined transform.
-        [test.options?.transform, test.options?.postprocess].find((s) => s),
-      ]
-        .flat()
-        .filter((s): s is string => typeof s === 'string');
-      for (const t of transforms) {
-        processedResponse.output = await transform(t, processedResponse.output, {
+
+      // Apply provider transform first (if exists)
+      if (provider.transform) {
+        processedResponse.output = await transform(provider.transform, processedResponse.output, {
           vars,
           prompt,
+        });
+      }
+
+      // Store the provider-transformed output for assertions (contextTransform)
+      const providerTransformedOutput = processedResponse.output;
+
+      // Apply test transform (if exists)
+      const testTransform = test.options?.transform || test.options?.postprocess;
+      if (testTransform) {
+        processedResponse.output = await transform(testTransform, processedResponse.output, {
+          vars,
+          prompt,
+          ...(response && response.metadata && { metadata: response.metadata }),
         });
       }
 
@@ -604,10 +502,15 @@ export async function runEval({
         }
       }
 
+      // Pass providerTransformedOutput for contextTransform to use
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
-        providerResponse: processedResponse,
+        providerResponse: {
+          ...processedResponse,
+          // Add provider-transformed output for contextTransform
+          providerTransformedOutput,
+        },
         test,
         latencyMs: response.cached ? undefined : latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
@@ -663,23 +566,6 @@ export async function runEval({
       },
     ];
   }
-}
-
-/**
- * Calculates the number of threads allocated to a specific progress bar.
- * @param concurrency Total number of concurrent threads
- * @param numProgressBars Total number of progress bars
- * @param barIndex Index of the progress bar (0-based)
- * @returns Number of threads allocated to this progress bar
- */
-export function calculateThreadsPerBar(
-  concurrency: number,
-  numProgressBars: number,
-  barIndex: number,
-): number {
-  const threadsPerBar = Math.floor(concurrency / numProgressBars);
-  const extraThreads = concurrency % numProgressBars;
-  return barIndex < extraThreads ? threadsPerBar + 1 : threadsPerBar;
 }
 
 /**
@@ -829,6 +715,7 @@ class Evaluator {
     const prompts: CompletedPrompt[] = [];
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
+    const rowsWithMaxScoreAssertion = new Set<number>();
 
     const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
       suite: testSuite,
@@ -1039,9 +926,29 @@ class Evaluator {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
         ...testCase.metadata,
       };
-      testCase.provider =
-        testCase.provider ||
-        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.provider : undefined);
+      // If the test case doesn't have a provider, use the one from defaultTest
+      // Note: defaultTest.provider may be a raw config object that needs to be loaded
+      if (
+        !testCase.provider &&
+        typeof testSuite.defaultTest === 'object' &&
+        testSuite.defaultTest?.provider
+      ) {
+        const defaultProvider = testSuite.defaultTest.provider;
+        if (isApiProvider(defaultProvider)) {
+          // Already loaded
+          testCase.provider = defaultProvider;
+        } else if (typeof defaultProvider === 'object' && defaultProvider.id) {
+          // Raw config object - load it
+          const { loadApiProvider } = await import('./providers');
+          const providerId =
+            typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
+          testCase.provider = await loadApiProvider(providerId, {
+            options: defaultProvider as ProviderOptions,
+          });
+        } else {
+          testCase.provider = defaultProvider;
+        }
+      }
       testCase.assertScoringFunction =
         testCase.assertScoringFunction ||
         (typeof testSuite.defaultTest === 'object'
@@ -1200,6 +1107,9 @@ class Evaluator {
 
         if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
           rowsWithSelectBestAssertion.add(row.testIdx);
+        }
+        if (evalStep.test.assert?.some((a) => a.type === 'max-score')) {
+          rowsWithMaxScoreAssertion.add(row.testIdx);
         }
         for (const assert of evalStep.test.assert || []) {
           if (assert.type) {
@@ -1413,10 +1323,9 @@ class Evaluator {
     const progressBarManager = new ProgressBarManager(isWebUI);
 
     // Initialize progress bar manager if needed
-    if (this.options.showProgressBar) {
-      // We'll create the comparison bar dynamically later when we know the actual count
-      await progressBarManager.initialize(runEvalOptions, concurrency, 0);
-    }
+    logger.debug(
+      `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
+    );
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
@@ -1448,10 +1357,24 @@ class Evaluator {
       }
     }
 
+    // Print info messages before starting progress bar
+    if (serialRunEvalOptions.length > 0) {
+      logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+    }
+    if (concurrentRunEvalOptions.length > 0) {
+      logger.info(
+        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+      );
+    }
+
+    // Now start the progress bar after info messages
+    if (this.options.showProgressBar) {
+      await progressBarManager.initialize(runEvalOptions, concurrency, 0);
+    }
+
     try {
       if (serialRunEvalOptions.length > 0) {
-        // Run serial evaluations first
-        logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+        // Run serial evaluations
         for (const evalStep of serialRunEvalOptions) {
           if (isWebUI) {
             const provider = evalStep.provider.label || evalStep.provider.id();
@@ -1465,16 +1388,10 @@ class Evaluator {
           processedIndices.add(idx);
         }
 
-        // Mark serial phase as complete
-        if (this.options.showProgressBar) {
-          progressBarManager.completePhase('serial');
-        }
+        // Serial phase complete - no specific action needed with single bar
       }
 
       // Then run concurrent evaluations
-      logger.info(
-        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
-      );
       await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
         checkAbort();
         const idx = runEvalOptions.indexOf(evalStep);
@@ -1492,16 +1409,11 @@ class Evaluator {
     }
 
     // Do we have to run comparisons between row outputs?
-    const compareRowsCount = rowsWithSelectBestAssertion.size;
+    const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
 
-    // Mark concurrent phase as complete
-    if (this.options.showProgressBar) {
-      progressBarManager.completePhase('concurrent');
-
-      // Create comparison progress bar now that we know the actual count
-      if (compareRowsCount > 0) {
-        progressBarManager.createComparisonBar(compareRowsCount);
-      }
+    // Update total count now that we know comparison count
+    if (this.options.showProgressBar && compareRowsCount > 0) {
+      progressBarManager.updateTotalCount(compareRowsCount);
     }
 
     let compareCount = 0;
@@ -1596,11 +1508,83 @@ class Evaluator {
       }
     }
 
+    // Process max-score assertions
+    const maxScoreRowsCount = rowsWithMaxScoreAssertion.size;
+    if (maxScoreRowsCount > 0) {
+      logger.info(`Processing ${maxScoreRowsCount} max-score assertions...`);
+
+      for (const testIdx of rowsWithMaxScoreAssertion) {
+        const resultsToCompare = this.evalRecord.persisted
+          ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
+          : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
+
+        if (resultsToCompare.length === 0) {
+          logger.warn(`Expected results to be found for test index ${testIdx}`);
+          continue;
+        }
+
+        const maxScoreAssertion = resultsToCompare[0].testCase.assert?.find(
+          (a) => a.type === 'max-score',
+        ) as Assertion;
+
+        if (maxScoreAssertion) {
+          const outputs = resultsToCompare.map((r) => r.response?.output || '');
+
+          // Pass the results with their grading results to selectMaxScore
+          const maxScoreGradingResults = await selectMaxScore(
+            outputs,
+            resultsToCompare,
+            maxScoreAssertion,
+          );
+
+          // Update progress bar
+          if (this.options.showProgressBar) {
+            progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+          } else if (!isWebUI) {
+            logger.debug(`Max-score assertion for test #${testIdx} complete`);
+          }
+
+          // Update results with max-score outcomes
+          for (let index = 0; index < resultsToCompare.length; index++) {
+            const result = resultsToCompare[index];
+            const maxScoreGradingResult = {
+              ...maxScoreGradingResults[index],
+              assertion: maxScoreAssertion,
+            };
+
+            // Preserve existing gradingResult data and add max-score result to componentResults
+            const existingComponentResults = result.gradingResult?.componentResults || [];
+            const existingGradingResult = result.gradingResult;
+
+            result.gradingResult = {
+              pass: maxScoreGradingResult.pass,
+              score: maxScoreGradingResult.score,
+              reason: maxScoreGradingResult.reason,
+              componentResults: [...existingComponentResults, maxScoreGradingResult],
+              namedScores: {
+                ...(existingGradingResult?.namedScores || {}),
+                ...maxScoreGradingResult.namedScores,
+              },
+              tokensUsed: existingGradingResult?.tokensUsed || maxScoreGradingResult.tokensUsed,
+              assertion: maxScoreAssertion,
+            };
+
+            // Don't overwrite overall success/score - max-score is just another assertion
+            // The overall result should be determined by all assertions, not just max-score
+
+            if (this.evalRecord.persisted) {
+              await result.save();
+            }
+          }
+        }
+      }
+    }
+
     await this.evalRecord.addPrompts(prompts);
 
     // Finish up
     if (this.options.showProgressBar) {
-      progressBarManager.completePhase('comparison');
+      progressBarManager.complete();
       progressBarManager.stop();
     }
 

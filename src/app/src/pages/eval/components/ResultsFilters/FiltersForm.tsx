@@ -26,6 +26,7 @@ const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   metadata: 'Metadata',
   plugin: 'Plugin',
   strategy: 'Strategy',
+  severity: 'Severity',
 };
 
 const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
@@ -70,13 +71,15 @@ function Dropdown({
           },
         }}
       >
-        {values
-          .filter((item) => !disabledValues.includes(item.value))
-          .map((item) => (
-            <MenuItem key={item.value} value={item.value}>
-              {item.label}
-            </MenuItem>
-          ))}
+        {values.map((item) => (
+          <MenuItem
+            key={item.value}
+            value={item.value}
+            disabled={disabledValues.includes(item.value)}
+          >
+            {item.label}
+          </MenuItem>
+        ))}
       </Select>
     </FormControl>
   );
@@ -141,6 +144,21 @@ function Filter({
     .filter((filter) => filter.id !== value.id && filter.type === 'metric' && filter.value)
     .map((filter) => filter.value);
 
+  // Compute selected plugin values (excluding current filter)
+  const selectedPluginValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'plugin' && filter.value)
+    .map((filter) => filter.value);
+
+  // Compute selected strategy values (excluding current filter)
+  const selectedStrategyValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'strategy' && filter.value)
+    .map((filter) => filter.value);
+
+  // Compute selected severity values (excluding current filter)
+  const selectedSeverityValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'severity' && filter.value)
+    .map((filter) => filter.value);
+
   /**
    * Updates the metadata field.
    * @param field - The new metadata field.
@@ -170,7 +188,10 @@ function Filter({
       }
       // Reset operator to 'equals' when changing to types that only support 'equals'
       if (
-        (filterType === 'metric' || filterType === 'plugin' || filterType === 'strategy') &&
+        (filterType === 'metric' ||
+          filterType === 'plugin' ||
+          filterType === 'strategy' ||
+          filterType === 'severity') &&
         value.operator !== 'equals'
       ) {
         updatedFilter.operator = 'equals';
@@ -299,6 +320,9 @@ function Filter({
             ...(filters.options.strategy.length > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.strategy, value: 'strategy' }]
               : []),
+            ...(filters.options.severity.length > 0
+              ? [{ label: TYPE_LABELS_BY_TYPE.severity, value: 'severity' }]
+              : []),
           ]}
           value={value.type}
           onChange={(e) => handleTypeChange(e as ResultsFilter['type'])}
@@ -322,7 +346,10 @@ function Filter({
           id={`${index}-operator-select`}
           label="Operator"
           values={
-            value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy'
+            value.type === 'metric' ||
+            value.type === 'plugin' ||
+            value.type === 'strategy' ||
+            value.type === 'severity'
               ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
               : [
                   { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
@@ -336,7 +363,10 @@ function Filter({
         />
 
         <Box sx={{ flex: 1, minWidth: 250 }}>
-          {value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy' ? (
+          {value.type === 'metric' ||
+          value.type === 'plugin' ||
+          value.type === 'strategy' ||
+          value.type === 'severity' ? (
             <Dropdown
               id={`${index}-value-select`}
               label={TYPE_LABELS_BY_TYPE[value.type]}
@@ -382,7 +412,17 @@ function Filter({
               value={value.value}
               onChange={(e) => handleValueChange(e)}
               width="100%"
-              disabledValues={value.type === 'metric' ? selectedMetricValues : []}
+              disabledValues={
+                value.type === 'metric'
+                  ? selectedMetricValues
+                  : value.type === 'plugin'
+                    ? selectedPluginValues
+                    : value.type === 'strategy'
+                      ? selectedStrategyValues
+                      : value.type === 'severity'
+                        ? selectedSeverityValues
+                        : []
+              }
             />
           ) : (
             <DebouncedTextField
@@ -424,6 +464,8 @@ export default function FiltersForm({
       defaultType = 'plugin';
     } else if (filters.options.strategy.length > 1) {
       defaultType = 'strategy';
+    } else if (filters.options.severity.length > 0) {
+      defaultType = 'severity';
     }
 
     addFilter({
