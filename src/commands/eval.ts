@@ -414,6 +414,7 @@ export async function doEval(
     const durationDisplay = formatDuration(duration);
 
     const isRedteam = Boolean(config.redteam);
+    const tracker = TokenUsageTracker.getInstance();
 
     // Handle token usage display
     if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
@@ -459,7 +460,7 @@ export async function doEval(
       }
 
       // Provider breakdown
-      const tracker = TokenUsageTracker.getInstance();
+
       const providerIds = tracker.getProviderIds();
       if (providerIds.length > 1) {
         logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
@@ -475,7 +476,7 @@ export async function doEval(
             // Extract just the provider ID part (remove class name in parentheses)
             const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
             logger.info(
-              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())}`,
+              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())} (${usage.numRequests} requests)`,
             );
 
             // Show breakdown if there are individual components
