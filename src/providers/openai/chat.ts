@@ -9,6 +9,7 @@ import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { normalizeFinishReason } from '../../util/finishReason';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
@@ -26,8 +27,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   config: OpenAiCompletionOptions;
   private mcpClient: MCPClient | null = null;
+  private functionCallbackHandler: FunctionCallbackHandler;
   private initializationPromise: Promise<void> | null = null;
-  private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(
     modelName: string,
@@ -39,6 +40,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     super(modelName, options);
     this.config = options.config || {};
 
+    // Initialize callback handler immediately (will be replaced if MCP is enabled)
+    this.functionCallbackHandler = new FunctionCallbackHandler();
+
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
@@ -47,6 +51,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
     await this.mcpClient.initialize();
+
+    // Initialize callback handler with MCP client
+    this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
   }
 
   async cleanup(): Promise<void> {
@@ -107,64 +114,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
-  /**
-   * Executes a function callback with proper error handling
-   */
-  private async executeFunctionCallback(
-    functionName: string,
-    args: string,
-    config: OpenAiCompletionOptions,
-  ): Promise<string> {
-    try {
-      // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
-
-      // If not loaded yet, try to load it now
-      if (!callback) {
-        const callbackRef = config.functionToolCallbacks?.[functionName];
-
-        if (callbackRef && typeof callbackRef === 'string') {
-          const callbackStr: string = callbackRef;
-          if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
-          } else {
-            callback = new Function('return ' + callbackStr)();
-          }
-
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
-        }
-      }
-
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      // Execute the callback
-      logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
-
-      // Format the result
-      if (result === undefined || result === null) {
-        return '';
-      } else if (typeof result === 'object') {
-        try {
-          return JSON.stringify(result);
-        } catch (error) {
-          logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
-          return String(result);
-        }
-      } else {
-        return String(result);
-      }
-    } catch (error: any) {
-      logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
-      throw error; // Re-throw so caller can handle fallback behavior
-    }
-  }
 
   protected isReasoningModel(): boolean {
     return (
@@ -412,48 +361,35 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
       }
 
-      // Handle function tool callbacks
+      // Handle function tool callbacks using unified handler
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
-      if (functionCalls && config.functionToolCallbacks) {
-        const results = [];
-        let hasSuccessfulCallback = false;
-        for (const functionCall of functionCalls) {
-          const functionName = functionCall.name || functionCall.function?.name;
-          if (config.functionToolCallbacks[functionName]) {
-            try {
-              const functionResult = await this.executeFunctionCallback(
-                functionName,
-                functionCall.arguments || functionCall.function?.arguments,
+      if (functionCalls && ((config.functionToolCallbacks && functionCalls) || (this.mcpClient && functionCalls))) {
+        try {
+          const callbackResult = await this.functionCallbackHandler.processCalls(
+            functionCalls,
+            config.functionToolCallbacks,
+          );
+          
+          // If processCalls returned something meaningful (not just the original call)
+          if (callbackResult !== functionCalls && callbackResult) {
+            return {
+              output: callbackResult,
+              tokenUsage: getTokenUsage(data, cached),
+              cached,
+              logProbs,
+              ...(finishReason && { finishReason }),
+              cost: calculateOpenAICost(
+                this.modelName,
                 config,
-              );
-              results.push(functionResult);
-              hasSuccessfulCallback = true;
-            } catch (error) {
-              // If callback fails, fall back to original behavior (return the function call)
-              logger.debug(
-                `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
-              );
-              hasSuccessfulCallback = false;
-              break;
-            }
+                data.usage?.prompt_tokens,
+                data.usage?.completion_tokens,
+                data.usage?.audio_prompt_tokens,
+                data.usage?.audio_completion_tokens,
+              ),
+            };
           }
-        }
-        if (hasSuccessfulCallback && results.length > 0) {
-          return {
-            output: results.join('\n'),
-            tokenUsage: getTokenUsage(data, cached),
-            cached,
-            logProbs,
-            ...(finishReason && { finishReason }),
-            cost: calculateOpenAICost(
-              this.modelName,
-              config,
-              data.usage?.prompt_tokens,
-              data.usage?.completion_tokens,
-              data.usage?.audio_prompt_tokens,
-              data.usage?.audio_completion_tokens,
-            ),
-          };
+        } catch (error) {
+          logger.debug(`Function callback handler failed: ${error}, falling back to original output`);
         }
       }
 
