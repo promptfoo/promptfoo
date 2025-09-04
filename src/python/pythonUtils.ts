@@ -56,9 +56,12 @@ async function tryPythonCommands(commands: string[]): Promise<string | null> {
       const result = await execAsync(`${cmd} -c "import sys; print(sys.executable)"`);
       const executablePath = result.stdout.trim();
       if (executablePath && executablePath !== 'None') {
-        // On Windows, ensure .exe suffix if missing
+        // On Windows, ensure .exe suffix if missing (but only for Windows-style paths)
         if (process.platform === 'win32' && !executablePath.toLowerCase().endsWith('.exe')) {
-          return executablePath + '.exe';
+          // Only add .exe for Windows-style paths (contains \ or : or starts with C:)
+          if (executablePath.includes('\\') || executablePath.includes(':')) {
+            return executablePath + '.exe';
+          }
         }
         return executablePath;
       }
