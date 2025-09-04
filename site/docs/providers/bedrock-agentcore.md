@@ -416,6 +416,7 @@ The provider includes specific error messages for common issues:
    ```
 
 3. **Control Response Length**:
+
    ```yaml
    inferenceConfig:
      maximumLength: 1024 # Limit response size
@@ -433,6 +434,7 @@ The provider includes specific error messages for common issues:
    ```
 
 2. Check IAM permissions include:
+
    ```json
    {
      "Effect": "Allow",
