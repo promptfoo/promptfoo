@@ -440,7 +440,7 @@ export class AwsBedrockAgentCoreProvider extends AwsBedrockGenericProvider imple
               cached: true,
             };
           }
-        } catch (_error) {
+        } catch {
           logger.warn('Failed to parse cached AgentCore response, ignoring cache');
         }
       }
