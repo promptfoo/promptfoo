@@ -56,6 +56,7 @@ This example includes:
 - `promptfooconfig.claude.yaml`: Claude models for technical writing and code analysis
 - `promptfooconfig.llama.yaml`: Llama models with safety features and region configuration
 - `promptfooconfig.search.yaml`: Search grounding for real-time information
+- `promptfooconfig.response-schema.yaml`: Response schemas with structured output
 
 ## Running Examples
 
@@ -71,6 +72,9 @@ promptfoo eval -c promptfooconfig.llama.yaml
 # Search grounding tool and image understanding
 promptfoo eval -c promptfooconfig.search.yaml
 promptfoo eval -c promptfooconfig.image.yaml
+
+# Structured output with response schemas
+promptfoo eval -c promptfooconfig.response-schema.yaml
 
 # View results
 promptfoo view
