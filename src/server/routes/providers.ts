@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { createTransformRequest, createTransformResponse } from '../../providers/http';
 import { loadApiProvider } from '../../providers/index';
 import {
   doTargetPurposeDiscovery,
@@ -162,6 +163,114 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     });
   }
 });
+
+// Test request transform endpoint
+providersRouter.post(
+  '/test-request-transform',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { transformCode, prompt } = req.body;
+
+      if (!transformCode) {
+        res.status(400).json({ success: false, error: 'Transform code is required' });
+        return;
+      }
+
+      if (typeof prompt !== 'string') {
+        res.status(400).json({ success: false, error: 'Prompt must be a string' });
+        return;
+      }
+
+      // Use the actual HTTP provider's transform function
+      const transformFn = await createTransformRequest(transformCode);
+      const result = await transformFn(prompt, {});
+
+      // Check if result is completely empty (no value at all)
+      if (result === null || result === undefined) {
+        res.json({
+          success: false,
+          error: 'Transform returned null or undefined. Check your transform function.',
+        });
+        return;
+      }
+
+      // Return the result even if it's an empty string or other falsy value
+      // as it might be intentional
+      res.json({
+        success: true,
+        result,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`[POST /providers/test-request-transform] Error: ${errorMessage}`);
+      res.status(200).json({
+        success: false,
+        error: errorMessage,
+      });
+    }
+  },
+);
+
+// Test response transform endpoint
+providersRouter.post(
+  '/test-response-transform',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { transformCode, response: responseText } = req.body;
+
+      if (!transformCode) {
+        res.status(400).json({ success: false, error: 'Transform code is required' });
+        return;
+      }
+
+      if (typeof responseText !== 'string') {
+        res.status(400).json({ success: false, error: 'Response must be a string' });
+        return;
+      }
+
+      // Parse the response as JSON if possible
+      let jsonData;
+      try {
+        jsonData = JSON.parse(responseText);
+      } catch {
+        jsonData = null;
+      }
+
+      // Use the actual HTTP provider's transform function
+      const transformFn = await createTransformResponse(transformCode);
+      const result = transformFn(jsonData, responseText);
+
+      // Check if result is empty/null/undefined
+      // The result is always a ProviderResponse object with an 'output' field
+      const output = result?.output ?? result?.raw ?? result;
+
+      // Check if both output and raw are empty
+      if (output === null || output === undefined || output === '') {
+        res.json({
+          success: false,
+          error:
+            'Transform returned empty result. Check your extraction path or transform function.',
+          result: output,
+        });
+        return;
+      }
+
+      // If output is empty but raw has content, still return it as success
+      // This handles cases where the result isn't a string but is still valid
+      res.json({
+        success: true,
+        result: output,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`[POST /providers/test-response-transform] Error: ${errorMessage}`);
+      res.status(200).json({
+        success: false,
+        error: errorMessage,
+      });
+    }
+  },
+);
 
 // Test multi-turn session functionality
 providersRouter.post('/test-session', async (req: Request, res: Response): Promise<void> => {
