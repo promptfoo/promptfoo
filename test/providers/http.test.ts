@@ -1911,13 +1911,13 @@ describe('HttpProvider', () => {
 describe('createTransformRequest', () => {
   it('should return identity function when no transform specified', async () => {
     const transform = await createTransformRequest(undefined);
-    const result = await transform('test prompt');
+    const result = await transform('test prompt', {} as any);
     expect(result).toBe('test prompt');
   });
 
   it('should handle string templates', async () => {
     const transform = await createTransformRequest('return {"text": prompt}');
-    const result = await transform('hello');
+    const result = await transform('hello', {} as any);
     expect(result).toEqual({
       text: 'hello',
     });
@@ -1929,7 +1929,7 @@ describe('createTransformRequest', () => {
     };
     const transform = await createTransformRequest(errorFn);
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow('Error in request transform function: Transform function error');
   });
 
@@ -1941,7 +1941,7 @@ describe('createTransformRequest', () => {
 
     const transform = await createTransformRequest('file://error-transform.js');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow(
       'Error in request transform function from error-transform.js: File transform error',
     );
@@ -1950,7 +1950,7 @@ describe('createTransformRequest', () => {
   it('should handle errors in string template transform', async () => {
     const transform = await createTransformRequest('return badVariable.nonexistent');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow('Error in request transform string template: badVariable is not defined');
   });
 
@@ -2004,14 +2004,14 @@ describe('createTransformRequest', () => {
 
     const transform = await createTransformRequest('file://specific-file.js');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow('Error in request transform function from specific-file.js: File error');
   });
 
   it('should handle errors in string template rendering', async () => {
     const transform = await createTransformRequest('{{ nonexistent | invalid }}');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow(
       'Error in request transform string template: (unknown path)\n  Error: filter not found: invalid',
     );

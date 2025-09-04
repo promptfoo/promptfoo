@@ -53,6 +53,7 @@ type EnvVars = {
   PROMPTFOO_STRIP_RESPONSE_OUTPUT?: boolean;
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
+  PROMPTFOO_TRACING_ENABLED?: boolean;
   PROMPTFOO_DISABLE_UNBLOCKING?: boolean;
 
   //=========================================================================
@@ -174,6 +175,7 @@ type EnvVars = {
   ANTHROPIC_TEMPERATURE?: number;
 
   // AWS Bedrock
+  AWS_BEARER_TOKEN_BEDROCK?: string;
   AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
   AWS_BEDROCK_MAX_NEW_TOKENS?: number;
