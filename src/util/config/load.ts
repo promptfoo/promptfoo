@@ -463,7 +463,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
 
       const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
-      return sharingConfig ? sharingConfig.sharing : true;
+      return sharingConfig ? sharingConfig.sharing : false;
     })(),
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
@@ -558,7 +558,7 @@ export async function resolveConfigs(
     env: fileConfig.env || defaultConfig.env,
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
-      : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
+      : (fileConfig.sharing ?? defaultConfig.sharing ?? false),
     defaultTest: processedDefaultTest
       ? await readTest(processedDefaultTest, basePath, true)
       : undefined,
