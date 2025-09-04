@@ -155,6 +155,33 @@ describe('CrescendoProvider', () => {
     expect(provider.config.continueAfterSuccess).toBe(false);
   });
 
+  it('should support backwards compatibility with maxRounds', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxRounds: 8, // Using old property name
+      maxBacktracks: 5,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    // Should use maxRounds value when maxTurns is not provided
+    expect(provider['maxTurns']).toBe(8);
+  });
+
+  it('should prefer maxTurns over maxRounds when both are provided', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 12,
+      maxRounds: 8, // This should be ignored
+      maxBacktracks: 5,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    // Should prefer maxTurns when both are provided
+    expect(provider['maxTurns']).toBe(12);
+  });
+
   it('should return correct provider id', () => {
     expect(crescendoProvider.id()).toBe('promptfoo:redteam:crescendo');
   });
