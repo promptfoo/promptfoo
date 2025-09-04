@@ -17,6 +17,7 @@ import {
 import type {
   BedrockAI21GenerationOptions,
   BedrockClaudeMessagesCompletionOptions,
+  BedrockOpenAIGenerationOptions,
   IBedrockModel,
   LlamaMessage,
   TextGenerationOptions,
@@ -1229,6 +1230,230 @@ describe('BEDROCK_MODEL MISTRAL', () => {
   });
 });
 
+describe('BEDROCK_MODEL OPENAI', () => {
+  const modelHandler = BEDROCK_MODEL.OPENAI;
+
+  describe('params', () => {
+    it('should include OpenAI-specific parameters', () => {
+      const config: BedrockOpenAIGenerationOptions = {
+        region: 'us-east-1',
+        max_completion_tokens: 150,
+        temperature: 0.8,
+        top_p: 0.95,
+        frequency_penalty: 0.2,
+        presence_penalty: 0.1,
+        stop: ['END', 'STOP'],
+      };
+      const prompt = 'What is artificial intelligence?';
+      const stop = ['FINISH'];
+
+      const params = modelHandler.params(config, prompt, stop);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'What is artificial intelligence?' }],
+        max_completion_tokens: 150,
+        temperature: 0.8,
+        top_p: 0.95,
+        frequency_penalty: 0.2,
+        presence_penalty: 0.1,
+        stop: ['FINISH'], // stop parameter takes precedence
+      });
+    });
+
+    it('should use config.stop when stop parameter is not provided', () => {
+      const config = {
+        stop: ['CONFIG_END'],
+        temperature: 0.5,
+      };
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Test prompt' }],
+        temperature: 0.5,
+        top_p: 1.0,
+        stop: ['CONFIG_END'],
+      });
+    });
+
+    it('should use default values when config is not provided', () => {
+      const config = {};
+      const prompt = 'Hello, how are you?';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Hello, how are you?' }],
+        temperature: 0.1,
+        top_p: 1.0,
+      });
+    });
+
+    it('should handle JSON message array input', () => {
+      const config = { temperature: 0.7 };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is machine learning?' },
+      ]);
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: 'What is machine learning?' },
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should handle reasoning_effort by adding it to system message', () => {
+      const config = {
+        temperature: 0.7,
+        reasoning_effort: 'high' as const,
+      };
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'Reasoning: high' },
+          { role: 'user', content: 'Test prompt' },
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should append reasoning_effort to existing system message', () => {
+      const config = {
+        temperature: 0.7,
+        reasoning_effort: 'medium' as const,
+      };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What is machine learning?' },
+      ]);
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.\n\nReasoning: medium' },
+          { role: 'user', content: 'What is machine learning?' },
+        ],
+        temperature: 0.7,
+        top_p: 1.0,
+      });
+    });
+
+    it('should not modify messages when reasoning_effort is not specified', () => {
+      const config = { temperature: 0.5 };
+      const prompt = 'Test prompt';
+
+      const params = modelHandler.params(config, prompt);
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Test prompt' }],
+        temperature: 0.5,
+        top_p: 1.0,
+      });
+    });
+  });
+
+  describe('output', () => {
+    it('should extract output from OpenAI chat completion format', () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'This is a test response from OpenAI model.',
+            },
+          },
+        ],
+      };
+
+      expect(modelHandler.output({}, mockResponse)).toBe(
+        'This is a test response from OpenAI model.',
+      );
+    });
+
+    it('should throw an error for API errors', () => {
+      const mockErrorResponse = { error: 'API Error occurred' };
+      expect(() => modelHandler.output({}, mockErrorResponse)).toThrow(
+        'OpenAI API error: API Error occurred',
+      );
+    });
+
+    it('should return undefined for unrecognized formats', () => {
+      const mockResponse = { something: 'else' };
+      const result = modelHandler.output({}, mockResponse);
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from OpenAI response format', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 25,
+          completion_tokens: 75,
+          total_tokens: 100,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 75,
+        total: 100,
+        numRequests: 1,
+      });
+    });
+
+    it('should handle string token counts', () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: '30',
+          completion_tokens: '60',
+          total_tokens: '90',
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 60,
+        total: 90,
+        numRequests: 1,
+      });
+    });
+
+    it('should return undefined token counts when usage is not provided', () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: 'Response without usage info',
+            },
+          },
+        ],
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
 describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
 
@@ -1724,6 +1949,11 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     }
 
     expect(handler).toBe(BEDROCK_MODEL.LLAMA4);
+  });
+
+  it('should include OpenAI models with OPENAI handler', () => {
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-120b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-20b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
   });
 });
 

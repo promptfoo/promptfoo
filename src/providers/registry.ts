@@ -302,10 +302,9 @@ export const providerMap: ProviderFactory[] = [
         const { AwsBedrockKnowledgeBaseProvider } = await import('./bedrock/knowledgeBase');
         return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
       }
-      return new AwsBedrockCompletionProvider(
-        `${modelType}${modelName ? `:${modelName}` : ''}`,
-        providerOptions,
-      );
+      // Reconstruct the full model name preserving the original format
+      const fullModelName = splits.slice(1).join(':');
+      return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
     },
   },
   {

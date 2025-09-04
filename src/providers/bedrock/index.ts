@@ -310,6 +310,16 @@ interface BedrockDeepseekGenerationOptions extends BedrockOptions {
   stop?: string[];
 }
 
+export interface BedrockOpenAIGenerationOptions extends BedrockOptions {
+  max_completion_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  stop?: string[];
+  reasoning_effort?: 'low' | 'medium' | 'high';
+}
+
 export interface IBedrockModel {
   params: (config: BedrockOptions, prompt: string, stop: string[], modelName?: string) => any;
   output: (config: BedrockOptions, responseJson: any) => any;
@@ -1273,6 +1283,92 @@ ${prompt}
       };
     },
   },
+  OPENAI: {
+    params: (
+      config: BedrockOpenAIGenerationOptions,
+      prompt: string,
+      stop?: string[],
+      modelName?: string,
+    ) => {
+      const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+
+      // Handle reasoning_effort by adding it to system message
+      if (config?.reasoning_effort) {
+        const reasoningInstruction = `Reasoning: ${config.reasoning_effort}`;
+
+        // Find existing system message or create one
+        const systemMessageIndex = messages.findIndex((msg) => msg.role === 'system');
+        if (systemMessageIndex >= 0) {
+          // Append to existing system message
+          messages[systemMessageIndex].content += `\n\n${reasoningInstruction}`;
+        } else {
+          // Add new system message at the beginning
+          messages.unshift({ role: 'system', content: reasoningInstruction });
+        }
+      }
+
+      const params: any = {
+        messages,
+      };
+
+      addConfigParam(
+        params,
+        'max_completion_tokens',
+        config?.max_completion_tokens,
+        getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
+        undefined,
+      );
+      addConfigParam(
+        params,
+        'temperature',
+        config?.temperature,
+        getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+        0.1,
+      );
+      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
+      if ((stop && stop.length > 0) || config?.stop) {
+        addConfigParam(params, 'stop', stop || config?.stop, getEnvString('AWS_BEDROCK_STOP'));
+      }
+      addConfigParam(
+        params,
+        'frequency_penalty',
+        config?.frequency_penalty,
+        getEnvFloat('AWS_BEDROCK_FREQUENCY_PENALTY'),
+      );
+      addConfigParam(
+        params,
+        'presence_penalty',
+        config?.presence_penalty,
+        getEnvFloat('AWS_BEDROCK_PRESENCE_PENALTY'),
+      );
+
+      return params;
+    },
+    output: (config: BedrockOptions, responseJson: any) => {
+      if (responseJson.error) {
+        throw new Error(`OpenAI API error: ${responseJson.error}`);
+      }
+      return responseJson.choices?.[0]?.message?.content;
+    },
+    tokenUsage: (responseJson: any, promptText: string): TokenUsage => {
+      if (responseJson?.usage) {
+        return {
+          prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+          completion: coerceStrToNum(responseJson.usage.completion_tokens),
+          total: coerceStrToNum(responseJson.usage.total_tokens),
+          numRequests: 1,
+        };
+      }
+
+      // Return undefined values when token counts aren't provided by the API
+      return {
+        prompt: undefined,
+        completion: undefined,
+        total: undefined,
+        numRequests: 1,
+      };
+    },
+  },
 };
 
 export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
@@ -1375,6 +1471,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
   'us.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'us.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+
+  // OpenAI Models via Bedrock
+  'openai.gpt-oss-120b-1:0': BEDROCK_MODEL.OPENAI,
+  'openai.gpt-oss-20b-1:0': BEDROCK_MODEL.OPENAI,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html

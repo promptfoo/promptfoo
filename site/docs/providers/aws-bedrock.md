@@ -6,7 +6,7 @@ description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, No
 
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -156,6 +156,18 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    config:
+      region: 'us-west-2'
+      temperature: 0.7
+      max_completion_tokens: 256
+      reasoning_effort: 'medium'
+  - id: bedrock:openai.gpt-oss-20b-1:0
+    config:
+      region: 'us-west-2'
+      temperature: 0.7
+      max_completion_tokens: 256
+      reasoning_effort: 'low'
 
 tests:
   - vars:
@@ -363,6 +375,60 @@ DeepSeek models support an extended thinking capability. The `showThinking` para
 - When set to `false`, thinking content will be excluded from the output
 
 This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
+
+### OpenAI Models
+
+OpenAI's open-weight models are available through AWS Bedrock with full support for their reasoning capabilities and parameters. The available models include:
+
+- **`openai.gpt-oss-120b-1:0`**: 120 billion parameter model with strong reasoning capabilities
+- **`openai.gpt-oss-20b-1:0`**: 20 billion parameter model, more cost-effective
+
+```yaml
+config:
+  max_completion_tokens: 1024 # Maximum tokens for response (OpenAI-style parameter)
+  temperature: 0.7 # Controls randomness (0.0 to 1.0)
+  top_p: 0.9 # Nucleus sampling parameter
+  frequency_penalty: 0.1 # Reduces repetition of frequent tokens
+  presence_penalty: 0.1 # Reduces repetition of any tokens
+  stop: ['END', 'STOP'] # Stop sequences
+  reasoning_effort: 'medium' # Controls reasoning depth: 'low', 'medium', 'high'
+```
+
+#### Reasoning Effort
+
+OpenAI models support adjustable reasoning effort through the `reasoning_effort` parameter:
+
+- **`low`**: Faster responses with basic reasoning
+- **`medium`**: Balanced performance and reasoning depth
+- **`high`**: Thorough reasoning, slower but more accurate responses
+
+The reasoning effort is implemented via system prompt instructions, allowing the model to adjust its cognitive processing depth.
+
+#### Usage Example
+
+```yaml
+providers:
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    config:
+      region: 'us-west-2'
+      max_completion_tokens: 2048
+      temperature: 0.3
+      top_p: 0.95
+      reasoning_effort: 'high'
+  - id: bedrock:openai.gpt-oss-20b-1:0
+    config:
+      region: 'us-west-2'
+      max_completion_tokens: 1024
+      temperature: 0.5
+      reasoning_effort: 'medium'
+      stop: ['END', 'FINAL']
+```
+
+:::note
+
+OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bedrock models. This aligns with OpenAI's API specification and allows for more precise control over response length.
+
+:::
 
 ## Model-graded tests
 
@@ -618,7 +684,7 @@ Configuration options include:
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication
 
-### Example
+### Knowledge Base Example
 
 Here's a complete example to test your Knowledge Base with a few questions:
 
