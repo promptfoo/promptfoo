@@ -1,5 +1,7 @@
 ---
-sidebar_label: RAG Document Exfiltration Plugin
+title: RAG Document Exfiltration
+sidebar_label: RAG Document Exfiltration
+description: Detect RAG vulnerabilities that could expose complete documents, sensitive data, or proprietary information through prompts
 ---
 
 # RAG Document Exfiltration Plugin

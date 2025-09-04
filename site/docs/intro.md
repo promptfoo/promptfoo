@@ -1,5 +1,6 @@
 ---
 sidebar_position: 1
+description: Evaluate and secure LLM applications with automated testing, red teaming, and benchmarking. Compare outputs across 50+ providers.
 ---
 
 # Intro

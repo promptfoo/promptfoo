@@ -1,5 +1,6 @@
-import { Command } from 'commander';
 import * as path from 'path';
+
+import { Command } from 'commander';
 import { disableCache } from '../../src/cache';
 import {
   doEval,
@@ -9,29 +10,42 @@ import {
 } from '../../src/commands/eval';
 import { evaluate } from '../../src/evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../../src/globalConfig/accounts';
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
+import { checkCloudPermissions, ConfigPermissionError } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
+
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');
 jest.mock('../../src/globalConfig/accounts');
+jest.mock('../../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    isEnabled: jest.fn().mockReturnValue(false),
+    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+  },
+}));
 jest.mock('../../src/migrate');
 jest.mock('../../src/providers');
+jest.mock('../../src/redteam/shared', () => ({}));
 jest.mock('../../src/share');
 jest.mock('../../src/table');
+jest.mock('../../src/util/cloud', () => ({
+  ...jest.requireActual('../../src/util/cloud'),
+  getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
+  checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('fs');
 jest.mock('path', () => {
-  // Use actual path module for platform-agnostic tests
   const actualPath = jest.requireActual('path');
   return {
     ...actualPath,
-    // Add any specific mocks for path methods if needed
   };
 });
 jest.mock('../../src/util/config/load');
@@ -71,7 +85,7 @@ describe('evalCommand', () => {
         prompts: [],
         providers: [],
       },
-      basePath: path.resolve('/'), // Platform-agnostic root path
+      basePath: path.resolve('/'),
     });
   });
 
@@ -79,6 +93,14 @@ describe('evalCommand', () => {
     const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
     expect(cmd.name()).toBe('eval');
     expect(cmd.description()).toBe('Evaluate prompts');
+  });
+
+  it('should have help option available', () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    // The help option is automatically added by commander
+    const helpText = cmd.helpInformation();
+    expect(helpText).toContain('-h, --help');
+    expect(helpText).toContain('display help for command');
   });
 
   it('should handle --no-cache option', async () => {
@@ -110,7 +132,7 @@ describe('evalCommand', () => {
         providers: [],
         tests: [{ vars: { test: 'value' } }],
       },
-      basePath: path.resolve('/'), // Platform-agnostic root path
+      basePath: path.resolve('/'),
     });
 
     const mockEvalRecord = new Eval(config);
@@ -133,7 +155,75 @@ describe('evalCommand', () => {
         prompts: [],
         providers: [],
       },
-      basePath: path.resolve('/'), // Platform-agnostic root path
+      basePath: path.resolve('/'),
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(evalRecord);
+    jest.mocked(isSharingEnabled).mockReturnValue(true);
+    jest.mocked(createShareableUrl).mockResolvedValue('http://share.url');
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+  });
+
+  it('should not share when share is explicitly set to false even if config has sharing enabled', async () => {
+    const cmdObj = { share: false };
+    const config = { sharing: true } as UnifiedConfig;
+    const evalRecord = new Eval(config);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(evalRecord);
+    jest.mocked(isSharingEnabled).mockReturnValue(true);
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).not.toHaveBeenCalled();
+  });
+
+  it('should share when share is true even if config has no sharing enabled', async () => {
+    const cmdObj = { share: true };
+    const config = {} as UnifiedConfig;
+    const evalRecord = new Eval(config);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    jest.mocked(evaluate).mockResolvedValue(evalRecord);
+    jest.mocked(isSharingEnabled).mockReturnValue(true);
+    jest.mocked(createShareableUrl).mockResolvedValue('http://share.url');
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+  });
+
+  it('should share when share is undefined and config has sharing enabled', async () => {
+    const cmdObj = {};
+    const config = { sharing: true } as UnifiedConfig;
+    const evalRecord = new Eval(config);
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
     });
 
     jest.mocked(evaluate).mockResolvedValue(evalRecord);
@@ -190,7 +280,7 @@ describe('evalCommand', () => {
   });
 
   it('should fallback to evaluateOptions.maxConcurrency when cmdObj.maxConcurrency is undefined', async () => {
-    const cmdObj = {}; // No maxConcurrency set
+    const cmdObj = {};
     const evaluateOptions = { maxConcurrency: 3 };
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions);
@@ -203,16 +293,135 @@ describe('evalCommand', () => {
   });
 
   it('should fallback to DEFAULT_MAX_CONCURRENCY when both cmdObj and evaluateOptions maxConcurrency are undefined', async () => {
-    const cmdObj = {}; // No maxConcurrency set
-    const evaluateOptions = {}; // No maxConcurrency set
+    const cmdObj = {};
+    const evaluateOptions = {};
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions);
 
     expect(evaluate).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({ maxConcurrency: 4 }), // DEFAULT_MAX_CONCURRENCY is 4 in the mock
+      expect.objectContaining({ maxConcurrency: 4 }),
     );
+  });
+});
+
+describe('checkCloudPermissions', () => {
+  const defaultConfigPath = 'config.yaml';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should fail when checkCloudPermissions throws an error', async () => {
+    // Mock cloudConfig to be enabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+
+    // Mock checkCloudPermissions to throw an error
+    const permissionError = new ConfigPermissionError('Permission denied: insufficient access');
+    jest.mocked(checkCloudPermissions).mockRejectedValueOnce(permissionError);
+
+    // Setup the test configuration
+    const config = {
+      providers: ['openai:gpt-4'],
+    } as UnifiedConfig;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }] as ApiProvider[],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const cmdObj = {};
+
+    await expect(doEval(cmdObj, config, defaultConfigPath, {})).rejects.toThrow(
+      'Permission denied: insufficient access',
+    );
+
+    // Verify checkCloudPermissions was called with the correct arguments
+    expect(checkCloudPermissions).toHaveBeenCalledWith(config);
+
+    // Verify that evaluate was not called
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('should call checkCloudPermissions and proceed when it succeeds', async () => {
+    // Mock cloudConfig to be enabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+
+    // Mock checkCloudPermissions to succeed (resolve without throwing)
+    jest.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
+
+    // Setup the test configuration
+    const config = {
+      providers: ['openai:gpt-4'],
+    } as UnifiedConfig;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const mockEvalRecord = new Eval(config);
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    const cmdObj = {};
+
+    const result = await doEval(cmdObj, config, defaultConfigPath, {});
+
+    // Verify checkCloudPermissions was called
+    expect(checkCloudPermissions).toHaveBeenCalledWith(config);
+
+    // Verify that the function proceeded normally
+    expect(result).not.toBeNull();
+
+    // Verify that evaluate was called
+    expect(evaluate).toHaveBeenCalled();
+  });
+
+  it('should call checkCloudPermissions but skip permission check when cloudConfig is disabled', async () => {
+    // Mock cloudConfig to be disabled
+    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+
+    // Mock checkCloudPermissions to succeed (it should return early due to disabled cloud)
+    jest.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
+
+    // Setup the test configuration
+    const config = {
+      providers: ['openai:gpt-4'],
+    } as UnifiedConfig;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const mockEvalRecord = new Eval(config);
+    jest.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    const cmdObj = {};
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    // Verify checkCloudPermissions was called (but returns early due to disabled cloud)
+    expect(checkCloudPermissions).toHaveBeenCalledWith(config);
+
+    // Verify that evaluate was called
+    expect(evaluate).toHaveBeenCalled();
   });
 });
 
@@ -309,7 +518,6 @@ describe('Provider Token Tracking', () => {
     jest.clearAllMocks();
     mockLogger.mockClear();
 
-    // Create a mock instance of TokenUsageTracker
     mockTokenUsageTracker = {
       getProviderIds: jest.fn(),
       getProviderUsage: jest.fn(),
@@ -320,7 +528,6 @@ describe('Provider Token Tracking', () => {
       cleanup: jest.fn(),
     } as any;
 
-    // Mock the getInstance static method
     jest.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTokenUsageTracker);
   });
 
@@ -332,22 +539,7 @@ describe('Provider Token Tracking', () => {
   });
 
   it('should handle provider token tracking when mocked properly', () => {
-    // Setup mock data
-    const providerUsageData: Record<
-      string,
-      {
-        total: number;
-        prompt: number;
-        completion: number;
-        cached: number;
-        numRequests: number;
-        completionDetails: {
-          reasoning: number;
-          acceptedPrediction: number;
-          rejectedPrediction: number;
-        };
-      }
-    > = {
+    const providerUsageData = {
       'openai:gpt-4': {
         total: 1500,
         prompt: 600,
@@ -368,10 +560,9 @@ describe('Provider Token Tracking', () => {
 
     mockTokenUsageTracker.getProviderIds.mockReturnValue(['openai:gpt-4', 'anthropic:claude-3']);
     mockTokenUsageTracker.getProviderUsage.mockImplementation(
-      (id: string) => providerUsageData[id],
+      (id: string) => providerUsageData[id as keyof typeof providerUsageData],
     );
 
-    // Test the tracker functionality directly
     const tracker = TokenUsageTracker.getInstance();
     const providerIds = tracker.getProviderIds();
     expect(providerIds).toEqual(['openai:gpt-4', 'anthropic:claude-3']);
@@ -381,5 +572,167 @@ describe('Provider Token Tracking', () => {
 
     const claudeUsage = tracker.getProviderUsage('anthropic:claude-3');
     expect(claudeUsage).toEqual(providerUsageData['anthropic:claude-3']);
+  });
+});
+
+describe('doEval with external defaultTest', () => {
+  const defaultConfig = {} as UnifiedConfig;
+  const defaultConfigPath = 'config.yaml';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+        defaultTest: undefined,
+      },
+      basePath: path.resolve('/'),
+    });
+  });
+
+  it('should handle grader option with string defaultTest', async () => {
+    const cmdObj = { grader: 'test-grader' };
+    const mockProvider = {
+      id: () => 'test-grader',
+      callApi: async () => ({ output: 'test' }),
+    } as ApiProvider;
+
+    jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      defaultTest: 'file://defaultTest.yaml',
+    } as TestSuite;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          options: expect.objectContaining({
+            provider: mockProvider,
+          }),
+        }),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should handle var option with string defaultTest', async () => {
+    const cmdObj = { var: { key: 'value' } };
+
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      defaultTest: 'file://defaultTest.yaml',
+    } as TestSuite;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          vars: expect.objectContaining({
+            key: 'value',
+          }),
+        }),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should handle both grader and var options with object defaultTest', async () => {
+    const cmdObj = {
+      grader: 'test-grader',
+      var: { key: 'value' },
+    };
+
+    const mockProvider = {
+      id: () => 'test-grader',
+      callApi: async () => ({ output: 'test' }),
+    } as ApiProvider;
+
+    jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      defaultTest: {
+        options: {},
+        assert: [{ type: 'equals' as const, value: 'test' }],
+        vars: { existing: 'var' },
+      },
+    } as TestSuite;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          assert: [{ type: 'equals', value: 'test' }],
+          vars: { existing: 'var', key: 'value' },
+          options: expect.objectContaining({
+            provider: mockProvider,
+          }),
+        }),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should not modify defaultTest when no grader or var options', async () => {
+    const cmdObj = {};
+
+    const originalDefaultTest = {
+      options: {},
+      assert: [{ type: 'equals' as const, value: 'test' }],
+      vars: { foo: 'bar' },
+    };
+
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      defaultTest: originalDefaultTest,
+    } as TestSuite;
+
+    jest.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: originalDefaultTest,
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });

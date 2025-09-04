@@ -1,5 +1,6 @@
 ---
 sidebar_label: Cross-Session Leak
+description: Red team cross-session data leaks by simulating sequential user interactions to protect AI systems from unauthorized information disclosure between conversations
 ---
 
 # Cross-Session Leak Plugin
@@ -26,6 +27,11 @@ redteam:
   plugins:
     - cross-session-leak
 ```
+
+:::note Strategy exclusions
+The Crescendo and GOAT multi-turn strategies are incompatible with this plugin.
+They are automatically skipped when generating tests.
+:::
 
 ## Example Test Cases
 

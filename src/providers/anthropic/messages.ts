@@ -1,22 +1,25 @@
-import type Anthropic from '@anthropic-ai/sdk';
 import { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt, getEnvFloat } from '../../envars';
+import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import type { ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { maybeLoadToolsFromExternalFile } from '../../util';
+import { normalizeFinishReason } from '../../util/finishReason';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { AnthropicGenericProvider } from './generic';
-import type { AnthropicMessageOptions } from './types';
 import {
-  outputFromMessage,
-  parseMessages,
+  ANTHROPIC_MODELS,
   calculateAnthropicCost,
   getTokenUsage,
-  ANTHROPIC_MODELS,
+  outputFromMessage,
+  parseMessages,
 } from './util';
+import type Anthropic from '@anthropic-ai/sdk';
+
+import type { CallApiContextParams, ProviderResponse } from '../../types';
+import type { EnvOverrides } from '../../types/env';
+import type { AnthropicMessageOptions } from './types';
 
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
@@ -64,7 +67,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return `[Anthropic Messages Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise) {
       await this.initializationPromise;
@@ -80,6 +83,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       throw new Error('Anthropic model name is not set. Please provide a valid model name.');
     }
 
+    // Merge configs from the provider and the prompt
+    const config: AnthropicMessageOptions = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
     const { system, extractedMessages, thinking } = parseMessages(prompt);
 
     // Get MCP tools if client is initialized
@@ -87,38 +96,36 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     if (this.mcpClient) {
       mcpTools = transformMCPToolsToAnthropic(this.mcpClient.getAllTools());
     }
-    const fileTools = maybeLoadToolsFromExternalFile(this.config.tools) || [];
+    const fileTools = maybeLoadToolsFromExternalFile(config.tools) || [];
     const allTools = [...mcpTools, ...fileTools];
 
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
       max_tokens:
-        this.config?.max_tokens ||
-        getEnvInt('ANTHROPIC_MAX_TOKENS', this.config.thinking || thinking ? 2048 : 1024),
+        config?.max_tokens ||
+        getEnvInt('ANTHROPIC_MAX_TOKENS', config.thinking || thinking ? 2048 : 1024),
       messages: extractedMessages,
       stream: false,
       temperature:
-        this.config.thinking || thinking
-          ? this.config.temperature
-          : this.config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
+        config.thinking || thinking
+          ? config.temperature
+          : config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
-      ...(this.config.tool_choice ? { tool_choice: this.config.tool_choice } : {}),
-      ...(this.config.thinking || thinking ? { thinking: this.config.thinking || thinking } : {}),
-      ...(typeof this.config?.extra_body === 'object' && this.config.extra_body
-        ? this.config.extra_body
-        : {}),
+      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
+      ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
     logger.debug(`Calling Anthropic Messages API: ${JSON.stringify(params)}`);
 
     const headers: Record<string, string> = {
-      ...(this.config.headers || {}),
+      ...(config.headers || {}),
     };
 
     // Add beta features header if specified
-    if (this.config.beta?.length) {
-      headers['anthropic-beta'] = this.config.beta.join(',');
+    if (config.beta?.length) {
+      headers['anthropic-beta'] = config.beta.join(',');
     }
 
     const cache = await getCache();
@@ -131,12 +138,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         try {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
+          const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
           return {
-            output: outputFromMessage(parsedCachedResponse, this.config.showThinking ?? true),
+            output: outputFromMessage(parsedCachedResponse, config.showThinking ?? true),
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
+            ...(finishReason && { finishReason }),
             cost: calculateAnthropicCost(
               this.modelName,
-              this.config,
+              config,
               parsedCachedResponse.usage?.input_tokens,
               parsedCachedResponse.usage?.output_tokens,
             ),
@@ -145,7 +154,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           // Could be an old cache item, which was just the text content from TextBlock.
           return {
             output: cachedResponse,
-            tokenUsage: {},
+            tokenUsage: createEmptyTokenUsage(),
           };
         }
       }
@@ -173,12 +182,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         };
       }
 
+      const finishReason = normalizeFinishReason(response.stop_reason);
       return {
-        output: outputFromMessage(response, this.config.showThinking ?? true),
+        output: outputFromMessage(response, config.showThinking ?? true),
         tokenUsage: getTokenUsage(response, false),
+        ...(finishReason && { finishReason }),
         cost: calculateAnthropicCost(
           this.modelName,
-          this.config,
+          config,
           response.usage?.input_tokens,
           response.usage?.output_tokens,
         ),

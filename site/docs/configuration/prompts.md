@@ -1,6 +1,19 @@
 ---
-sidebar_position: 5
+sidebar_position: 11
 sidebar_label: Prompts
+title: Prompt Configuration - Text, Chat, and Dynamic Prompts
+description: Configure prompts for LLM evaluation including text prompts, chat conversations, file-based prompts, and dynamic prompt generation with variables.
+keywords:
+  [
+    prompt configuration,
+    LLM prompts,
+    chat conversations,
+    dynamic prompts,
+    template variables,
+    prompt engineering,
+  ]
+pagination_prev: configuration/parameters
+pagination_next: configuration/test-cases
 ---
 
 # Prompt Configuration
@@ -111,6 +124,8 @@ prompts:
   - file://prompts/*.txt
   - file://scenarios/**/*.json
 ```
+
+Wildcards like `path/to/prompts/**/*.py:func_name` are also supported.
 
 ## Chat Format (JSON)
 
@@ -253,6 +268,52 @@ prompt,label
 "Translate to Spanish: {{text}}","Spanish Translation"
 "Translate to German: {{text}}","German Translation"
 ```
+
+## External Prompt Management Systems
+
+Promptfoo integrates with external prompt management platforms, allowing you to centralize and version control your prompts:
+
+### Langfuse
+
+[Langfuse](/docs/integrations/langfuse) is an open-source LLM engineering platform with collaborative prompt management:
+
+```yaml
+prompts:
+  # Reference by version (numeric values)
+  - langfuse://my-prompt:3:text
+  - langfuse://chat-prompt:1:chat
+
+  # Reference by label using @ syntax (recommended for clarity)
+  - langfuse://my-prompt@production
+  - langfuse://chat-prompt@staging:chat
+  - langfuse://email-template@latest:text
+
+  # Reference by label using : syntax (auto-detected strings)
+  - langfuse://my-prompt:production # String detected as label
+  - langfuse://chat-prompt:staging:chat # String detected as label
+```
+
+### Portkey
+
+[Portkey](/docs/integrations/portkey) provides AI observability with prompt management capabilities:
+
+```yaml
+prompts:
+  - portkey://pp-customer-support-v2
+  - portkey://pp-email-generator-prod
+```
+
+### Helicone
+
+[Helicone](/docs/integrations/helicone) offers prompt management alongside observability features:
+
+```yaml
+prompts:
+  - helicone://greeting-prompt:1.0
+  - helicone://support-chat:2.5
+```
+
+Variables from your test cases are automatically passed to these external prompts.
 
 ## Advanced Features
 

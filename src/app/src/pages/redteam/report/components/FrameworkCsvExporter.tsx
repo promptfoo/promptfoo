@@ -1,19 +1,20 @@
 import React from 'react';
+
 import DownloadIcon from '@mui/icons-material/Download';
 import Button from '@mui/material/Button';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_COMPLIANCE_IDS,
   FRAMEWORK_NAMES,
-  OWASP_LLM_TOP_10_NAMES,
   OWASP_API_TOP_10_NAMES,
+  OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
 import {
   type CategoryStats,
-  expandPluginCollections,
   categorizePlugins,
+  expandPluginCollections,
   getPluginDisplayName,
 } from './FrameworkComplianceUtils';
 
@@ -194,7 +195,13 @@ const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRate
   };
 
   return (
-    <Button variant="contained" color="primary" startIcon={<DownloadIcon />} onClick={exportToCSV}>
+    <Button
+      variant="contained"
+      color="primary"
+      startIcon={<DownloadIcon />}
+      onClick={exportToCSV}
+      className="print-hide"
+    >
       Export framework results to CSV
     </Button>
   );

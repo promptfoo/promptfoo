@@ -1,6 +1,20 @@
 ---
-date: 2024-11-23
+title: 'How to Red Team an Ollama Model: Complete Local LLM Security Testing Guide'
+description: 'Running LLMs locally with Ollama? These models often bypass cloud safety filters. Learn how to red team local deployments and assess their unique risks.'
 image: /img/blog/llama-red-team/llama-hacker.webp
+keywords:
+  [
+    Ollama red teaming,
+    local LLM security,
+    Ollama security testing,
+    local model testing,
+    open source LLM security,
+    model jailbreak testing,
+    AI security,
+  ]
+date: 2024-11-23
+authors: [ian]
+tags: [technical-guide, red-teaming]
 ---
 
 # How to Red Team an Ollama Model
@@ -19,7 +33,7 @@ Here's an example of what the red team report looks like:
 
 Before you begin, ensure you have:
 
-- **Node.js**: Install Node.js version 18 or later. [Download Node.js](https://nodejs.org/en/download/)
+- **Node.js**: Install Node.js version 20 or later. [Download Node.js](https://nodejs.org/en/download/)
 - **Ollama**: Install Ollama from [ollama.ai](https://ollama.ai)
 - **Promptfoo**: No prior installation needed; we'll use `npx` to run commands
 

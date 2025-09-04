@@ -7,10 +7,11 @@ import {
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
-  redteamProviderManager,
   getTargetResponse,
-  messagesToRedteamHistory,
   type Message,
+  messagesToRedteamHistory,
+  redteamProviderManager,
+  tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import type {
   ApiProvider,
@@ -20,6 +21,10 @@ import type {
   ProviderResponse,
 } from '../../../src/types';
 import { sleep } from '../../../src/util/time';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../src/util/tokenUsageUtils';
 
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/cliState', () => ({
@@ -27,7 +32,7 @@ jest.mock('../../../src/cliState', () => ({
   default: {
     config: {
       redteam: {
-        provider: null,
+        provider: undefined,
       },
     },
   },
@@ -43,10 +48,43 @@ const mockedOpenAiProvider = jest.mocked(OpenAiChatCompletionProvider);
 
 describe('shared redteam provider utilities', () => {
   beforeEach(() => {
+    // Clear all mocks thoroughly
+    jest.clearAllMocks();
+    jest.resetAllMocks();
+
+    // Reset specific mocks
     mockedSleep.mockClear();
     mockedLoadApiProviders.mockClear();
     mockedOpenAiProvider.mockClear();
+
+    // Clear the redteam provider manager cache
     redteamProviderManager.clearProvider();
+
+    // Reset cliState to default
+    cliState.config = {
+      redteam: {
+        provider: undefined,
+      },
+    };
+
+    // Reset OpenAI provider mock to default behavior
+    mockedOpenAiProvider.mockImplementation((model: string, options?: any) => {
+      const mockInstance = {
+        id: () => `openai:${model}`,
+        callApi: jest.fn(),
+        toString: () => `OpenAI(${model})`,
+        config: options?.config || {},
+        getApiKey: jest.fn(),
+        getApiUrl: jest.fn(),
+        getApiUrlDefault: jest.fn(),
+        getOrganization: jest.fn(),
+        requiresApiKey: jest.fn(),
+        initializationPromise: null,
+        loadedFunctionCallbacks: {},
+        mcpClient: null,
+      };
+      return mockInstance as any;
+    });
   });
 
   describe('RedteamProviderManager', () => {
@@ -59,8 +97,24 @@ describe('shared redteam provider utilities', () => {
     };
 
     it('creates default OpenAI provider when no provider specified', async () => {
-      const mockOpenAiInstance = new OpenAiChatCompletionProvider(ATTACKER_MODEL);
-      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance);
+      const mockOpenAiInstance = {
+        id: () => `openai:${ATTACKER_MODEL}`,
+        callApi: jest.fn(),
+        toString: () => `OpenAI(${ATTACKER_MODEL})`,
+        config: { temperature: TEMPERATURE, response_format: undefined },
+        getApiKey: jest.fn(),
+        getApiUrl: jest.fn(),
+        getApiUrlDefault: jest.fn(),
+        getOrganization: jest.fn(),
+        requiresApiKey: jest.fn(),
+        initializationPromise: null,
+        loadedFunctionCallbacks: {},
+        mcpClient: null,
+      };
+
+      // Clear and set up specific mock for this test
+      mockedOpenAiProvider.mockClear();
+      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
 
       const result = await redteamProviderManager.getProvider({});
 
@@ -74,8 +128,24 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('clears cached providers', async () => {
-      const mockOpenAiInstance = new OpenAiChatCompletionProvider(ATTACKER_MODEL);
-      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance);
+      const mockOpenAiInstance = {
+        id: () => `openai:${ATTACKER_MODEL}`,
+        callApi: jest.fn(),
+        toString: () => `OpenAI(${ATTACKER_MODEL})`,
+        config: { temperature: TEMPERATURE, response_format: undefined },
+        getApiKey: jest.fn(),
+        getApiUrl: jest.fn(),
+        getApiUrlDefault: jest.fn(),
+        getOrganization: jest.fn(),
+        requiresApiKey: jest.fn(),
+        initializationPromise: null,
+        loadedFunctionCallbacks: {},
+        mcpClient: null,
+      };
+
+      // Clear and set up specific mock for this test
+      mockedOpenAiProvider.mockClear();
+      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
 
       // First call to set up the cache
       await redteamProviderManager.getProvider({});
@@ -110,8 +180,24 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('uses small model when preferSmallModel is true', async () => {
-      const mockOpenAiInstance = new OpenAiChatCompletionProvider(ATTACKER_MODEL_SMALL);
-      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance);
+      const mockOpenAiInstance = {
+        id: () => `openai:${ATTACKER_MODEL_SMALL}`,
+        callApi: jest.fn(),
+        toString: () => `OpenAI(${ATTACKER_MODEL_SMALL})`,
+        config: { temperature: TEMPERATURE, response_format: undefined },
+        getApiKey: jest.fn(),
+        getApiUrl: jest.fn(),
+        getApiUrlDefault: jest.fn(),
+        getOrganization: jest.fn(),
+        requiresApiKey: jest.fn(),
+        initializationPromise: null,
+        loadedFunctionCallbacks: {},
+        mcpClient: null,
+      };
+
+      // Clear and set up specific mock for this test
+      mockedOpenAiProvider.mockClear();
+      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
 
       const result = await redteamProviderManager.getProvider({ preferSmallModel: true });
 
@@ -125,8 +211,24 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('sets response_format to json_object when jsonOnly is true', async () => {
-      const mockOpenAiInstance = new OpenAiChatCompletionProvider(ATTACKER_MODEL);
-      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance);
+      const mockOpenAiInstance = {
+        id: () => `openai:${ATTACKER_MODEL}`,
+        callApi: jest.fn(),
+        toString: () => `OpenAI(${ATTACKER_MODEL})`,
+        config: { temperature: TEMPERATURE, response_format: { type: 'json_object' } },
+        getApiKey: jest.fn(),
+        getApiUrl: jest.fn(),
+        getApiUrlDefault: jest.fn(),
+        getOrganization: jest.fn(),
+        requiresApiKey: jest.fn(),
+        initializationPromise: null,
+        loadedFunctionCallbacks: {},
+        mcpClient: null,
+      };
+
+      // Clear and set up specific mock for this test
+      mockedOpenAiProvider.mockClear();
+      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
 
       const result = await redteamProviderManager.getProvider({ jsonOnly: true });
 
@@ -147,11 +249,20 @@ describe('shared redteam provider utilities', () => {
           [string, CallApiContextParams | undefined, any]
         >(),
       };
-      cliState.config!.redteam!.provider = mockStateProvider;
+
+      // Clear and set up cliState for this test
+      cliState.config = {
+        redteam: {
+          provider: mockStateProvider,
+        },
+      };
 
       const result = await redteamProviderManager.getProvider({});
 
       expect(result).toBe(mockStateProvider);
+
+      // Clean up for next test
+      cliState.config!.redteam!.provider = undefined;
     });
 
     it('sets and reuses providers', async () => {
@@ -421,6 +532,49 @@ describe('shared redteam provider utilities', () => {
       const result = messagesToRedteamHistory(messages);
 
       expect(result).toEqual([{ prompt: 'user message 2', output: 'assistant response 2' }]);
+    });
+  });
+
+  // New tests for tryUnblocking env flag
+  describe('tryUnblocking environment flag', () => {
+    const originalEnv = process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        delete process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+      } else {
+        process.env.PROMPTFOO_DISABLE_UNBLOCKING = originalEnv;
+      }
+    });
+
+    it('short-circuits when PROMPTFOO_DISABLE_UNBLOCKING=true', async () => {
+      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'irrelevant',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.unblockingPrompt).toBeUndefined();
+    });
+
+    it('does not increment token usage when skipped via env flag', async () => {
+      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
+
+      const total = createEmptyTokenUsage();
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'irrelevant',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      accumulateResponseTokenUsage(total, result);
+
+      expect(total.numRequests).toBe(0);
     });
   });
 });

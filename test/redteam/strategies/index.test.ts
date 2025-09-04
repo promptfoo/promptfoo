@@ -1,8 +1,10 @@
 import path from 'path';
+
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { validateStrategies, loadStrategy } from '../../../src/redteam/strategies';
+import { loadStrategy, validateStrategies } from '../../../src/redteam/strategies';
+
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types';
 
 jest.mock('../../../src/cliState');
@@ -24,6 +26,7 @@ describe('validateStrategies', () => {
       { id: 'piglatin' },
       { id: 'camelcase' },
       { id: 'emoji' },
+      { id: 'mischievous-user' },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -128,6 +131,29 @@ describe('loadStrategy', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 
+  it('should load mischievous user strategy', async () => {
+    const strategy = await loadStrategy('mischievous-user');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('mischievous-user');
+    expect(typeof strategy.action).toBe('function');
+  });
+
+  it('should call mischievous user strategy action with correct parameters', async () => {
+    const strategy = await loadStrategy('mischievous-user');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = {};
+
+    await strategy.action(testCases, injectVar, config);
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Adding mischievous user test cases'),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
   it('should throw error for non-existent strategy', async () => {
     await expect(loadStrategy('non-existent')).rejects.toThrow('Strategy not found: non-existent');
   });
@@ -179,5 +205,92 @@ describe('loadStrategy', () => {
 
     await loadStrategy('file://relative/custom.js');
     expect(importModule).toHaveBeenCalledWith(path.join('/base/path', 'relative/custom.js'));
+  });
+});
+
+describe('custom strategy validation', () => {
+  it('should validate simple custom strategy', async () => {
+    const strategies: RedteamStrategyObject[] = [{ id: 'custom' }];
+    await expect(validateStrategies(strategies)).resolves.toBeUndefined();
+  });
+
+  it('should validate custom strategy variants with compound IDs', async () => {
+    const strategies: RedteamStrategyObject[] = [
+      { id: 'custom:aggressive' },
+      { id: 'custom:greeting-strategy' },
+      { id: 'custom:multi-word-variant' },
+      { id: 'custom:snake_case_variant' },
+    ];
+    await expect(validateStrategies(strategies)).resolves.toBeUndefined();
+  });
+
+  it('should validate custom strategies with config', async () => {
+    const strategies: RedteamStrategyObject[] = [
+      {
+        id: 'custom:configured',
+        config: {
+          strategyText: 'Custom strategy text',
+          stateful: true,
+          temperature: 0.8,
+        },
+      },
+    ];
+    await expect(validateStrategies(strategies)).resolves.toBeUndefined();
+  });
+
+  it('should validate mixed strategies including custom variants', async () => {
+    const strategies: RedteamStrategyObject[] = [
+      { id: 'basic' },
+      { id: 'custom' },
+      { id: 'custom:variant1' },
+      { id: 'crescendo' },
+      { id: 'custom:variant2', config: { strategyText: 'Custom text' } },
+    ];
+    await expect(validateStrategies(strategies)).resolves.toBeUndefined();
+  });
+
+  it('should validate custom strategies with complex variant names', async () => {
+    const strategies: RedteamStrategyObject[] = [
+      { id: 'custom:very-long-complex-variant-name-with-many-hyphens' },
+      { id: 'custom:variant_with_underscores_and_numbers_123' },
+      { id: 'custom:CamelCaseVariant' },
+      { id: 'custom:variant.with.dots' },
+    ];
+    await expect(validateStrategies(strategies)).resolves.toBeUndefined();
+  });
+
+  it('should reject invalid custom-like strategy patterns', async () => {
+    const strategies: RedteamStrategyObject[] = [
+      { id: 'invalid-strategy' },
+      { id: 'custom-invalid' },
+      { id: 'custom_invalid' },
+      { id: 'notcustom:variant' },
+    ];
+
+    await validateStrategies(strategies);
+
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid strategy(s)'));
+  });
+});
+
+describe('custom strategy loading', () => {
+  it('should load simple custom strategy', async () => {
+    const strategy = await loadStrategy('custom');
+    expect(strategy).toBeDefined();
+    expect(strategy.id).toBe('custom');
+  });
+
+  it('should call custom strategy action with correct parameters including strategyId', async () => {
+    const strategy = await loadStrategy('custom');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { test: 'value' }, metadata: { pluginId: 'test' } },
+    ];
+    const injectVar = 'inject';
+    const config = { strategyText: 'Test strategy' };
+
+    await strategy.action(testCases, injectVar, config, 'custom:test');
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Adding Custom'));
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
   });
 });

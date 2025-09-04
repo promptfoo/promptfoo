@@ -10,6 +10,7 @@ import {
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS,
   FOUNDATION_PLUGINS,
+  GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
@@ -19,7 +20,6 @@ import {
   STRATEGY_EXEMPT_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../../src/redteam/constants/plugins';
-import { MEMORY_POISONING_PLUGIN_ID } from '../../../src/redteam/plugins/agentic/constants';
 
 describe('plugins constants', () => {
   it('should define DEFAULT_NUM_TESTS_PER_PLUGIN', () => {
@@ -31,9 +31,7 @@ describe('plugins constants', () => {
   });
 
   it('should define LLAMA_GUARD_REPLICATE_PROVIDER', () => {
-    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe(
-      'replicate:moderation:meta/llama-guard-3-8b:146d1220d447cdcc639bc17c5f6137416042abee6ae153a2615e6ef5749205c8',
-    );
+    expect(LLAMA_GUARD_REPLICATE_PROVIDER).toBe('replicate:moderation:meta/llama-guard-4-12b');
   });
 
   it('should define LLAMA_GUARD_ENABLED_CATEGORIES', () => {
@@ -58,12 +56,25 @@ describe('plugins constants', () => {
     expect(FOUNDATION_PLUGINS.length).toBeGreaterThan(0);
   });
 
+  it('should define GUARDRAILS_EVALUATION_PLUGINS array', () => {
+    expect(Array.isArray(GUARDRAILS_EVALUATION_PLUGINS)).toBe(true);
+    expect(GUARDRAILS_EVALUATION_PLUGINS.length).toBeGreaterThan(0);
+  });
+
   it('should define AGENTIC_PLUGINS with memory poisoning plugin', () => {
-    expect(AGENTIC_PLUGINS).toEqual([MEMORY_POISONING_PLUGIN_ID]);
+    expect(AGENTIC_PLUGINS).toEqual(['agentic:memory-poisoning']);
   });
 
   it('should define COLLECTIONS array', () => {
-    expect(COLLECTIONS).toEqual(['default', 'foundation', 'harmful', 'pii']);
+    expect(COLLECTIONS).toEqual([
+      'default',
+      'foundation',
+      'harmful',
+      'pii',
+      'bias',
+      'medical',
+      'guardrails-eval',
+    ]);
   });
 
   it('should define UNALIGNED_PROVIDER_HARM_PLUGINS object', () => {
@@ -107,7 +118,7 @@ describe('plugins constants', () => {
   });
 
   it('should define AGENTIC_EXEMPT_PLUGINS array', () => {
-    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', MEMORY_POISONING_PLUGIN_ID]);
+    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'agentic:memory-poisoning']);
   });
 
   it('should define DATASET_EXEMPT_PLUGINS array', () => {

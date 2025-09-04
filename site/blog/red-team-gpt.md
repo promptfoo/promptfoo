@@ -1,6 +1,21 @@
 ---
-date: 2025-06-07
+title: 'How to Red Team GPT: Complete Security Testing Guide for OpenAI Models'
+description: "OpenAI's latest GPT models are more capable but also more vulnerable. Discover new attack vectors and systematic approaches to testing GPT security."
 image: /img/blog/gpt-red-team.png
+keywords:
+  [
+    GPT red teaming,
+    OpenAI security testing,
+    GPT jailbreak,
+    ChatGPT security,
+    LLM security testing,
+    AI model evaluation,
+    GPT vulnerabilities,
+    AI safety testing,
+  ]
+date: 2025-06-07
+authors: [ian]
+tags: [technical-guide, red-teaming, openai]
 ---
 
 # How to Red Team GPT
@@ -26,7 +41,7 @@ GPT-4.1 and 4.5's new capabilities present unique security considerations:
 
 Before you begin, ensure you have:
 
-- **Node.js**: Version 18 or later. [Download Node.js](https://nodejs.org/en/download/)
+- **Node.js**: Version 20 or later. [Download Node.js](https://nodejs.org/en/download/)
 - **OpenAI API Key**: Sign up for an [OpenAI account](https://platform.openai.com/) and obtain an API key
 - **Promptfoo**: No prior installation needed; we'll use `npx` to run commands
 

@@ -1,5 +1,6 @@
 .report-header {
   padding: 24px;
+  padding-right: 200px; /* Make space for action buttons */
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
@@ -16,4 +17,55 @@
 
 .report-details .MuiChip-root {
   font-size: 0.875rem;
+}
+
+/* Print CSS for PDF generation */
+@media print {
+  .report-header {
+    padding-right: 8px !important;
+  }
+
+  /* Framework compliance layout fixes */
+  /* Make framework sections stack vertically instead of side-by-side */
+  .framework-grid {
+    flex-direction: column !important;
+    display: flex !important;
+  }
+
+  .framework-grid .MuiGrid-item {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-bottom: 1.5rem !important;
+    flex-basis: 100% !important;
+  }
+
+  /* Ensure framework cards stack vertically */
+  [class*='framework'] {
+    width: 100% !important;
+    margin-bottom: 2rem !important;
+    display: block !important;
+  }
+
+  /* Framework lists flow left to right, top to bottom */
+  [class*='FrameworkCompliance'] ul,
+  [class*='FrameworkCompliance'] {
+    columns: 2 !important;
+    column-gap: 2rem !important;
+    break-inside: avoid !important;
+  }
+
+  [class*='FrameworkCompliance'] li {
+    break-inside: avoid !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* Dark mode print styles */
+  [data-theme='dark'] body,
+  [data-theme='dark'] .MuiBox-root,
+  [data-theme='dark'] .MuiContainer-root,
+  [data-theme='dark'] .MuiPaper-root,
+  [data-theme='dark'] .MuiStack-root,
+  [data-theme='dark'] .report-header {
+    background-color: #1a1a1a !important;
+  }
 }

@@ -1,11 +1,11 @@
 import OpenAI from 'openai';
-import type { TokenUsage } from '../../types';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { getAjv } from '../../util/json';
-import { safeJsonStringify } from '../../util/json';
-import type { ProviderConfig } from '../shared';
+import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
+
+import type { TokenUsage } from '../../types';
+import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
 
@@ -79,13 +79,7 @@ export const OPENAI_CHAT_MODELS = [
       output: 0.4 / 1e6,
     },
   })),
-  ...['gpt-4.5-preview', 'gpt-4.5-preview-2025-02-27'].map((model) => ({
-    id: model,
-    cost: {
-      input: 75 / 1e6,
-      output: 150 / 1e6,
-    },
-  })),
+  // GPT-4.5 models deprecated as of 2025-07-14, removed from API
   ...['o1-pro', 'o1-pro-2025-03-19'].map((model) => ({
     id: model,
     cost: {
@@ -132,6 +126,7 @@ export const OPENAI_CHAT_MODELS = [
     'gpt-4o-audio-preview',
     'gpt-4o-audio-preview-2024-12-17',
     'gpt-4o-audio-preview-2024-10-01',
+    'gpt-4o-audio-preview-2025-06-03',
   ].map((model) => ({
     id: model,
     cost: {
@@ -171,11 +166,18 @@ export const OPENAI_CHAT_MODELS = [
       output: 0.6 / 1e6,
     },
   })),
-  ...['gpt-4', 'gpt-4-0613'].map((model) => ({
+  ...['gpt-4', 'gpt-4-0613', 'gpt-4-0314'].map((model) => ({
     id: model,
     cost: {
       input: 30 / 1e6,
       output: 60 / 1e6,
+    },
+  })),
+  ...['gpt-4-32k', 'gpt-4-32k-0314', 'gpt-4-32k-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 60 / 1e6,
+      output: 120 / 1e6,
     },
   })),
   ...[
@@ -185,6 +187,7 @@ export const OPENAI_CHAT_MODELS = [
     'gpt-4-0125-preview',
     'gpt-4-1106-preview',
     'gpt-4-1106-vision-preview',
+    'gpt-4-vision-preview',
   ].map((model) => ({
     id: model,
     cost: {
@@ -213,6 +216,20 @@ export const OPENAI_CHAT_MODELS = [
       output: 2 / 1e6,
     },
   },
+  ...['gpt-3.5-turbo-0301', 'gpt-3.5-turbo-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.5 / 1e6,
+      output: 2 / 1e6,
+    },
+  })),
+  ...['gpt-3.5-turbo-16k', 'gpt-3.5-turbo-16k-0613'].map((model) => ({
+    id: model,
+    cost: {
+      input: 3 / 1e6,
+      output: 4 / 1e6,
+    },
+  })),
   ...['gpt-3.5-turbo-instruct'].map((model) => ({
     id: model,
     cost: {
@@ -227,11 +244,58 @@ export const OPENAI_CHAT_MODELS = [
       output: 4.4 / 1e6,
     },
   })),
+  // GPT-5 models - hypothetical pricing based on model progression
+  ...['gpt-5', 'gpt-5-2025-08-07'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5-chat-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.25 / 1e6,
+      output: 10 / 1e6,
+    },
+  })),
+  ...['gpt-5-nano', 'gpt-5-nano-2025-08-07'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.05 / 1e6,
+      output: 0.4 / 1e6,
+    },
+  })),
+  ...['gpt-5-mini', 'gpt-5-mini-2025-08-07'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.25 / 1e6,
+      output: 2 / 1e6,
+    },
+  })),
   ...['codex-mini-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1.5 / 1e6,
       output: 6.0 / 1e6,
+    },
+  })),
+];
+
+// Deep research models for Responses API
+export const OPENAI_DEEP_RESEARCH_MODELS = [
+  ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
+    id: model,
+    cost: {
+      input: 10 / 1e6,
+      output: 40 / 1e6,
+    },
+  })),
+  ...['o4-mini-deep-research', 'o4-mini-deep-research-2025-06-26'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2 / 1e6,
+      output: 8 / 1e6,
     },
   })),
 ];
@@ -302,6 +366,7 @@ export function calculateOpenAICost(
       ...OPENAI_CHAT_MODELS,
       ...OPENAI_COMPLETION_MODELS,
       ...OPENAI_REALTIME_MODELS,
+      ...OPENAI_DEEP_RESEARCH_MODELS,
     ]);
   }
 
@@ -323,6 +388,7 @@ export function calculateOpenAICost(
     ...OPENAI_CHAT_MODELS,
     ...OPENAI_COMPLETION_MODELS,
     ...OPENAI_REALTIME_MODELS,
+    ...OPENAI_DEEP_RESEARCH_MODELS,
   ].find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;

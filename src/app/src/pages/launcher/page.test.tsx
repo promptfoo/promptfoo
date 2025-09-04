@@ -1,7 +1,7 @@
-import { render, screen, waitFor, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LauncherPage from './page';
 
 const mockFetch = vi.fn();

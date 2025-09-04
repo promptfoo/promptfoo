@@ -1,5 +1,6 @@
-import debounce from 'debounce';
 import fs from 'fs';
+
+import debounce from 'debounce';
 import logger from '../logger';
 import { getDbSignalPath } from './index';
 
@@ -22,7 +23,7 @@ export function updateSignalFile(): void {
 /**
  * Ensures the signal file exists, creating it if necessary.
  */
-export function ensureSignalFile(): void {
+function ensureSignalFile(): void {
   const filePath = getDbSignalPath();
   if (!fs.existsSync(filePath)) {
     logger.debug(`Creating signal file at ${filePath}`);

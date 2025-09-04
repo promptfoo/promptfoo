@@ -1,5 +1,6 @@
 ---
-sidebar_label: 'Configuring the Grader'
+sidebar_label: Configuring the Grader
+description: Red team LLM grading systems by validating output classification to prevent false negatives and ensure accurate vulnerability detection in AI security assessments
 ---
 
 # About the Grader
@@ -47,7 +48,7 @@ You can override the grader model within your `promptfooconfig.yaml` file throug
 ```yaml
 defaultTest:
   options:
-    provider: 'ollama:chat:llama3:70b'
+    provider: 'ollama:chat:llama3.3:70b'
 ```
 
 In this example, we can override the default grader to use Azure OpenAI:

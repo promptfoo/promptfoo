@@ -1,11 +1,14 @@
-import { renderHook, act } from '@testing-library/react';
 import { callApi } from '@app/utils/api';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useApiHealth } from './useApiHealth';
 
 // Mock the API call
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('useApiHealth', () => {

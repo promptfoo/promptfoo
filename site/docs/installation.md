@@ -13,7 +13,7 @@ import TabItem from '@theme/TabItem';
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js 20 or newer
 - Supported operating systems: macOS, Linux, Windows
 
 ## For Command-Line Usage
@@ -70,7 +70,7 @@ To verify that promptfoo is installed correctly, run:
 
 This should display the version number of promptfoo:
 
-```
+```text
 0.114.7
 ```
 
@@ -99,3 +99,8 @@ After installation, you can start using promptfoo by running:
 This will create a `promptfooconfig.yaml` placeholder in your current directory.
 
 For more detailed usage instructions, please refer to our [Getting Started guide](./getting-started.md).
+
+## See Also
+
+- [Getting Started](./getting-started.md)
+- [Contributing](./contributing.md)

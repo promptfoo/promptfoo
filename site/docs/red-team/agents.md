@@ -1,5 +1,6 @@
 ---
 sidebar_position: 10001
+description: Red team LLM agent security by testing privilege escalation, context poisoning, and memory manipulation to protect AI systems from unauthorized access and data breaches
 ---
 
 # How to red team LLM Agents
@@ -103,6 +104,7 @@ redteam:
   strategies:
     - 'jailbreak'
     - 'crescendo' # Multi-turn strategy that gradually builds up an attack
+    - 'mischievous-user'
 ```
 
 The Memory Poisoning plugin creates scenarios with specific "memories" the agent should maintain, sends a poisoned message attempting to corrupt this established memory, and then tests the effectiveness of the attack with a follow-up question that relies on the original memory.

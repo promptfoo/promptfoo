@@ -1,31 +1,30 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
-import * as fs from 'fs';
+import { XMLBuilder } from 'fast-xml-parser';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import * as path from 'path';
-import { TERMINAL_MAX_WIDTH } from '../constants';
+import * as os from 'os';
+import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
-import type { Vars } from '../types';
 import {
+  type CsvRow,
   type EvaluateResult,
   type EvaluateTableOutput,
-  type NunjucksFilterMap,
-  type TestCase,
-  type OutputFile,
-  type CompletedPrompt,
-  type CsvRow,
   isApiProvider,
   isProviderOptions,
+  type NunjucksFilterMap,
+  type OutputFile,
   OutputFileExtension,
   ResultFailureReason,
+  type TestCase,
 } from '../types';
 import invariant from '../util/invariant';
 import { convertTestResultsToTableRow } from './exportToFile';
@@ -33,6 +32,10 @@ import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { getNunjucksEngine } from './templates';
+
+import type Eval from '../models/eval';
+import type EvalResult from '../models/evalResult';
+import type { Vars } from '../types';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -58,6 +61,72 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
       ${gradingResultText}
     `.trim();
 };
+
+export function createOutputMetadata(evalRecord: Eval) {
+  let evaluationCreatedAt: string | undefined;
+  if (evalRecord.createdAt) {
+    try {
+      const date = new Date(evalRecord.createdAt);
+      evaluationCreatedAt = Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+    } catch {
+      evaluationCreatedAt = undefined;
+    }
+  }
+
+  return {
+    promptfooVersion: VERSION,
+    nodeVersion: process.version,
+    platform: os.platform(),
+    arch: os.arch(),
+    exportedAt: new Date().toISOString(),
+    evaluationCreatedAt,
+    author: evalRecord.author,
+  };
+}
+
+/**
+ * JSON writer with improved error handling for large datasets.
+ * Provides helpful error messages when memory limits are exceeded.
+ */
+async function writeJsonOutputSafely(
+  outputPath: string,
+  evalRecord: Eval,
+  shareableUrl: string | null,
+): Promise<void> {
+  const metadata = createOutputMetadata(evalRecord);
+
+  try {
+    const summary = await evalRecord.toEvaluateSummary();
+    const outputData: OutputFile = {
+      evalId: evalRecord.id,
+      results: summary,
+      config: evalRecord.config,
+      shareableUrl,
+      metadata,
+    };
+
+    // Use standard JSON.stringify with proper formatting
+    const jsonString = JSON.stringify(outputData, null, 2);
+    fs.writeFileSync(outputPath, jsonString);
+  } catch (error) {
+    const msg = (error as Error)?.message ?? '';
+    const isStringLen = error instanceof RangeError && msg.includes('Invalid string length');
+    const isHeapOOM = /heap out of memory|Array buffer allocation failed|ERR_STRING_TOO_LONG/i.test(
+      msg,
+    );
+    if (isStringLen || isHeapOOM) {
+      // The dataset is too large to load into memory at once
+      const resultCount = await evalRecord.getResultsCount();
+      logger.error(`Dataset too large for JSON export (${resultCount} results).`);
+      throw new Error(
+        `Dataset too large for JSON export. The evaluation has ${resultCount} results which exceeds memory limits. ` +
+          'Consider using JSONL format instead: --output output.jsonl',
+      );
+    } else {
+      throw error;
+    }
+  }
+}
 
 export async function writeOutput(
   outputPath: string,
@@ -96,6 +165,8 @@ export async function writeOutput(
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
+  const metadata = createOutputMetadata(evalRecord);
+
   if (outputExtension === 'csv') {
     // Write headers first
     const headers = getHeaderForTable(evalRecord);
@@ -124,20 +195,7 @@ export async function writeOutput(
       fs.appendFileSync(outputPath, batchCsv);
     }
   } else if (outputExtension === 'json') {
-    const summary = await evalRecord.toEvaluateSummary();
-    fs.writeFileSync(
-      outputPath,
-      JSON.stringify(
-        {
-          evalId: evalRecord.id,
-          results: summary,
-          config: evalRecord.config,
-          shareableUrl,
-        } satisfies OutputFile,
-        null,
-        2,
-      ),
-    );
+    await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
     fs.writeFileSync(
@@ -147,6 +205,7 @@ export async function writeOutput(
         results: summary,
         config: evalRecord.config,
         shareableUrl,
+        metadata,
       } as OutputFile),
     );
   } else if (outputExtension === 'html') {
@@ -169,9 +228,51 @@ export async function writeOutput(
     fs.writeFileSync(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      const text = batchResults.map((result) => JSON.stringify(result)).join('\n');
+      const text = batchResults.map((result) => JSON.stringify(result)).join(os.EOL) + os.EOL;
       fs.appendFileSync(outputPath, text);
     }
+  } else if (outputExtension === 'xml') {
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Sanitize data for XML builder to prevent textValue.replace errors
+    const sanitizeForXml = (obj: any): any => {
+      if (obj === null || obj === undefined) {
+        return '';
+      }
+      if (typeof obj === 'boolean' || typeof obj === 'number') {
+        return String(obj);
+      }
+      if (typeof obj === 'string') {
+        return obj;
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(sanitizeForXml);
+      }
+      if (typeof obj === 'object') {
+        const sanitized: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+          sanitized[key] = sanitizeForXml(value);
+        }
+        return sanitized;
+      }
+      // For any other type, convert to string
+      return String(obj);
+    };
+
+    const xmlBuilder = new XMLBuilder({
+      ignoreAttributes: false,
+      format: true,
+      indentBy: '  ',
+    });
+    const xmlData = xmlBuilder.build({
+      promptfoo: {
+        evalId: evalRecord.id,
+        results: sanitizeForXml(summary),
+        config: sanitizeForXml(evalRecord.config),
+        shareableUrl: shareableUrl || '',
+      },
+    });
+    fs.writeFileSync(outputPath, xmlData);
   }
 }
 
@@ -222,32 +323,79 @@ export function printBorder() {
 export function setupEnv(envPath: string | undefined) {
   if (envPath) {
     logger.info(`Loading environment variables from ${envPath}`);
-    dotenv.config({ path: envPath, override: true });
+    dotenv.config({ path: envPath, override: true, quiet: true });
   } else {
-    dotenv.config();
+    dotenv.config({ quiet: true });
   }
 }
 
-export type StandaloneEval = CompletedPrompt & {
-  evalId: string;
-  description: string | null;
-  datasetId: string | null;
-  promptId: string | null;
-  isRedteam: boolean;
-  createdAt: number;
-  uuid: string;
-  pluginFailCount: Record<string, number>;
-  pluginPassCount: Record<string, number>;
-};
-
-export function providerToIdentifier(provider: TestCase['provider']): string | undefined {
-  if (isApiProvider(provider)) {
-    return provider.id();
-  } else if (isProviderOptions(provider)) {
-    return provider.id;
-  } else if (typeof provider === 'string') {
-    return provider;
+function canonicalizeProviderId(id: string): string {
+  // Handle file:// prefix
+  if (id.startsWith('file://')) {
+    const filePath = id.slice('file://'.length);
+    return path.isAbsolute(filePath) ? id : `file://${path.resolve(filePath)}`;
   }
+
+  // Handle other executable prefixes with file paths
+  const executablePrefixes = ['exec:', 'python:', 'golang:'];
+  for (const prefix of executablePrefixes) {
+    if (id.startsWith(prefix)) {
+      const filePath = id.slice(prefix.length);
+      if (filePath.includes('/') || filePath.includes('\\')) {
+        return `${prefix}${path.resolve(filePath)}`;
+      }
+      return id;
+    }
+  }
+
+  // For JavaScript/TypeScript files without file:// prefix
+  if (
+    (id.endsWith('.js') || id.endsWith('.ts') || id.endsWith('.mjs')) &&
+    (id.includes('/') || id.includes('\\'))
+  ) {
+    return `file://${path.resolve(id)}`;
+  }
+
+  return id;
+}
+
+function getProviderLabel(provider: any): string | undefined {
+  return provider?.label && typeof provider.label === 'string' ? provider.label : undefined;
+}
+
+export function providerToIdentifier(
+  provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
+): string | undefined {
+  if (!provider) {
+    return undefined;
+  }
+
+  if (typeof provider === 'string') {
+    return canonicalizeProviderId(provider);
+  }
+
+  // Check for label first on any provider type
+  const label = getProviderLabel(provider);
+  if (label) {
+    return label;
+  }
+
+  if (isApiProvider(provider)) {
+    return canonicalizeProviderId(provider.id());
+  }
+
+  if (isProviderOptions(provider)) {
+    if (provider.id) {
+      return canonicalizeProviderId(provider.id);
+    }
+    return undefined;
+  }
+
+  // Handle any other object with id property
+  if (typeof provider === 'object' && 'id' in provider && typeof provider.id === 'string') {
+    return canonicalizeProviderId(provider.id);
+  }
+
   return undefined;
 }
 

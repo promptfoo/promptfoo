@@ -38,6 +38,8 @@ export type PluginConfig = {
   intent?: Intent | Intent[];
   policy?: string;
   systemPrompt?: string;
+  // Strategy exclusions - allows plugins to exclude incompatible strategies
+  excludeStrategies?: string[];
 };
 export type StrategyConfig = RedteamObjectConfig;
 
@@ -100,12 +102,14 @@ type CommonOptions = {
   sharing?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   testGenerationInstructions?: string;
+  maxConcurrency?: number;
 };
 
 // NOTE: Remember to edit validators/redteam.ts:RedteamGenerateOptionsSchema if you edit this schema
 export interface RedteamCliGenerateOptions extends CommonOptions {
   cache: boolean;
   config?: string;
+  target?: string;
   defaultConfig: Record<string, unknown>;
   defaultConfigPath?: string;
   envFile?: string;
@@ -118,6 +122,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
   progressBar?: boolean;
+  configFromCloud?: any;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
@@ -181,6 +186,7 @@ export interface SavedRedteamConfig {
   purpose?: string;
   extensions?: string[];
   numTests?: number;
+  maxConcurrency?: number;
   applicationDefinition: {
     purpose?: string;
     features?: string;
@@ -217,3 +223,9 @@ export interface BaseRedteamMetadata {
   stopReason: string;
   redteamHistory?: { prompt: string; output: string }[];
 }
+
+/**
+ * Options for generating red team tests via the public API
+ * This is a cleaner subset of RedteamCliGenerateOptions for external use
+ */
+export type RedteamGenerateOptions = Partial<RedteamCliGenerateOptions>;

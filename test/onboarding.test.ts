@@ -1,8 +1,8 @@
 import fs from 'fs';
 import { rm } from 'fs/promises';
+
 import yaml from 'js-yaml';
-import { reportProviderAPIKeyWarnings } from '../src/onboarding';
-import { createDummyFiles } from '../src/onboarding';
+import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
 import { TestSuiteConfigSchema } from '../src/types';
 
 jest.mock('fs', () => ({
@@ -42,7 +42,7 @@ jest.mock('../src/database', () => ({
 }));
 
 jest.mock('../src/telemetry', () => ({
-  recordAndSend: jest.fn(),
+  record: jest.fn(),
 }));
 
 jest.mock('../src/fetch', () => ({
@@ -160,8 +160,8 @@ describe('createDummyFiles', () => {
     const config = validationResult.data!;
     expect(config.prompts).toHaveLength(2);
     expect(config.providers).toHaveLength(2);
-    expect(config.providers).toContain('openai:gpt-4o-mini');
-    expect(config.providers).toContain('openai:gpt-4o');
+    expect(config.providers).toContain('openai:gpt-5-mini');
+    expect(config.providers).toContain('openai:gpt-5');
   });
 
   it('should generate valid YAML configuration for RAG setup', async () => {

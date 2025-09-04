@@ -1,102 +1,77 @@
 ---
-sidebar_label: Context Recall
+sidebar_position: 50
+description: 'Quantify retrieval quality by measuring how thoroughly LLM responses cover expected information from source materials.'
 ---
 
-# Context Recall
+# Context recall
 
-The `context-recall` assertion evaluates whether key information from a ground truth statement appears in the provided context. This is particularly useful for RAG (Retrieval-Augmented Generation) applications to ensure that important facts are being retrieved.
+Checks if your retrieved context contains the information needed to generate a known correct answer.
 
-### How to use it
+**Use when**: You have ground truth answers and want to verify your retrieval finds supporting evidence.
 
-To use the `context-recall` assertion type, add it to your test configuration like this:
+**How it works**: Breaks the expected answer into statements and checks if each can be attributed to the context. Score = attributable statements / total statements.
+
+**Example**:
+
+```text
+Expected: "Python was created by Guido van Rossum in 1991"
+Context: "Python was released in 1991"
+Score: 0.5 (year ✓, creator ✗)
+```
+
+## Configuration
 
 ```yaml
 assert:
   - type: context-recall
-    threshold: 0.9 # Score between 0 and 1
-    value: 'Key facts that should appear in the context'
+    value: 'Python was created by Guido van Rossum in 1991'
+    threshold: 1.0 # Context must support entire answer
 ```
 
-Note: This assertion requires the `context` variable to be set in your test.
+### Required fields
 
-### How it works
+- `value` - Expected answer/ground truth
+- `context` - Retrieved text (in vars or via `contextTransform`)
+- `threshold` - Minimum score 0-1 (default: 0)
 
-The context recall checker:
-
-1. Takes a ground truth statement (the `value`) and the retrieved context
-2. Breaks down the ground truth into individual statements
-3. Checks which statements are supported by the context
-4. Calculates a recall score based on the proportion of supported statements
-
-A higher threshold requires more of the ground truth information to be present in the context.
-
-### Example Configuration
-
-Here's a complete example showing how to use context recall in a RAG system:
+### Full example
 
 ```yaml
-prompts:
-  - |
-    Answer this question: {{query}}
-    Using this context: {{context}}
-providers:
-  - openai:gpt-4
 tests:
   - vars:
-      query: 'What is our maternity leave policy?'
-      context: file://docs/policies/maternity.md
+      query: 'Who created Python?'
+      context: 'Guido van Rossum created Python in 1991.'
     assert:
       - type: context-recall
-        threshold: 0.9
-        value: |
-          Employees get 4 months paid maternity leave.
-          Leave can be taken before or after birth.
-          Additional unpaid leave is available upon request.
+        value: 'Python was created by Guido van Rossum in 1991'
+        threshold: 1.0
 ```
 
-### Overriding the Grader
+### Dynamic context extraction
 
-Like other model-graded assertions, you can override the default grader:
-
-1. Using the CLI:
-
-   ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
-   ```
-
-2. Using test options:
-
-   ```yaml
-   defaultTest:
-     options:
-       provider: openai:gpt-4.1-mini
-   ```
-
-3. Using assertion-level override:
-   ```yaml
-   assert:
-     - type: context-recall
-       threshold: 0.9
-       value: 'Key facts to check'
-       provider: openai:gpt-4.1-mini
-   ```
-
-### Customizing the Prompt
-
-You can customize the evaluation prompt using the `rubricPrompt` property:
+For RAG systems that return context with their response:
 
 ```yaml
-defaultTest:
-  options:
-    rubricPrompt: |
-      Context: {{context}}
-      Ground Truth: {{groundTruth}}
-
-      Break down the ground truth into atomic statements.
-      For each statement, mark it with [FOUND] if it appears in the context,
-      or [NOT FOUND] if it does not.
+# Provider returns { answer: "...", context: "..." }
+assert:
+  - type: context-recall
+    value: 'Expected answer here'
+    contextTransform: 'output.context' # Extract context field
+    threshold: 0.8
 ```
 
-# Further reading
+## Limitations
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- Binary attribution (no partial credit)
+- Works best with factual statements
+- Requires known correct answers
+
+## Related metrics
+
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - Is retrieved context relevant?
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - Does output stay faithful to context?
+
+## Further reading
+
+- [Defining context in test cases](/docs/configuration/expected-outputs/model-graded#defining-context-for-context-based-assertions)
+- [RAG Evaluation Guide](/docs/guides/evaluate-rag)

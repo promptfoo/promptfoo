@@ -1,17 +1,19 @@
-import chalk from 'chalk';
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as os from 'os';
 import * as path from 'path';
+
+import chalk from 'chalk';
+import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
-import type Eval from '../models/eval';
 import { createShareableUrl } from '../share';
 import { isRunningUnderNpx } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
+
+import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
@@ -132,4 +134,15 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   // Clear the callback when done
   setLogCallback(null);
   return evalResult;
+}
+
+/**
+ * Custom error class for target permission-related failures.
+ * Thrown when users lack necessary permissions to access or create targets.
+ */
+export class TargetPermissionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TargetPermissionError';
+  }
 }

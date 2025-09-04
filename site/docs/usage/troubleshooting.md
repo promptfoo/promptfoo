@@ -1,5 +1,6 @@
 ---
 sidebar_position: 60
+description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, and native builds in your LLM testing pipeline
 ---
 
 # Troubleshooting
@@ -14,7 +15,11 @@ Follow **all** of these steps:
 
 1. Do not use the `--no-write` flag. We need to write to disk to avoid memory issues.
 2. Use the `--no-table` flag.
-3. Only output to `jsonl` ex: `--output results.jsonl`
+3. **Use JSONL format**: `--output results.jsonl`
+
+:::tip
+JSONL format processes results in batches, avoiding memory limits that cause JSON export to fail on large datasets.
+:::
 
 ### Granular memory optimization
 
@@ -71,7 +76,7 @@ tests:
 
 **Default solution:** Objects are automatically converted to JSON strings:
 
-```
+```text
 Product: {"name":"Headphones","price":99.99}
 ```
 
@@ -110,7 +115,7 @@ prompts:
 
 When running `npx promptfoo@latest`, you might encounter this error:
 
-```
+```text
 Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
 was compiled against a different Node.js version using
 NODE_MODULE_VERSION 115. This version of Node.js requires
@@ -217,25 +222,22 @@ Alternatively, you can use the `--verbose` flag:
 npx promptfoo eval --verbose
 ```
 
-### Using a debugger
+### Using the Python debugger (pdb)
 
-While standard Python debuggers like `pdb` are not directly supported, you can use `remote-pdb` for debugging. First, install `remote-pdb`:
+Promptfoo now supports native Python debugging with pdb. To enable it:
 
 ```bash
-pip install remote-pdb
+export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
 ```
 
-Then, add the following lines to your Python script where you want to set a breakpoint:
+Then add breakpoints in your Python code:
 
 ```python
-from remote_pdb import RemotePdb
-RemotePdb('127.0.0.1', 4444).set_trace()
-```
+import pdb
 
-When your code reaches this point, it will pause execution and wait for you to connect to the debugger. You can then connect to the debugger using a tool like `telnet`:
-
-```bash
-telnet 127.0.0.1 4444
+def call_api(prompt, options, context):
+    pdb.set_trace()  # Debugger will pause here
+    # Your code...
 ```
 
 ### Handling errors

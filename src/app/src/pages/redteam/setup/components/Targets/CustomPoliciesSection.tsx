@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { memo, useCallback, useEffect, useState } from 'react';
+
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -57,6 +58,7 @@ PolicyInput.displayName = 'PolicyInput';
 
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
+  const [isInitialMount, setIsInitialMount] = useState(true);
   const [policies, setPolicies] = useState<PolicyInstance[]>(() => {
     // Initialize from existing config or create a default empty policy
     const existingPolicies = config.plugins
@@ -82,36 +84,48 @@ export const CustomPoliciesSection = () => {
 
   const [debouncedPolicies] = useDebounce(policies, 500);
 
+  // Sync policies to config - immediate on mount, debounced on changes
+  const syncPolicies = useCallback(
+    (policiesToSync: PolicyInstance[]) => {
+      const policyPlugins = policiesToSync
+        .filter((policy) => policy.policy.trim() !== '')
+        .map((policy) => ({
+          id: 'policy',
+          config: {
+            policy: policy.policy,
+          },
+        }));
+
+      const otherPlugins = config.plugins.filter((p) =>
+        typeof p === 'string' ? true : p.id !== 'policy',
+      );
+
+      const currentPolicies = JSON.stringify(
+        config.plugins.filter((p) => typeof p === 'object' && p.id === 'policy'),
+      );
+      const newPolicies = JSON.stringify(policyPlugins);
+
+      if (currentPolicies !== newPolicies) {
+        updateConfig('plugins', [...otherPlugins, ...policyPlugins]);
+      }
+    },
+    [config.plugins, updateConfig],
+  );
+
+  // Immediate sync on initial mount
   useEffect(() => {
-    if (
-      debouncedPolicies.length === 0 &&
-      !config.plugins.some((p) => typeof p === 'object' && p.id === 'policy')
-    ) {
-      return;
+    if (isInitialMount) {
+      syncPolicies(policies);
+      setIsInitialMount(false);
     }
+  }, [isInitialMount, policies, syncPolicies]);
 
-    const policyPlugins = debouncedPolicies
-      .filter((policy) => policy.policy.trim() !== '')
-      .map((policy) => ({
-        id: 'policy',
-        config: {
-          policy: policy.policy,
-        },
-      }));
-
-    const otherPlugins = config.plugins.filter((p) =>
-      typeof p === 'string' ? true : p.id !== 'policy',
-    );
-
-    const currentPolicies = JSON.stringify(
-      config.plugins.filter((p) => typeof p === 'object' && p.id === 'policy'),
-    );
-    const newPolicies = JSON.stringify(policyPlugins);
-
-    if (currentPolicies !== newPolicies) {
-      updateConfig('plugins', [...otherPlugins, ...policyPlugins]);
+  // Debounced sync for subsequent changes
+  useEffect(() => {
+    if (!isInitialMount) {
+      syncPolicies(debouncedPolicies);
     }
-  }, [debouncedPolicies]);
+  }, [debouncedPolicies, isInitialMount, syncPolicies]);
 
   const handlePolicyChange = useCallback((policyId: string, newValue: string) => {
     setPolicies((prev) => prev.map((p) => (p.id === policyId ? { ...p, policy: newValue } : p)));
@@ -203,5 +217,3 @@ export const CustomPoliciesSection = () => {
     </Box>
   );
 };
-
-export default memo(CustomPoliciesSection);

@@ -1,12 +1,12 @@
 import confirm from '@inquirer/confirm';
-import type { Command } from 'commander';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util';
 import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database';
+import type { Command } from 'commander';
 
-async function handleEvalDelete(evalId: string, envPath?: string) {
+export async function handleEvalDelete(evalId: string, envPath?: string) {
   try {
     await deleteEval(evalId);
     logger.info(`Evaluation with ID ${evalId} has been successfully deleted.`);
@@ -16,7 +16,7 @@ async function handleEvalDelete(evalId: string, envPath?: string) {
   }
 }
 
-async function handleEvalDeleteAll() {
+export async function handleEvalDeleteAll() {
   const confirmed = await confirm({
     message:
       'Are you sure you want to delete all stored evaluations? This action cannot be undone.',
@@ -45,6 +45,7 @@ export function deleteCommand(program: Command) {
       }
 
       logger.error(`No resource found with ID ${id}`);
+      process.exitCode = 1;
     });
 
   deleteCommand
@@ -59,7 +60,6 @@ export function deleteCommand(program: Command) {
         name: 'delete eval',
         evalId,
       });
-      await telemetry.send();
 
       if (evalId === 'latest') {
         const latestResults = await Eval.latest();

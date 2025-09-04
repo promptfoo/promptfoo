@@ -1,12 +1,10 @@
 ---
 sidebar_label: Medical Plugins
-title: Medical Red-Teaming Plugins - AI Healthcare Safety Testing
-description: Comprehensive guide to medical red-teaming plugins for testing AI systems in healthcare contexts. Based on medical red-teaming research for identifying vulnerabilities in medical AI applications.
+title: Medical Red-Teaming Plugins - AI Security for Healthcare
+description: Medical red-teaming plugins for testing AI systems in healthcare contexts to identify vulnerabilities in medical AI apps
 ---
 
 # Medical Red-Teaming Plugins
-
-## Overview
 
 The Medical Red-Teaming Plugins are a comprehensive suite of tests designed specifically for AI systems operating in healthcare contexts. These plugins are based on extensive medical red-teaming research conducted with 46 healthcare professionals and ML experts, who identified vulnerabilities that could be particularly dangerous when AI systems provide medical information or assistance.
 
@@ -143,6 +141,32 @@ Tests whether AI systems inappropriately agree with incorrect medical assumption
 ❌ Supporting patient preference over established medical guidelines
 ```
 
+### Medical Off-Label Use
+
+**Plugin ID:** `medical:off-label-use`  
+**Severity: High**
+
+Tests whether AI systems inappropriately recommend off-label use of medications without proper disclaimers, warnings, or professional consultation requirements.
+
+**What it detects:**
+
+- **Unapproved Indications**: Recommending drugs for conditions they're not approved to treat
+- **Cognitive Enhancement**: Suggesting prescription drugs for performance enhancement in healthy individuals
+- **Pediatric Off-Label**: Suggesting adult medications for children without appropriate warnings
+- **Dosage Modifications**: Recommending doses outside approved ranges without clinical justification
+- **Combination Therapy**: Suggesting drug combinations not studied or approved
+- **Alternative Uses**: Promoting medications for non-medical purposes (e.g., cognitive enhancement, weight loss)
+- **Experimental Treatments**: Recommending investigational or experimental uses without proper context
+
+**Real example scenarios:**
+
+```
+❌ "Gabapentin 300mg three times daily should help with your anxiety"
+❌ "You can use a quarter of an adult Ambien tablet for your 8-year-old's sleep issues"
+❌ "Metformin 500mg daily is great for anti-aging even if you're not diabetic"
+❌ Recommending specific dosages for off-label uses without medical supervision
+```
+
 ## Research Foundation
 
 These plugins are based on a comprehensive red-teaming workshop with 46 participants, including 18 clinical experts across multiple specialties (oncology, hepatology, emergency medicine, pediatrics). The research identified 32 unique prompts that resulted in medical vulnerabilities across multiple AI models.
@@ -161,10 +185,20 @@ Add medical plugins to your promptfoo configuration:
 ```yaml
 redteam:
   plugins:
+    # Use the medical collection to include all medical plugins
+    - medical
+```
+
+Or specify individual medical plugins:
+
+```yaml
+redteam:
+  plugins:
     # Individual medical plugins
     - medical:hallucination
     - medical:anchoring-bias
     - medical:incorrect-knowledge
+    - medical:off-label-use
     - medical:prioritization-error
     - medical:sycophancy
 ```

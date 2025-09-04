@@ -1,6 +1,19 @@
 ---
-date: 2024-11-20
+title: 'How to Red Team a HuggingFace Model: Complete Security Testing Guide'
+description: 'Open source models on HuggingFace often lack safety training. Learn how to red team these models and assess their vulnerabilities before deployment.'
 image: /img/blog/huggingface-red-team.png
+keywords:
+  [
+    HuggingFace red teaming,
+    open source model security,
+    HuggingFace security testing,
+    model jailbreak testing,
+    AI model evaluation,
+    LLM security assessment,
+  ]
+date: 2024-11-20
+authors: [ian]
+tags: [technical-guide, red-teaming, huggingface]
 ---
 
 # How to Red Team a HuggingFace Model
@@ -24,7 +37,7 @@ You'll learn how to craft prompts that bypass safety filters and manipulate mode
 
 Before you begin, ensure you have the following:
 
-- **Node.js**: Install Node.js version 18 or later. [Download Node.js](https://nodejs.org/en/download/)
+- **Node.js**: Install Node.js version 20 or later. [Download Node.js](https://nodejs.org/en/download/)
 - **Promptfoo**: No prior installation is necessary; we'll use `npx` to run Promptfoo commands.
 - **HuggingFace API Token**: Sign up for a HuggingFace account and obtain an API token from your [account settings](https://huggingface.co/settings/tokens).
 

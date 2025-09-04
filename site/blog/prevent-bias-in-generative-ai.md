@@ -1,7 +1,23 @@
 ---
+title: 'Preventing Bias & Toxicity in Generative AI'
 sidebar_label: Preventing bias & toxicity
+description: 'Biased AI outputs can destroy trust and violate regulations. Discover practical methods to detect, measure, and prevent bias in your generative AI applications.'
 image: /img/blog/bias/llm-bias-mitigation-diagram.svg
+keywords:
+  [
+    AI bias prevention,
+    generative AI bias,
+    toxicity detection,
+    LLM fairness,
+    AI ethics,
+    bias mitigation,
+    inclusive AI,
+    algorithmic bias,
+    AI safety,
+  ]
 date: 2024-10-08
+authors: [ian]
+tags: [research-analysis, best-practices]
 ---
 
 # Preventing Bias & Toxicity in Generative AI

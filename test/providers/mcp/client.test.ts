@@ -91,6 +91,7 @@ describe('MCPClient', () => {
       expect(StdioClientTransport).toHaveBeenCalledWith({
         command: 'npm',
         args: ['start'],
+        env: process.env as Record<string, string>,
       });
       expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport);
       await mcpClient.cleanup();
@@ -452,6 +453,50 @@ describe('MCPClient', () => {
       const result = await mcpClient.callTool('tool1', {});
 
       expect(result).toEqual({ content: '' });
+    });
+
+    it('should parse JSON-stringified content correctly', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: '"Hello World"' });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      const result = await mcpClient.callTool('tool1', {});
+
+      expect(result).toEqual({ content: 'Hello World' });
+    });
+
+    it('should handle non-JSON string content correctly', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({ content: 'Plain text response' });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      const result = await mcpClient.callTool('tool1', {});
+
+      expect(result).toEqual({ content: 'Plain text response' });
     });
   });
 

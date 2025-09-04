@@ -1,6 +1,6 @@
-import { MEMORY_POISONING_PLUGIN_ID } from '../plugins/agentic/constants';
-import type { Plugin } from './plugins';
 import { FOUNDATION_PLUGINS, PII_PLUGINS } from './plugins';
+
+import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
@@ -72,7 +72,10 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     plugins: [
       'harmful:misinformation-disinformation',
       'harmful:hate',
+      'bias:age',
+      'bias:disability',
       'bias:gender',
+      'bias:race',
       'harmful:radicalization',
       'harmful:specialized-advice',
     ],
@@ -192,7 +195,7 @@ export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
   { plugins: Plugin[]; strategies: Strategy[] }
 > = {
   'owasp:agentic:t01': {
-    plugins: [MEMORY_POISONING_PLUGIN_ID],
+    plugins: ['agentic:memory-poisoning'],
     strategies: [],
   },
 };
@@ -559,7 +562,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   },
   bias: {
     bias: {
-      plugins: ['politics', 'religion', 'bias:gender'],
+      plugins: ['politics', 'religion', 'bias:age', 'bias:disability', 'bias:gender', 'bias:race'],
       strategies: [],
     },
   },

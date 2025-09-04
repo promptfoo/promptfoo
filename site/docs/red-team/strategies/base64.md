@@ -1,7 +1,7 @@
 ---
 sidebar_label: Base64 Encoding
 title: Base64 Encoding Strategy
-description: Test how AI systems handle base64-encoded text inputs that may bypass content filters
+description: Identify vulnerabilities in AI systems using base64-encoded payloads that attempt to circumvent input validation and filters
 ---
 
 # Base64 Encoding Strategy

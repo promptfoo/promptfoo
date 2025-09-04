@@ -1,9 +1,11 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ quiet: true });
+
 import cliState from './cliState';
 import type { EnvOverrides } from './types/env';
 
 // Define the supported environment variables and their types
-export type EnvVars = {
+type EnvVars = {
   //=========================================================================
   // Core promptfoo configuration
   //=========================================================================
@@ -34,11 +36,13 @@ export type EnvVars = {
   PROMPTFOO_DISABLE_TEMPLATING?: boolean;
   PROMPTFOO_DISABLE_UPDATE?: boolean;
   PROMPTFOO_DISABLE_VAR_EXPANSION?: boolean;
+  PROMPTFOO_DISABLE_WAL_MODE?: boolean;
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
+  PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
@@ -49,6 +53,7 @@ export type EnvVars = {
   PROMPTFOO_STRIP_RESPONSE_OUTPUT?: boolean;
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
+  PROMPTFOO_DISABLE_UNBLOCKING?: boolean;
 
   //=========================================================================
   // promptfoo configuration options
@@ -83,6 +88,11 @@ export type EnvVars = {
   PROMPTFOO_SHARE_CHUNK_SIZE?: number;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
   PROMPTFOO_CA_CERT_PATH?: string;
+  PROMPTFOO_PFX_CERT_PATH?: string;
+  PROMPTFOO_PFX_PASSWORD?: string;
+  PROMPTFOO_JKS_CERT_PATH?: string;
+  PROMPTFOO_JKS_PASSWORD?: string;
+  PROMPTFOO_JKS_ALIAS?: string;
 
   //=========================================================================
   // HTTP proxy settings
@@ -154,6 +164,9 @@ export type EnvVars = {
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
 
+  // AIML API
+  AIML_API_KEY?: string;
+
   // Anthropic
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MAX_TOKENS?: number;
@@ -206,6 +219,9 @@ export type EnvVars = {
   // FAL
   FAL_KEY?: string;
 
+  // GitHub
+  GITHUB_TOKEN?: string;
+
   // Groq
   GROQ_API_KEY?: string;
 
@@ -217,6 +233,9 @@ export type EnvVars = {
   HF_API_TOKEN?: string;
   HF_TOKEN?: string;
 
+  // Hyperbolic
+  HYPERBOLIC_API_KEY?: string;
+
   // Langfuse
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
@@ -224,6 +243,9 @@ export type EnvVars = {
 
   // LLaMa
   LLAMA_BASE_URL?: string;
+
+  // Llama API
+  LLAMA_API_KEY?: string;
 
   // Local AI
   LOCALAI_BASE_URL?: string;
@@ -382,7 +404,8 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
 }
 
 /**
- * Get the evaluation timeout in milliseconds.
+ * Get the timeout in milliseconds for each individual test case/provider API call.
+ * When this timeout is reached, that specific test is marked as an error.
  * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no timeout).
  * @returns The timeout value in milliseconds, or the default value if not set.
  */
@@ -391,7 +414,8 @@ export function getEvalTimeoutMs(defaultValue: number = 0): number {
 }
 
 /**
- * Get the maximum duration for an evaluation in milliseconds.
+ * Get the maximum total runtime in milliseconds for the entire evaluation process.
+ * When this timeout is reached, all remaining tests are marked as errors and the evaluation ends.
  * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no limit).
  * @returns The max duration in milliseconds, or the default value if not set.
  */

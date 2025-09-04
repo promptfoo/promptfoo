@@ -1,11 +1,16 @@
 import React from 'react';
+
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { usePageMeta } from '@app/hooks/usePageMeta';
+import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import ListAltIcon from '@mui/icons-material/ListAlt';
+import PrintIcon from '@mui/icons-material/Print';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
@@ -16,35 +21,47 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
 import {
   type EvaluateResult,
+  type EvaluateSummaryV2,
+  type GradingResult,
+  isProviderOptions,
+  ResultFailureReason,
+  type ResultLightweightWithLabel,
   type ResultsFile,
   type SharedResults,
-  type GradingResult,
-  type ResultLightweightWithLabel,
-  type EvaluateSummaryV2,
-  isProviderOptions,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
-import DiscoveredInformation from './DiscoveredInformation';
+import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import './Report.css';
 
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+
 const App: React.FC = () => {
+  const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
+  const { recordEvent } = useTelemetry();
+
+  // Vulnerabilities DataGrid
+  const vulnerabilitiesDataGridRef = React.useRef<HTMLDivElement>(null);
+  const [vulnerabilitiesDataGridFilterModel, setVulnerabilitiesDataGridFilterModel] =
+    React.useState<GridFilterModel>({
+      items: [],
+      logicOperator: GridLogicOperator.Or,
+    });
 
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
@@ -54,6 +71,14 @@ const App: React.FC = () => {
       });
       const body = (await resp.json()) as SharedResults;
       setEvalData(body.data);
+
+      // Track funnel event for report viewed
+      recordEvent('funnel', {
+        type: 'redteam',
+        step: 'webui_report_viewed',
+        source: 'webui',
+        evalId: id,
+      });
     };
 
     if (searchParams) {
@@ -104,6 +129,11 @@ const App: React.FC = () => {
         return;
       }
 
+      // Exclude results with errors from being counted as failures
+      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
+        return;
+      }
+
       if (!result.success || !result.gradingResult?.pass) {
         if (!failures[pluginId]) {
           failures[pluginId] = [];
@@ -139,6 +169,11 @@ const App: React.FC = () => {
         return;
       }
 
+      // Exclude results with errors from being counted
+      if (result.error && result.failureReason === ResultFailureReason.ERROR) {
+        return;
+      }
+
       if (result.success && result.gradingResult?.pass) {
         if (!passes[pluginId]) {
           passes[pluginId] = [];
@@ -164,6 +199,11 @@ const App: React.FC = () => {
       (acc, row) => {
         const pluginId = getPluginIdFromResult(row);
         if (!pluginId) {
+          return acc;
+        }
+
+        // Exclude results with errors from statistics
+        if (row.error && row.failureReason === ResultFailureReason.ERROR) {
           return acc;
         }
 
@@ -225,12 +265,27 @@ const App: React.FC = () => {
     return stats;
   }, [failuresByPlugin, passesByPlugin]);
 
-  React.useEffect(() => {
-    document.title = `Report: ${evalData?.config.description || evalId || 'Red Team'} | promptfoo`;
-  }, [evalData, evalId]);
+  usePageMeta({
+    title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
+    description: 'Red team evaluation report',
+  });
 
   if (!evalData || !evalId) {
-    return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '9rem',
+        }}
+      >
+        <CircularProgress size={22} />
+        <Box>Waiting for report data</Box>
+      </Box>
+    );
   }
 
   if (!evalData.config.redteam) {
@@ -287,15 +342,15 @@ const App: React.FC = () => {
     setIsPromptModalOpen(false);
   };
 
-  const targetPurposeDiscoveryResult: TargetPurposeDiscoveryResult | undefined =
-    evalData?.config?.metadata?.targetPurposeDiscoveryResult;
-
   return (
     <Container maxWidth="xl">
       <Stack spacing={4} pb={8} pt={2}>
         {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
         <Card className="report-header" sx={{ position: 'relative' }}>
-          <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
+          <Box
+            sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}
+            className="print-hide"
+          >
             <Tooltip title="View all logs" placement="top">
               <IconButton
                 sx={{ position: 'relative' }}
@@ -305,7 +360,7 @@ const App: React.FC = () => {
                   if (event.ctrlKey || event.metaKey) {
                     window.open(url, '_blank');
                   } else {
-                    window.location.href = url;
+                    navigate(url);
                   }
                 }}
               >
@@ -316,6 +371,18 @@ const App: React.FC = () => {
               evalDescription={evalData.config.description || evalId}
               evalData={evalData}
             />
+            <Tooltip
+              title="Print this page (Ctrl+P) and select 'Save as PDF' for best results"
+              placement="top"
+            >
+              <IconButton
+                sx={{ position: 'relative' }}
+                aria-label="print page"
+                onClick={() => window.print()}
+              >
+                <PrintIcon />
+              </IconButton>
+            </Tooltip>
             <ReportSettingsDialogButton />
           </Box>
           <Typography variant="h4">
@@ -392,7 +459,12 @@ const App: React.FC = () => {
             )}
           </Box>
         </Card>
-        <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
+        <Overview
+          categoryStats={categoryStats}
+          plugins={evalData.config.redteam.plugins || []}
+          vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
+          setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
+        />
         <StrategyStats
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
@@ -405,13 +477,13 @@ const App: React.FC = () => {
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
         />
-        {targetPurposeDiscoveryResult && (
-          <DiscoveredInformation result={targetPurposeDiscoveryResult} />
-        )}
         <TestSuites
           evalId={evalId}
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
+          vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
+          vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
+          setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
         />
         <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
       </Stack>

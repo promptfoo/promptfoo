@@ -59,11 +59,18 @@ describe('isEmptyResponse', () => {
     expect(isEmptyResponse('   ')).toBe(true);
     expect(isEmptyResponse('{}')).toBe(true);
     expect(isEmptyResponse('  {}  ')).toBe(true);
+    expect(isEmptyResponse('undefined')).toBe(true);
+    expect(isEmptyResponse('  undefined  ')).toBe(true);
+    expect(isEmptyResponse('UNDEFINED')).toBe(true);
+    expect(isEmptyResponse('null')).toBe(true);
+    expect(isEmptyResponse('  NULL  ')).toBe(true);
   });
 
   it('should return false for non-empty responses', () => {
     expect(isEmptyResponse('Hello')).toBe(false);
     expect(isEmptyResponse('{"key": "value"}')).toBe(false);
+    expect(isEmptyResponse('undefined behavior')).toBe(false);
+    expect(isEmptyResponse('null pointer')).toBe(false);
   });
 });
 
@@ -200,5 +207,105 @@ describe('extractGoalFromPrompt', () => {
       }),
       expect.any(Number),
     );
+  });
+
+  it('should skip remote call when remote generation is disabled', async () => {
+    // Preserve original environment setting
+    const originalValue = process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+
+    expect(result).toBeNull();
+    expect(fetchWithCache).not.toHaveBeenCalled();
+
+    // Cleanup: restore or delete the env var to avoid leaking into other tests
+    if (originalValue === undefined) {
+      delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+    } else {
+      process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = originalValue;
+    }
+  });
+
+  it('should skip goal extraction for dataset plugins with short plugin ID', async () => {
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose', 'beavertails');
+
+    expect(result).toBeNull();
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should skip goal extraction for dataset plugins with full plugin ID', async () => {
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      'promptfoo:redteam:cyberseceval',
+    );
+
+    expect(result).toBeNull();
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should skip goal extraction for all dataset plugins', async () => {
+    const datasetPlugins = [
+      'beavertails',
+      'cyberseceval',
+      'donotanswer',
+      'harmbench',
+      'toxic-chat',
+      'aegis',
+      'pliny',
+      'unsafebench',
+      'xstest',
+    ];
+
+    for (const pluginId of datasetPlugins) {
+      const result = await extractGoalFromPrompt('test prompt', 'test purpose', pluginId);
+      expect(result).toBeNull();
+
+      // Also test with full plugin ID format
+      const fullPluginId = `promptfoo:redteam:${pluginId}`;
+      const resultFull = await extractGoalFromPrompt('test prompt', 'test purpose', fullPluginId);
+      expect(resultFull).toBeNull();
+    }
+
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should proceed with API call for non-dataset plugins', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'extracted goal' },
+      deleteFromCache: async () => {},
+    });
+
+    // Test with a non-dataset plugin
+    const result = await extractGoalFromPrompt('test prompt', 'test purpose', 'prompt-extraction');
+
+    expect(result).toBe('extracted goal');
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('should proceed with API call for non-dataset plugins with full plugin ID', async () => {
+    jest.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'extracted goal' },
+      deleteFromCache: async () => {},
+    });
+
+    // Test with a full non-dataset plugin ID
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      'promptfoo:redteam:sql-injection',
+    );
+
+    expect(result).toBe('extracted goal');
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
   });
 });

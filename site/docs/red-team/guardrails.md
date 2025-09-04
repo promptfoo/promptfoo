@@ -1,6 +1,7 @@
 ---
 sidebar_label: Guardrails
 sidebar_position: 99
+description: Red team LLM guardrails by testing injection detection, content moderation, and PII filtering to protect AI systems from malicious inputs and data exposure risks
 ---
 
 # Guardrails
@@ -8,6 +9,12 @@ sidebar_position: 99
 Guardrails are an active mitigation solution to LLM security, implemented to control and monitor user interactions. They help prevent misuse, detect potential security risks, and ensure appropriate model behavior by filtering or blocking problematic inputs and outputs.
 
 Common guardrails include prompt injection/jailbreak detection, content moderation, and PII (personally identifiable information) detection.
+
+:::info
+
+[Adaptive guardrails](https://www.promptfoo.dev/guardrails/), which learn from your red teaming findings and custom policies, are available in [Promptfoo Enterprise](/docs/enterprise/).
+
+:::
 
 ## Guardrails API
 

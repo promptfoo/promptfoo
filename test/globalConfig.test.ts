@@ -1,10 +1,18 @@
 import * as fs from 'fs';
+
 import yaml from 'js-yaml';
+
 import type {
   readGlobalConfig,
   writeGlobalConfig,
   writeGlobalConfigPartial,
 } from '../src/globalConfig/globalConfig';
+
+// Helper function to validate UUID format
+function isValidUUID(uuid: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+}
 
 // Clear any existing mocks
 jest.unmock('../src/globalConfig/globalConfig');
@@ -42,7 +50,7 @@ describe('Global Config', () => {
     });
   });
 
-  const mockConfig = { account: { email: 'test@example.com' } };
+  const mockConfig = { id: 'test-id', account: { email: 'test@example.com' } };
 
   describe('readGlobalConfig', () => {
     describe('when config file exists', () => {
@@ -65,12 +73,33 @@ describe('Global Config', () => {
         expect(result).toEqual(mockConfig);
       });
 
-      it('should handle empty config file by returning empty object', () => {
+      it('should handle empty config file by returning config with generated ID', () => {
         jest.mocked(fs.readFileSync).mockReturnValue('');
 
         const result = globalConfig.readGlobalConfig();
 
-        expect(result).toEqual({});
+        expect(result).toEqual({ id: expect.any(String) });
+        expect(result.id).toBeDefined();
+        expect(typeof result.id).toBe('string');
+        expect(isValidUUID(result.id!)).toBe(true);
+      });
+
+      it('should generate and save ID when existing config lacks an ID', () => {
+        const configWithoutId = { account: { email: 'test@example.com' } };
+        jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(configWithoutId));
+        jest.mocked(fs.writeFileSync).mockImplementation();
+
+        const result = globalConfig.readGlobalConfig();
+
+        expect(result.id).toBeDefined();
+        expect(typeof result.id).toBe('string');
+        expect(isValidUUID(result.id!)).toBe(true);
+        expect(result.account).toEqual(configWithoutId.account);
+        // Should have written the config with the new ID
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          expect.stringContaining('promptfoo.yaml'),
+          expect.stringContaining(`id: ${result.id}`),
+        );
       });
     });
 
@@ -81,7 +110,7 @@ describe('Global Config', () => {
         jest.mocked(fs.mkdirSync).mockImplementation();
       });
 
-      it('should create new config directory and file with empty config', () => {
+      it('should create new config directory and file with generated UUID', () => {
         const result = globalConfig.readGlobalConfig();
 
         expect(fs.existsSync).toHaveBeenCalledTimes(2);
@@ -91,7 +120,10 @@ describe('Global Config', () => {
           expect.stringContaining('promptfoo.yaml'),
           expect.any(String),
         );
-        expect(result).toEqual({});
+        expect(result).toEqual({ id: expect.any(String) });
+        expect(result.id).toBeDefined();
+        expect(typeof result.id).toBe('string');
+        expect(isValidUUID(result.id!)).toBe(true);
       });
     });
 
@@ -107,7 +139,9 @@ describe('Global Config', () => {
 
   describe('writeGlobalConfig', () => {
     it('should write config to file in YAML format', () => {
-      globalConfig.writeGlobalConfig(mockConfig);
+      globalConfig.writeGlobalConfig({
+        ...mockConfig,
+      });
 
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo.yaml'),
@@ -161,7 +195,7 @@ describe('Global Config', () => {
 
       globalConfig.writeGlobalConfigPartial(partialConfig);
 
-      const writeCall = jest.mocked(fs.writeFileSync).mock.calls[0][1] as string;
+      const writeCall = jest.mocked(fs.writeFileSync).mock.calls[1][1] as string;
       const writtenConfig = yaml.load(writeCall) as any;
 
       expect(writtenConfig.cloud.apiKey).toBe('new-key');

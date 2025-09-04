@@ -1,6 +1,20 @@
 ---
-date: 2025-01-18
+title: 'How to Red Team a LangChain Application: Complete Security Testing Guide'
+description: 'LangChain apps combine multiple AI components, creating complex attack surfaces. Learn how to red team agents, chains, and tool integrations systematically.'
 image: /img/blog/langchain/red-team-langchain-banner.jpg
+keywords:
+  [
+    LangChain red teaming,
+    LangChain security,
+    AI agent testing,
+    chain security testing,
+    LangChain vulnerabilities,
+    AI application security,
+    framework security,
+  ]
+date: 2025-01-18
+authors: [ian]
+tags: [technical-guide, red-teaming]
 ---
 
 # How to Red Team a LangChain Application
@@ -28,7 +42,7 @@ You'll learn how to use adversarial LLM models to test your LangChain applicatio
 Before you begin, ensure you have the following:
 
 - **Python**: Python 3.8 or later
-- **Node.js**: Version 18 or later
+- **Node.js**: Version 20 or later
 - **Promptfoo**: No prior installation needed; we'll use `npx`
 - **LangChain**: Install via pip: `pip install langchain`
 - **API Keys**: For your LLM provider (e.g., OpenAI, Anthropic)

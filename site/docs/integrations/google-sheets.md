@@ -1,5 +1,6 @@
 ---
 sidebar_label: Google Sheets
+description: Import and export LLM test cases with Google Sheets integration. Configure public or authenticated access, write evaluation results, and run model-graded metrics.
 ---
 
 # Google Sheets Integration
@@ -47,7 +48,6 @@ For private sheets, you'll need to set up Google's Default Application Credentia
    ```
 
 2. **Set Up Authentication**
-
    - Create a [service account](https://console.cloud.google.com/iam-admin/serviceaccounts) in Google Cloud
    - Download the JSON key file
    - Enable the [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com) (`sheets.googleapis.com`)
@@ -119,7 +119,7 @@ defaultTest:
   options:
     provider:
       text:
-        id: ollama:llama3.1:70b
+        id: ollama:chat:llama3.3:70b
       embedding:
         id: ollama:embeddings:mxbai-embed-large
 ```

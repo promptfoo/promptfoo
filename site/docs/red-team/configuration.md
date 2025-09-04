@@ -1,6 +1,7 @@
 ---
 sidebar_position: 3
-sidebar_label: 'Configuration'
+sidebar_label: Configuration
+description: Red team your LLM configuration settings using automated vulnerability scanning to detect misconfigurations and prevent unauthorized access to AI system parameters
 ---
 
 import React from 'react';
@@ -250,6 +251,7 @@ To see the list of available plugins on the command line, run `promptfoo redteam
 - `pii`: Includes all available PII plugins
 - `toxicity`: Includes all available plugins related to toxicity
 - `bias`: Includes all available plugins related to bias
+- `medical`: Includes all available medical AI safety plugins
 - `misinformation`: Includes all available plugins related to misinformation
 - `illegal-activity`: Includes all available plugins related to illegal activity
 
@@ -259,6 +261,7 @@ Example usage:
 plugins:
   - toxicity
   - bias
+  - medical
 ```
 
 ### Standards
@@ -504,7 +507,7 @@ strategies:
 
 ### Purpose
 
-The `purpose` field provides context to guide the generation of adversarial inputs. It is derived automatically, or you can set it.
+The `purpose` field provides context to guide the generation of adversarial inputs.
 
 The purpose should be descriptive, as it will be used as the basis for generated adversarial tests and grading. For example:
 
@@ -584,7 +587,7 @@ A local model via [ollama](/docs/providers/ollama/) would look similar:
 
 ```yaml
 redteam:
-  provider: ollama:chat:llama3.1
+  provider: ollama:chat:llama3.3
 ```
 
 :::warning
@@ -594,6 +597,10 @@ Some providers such as Anthropic may disable your account for generating harmful
 ### Remote Generation
 
 By default, promptfoo uses a remote service for generating adversarial certain inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+
+:::info Cloud Users
+If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
+:::
 
 :::warning
 Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.
@@ -821,6 +828,8 @@ Configuration values can be set in multiple ways, with the following precedence 
 3. Adjust `numTests` for individual plugins based on importance
 4. Run a red team eval and generate additional tests as needed
 
+For more information, see [Best Practices](/docs/red-team/troubleshooting/best-practices/).
+
 ## Example Configurations
 
 ### Basic Configuration
@@ -866,7 +875,7 @@ In some cases, you may already have a set of tests that you want to use in addit
 
 There are two approaches:
 
-1. Run these tests as a separate eval. See the [getting started](https://www.promptfoo.dev/docs/getting-started/) guide for evaluations. For grading, you will likely want to use the [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric/) or [`moderation`](/docs/configuration/expected-outputs/moderation/) assertion types.
+1. Run these tests as a separate eval. See the [getting started](/docs/getting-started/) guide for evaluations. For grading, you will likely want to use the [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric/) or [`moderation`](/docs/configuration/expected-outputs/moderation/) assertion types.
 1. You can also add your custom tests to the `tests` section of the generated `redteam.yaml` configuration file.
 
 Either way, this will allow you to evaluate your custom tests.
@@ -906,4 +915,4 @@ prompts:
 tests: huggingface://datasets/rajpurkar/squad
 ```
 
-For detailed information about query parameters, dataset configuration, and more examples, see the [HuggingFace provider documentation](/docs/providers/huggingface/#datasets).
+For detailed information about query parameters, dataset configuration, and more examples, see [Loading Test Cases from HuggingFace Datasets](/docs/configuration/huggingface-datasets).
