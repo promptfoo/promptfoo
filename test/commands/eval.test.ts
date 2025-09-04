@@ -267,7 +267,7 @@ describe('evalCommand', () => {
     const evalRecord = new Eval(config);
 
     // Mock cloud config as enabled
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    jest.mocked(cloudConfig.isEnabled).mockReturnValueOnce(true);
 
     jest.mocked(resolveConfigs).mockResolvedValue({
       config,
@@ -279,7 +279,7 @@ describe('evalCommand', () => {
     });
 
     jest.mocked(evaluate).mockResolvedValue(evalRecord);
-    jest.mocked(isSharingEnabled).mockReturnValue(true);
+    jest.mocked(isSharingEnabled).mockReturnValueOnce(true);
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 

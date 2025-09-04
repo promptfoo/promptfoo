@@ -415,6 +415,12 @@ export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
+  // If sharing is explicitly disabled, return null
+  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
+    logger.debug('Sharing is explicitly disabled, returning null');
+    return null;
+  }
+
   // 1. Handle email collection
   await handleEmailCollection(evalRecord);
 
