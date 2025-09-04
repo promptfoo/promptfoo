@@ -1,6 +1,12 @@
-# AWS Bedrock AgentCore Example
+# bedrock-agentcore (AWS Bedrock AgentCore Example)
 
 This example demonstrates how to use AWS Bedrock AgentCore with promptfoo to test and evaluate deployed AI agents, including both single-agent and multi-agent scenarios.
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example bedrock-agentcore
+```
 
 ## Prerequisites
 
@@ -8,6 +14,7 @@ This example demonstrates how to use AWS Bedrock AgentCore with promptfoo to tes
 2. One or more deployed AgentCore agents (get agent IDs from the AWS Console)
 3. AWS credentials configured (via environment variables, AWS CLI, or IAM role)
 4. Install the required AWS SDK:
+
    ```bash
    npm install @aws-sdk/client-bedrock-agent-runtime
    ```
@@ -38,8 +45,8 @@ This example demonstrates how to use AWS Bedrock AgentCore with promptfoo to tes
    Via IAM role (if running on EC2/Lambda)
 
 3. **Choose your configuration**:
-   - `config.yaml`: Basic single-agent configuration
-   - `multi-agent-config.yaml`: Advanced multi-agent system configuration
+   - `promptfooconfig.yaml`: Basic single-agent configuration
+   - `promptfooconfig.multi-agent.yaml`: Advanced multi-agent system configuration
 
 ## Running the Examples
 
@@ -47,7 +54,7 @@ This example demonstrates how to use AWS Bedrock AgentCore with promptfoo to tes
 
 ```bash
 # Run basic agent evaluation
-npx promptfoo eval -c config.yaml
+npx promptfoo eval -c promptfooconfig.yaml
 
 # View results in the web UI
 npx promptfoo view
@@ -57,7 +64,7 @@ npx promptfoo view
 
 ```bash
 # Run multi-agent system evaluation
-npx promptfoo eval -c multi-agent-config.yaml
+npx promptfoo eval -c promptfooconfig.multi-agent.yaml
 
 # View results in the web UI
 npx promptfoo view
@@ -142,14 +149,18 @@ config:
 ## Testing Scenarios
 
 ### Single Agent Tests
+
 The basic config includes tests for:
+
 - Basic agent responses
 - Tool/function calling (e.g., calculator)
 - Memory retention
 - Multi-turn conversations
 
 ### Multi-Agent System Tests
+
 The multi-agent config includes tests for:
+
 - Specialized agent capabilities (technical, billing, product)
 - Cross-functional issue handling
 - Agent collaboration and coordination
