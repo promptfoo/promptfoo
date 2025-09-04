@@ -18,11 +18,61 @@ export const state: {
 };
 
 /**
+ * Windows-specific: Find a clean Python executable using 'where' command.
+ * Filters out Microsoft Store stubs and broken installations.
+ * @returns Clean Python executable path if found, or null if none found.
+ */
+async function getWindowsPythonClean(): Promise<string | null> {
+  if (process.platform !== 'win32') {
+    return null;
+  }
+
+  try {
+    // Use Windows 'where' command to find Python installations
+    const result = await execAsync('where python');
+    const paths = result.stdout.trim().split('\n');
+
+    // Find the best Python candidate
+    for (const pythonPath of paths) {
+      const trimmedPath = pythonPath.trim();
+
+      // Skip Microsoft Store stubs (major source of Windows issues)
+      if (trimmedPath.includes('WindowsApps')) {
+        continue;
+      }
+
+      // Skip if not a real executable
+      if (!trimmedPath.endsWith('.exe')) {
+        continue;
+      }
+
+      // This is likely a real Python installation - validate it works
+      const validated = await tryPath(trimmedPath);
+      if (validated) {
+        return validated;
+      }
+    }
+  } catch {
+    // Silently fall through - 'where' command not available or no Python found
+  }
+
+  return null;
+}
+
+/**
  * Attempts to get the Python executable path using sys.executable.
  * @returns The sys.executable path if successful, or null if failed.
  */
 export async function getSysExecutable(): Promise<string | null> {
-  // Try different Python commands to get sys.executable
+  // Windows-specific: Try to find a clean Python first to avoid Microsoft Store stubs
+  if (process.platform === 'win32') {
+    const windowsPython = await getWindowsPythonClean();
+    if (windowsPython) {
+      return windowsPython;
+    }
+  }
+
+  // Try different Python commands to get sys.executable (cross-platform fallback)
   const pythonCommands =
     process.platform === 'win32'
       ? ['python', 'python3', 'py', 'py -3'] // Try python first on Windows since py might not exist

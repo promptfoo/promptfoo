@@ -456,8 +456,9 @@ Promptfoo automatically detects your Python installation in this priority order:
 
 1. **Environment variable**: `PROMPTFOO_PYTHON` (if set)
 2. **Provider config**: `pythonExecutable` or `pythonPath` in your config
-3. **Smart detection**: Uses `python -c "import sys; print(sys.executable)"` to find the actual Python path
-4. **Fallback commands**:
+3. **Windows smart detection**: Uses `where python` and filters out Microsoft Store stubs (Windows only)
+4. **Smart detection**: Uses `python -c "import sys; print(sys.executable)"` to find the actual Python path
+5. **Fallback commands**:
    - Windows: `python`, `python3`, `py -3`, `py`
    - macOS/Linux: `python3`, `python`
 

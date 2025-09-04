@@ -276,8 +276,9 @@ On Windows, promptfoo tries to detect Python in this order:
 
 1. `PROMPTFOO_PYTHON` environment variable (if set)
 2. Provider-specific `pythonExecutable` config (if set)
-3. `python -c "import sys; print(sys.executable)"` (to get the actual Python path)
-4. Common fallback commands: `python`, `python3`, `py -3`, `py`
+3. **Windows smart detection**: Uses `where python` command and filters out Microsoft Store stubs
+4. `python -c "import sys; print(sys.executable)"` (to get the actual Python path)
+5. Common fallback commands: `python`, `python3`, `py -3`, `py`
 
 If you don't have the Python launcher (`py.exe`) installed but have Python directly, make sure the `python` command works from your command line. If not, either:
 
