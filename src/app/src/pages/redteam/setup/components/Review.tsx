@@ -1093,7 +1093,7 @@ export default function Review({
                     <Button
                       variant="contained"
                       color="success"
-                      href={`/report?evalId=${evalId}`}
+                      href={`/reports?evalId=${evalId}`}
                       startIcon={<AssessmentIcon />}
                     >
                       View Report

@@ -1,9 +1,11 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
+import https from 'https';
 import path from 'path';
 
 import httpZ from 'http-z';
+import { Agent } from 'undici';
 import { z } from 'zod';
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -361,6 +363,16 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
  */
 function resolveFilePath(filePath: string): string {
   return path.isAbsolute(filePath) ? filePath : path.resolve(cliState.basePath || '', filePath);
+}
+
+/**
+ * Detects if a string is likely base64-encoded
+ */
+function isBase64(str: string): boolean {
+  // Check for common base64 patterns
+  // Must be divisible by 4, only contain valid base64 chars, and optionally end with padding
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+  return str.length % 4 === 0 && base64Regex.test(str) && str.length > 100;
 }
 
 /**
@@ -757,6 +769,67 @@ const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
   keyContent: z.string().optional(),
 }).passthrough();
 
+// TLS Certificate configuration schema for HTTPS connections
+const TlsCertificateSchema = z
+  .object({
+    // CA certificate for verifying server certificates
+    ca: z.union([z.string(), z.array(z.string())]).optional(),
+    caPath: z.string().optional(),
+
+    // Client certificate for mutual TLS
+    cert: z.union([z.string(), z.array(z.string())]).optional(),
+    certPath: z.string().optional(),
+
+    // Private key for client certificate
+    key: z.union([z.string(), z.array(z.string())]).optional(),
+    keyPath: z.string().optional(),
+
+    // PFX/PKCS12 certificate bundle
+    // Supports inline content as base64-encoded string or Buffer
+    pfx: z
+      .union([z.string(), z.instanceof(Buffer)])
+      .optional()
+      .describe(
+        'PFX/PKCS12 certificate bundle. Can be a file path via pfxPath, or inline as a base64-encoded string or Buffer',
+      ),
+    pfxPath: z.string().optional().describe('Path to PFX/PKCS12 certificate file'),
+    passphrase: z.string().optional().describe('Passphrase for PFX certificate'),
+
+    // Security options
+    rejectUnauthorized: z.boolean().default(true),
+    servername: z.string().optional(),
+
+    // Cipher configuration
+    ciphers: z.string().optional(),
+    secureProtocol: z.string().optional(),
+    minVersion: z.string().optional(),
+    maxVersion: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      // Ensure that if cert is provided, key is also provided (and vice versa)
+      const hasCert = data.cert || data.certPath;
+      const hasKey = data.key || data.keyPath;
+      const hasPfx = data.pfx || data.pfxPath;
+
+      // If using PFX, don't need separate cert/key
+      if (hasPfx) {
+        return true;
+      }
+
+      // If using cert/key, both must be provided
+      if (hasCert || hasKey) {
+        return hasCert && hasKey;
+      }
+
+      return true;
+    },
+    {
+      message:
+        'Both certificate and key must be provided for client certificate authentication (unless using PFX)',
+    },
+  );
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
@@ -792,6 +865,8 @@ export const HttpProviderConfigSchema = z.object({
     ])
     .optional()
     .transform(preprocessSignatureAuthConfig),
+  // TLS Certificate configuration for HTTPS connections
+  tls: TlsCertificateSchema.optional(),
 });
 
 type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -1070,15 +1145,16 @@ function parseRawRequest(input: string) {
 
 export async function createTransformRequest(
   transform: string | Function | undefined,
-): Promise<(prompt: string) => any> {
+): Promise<(prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any> {
   if (!transform) {
     return (prompt) => prompt;
   }
 
   if (typeof transform === 'function') {
-    return async (prompt) => {
+    return async (prompt, vars, context) => {
       try {
-        return await transform(prompt);
+        // Pass prompt, vars, and context to user-provided function (extra args are safe)
+        return await (transform as any)(prompt, vars, context);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wrappedError = new Error(`Error in request transform function: ${errorMessage}`);
@@ -1103,9 +1179,9 @@ export async function createTransformRequest(
         functionName,
       );
       if (typeof requiredModule === 'function') {
-        return async (prompt) => {
+        return async (prompt, vars, context) => {
           try {
-            return await requiredModule(prompt);
+            return await requiredModule(prompt, vars, context);
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             const wrappedError = new Error(
@@ -1121,10 +1197,14 @@ export async function createTransformRequest(
       );
     }
     // Handle string template
-    return async (prompt) => {
+    return async (prompt, vars, context) => {
       try {
-        const rendered = getNunjucksEngine().renderString(transform, { prompt });
-        return await new Function('prompt', `${rendered}`)(prompt);
+        const rendered = getNunjucksEngine().renderString(transform, { prompt, vars, context });
+        return await new Function('prompt', 'vars', 'context', `${rendered}`)(
+          prompt,
+          vars,
+          context,
+        );
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const wrappedError = new Error(
@@ -1236,6 +1316,172 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
   return Math.ceil(words.length * multiplier);
 }
 
+/**
+ * Creates an HTTPS agent with TLS configuration for secure connections
+ */
+async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
+  const tlsOptions: https.AgentOptions = {};
+
+  // Load CA certificates
+  if (tlsConfig.ca) {
+    tlsOptions.ca = tlsConfig.ca;
+  } else if (tlsConfig.caPath) {
+    const resolvedPath = resolveFilePath(tlsConfig.caPath);
+    tlsOptions.ca = fs.readFileSync(resolvedPath, 'utf8');
+    logger.debug(`[HTTP Provider] Loaded CA certificate from ${resolvedPath}`);
+  }
+
+  // Handle JKS certificates for TLS (extract cert and key)
+  if ((tlsConfig as any).jksPath || (tlsConfig as any).jksContent) {
+    try {
+      const jksModule = await import('jks-js').catch(() => {
+        throw new Error(
+          'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+        );
+      });
+      const jks = jksModule as any;
+
+      let keystoreData: Buffer;
+      const keystorePassword =
+        (tlsConfig as any).keystorePassword ||
+        tlsConfig.passphrase ||
+        getEnvString('PROMPTFOO_JKS_PASSWORD');
+
+      if (!keystorePassword) {
+        throw new Error(
+          'JKS keystore password is required for TLS. Provide it via passphrase or PROMPTFOO_JKS_PASSWORD environment variable',
+        );
+      }
+
+      if ((tlsConfig as any).jksContent) {
+        // Use base64 encoded content
+        logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
+        keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
+      } else if ((tlsConfig as any).jksPath) {
+        // Use file path
+        const resolvedPath = resolveFilePath((tlsConfig as any).jksPath);
+        logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
+        keystoreData = fs.readFileSync(resolvedPath);
+      } else {
+        throw new Error('JKS content or path is required');
+      }
+
+      const keystore = jks.toPem(keystoreData, keystorePassword);
+      const aliases = Object.keys(keystore);
+
+      if (aliases.length === 0) {
+        throw new Error('No certificates found in JKS file');
+      }
+
+      const targetAlias = (tlsConfig as any).keyAlias || aliases[0];
+      const entry = keystore[targetAlias];
+
+      if (!entry) {
+        throw new Error(
+          `Alias '${targetAlias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
+        );
+      }
+
+      // Extract certificate and key from JKS entry
+      if (entry.cert) {
+        tlsOptions.cert = entry.cert;
+        logger.debug(
+          `[HTTP Provider] Extracted certificate from JKS for TLS (alias: ${targetAlias})`,
+        );
+      }
+
+      if (entry.key) {
+        tlsOptions.key = entry.key;
+        logger.debug(
+          `[HTTP Provider] Extracted private key from JKS for TLS (alias: ${targetAlias})`,
+        );
+      }
+
+      if (!tlsOptions.cert || !tlsOptions.key) {
+        throw new Error('Failed to extract both certificate and key from JKS file');
+      }
+    } catch (err) {
+      logger.error(`[HTTP Provider] Failed to load JKS certificate for TLS: ${String(err)}`);
+      throw new Error(`Failed to load JKS certificate: ${String(err)}`);
+    }
+  } else {
+    // Load client certificate (non-JKS)
+    if (tlsConfig.cert) {
+      tlsOptions.cert = tlsConfig.cert;
+    } else if (tlsConfig.certPath) {
+      const resolvedPath = resolveFilePath(tlsConfig.certPath);
+      tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
+      logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
+    }
+
+    // Load private key (non-JKS)
+    if (tlsConfig.key) {
+      tlsOptions.key = tlsConfig.key;
+    } else if (tlsConfig.keyPath) {
+      const resolvedPath = resolveFilePath(tlsConfig.keyPath);
+      tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
+      logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
+    }
+  }
+
+  // Load PFX certificate
+  if (tlsConfig.pfx) {
+    // Handle inline PFX content
+    if (typeof tlsConfig.pfx === 'string') {
+      // Check if it's base64-encoded (common for embedding binary data in config files)
+      if (isBase64(tlsConfig.pfx)) {
+        tlsOptions.pfx = Buffer.from(tlsConfig.pfx, 'base64');
+        logger.debug(`[HTTP Provider] Using base64-encoded inline PFX certificate`);
+      } else {
+        // Assume it's already in the correct format
+        tlsOptions.pfx = tlsConfig.pfx;
+        logger.debug(`[HTTP Provider] Using inline PFX certificate`);
+      }
+    } else {
+      // It's already a Buffer
+      tlsOptions.pfx = tlsConfig.pfx;
+      logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
+    }
+  } else if (tlsConfig.pfxPath) {
+    const resolvedPath = resolveFilePath(tlsConfig.pfxPath);
+    tlsOptions.pfx = fs.readFileSync(resolvedPath);
+    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
+  }
+
+  // Set passphrase if provided
+  if (tlsConfig.passphrase) {
+    tlsOptions.passphrase = tlsConfig.passphrase;
+  }
+
+  // Set security options
+  tlsOptions.rejectUnauthorized = tlsConfig.rejectUnauthorized !== false;
+
+  if (tlsConfig.servername) {
+    tlsOptions.servername = tlsConfig.servername;
+  }
+
+  // Set cipher configuration
+  if (tlsConfig.ciphers) {
+    tlsOptions.ciphers = tlsConfig.ciphers;
+  }
+  if (tlsConfig.secureProtocol) {
+    tlsOptions.secureProtocol = tlsConfig.secureProtocol;
+  }
+  if (tlsConfig.minVersion) {
+    tlsOptions.minVersion = tlsConfig.minVersion as any;
+  }
+  if (tlsConfig.maxVersion) {
+    tlsOptions.maxVersion = tlsConfig.maxVersion as any;
+  }
+
+  logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
+
+  // Create an undici Agent with the TLS options
+  return new Agent({
+    connect: tlsOptions,
+  });
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -1243,10 +1489,14 @@ export class HttpProvider implements ApiProvider {
     (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
   >;
   private sessionParser: Promise<(data: SessionParserData) => string>;
-  private transformRequest: Promise<(prompt: string) => any>;
+  private transformRequest: Promise<
+    (prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any
+  >;
   private validateStatus: Promise<(status: number) => boolean>;
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
+  private httpsAgent?: Agent;
+  private httpsAgentPromise?: Promise<Agent>;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
@@ -1260,6 +1510,14 @@ export class HttpProvider implements ApiProvider {
     this.sessionParser = createSessionParser(this.config.sessionParser);
     this.transformRequest = createTransformRequest(this.config.transformRequest);
     this.validateStatus = createValidateStatus(this.config.validateStatus);
+
+    // Initialize HTTPS agent if TLS configuration is provided
+    // Note: We can't use async in constructor, so we'll initialize on first use
+    if (this.config.tls) {
+      logger.debug(
+        '[HTTP Provider] TLS configuration detected, HTTPS agent will be created on first use',
+      );
+    }
 
     if (this.config.request) {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
@@ -1352,6 +1610,34 @@ export class HttpProvider implements ApiProvider {
     invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
   }
 
+  private async getHttpsAgent(): Promise<Agent | undefined> {
+    if (!this.config.tls) {
+      return undefined;
+    }
+
+    // If agent is already created, return it
+    if (this.httpsAgent) {
+      return this.httpsAgent;
+    }
+
+    // If agent creation is in progress, wait for it
+    if (this.httpsAgentPromise) {
+      return this.httpsAgentPromise;
+    }
+
+    // Create the agent
+    this.httpsAgentPromise = createHttpsAgent(this.config.tls);
+    try {
+      this.httpsAgent = await this.httpsAgentPromise;
+      logger.debug('[HTTP Provider] HTTPS agent created successfully');
+      return this.httpsAgent;
+    } catch (err) {
+      // Clear the promise so we can retry
+      this.httpsAgentPromise = undefined;
+      throw err;
+    }
+  }
+
   private getDefaultHeaders(body: any): Record<string, string> {
     if (this.config.method === 'GET') {
       return {};
@@ -1440,7 +1726,7 @@ export class HttpProvider implements ApiProvider {
     this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
-    const transformedPrompt = await (await this.transformRequest)(prompt);
+    const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
     logger.debug(
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
@@ -1493,19 +1779,29 @@ export class HttpProvider implements ApiProvider {
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with config: ${safeJsonStringify(sanitizeConfigForLogging(renderedConfig))}`,
     );
 
+    // Prepare fetch options with dispatcher if HTTPS agent is configured
+    const httpsAgent = await this.getHttpsAgent();
+    const fetchOptions: any = {
+      method: renderedConfig.method,
+      headers: renderedConfig.headers,
+      ...(method !== 'GET' && {
+        body: contentTypeIsJson(headers)
+          ? typeof renderedConfig.body === 'string'
+            ? renderedConfig.body // Already a JSON string, use as-is
+            : JSON.stringify(renderedConfig.body) // Object, needs stringifying
+          : String(renderedConfig.body)?.trim(),
+      }),
+    };
+
+    // Add HTTPS agent as dispatcher if configured
+    if (httpsAgent) {
+      fetchOptions.dispatcher = httpsAgent;
+      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+    }
+
     const response = await fetchWithCache(
       url,
-      {
-        method: renderedConfig.method,
-        headers: renderedConfig.headers,
-        ...(method !== 'GET' && {
-          body: contentTypeIsJson(headers)
-            ? typeof renderedConfig.body === 'string'
-              ? renderedConfig.body // Already a JSON string, use as-is
-              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
-            : String(renderedConfig.body)?.trim(),
-        }),
-      },
+      fetchOptions,
       REQUEST_TIMEOUT_MS,
       'text',
       context?.bustCache ?? context?.debug,
@@ -1575,7 +1871,7 @@ export class HttpProvider implements ApiProvider {
     // Transform prompt using request transform
     const prompt = vars.prompt;
     const transformFn = await this.transformRequest;
-    const transformedPrompt = await transformFn(prompt);
+    const transformedPrompt = await transformFn(prompt, vars, context);
     logger.debug(
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
@@ -1598,13 +1894,24 @@ export class HttpProvider implements ApiProvider {
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}  ${safeJsonStringify(parsedRequest.body)} \n headers: ${safeJsonStringify(sanitizeConfigForLogging({ headers: parsedRequest.headers }).headers)}`,
     );
+
+    // Prepare fetch options with dispatcher if HTTPS agent is configured
+    const httpsAgent = await this.getHttpsAgent();
+    const fetchOptions: any = {
+      method: parsedRequest.method,
+      headers: parsedRequest.headers,
+      ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
+    };
+
+    // Add HTTPS agent as dispatcher if configured
+    if (httpsAgent) {
+      fetchOptions.dispatcher = httpsAgent;
+      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+    }
+
     const response = await fetchWithCache(
       url,
-      {
-        method: parsedRequest.method,
-        headers: parsedRequest.headers,
-        ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
-      },
+      fetchOptions,
       REQUEST_TIMEOUT_MS,
       'text',
       context?.debug,

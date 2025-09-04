@@ -1792,6 +1792,9 @@
             "share": {
               "type": "boolean"
             },
+            "noShare": {
+              "type": "boolean"
+            },
             "progressBar": {
               "type": "boolean"
             },

@@ -9,7 +9,7 @@ import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { makeRequest as makeCloudRequest } from './util/cloud';
+import { checkCloudPermissions, makeRequest as makeCloudRequest } from './util/cloud';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -199,6 +199,8 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
   const isVerbose = isDebugEnabled();
   logger.debug(`Starting chunked results upload to ${url}`);
+
+  await checkCloudPermissions(evalRecord.config);
 
   const sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {

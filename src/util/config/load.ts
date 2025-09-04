@@ -479,7 +479,12 @@ export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
-): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
+): Promise<{
+  testSuite: TestSuite;
+  config: Partial<UnifiedConfig>;
+  basePath: string;
+  commandLineOptions?: Partial<CommandLineOptions>;
+}> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
@@ -696,5 +701,22 @@ export async function resolveConfigs(
   }
 
   cliState.config = config;
-  return { config, testSuite, basePath };
+
+  // Extract commandLineOptions from either explicit config files or default config
+  let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
+
+  // Resolve relative envPath against the config file directory
+  if (commandLineOptions?.envPath && !path.isAbsolute(commandLineOptions.envPath) && basePath) {
+    commandLineOptions = {
+      ...commandLineOptions,
+      envPath: path.resolve(basePath, commandLineOptions.envPath),
+    };
+  }
+
+  return {
+    config,
+    testSuite,
+    basePath,
+    commandLineOptions,
+  };
 }
