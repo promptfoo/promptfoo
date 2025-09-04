@@ -4,6 +4,7 @@ import { and, eq, gte, inArray, lt } from 'drizzle-orm';
 import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
+import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { type EvaluateResult } from '../types';
 import { isApiProvider, isProviderOptions } from '../types/providers';
@@ -113,19 +114,68 @@ export default class EvalResult {
     return new EvalResult(args);
   }
 
-  static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
+  static async createManyFromEvaluateResult(
+    results: EvaluateResult[],
+    evalId: string,
+    opts?: { returnInstances?: boolean },
+  ): Promise<EvalResult[]> {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    await db.transaction(async (tx) => {
-      for (const result of results) {
-        const dbResult = await tx
-          .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
-          .returning();
-        returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
+    const shouldReturnInstances = opts?.returnInstances ?? true;
+
+    try {
+      // Better-sqlite3 doesn't support async transactions, so we use sync transaction
+      db.transaction((tx) => {
+        for (const result of results) {
+          // Quick validation of critical fields
+          if (!result.promptIdx && result.promptIdx !== 0) {
+            logger.warn(`Result missing promptIdx, using default 0`);
+          }
+
+          const insertData = {
+            ...result,
+            evalId,
+            id: result.id || randomUUID(),
+            // Note: normalization should be done by caller to ensure consistency
+            // We trust that the data is already normalized
+          };
+
+          // Insert the result
+          tx.insert(evalResultsTable).values(insertData).run();
+
+          // Only create instances if requested (memory optimization for large imports)
+          if (shouldReturnInstances) {
+            returnResults.push(
+              new EvalResult({
+                ...insertData,
+                // Ensure null instead of undefined for nullable fields
+                error: insertData.error || null,
+                response: insertData.response || null,
+                gradingResult: insertData.gradingResult || null,
+                promptId: insertData.promptId || hashPrompt(insertData.prompt),
+                persisted: true,
+              }),
+            );
+          }
+        }
+      });
+
+      return returnResults;
+    } catch (error) {
+      // Provide better error messages for common issues
+      if (error instanceof Error) {
+        if (error.message.includes('UNIQUE constraint failed')) {
+          throw new Error(`Failed to insert results: Duplicate result ID found. ${error.message}`);
+        }
+        if (error.message.includes('NOT NULL constraint failed')) {
+          throw new Error(`Failed to insert results: Missing required field. ${error.message}`);
+        }
       }
-    });
-    return returnResults;
+      // Re-throw with context
+      throw new Error(
+        `Failed to create eval results: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   static async findById(id: string) {
