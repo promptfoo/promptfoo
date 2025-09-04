@@ -68,33 +68,15 @@ jobs:
           # Please adapt the secret name accordingly if you have named it differently.
           authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
 
-          # Set appDir to test directory where Jest tests are located
-          appDir: 'test'
-
-          # Jest test framework for src/ tests (excluding src/app which uses Vitest)
           testFramework: 'jest'
 
-          # Test file regex to match Jest test files in test/ directory
-          # This matches the 300+ Jest tests like test/providers/openai.test.ts, test/assertions/geval.test.ts, etc.
           testFileRegex: '^test/.*\.test\.(ts|tsx)$'
 
-          # Lint script for test files - need to adjust path since we're in test/ directory
-          lintScript: |
-            set -e
-            FILE_PATH="{{file}}"
-            # Go back to root directory to run Biome with correct paths
-            cd ..
-            npx @biomejs/biome check --write "test/$FILE_PATH"
-            cd test
+          lintScript: 'npx @biomejs/biome check --write {{file}}'
 
-          # The script to run Jest tests for individual files
           testScript: 'npx jest {{file}} --silent'
 
-          # Coverage script for Jest tests
           coverageScript: 'npx jest {{testFilePaths}} --coverage --coverageDirectory=coverage --coverageReporters=json-summary --coverageReporters=json --silent'
-
-          # No concurrency limit needed since we removed TypeScript compilation
-          # maxConcurrency: 1
 
           # Required for test parallelization where available, do not remove.
           runnerIndex: ${{ matrix.runnerIndex }}
