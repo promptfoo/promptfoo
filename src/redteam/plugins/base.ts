@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import { TokenUsageTracker } from 'src/util/tokenUsage';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';

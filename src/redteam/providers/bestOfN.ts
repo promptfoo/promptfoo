@@ -1,13 +1,13 @@
 import async from 'async';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from 'src/util/tokenUsageUtils';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 import type {

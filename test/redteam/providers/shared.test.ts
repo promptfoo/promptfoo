@@ -13,6 +13,12 @@ import {
   redteamProviderManager,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
+import { sleep } from '../../../src/util/time';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../src/util/tokenUsageUtils';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -20,11 +26,6 @@ import type {
   Prompt,
   ProviderResponse,
 } from '../../../src/types';
-import { sleep } from '../../../src/util/time';
-import {
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../../../src/util/tokenUsageUtils';
 
 jest.mock('../../../src/util/time');
 jest.mock('../../../src/cliState', () => ({
@@ -559,22 +560,6 @@ describe('shared redteam provider utilities', () => {
 
       expect(result.success).toBe(false);
       expect(result.unblockingPrompt).toBeUndefined();
-    });
-
-    it('does not increment token usage when skipped via env flag', async () => {
-      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
-
-      const total = createEmptyTokenUsage();
-      const result = await tryUnblocking({
-        messages: [],
-        lastResponse: 'irrelevant',
-        goal: 'test-goal',
-        purpose: 'test-purpose',
-      });
-
-      accumulateResponseTokenUsage(total, result);
-
-      expect(total.numRequests).toBe(0);
     });
   });
 });

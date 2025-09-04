@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import { TokenUsageTracker } from 'src/util/tokenUsage';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -8,12 +7,8 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import {
-  accumulateGraderTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateTokenUsage,
-  createEmptyTokenUsage,
-} from '../../util/tokenUsageUtils';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateGraderTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -485,12 +480,6 @@ export async function runRedteamConversation({
       graderPassed: storedGraderResult?.pass,
       guardrails: targetResponse.guardrails,
     });
-
-    // Update all the token usage accumulation patterns
-    accumulateResponseTokenUsage(totalTokenUsage, redteamResp);
-    accumulateResponseTokenUsage(totalTokenUsage, isOnTopicResp);
-    accumulateResponseTokenUsage(totalTokenUsage, judgeResp);
-    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
     // Break after all processing is complete if we should exit early
     if (shouldExitEarly) {

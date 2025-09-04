@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import { TokenUsageTracker } from 'src/util/tokenUsage';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -7,6 +6,7 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   createIterationContext,

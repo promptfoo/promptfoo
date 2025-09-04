@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 
-import { TokenUsageTracker } from 'src/util/tokenUsage';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
@@ -20,6 +19,7 @@ import {
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
 import { type TransformContext, TransformInputType, transform } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
@@ -138,7 +138,7 @@ export async function getTargetResponse(
     return {
       output,
       sessionId: targetRespRaw.sessionId,
-      tokenUsage: targetRespRaw.tokenUsage || { numRequests: 1 },
+      tokenUsage: { numRequests: 1, ...targetRespRaw.tokenUsage },
       guardrails: targetRespRaw.guardrails,
     };
   }
@@ -148,7 +148,7 @@ export async function getTargetResponse(
       output: '',
       error: targetRespRaw.error,
       sessionId: targetRespRaw.sessionId,
-      tokenUsage: { numRequests: 1 },
+      tokenUsage: { numRequests: 1, ...targetRespRaw.tokenUsage },
       guardrails: targetRespRaw.guardrails,
     };
   }

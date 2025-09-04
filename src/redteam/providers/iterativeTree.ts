@@ -14,7 +14,6 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
-import { TokenUsageTracker } from 'src/util/tokenUsage';
 import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -23,10 +22,10 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateGraderTokenUsage,
   accumulateResponseTokenUsage,
-  accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';

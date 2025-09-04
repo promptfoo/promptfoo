@@ -1,13 +1,9 @@
-import { TokenUsageTracker } from 'src/util/tokenUsage';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
-import {
-  accumulateGraderTokenUsage,
-  accumulateResponseTokenUsage,
-  createEmptyTokenUsage,
-} from '../util/tokenUsageUtils';
+import { TokenUsageTracker } from '../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
 import type {
