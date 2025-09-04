@@ -431,6 +431,7 @@ interface GuardrailResponse {
   flagged?: boolean;
   flaggedInput?: boolean;
   flaggedOutput?: boolean;
+  reason?: string;
 }
 ```
 

@@ -58,8 +58,8 @@ export const ANTHROPIC_MODELS = [
   ...['claude-3-5-haiku-20241022', 'claude-3-5-haiku-latest'].map((model) => ({
     id: model,
     cost: {
-      input: 1 / 1e6,
-      output: 5 / 1e6,
+      input: 0.8 / 1e6,
+      output: 4 / 1e6,
     },
   })),
   ...[
