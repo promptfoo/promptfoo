@@ -22,6 +22,7 @@ import telemetry from '../telemetry';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
 import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { checkCloudPermissions } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -234,6 +235,8 @@ export async function doEval(
       testSuite.providers,
       cmdObj.filterProviders || cmdObj.filterTargets,
     );
+
+    await checkCloudPermissions(config as UnifiedConfig);
 
     const options: EvaluateOptions = {
       ...evaluateOptions,

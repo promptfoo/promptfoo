@@ -54,16 +54,19 @@ const mockFetch = jest.fn();
 jest.mock('../src/globalConfig/cloud');
 jest.mock('../src/fetch', () => ({
   fetchWithProxy: jest.fn().mockImplementation((...args) => mockFetch(...args)),
+  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 jest.mock('../src/globalConfig/accounts', () => ({
   getUserEmail: jest.fn(),
   setUserEmail: jest.fn(),
   getAuthor: jest.fn().mockReturnValue('test-author@example.com'),
+  getUserId: jest.fn(),
 }));
 
 jest.mock('../src/util/cloud', () => ({
   makeRequest: jest.fn(),
+  checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/envars', () => ({

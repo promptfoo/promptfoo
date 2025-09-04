@@ -622,6 +622,8 @@ transformFn: (output: string, context: {
     display?: string;
   };
   vars?: Record<string, any>;
+  // Metadata returned in the provider response.
+  metadata?: Record<string, any>;
 }) => void;
 ```
 
