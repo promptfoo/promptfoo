@@ -1,5 +1,6 @@
 ---
 sidebar_label: Deepseek benchmark
+description: Compare Deepseek MoE (671B params) vs GPT-4.1 vs Llama-3 performance with custom benchmarks to evaluate code tasks and choose the optimal model for your needs
 ---
 
 # Deepseek vs GPT vs O3 vs Llama: Run a Custom Benchmark
@@ -12,7 +13,7 @@ In this guide, we'll create a practical comparison that results in a detailed si
 
 ## Requirements
 
-- Node.js 18 or later
+- Node.js 20 or later
 - OpenRouter API access for Deepseek and Llama (set `OPENROUTER_API_KEY`)
 - OpenAI API access for GPT-4o and o3-mini (set `OPENAI_API_KEY`)
 

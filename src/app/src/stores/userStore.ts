@@ -42,7 +42,7 @@ export const useUserStore = create<UserState>((set, getState) => ({
     }
     try {
       const userId = await fetchUserId();
-      set({ userId });
+      set({ userId: userId || null });
     } catch (error) {
       console.error('Error fetching user ID:', error);
       set({ userId: null });

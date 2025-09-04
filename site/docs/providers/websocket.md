@@ -1,5 +1,6 @@
 ---
 sidebar_label: WebSockets
+description: Configure WebSocket endpoints for real-time LLM inference with custom message templates, response parsing, and secure authentication for bidirectional API integration
 ---
 
 # WebSockets

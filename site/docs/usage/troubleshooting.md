@@ -1,5 +1,6 @@
 ---
 sidebar_position: 60
+description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, and native builds in your LLM testing pipeline
 ---
 
 # Troubleshooting
@@ -14,7 +15,11 @@ Follow **all** of these steps:
 
 1. Do not use the `--no-write` flag. We need to write to disk to avoid memory issues.
 2. Use the `--no-table` flag.
-3. Only output to `jsonl` ex: `--output results.jsonl`
+3. **Use JSONL format**: `--output results.jsonl`
+
+:::tip
+JSONL format processes results in batches, avoiding memory limits that cause JSON export to fail on large datasets.
+:::
 
 ### Granular memory optimization
 
@@ -71,7 +76,7 @@ tests:
 
 **Default solution:** Objects are automatically converted to JSON strings:
 
-```
+```text
 Product: {"name":"Headphones","price":99.99}
 ```
 
@@ -110,7 +115,7 @@ prompts:
 
 When running `npx promptfoo@latest`, you might encounter this error:
 
-```
+```text
 Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
 was compiled against a different Node.js version using
 NODE_MODULE_VERSION 115. This version of Node.js requires
@@ -233,6 +238,69 @@ import pdb
 def call_api(prompt, options, context):
     pdb.set_trace()  # Debugger will pause here
     # Your code...
+```
+
+### Python Installation and Path Issues
+
+If you encounter errors like `spawn py -3 ENOENT` or `Python 3 not found`, promptfoo cannot locate your Python installation. Here's how to resolve this:
+
+#### Setting a Custom Python Path
+
+Use the `PROMPTFOO_PYTHON` environment variable to specify your Python executable:
+
+```bash
+# Windows (if Python is installed at a custom location)
+export PROMPTFOO_PYTHON=C:\Python\3_11\python.exe
+
+# macOS/Linux
+export PROMPTFOO_PYTHON=/usr/local/bin/python3
+
+# Then run your evaluation
+npx promptfoo eval
+```
+
+#### Per-Provider Python Configuration
+
+You can also set the Python path for specific providers in your config:
+
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      pythonExecutable: /path/to/specific/python
+```
+
+#### Windows-Specific Issues
+
+On Windows, promptfoo tries to detect Python in this order:
+
+1. `PROMPTFOO_PYTHON` environment variable (if set)
+2. Provider-specific `pythonExecutable` config (if set)
+3. **Windows smart detection**: Uses `where python` command and filters out Microsoft Store stubs
+4. `python -c "import sys; print(sys.executable)"` (to get the actual Python path)
+5. Common fallback commands: `python`, `python3`, `py -3`, `py`
+
+If you don't have the Python launcher (`py.exe`) installed but have Python directly, make sure the `python` command works from your command line. If not, either:
+
+- Add your Python installation directory to your PATH
+- Set `PROMPTFOO_PYTHON` to the full path of your `python.exe`
+
+**Common Windows Python locations:**
+
+- Microsoft Store: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps\python.exe`
+- Direct installer: `C:\Python3X\python.exe` (where X is the version)
+- Anaconda: `C:\Users\YourName\anaconda3\python.exe`
+
+#### Testing Your Python Configuration
+
+To verify your Python is correctly configured:
+
+```bash
+# Test that promptfoo can find your Python
+python -c "import sys; print(sys.executable)"
+
+# If this works but promptfoo still has issues, set PROMPTFOO_PYTHON:
+export PROMPTFOO_PYTHON=$(python -c "import sys; print(sys.executable)")
 ```
 
 ### Handling errors

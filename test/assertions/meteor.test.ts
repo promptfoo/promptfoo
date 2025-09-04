@@ -1,4 +1,4 @@
-import type { AssertionParams, GradingResult } from 'src/types';
+import type { AssertionParams, GradingResult } from '../../src/types';
 
 import type { handleMeteorAssertion as originalHandleMeteorAssertion } from '../../src/assertions/meteor';
 

@@ -1,12 +1,12 @@
 ---
 sidebar_label: AWS Bedrock
 sidebar_position: 3
-description: Learn how to use Amazon Bedrock models in your evaluations, including Claude, Llama, Nova, and other models
+description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
 ---
 
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -49,15 +49,16 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
 ## Authentication
 
-Amazon Bedrock follows a specific credential resolution order that prioritizes explicitly configured credentials over default AWS mechanisms.
+Amazon Bedrock supports multiple authentication methods, including the new API key authentication for simplified access. Credentials are resolved in this priority order:
 
 ### Credential Resolution Order
 
 When authenticating with AWS Bedrock, credentials are resolved in this sequence:
 
-1. **Config file credentials**: Explicitly provided `accessKeyId` and `secretAccessKey` in your promptfoo configuration
-2. **SSO profile**: When a `profile` is specified in your config
-3. **AWS default credential chain**:
+1. **Config file credentials**: Explicitly provided `accessKeyId` and `secretAccessKey` in your promptfoo configuration (highest priority)
+2. **API Key authentication**: Bedrock API keys via config or environment variable
+3. **SSO profile**: When a `profile` is specified in your config
+4. **AWS default credential chain**:
    - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
    - Shared credentials file (`~/.aws/credentials`)
    - EC2 instance profile or ECS task role
@@ -81,7 +82,50 @@ providers:
 
 This method overrides all other credential sources, including EC2 instance roles.
 
-#### 2. SSO profile authentication
+#### 2. API Key authentication
+
+Amazon Bedrock API keys provide a simplified authentication method that doesn't require managing AWS IAM credentials. This is especially useful for developers who want quick access to Bedrock models.
+
+**Using environment variables:**
+
+Set the `AWS_BEARER_TOKEN_BEDROCK` environment variable:
+
+```bash
+export AWS_BEARER_TOKEN_BEDROCK="your-api-key-here"
+```
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      region: 'us-east-1' # Optional, defaults to us-east-1
+```
+
+**Using config file:**
+
+Specify the API key directly in your configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      apiKey: 'your-api-key-here'
+      region: 'us-east-1' # Optional, defaults to us-east-1
+```
+
+:::note
+
+API keys are limited to Amazon Bedrock and Amazon Bedrock Runtime actions. They cannot be used with:
+
+- InvokeModelWithBidirectionalStream operations
+- Agents for Amazon Bedrock API operations
+- Data Automation for Amazon Bedrock API operations
+
+For these advanced features, use traditional AWS IAM credentials instead.
+
+:::
+
+#### 3. SSO profile authentication
 
 Use a profile from your AWS configuration:
 
@@ -93,7 +137,7 @@ providers:
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
-#### 3. Default credentials (lowest priority)
+#### 4. Default credentials (lowest priority)
 
 Rely on the AWS default credential chain:
 
@@ -136,6 +180,11 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
+  - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
   - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
     config:
       region: 'us-east-1'
@@ -146,11 +195,23 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    config:
+      region: 'us-west-2'
+      temperature: 0.7
+      max_completion_tokens: 256
+      reasoning_effort: 'medium'
+  - id: bedrock:openai.gpt-oss-20b-1:0
+    config:
+      region: 'us-west-2'
+      temperature: 0.7
+      max_completion_tokens: 256
+      reasoning_effort: 'low'
 
 tests:
   - vars:
@@ -359,6 +420,60 @@ DeepSeek models support an extended thinking capability. The `showThinking` para
 
 This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
 
+### OpenAI Models
+
+OpenAI's open-weight models are available through AWS Bedrock with full support for their reasoning capabilities and parameters. The available models include:
+
+- **`openai.gpt-oss-120b-1:0`**: 120 billion parameter model with strong reasoning capabilities
+- **`openai.gpt-oss-20b-1:0`**: 20 billion parameter model, more cost-effective
+
+```yaml
+config:
+  max_completion_tokens: 1024 # Maximum tokens for response (OpenAI-style parameter)
+  temperature: 0.7 # Controls randomness (0.0 to 1.0)
+  top_p: 0.9 # Nucleus sampling parameter
+  frequency_penalty: 0.1 # Reduces repetition of frequent tokens
+  presence_penalty: 0.1 # Reduces repetition of any tokens
+  stop: ['END', 'STOP'] # Stop sequences
+  reasoning_effort: 'medium' # Controls reasoning depth: 'low', 'medium', 'high'
+```
+
+#### Reasoning Effort
+
+OpenAI models support adjustable reasoning effort through the `reasoning_effort` parameter:
+
+- **`low`**: Faster responses with basic reasoning
+- **`medium`**: Balanced performance and reasoning depth
+- **`high`**: Thorough reasoning, slower but more accurate responses
+
+The reasoning effort is implemented via system prompt instructions, allowing the model to adjust its cognitive processing depth.
+
+#### Usage Example
+
+```yaml
+providers:
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    config:
+      region: 'us-west-2'
+      max_completion_tokens: 2048
+      temperature: 0.3
+      top_p: 0.95
+      reasoning_effort: 'high'
+  - id: bedrock:openai.gpt-oss-20b-1:0
+    config:
+      region: 'us-west-2'
+      max_completion_tokens: 1024
+      temperature: 0.5
+      reasoning_effort: 'medium'
+      stop: ['END', 'FINAL']
+```
+
+:::note
+
+OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bedrock models. This aligns with OpenAI's API specification and allows for more precise control over response length.
+
+:::
+
 ## Model-graded tests
 
 You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-4.1-2025-04-14` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
@@ -512,6 +627,12 @@ providers:
 
 The following environment variables can be used to configure the Bedrock provider:
 
+**Authentication:**
+
+- `AWS_BEARER_TOKEN_BEDROCK`: Bedrock API key for simplified authentication
+
+**Configuration:**
+
 - `AWS_BEDROCK_REGION`: Default region for Bedrock API calls
 - `AWS_BEDROCK_MAX_TOKENS`: Default maximum number of tokens to generate
 - `AWS_BEDROCK_TEMPERATURE`: Default temperature for generation
@@ -601,8 +722,8 @@ The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
 
 For example:
 
-- `bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0` (US region)
-- `bedrock:kb:eu.anthropic.claude-3-7-sonnet-20250219-v1:0` (EU region)
+- `bedrock:kb:us.anthropic.claude-3-5-sonnet-20241022-v2:0` (US region)
+- `bedrock:kb:eu.anthropic.claude-3-5-sonnet-20241022-v2:0` (EU region)
 
 Configuration options include:
 
@@ -613,7 +734,7 @@ Configuration options include:
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication
 
-### Example
+### Knowledge Base Example
 
 Here's a complete example to test your Knowledge Base with a few questions:
 
@@ -632,7 +753,7 @@ providers:
       max_tokens: 1000
 
   # Regular Claude model for comparison
-  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-2'
       temperature: 0.0
@@ -695,6 +816,22 @@ This approach allows you to:
 - **Validate recall**: Ensure important information appears in retrieved context
 
 See the [Knowledge Base contextTransform example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for complete configuration examples.
+
+## AgentCore
+
+AWS Bedrock AgentCore provides a managed service for deploying and operating AI agents at scale. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock AgentCore Provider](./bedrock-agentcore.md) documentation.
+
+Quick example:
+
+```yaml
+providers:
+  - bedrock:agentcore:YOUR_AGENT_ID
+    config:
+      enableTrace: true
+      memoryConfig:
+        type: short-term
+        enabled: true
+```
 
 ## See Also
 

@@ -1,6 +1,6 @@
 ---
 title: Tool Discovery
-description: Test if AI systems reveal their available tools, functions, or API calls during interactions
+description: Probe AI systems for unintended tool disclosure, function enumeration, and API capability revelation through targeted queries
 keywords: [security testing, tool discovery, red team, function calls, API enumeration]
 ---
 

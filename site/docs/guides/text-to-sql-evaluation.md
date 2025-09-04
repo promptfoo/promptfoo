@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating LLM text-to-SQL performance
+description: Compare text-to-SQL accuracy across GPT-3.5 and GPT-4 using automated test cases and schema validation to optimize database query generation performance
 ---
 
 # Evaluating LLM text-to-SQL performance

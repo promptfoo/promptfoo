@@ -158,7 +158,6 @@ const redTeamSidebar = [
         items: [
           'red-team/strategies/multi-turn',
           'red-team/strategies/goat',
-          'red-team/strategies/pandamonium',
           'red-team/strategies/mischievous-user',
         ],
       },
@@ -403,6 +402,10 @@ const sidebars = {
     {
       type: 'doc',
       id: 'contributing',
+    },
+    {
+      type: 'doc',
+      id: 'write-for-promptfoo',
     },
     {
       type: 'doc',

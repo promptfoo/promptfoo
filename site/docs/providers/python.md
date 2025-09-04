@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Python
+description: 'Create custom Python scripts for advanced model integrations, evaluations, and complex testing logic with full flexibility'
 ---
 
 # Python Provider
@@ -428,12 +429,38 @@ Supported formats:
 
 #### Custom Python Executable
 
+You can specify a custom Python executable in several ways:
+
+**Option 1: Per-provider configuration**
+
 ```yaml
 providers:
   - id: 'file://my_provider.py'
     config:
       pythonExecutable: /path/to/venv/bin/python
 ```
+
+**Option 2: Global environment variable**
+
+```bash
+# Use specific Python version globally
+export PROMPTFOO_PYTHON=/usr/bin/python3.11
+npx promptfoo@latest eval
+```
+
+#### Python Detection Process
+
+Promptfoo automatically detects your Python installation in this priority order:
+
+1. **Environment variable**: `PROMPTFOO_PYTHON` (if set)
+2. **Provider config**: `pythonExecutable` in your config
+3. **Windows smart detection**: Uses `where python` and filters out Microsoft Store stubs (Windows only)
+4. **Smart detection**: Uses `python -c "import sys; print(sys.executable)"` to find the actual Python path
+5. **Fallback commands**:
+   - Windows: `python`, `python3`, `py -3`, `py`
+   - macOS/Linux: `python3`, `python`
+
+This enhanced detection is especially helpful on Windows where the Python launcher (`py.exe`) might not be available.
 
 #### Environment Variables
 
@@ -443,6 +470,9 @@ export PROMPTFOO_PYTHON=/usr/bin/python3.11
 
 # Add custom module paths
 export PYTHONPATH=/path/to/my/modules:$PYTHONPATH
+
+# Enable Python debugging with pdb
+export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
 
 # Run evaluation
 npx promptfoo@latest eval
@@ -525,13 +555,15 @@ def call_api(prompt, options, context):
 
 ### Common Issues and Solutions
 
-| Issue                     | Solution                                                            |
-| ------------------------- | ------------------------------------------------------------------- |
-| "Module not found" errors | Set `PYTHONPATH` or use `pythonExecutable` for virtual environments |
-| Script not executing      | Check file path is relative to `promptfooconfig.yaml`               |
-| No output visible         | Use `LOG_LEVEL=debug` to see print statements                       |
-| JSON parsing errors       | Ensure prompt format matches your parsing logic                     |
-| Timeout errors            | Optimize initialization code, load models once                      |
+| Issue                       | Solution                                                            |
+| --------------------------- | ------------------------------------------------------------------- |
+| `spawn py -3 ENOENT` errors | Set `PROMPTFOO_PYTHON` env var or use `pythonExecutable` in config  |
+| `Python 3 not found` errors | Ensure `python` command works or set `PROMPTFOO_PYTHON`             |
+| "Module not found" errors   | Set `PYTHONPATH` or use `pythonExecutable` for virtual environments |
+| Script not executing        | Check file path is relative to `promptfooconfig.yaml`               |
+| No output visible           | Use `LOG_LEVEL=debug` to see print statements                       |
+| JSON parsing errors         | Ensure prompt format matches your parsing logic                     |
+| Timeout errors              | Optimize initialization code, load models once                      |
 
 ### Debugging Tips
 

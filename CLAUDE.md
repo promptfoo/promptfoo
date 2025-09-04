@@ -92,10 +92,40 @@ This ensures you're testing with your current changes instead of the installed v
 - Follow Jest best practices with describe/it blocks
 - Use consistent error handling with proper type checks
 
+## Git Workflow - CRITICAL
+
+### NEVER COMMIT DIRECTLY TO MAIN BRANCH
+
+Always follow this workflow:
+
+1. **Create a feature branch**:
+
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout -b feature/your-branch-name
+   ```
+
+2. **Make your changes and commit**:
+
+   ```bash
+   git add .
+   git commit -m "your commit message"
+   ```
+
+3. **Push and create PR**:
+
+   ```bash
+   git push -u origin feature/your-branch-name
+   gh pr create --title "Your PR Title" --body "PR description"
+   ```
+
+4. **Wait for review and CI checks** before merging
+
 ## Project Conventions
 
 - Use CommonJS modules (type: "commonjs" in package.json)
-- Node.js version requirement (>=18.0.0)
+- Node.js version requirement (>=20.0.0). Use `nvm use` to align with `.nvmrc` (currently v24.7.0).
 - Follow file structure: core logic in src/, tests in test/
 - Examples belong in examples/ with clear README.md
 - Document provider configurations following examples in existing code

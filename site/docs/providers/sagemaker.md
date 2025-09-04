@@ -1,7 +1,7 @@
 ---
 sidebar_label: Amazon SageMaker AI
 title: Amazon SageMaker AI Provider
-description: Evaluate models deployed on Amazon SageMaker AI endpoints with promptfoo
+description: Test and evaluate ML models deployed on Amazon SageMaker endpoints with comprehensive metrics and performance benchmarking
 ---
 
 # Amazon SageMaker AI
