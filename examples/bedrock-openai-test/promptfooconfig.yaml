@@ -1,0 +1,92 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenAI Models via AWS Bedrock Evaluation'
+
+prompts:
+  - |
+    You are a helpful AI assistant. Answer the following question concisely and accurately.
+    
+    Question: {{question}}
+  - |
+    You are an expert AI assistant with high reasoning capabilities. Think step by step and provide a detailed answer.
+    
+    Question: {{question}}
+
+providers:
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    label: OpenAI GPT-OSS 120B (via Bedrock)
+    config:
+      region: us-west-2
+      max_completion_tokens: 1024
+      temperature: 0.7
+      top_p: 0.9
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+      reasoning_effort: medium
+  - id: bedrock:openai.gpt-oss-20b-1:0  
+    label: OpenAI GPT-OSS 20B (via Bedrock)
+    config:
+      region: us-west-2
+      max_completion_tokens: 1024
+      temperature: 0.7
+      top_p: 0.9
+      frequency_penalty: 0.0
+      presence_penalty: 0.0
+      reasoning_effort: low
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    label: OpenAI GPT-OSS 120B High Reasoning
+    config:
+      region: us-west-2
+      max_completion_tokens: 2048
+      temperature: 0.3
+      top_p: 0.95
+      reasoning_effort: high
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+    label: Claude Sonnet 4 (Comparison)
+    config:
+      region: us-west-2
+      max_tokens: 1024
+      temperature: 0.7
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris
+  - vars:
+      question: Explain the concept of machine learning in simple terms.
+    assert:
+      - type: contains
+        value: algorithm
+        weight: 0.5
+      - type: contains-all
+        value: ["learn", "data"]
+        weight: 0.5
+  - vars:
+      question: "What are the main differences between Python and JavaScript?"
+    assert:
+      - type: llm-rubric
+        value: "Response should mention key differences like typing (dynamic vs static tendencies), use cases (backend/data science vs web), and syntax differences"
+  - vars:
+      question: "Solve this math problem step by step: If a train travels 120 miles in 2 hours, what is its average speed?"
+    assert:
+      - type: contains
+        value: "60"
+      - type: contains-any
+        value: ["mph", "miles per hour", "speed"]
+  - vars:
+      question: "What is the significance of the year 1969 in space exploration?"
+    assert:
+      - type: contains-any
+        value: ["Apollo 11", "moon landing", "Neil Armstrong"]
+      - type: llm-rubric
+        value: "Response should mention Apollo 11 moon landing and its historical significance"
+  - vars:
+      question: "Write a brief explanation of photosynthesis."
+    assert:
+      - type: contains-all
+        value: ["sunlight", "carbon dioxide", "oxygen", "glucose"]
+        weight: 0.7
+      - type: llm-rubric
+        value: "Explanation should be scientifically accurate and mention the basic process of converting light energy to chemical energy"
+        weight: 0.3
