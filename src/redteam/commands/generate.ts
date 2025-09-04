@@ -19,6 +19,7 @@ import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
+  checkCloudPermissions,
   getCloudDatabaseId,
   getConfigFromCloud,
   getPluginSeverityOverridesFromCloud,
@@ -161,6 +162,27 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+    await checkCloudPermissions(resolved.config);
+
+    // Warn if both tests section and redteam config are present
+    if (redteamConfig && resolved.testSuite.tests && resolved.testSuite.tests.length > 0) {
+      logger.warn(
+        chalk.yellow(
+          dedent`
+            ⚠️  Warning: Found both 'tests' section and 'redteam' configuration in your config file.
+
+            The 'tests' section is ignored when generating red team tests. Red team automatically
+            generates its own test cases based on the plugins and strategies you've configured.
+
+            If you want to use custom test variables with red team, consider:
+            1. Using the \`defaultTest\` key to set your vars
+            2. Using environment variables with {{env.VAR_NAME}} syntax
+            3. Using a transformRequest function in your target config
+            4. Using multiple target configurations
+          `,
+        ),
+      );
+    }
 
     try {
       // If the provider is a cloud provider, check for plugin severity overrides:

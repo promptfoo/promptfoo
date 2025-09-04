@@ -12,7 +12,7 @@ jest.mock('../../src/util', () => ({
   writeOutput: jest.fn(),
   createOutputMetadata: jest.fn().mockReturnValue({
     promptfooVersion: '1.0.0',
-    nodeVersion: 'v18.0.0',
+    nodeVersion: 'v20.0.0',
     platform: 'linux',
     arch: 'x64',
     exportedAt: '2025-07-01T00:00:00.000Z',
@@ -88,7 +88,7 @@ describe('exportCommand', () => {
       shareableUrl: null,
       metadata: {
         promptfooVersion: '1.0.0',
-        nodeVersion: 'v18.0.0',
+        nodeVersion: 'v20.0.0',
         platform: 'linux',
         arch: 'x64',
         exportedAt: '2025-07-01T00:00:00.000Z',

@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
-import { getEnvFloat, getEnvInt } from '../envars';
+import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -22,6 +22,7 @@ import telemetry from '../telemetry';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
 import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { checkCloudPermissions } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -48,6 +49,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
+  noShare: z.boolean().optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -102,11 +104,13 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
+  // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
+  let commandLineOptions: Record<string, any> | undefined = undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -146,7 +150,18 @@ export async function doEval(
       }
     }
 
-    ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
+    ({
+      config,
+      testSuite,
+      basePath: _basePath,
+      commandLineOptions,
+    } = await resolveConfigs(cmdObj, defaultConfig));
+
+    // Phase 2: Load environment from config files if not already set via CLI
+    if (!cmdObj.envPath && commandLineOptions?.envPath) {
+      logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
+      setupEnv(commandLineOptions.envPath);
+    }
 
     // Check if config has redteam section but no test cases
     if (
@@ -237,6 +252,8 @@ export async function doEval(
       cmdObj.filterProviders || cmdObj.filterTargets,
     );
 
+    await checkCloudPermissions(config as UnifiedConfig);
+
     const options: EvaluateOptions = {
       ...evaluateOptions,
       showProgressBar:
@@ -311,7 +328,13 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-    const wantsToShare = cmdObj.share && config.sharing;
+    // Check for explicit disable signals first
+    const hasExplicitDisable =
+      cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
+
+    const wantsToShare = hasExplicitDisable
+      ? false
+      : cmdObj.share || config.sharing || cloudConfig.isEnabled();
 
     const shareableUrl =
       wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
@@ -408,6 +431,7 @@ export async function doEval(
     const durationDisplay = formatDuration(duration);
 
     const isRedteam = Boolean(config.redteam);
+    const tracker = TokenUsageTracker.getInstance();
 
     // Handle token usage display
     if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
@@ -453,7 +477,7 @@ export async function doEval(
       }
 
       // Provider breakdown
-      const tracker = TokenUsageTracker.getInstance();
+
       const providerIds = tracker.getProviderIds();
       if (providerIds.length > 1) {
         logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
@@ -469,7 +493,7 @@ export async function doEval(
             // Extract just the provider ID part (remove class name in parentheses)
             const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
             logger.info(
-              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())}`,
+              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())} (${usage.numRequests} requests)`,
             );
 
             // Show breakdown if there are individual components
@@ -784,6 +808,7 @@ export function evalCommand(
       '250',
     )
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
+    .option('--no-share', 'Do not share, this overrides the config file')
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',
@@ -858,7 +883,6 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
       }
-
       doEval(
         validatedOpts as Partial<CommandLineOptions & Command>,
         defaultConfig,
