@@ -2,7 +2,6 @@ import logger from '../logger';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
-import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
@@ -128,13 +127,8 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
-      const { messages: messagesToUser, tokenUsage: userTokenUsage } = await this.sendMessageToUser(
-        messages,
-        userProvider,
-      );
+      const { messages: messagesToUser } = await this.sendMessageToUser(messages, userProvider);
       const lastMessage = messagesToUser[messagesToUser.length - 1];
-
-      TokenUsageTracker.getInstance().trackUsage(userProvider.id(), userTokenUsage);
 
       // Check whether the judge has determined that the instruction goal is satisfied.
       if (

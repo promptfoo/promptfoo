@@ -129,6 +129,7 @@ export async function getTargetResponse(
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
     await sleep(targetProvider.delay);
   }
+  const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   if (targetRespRaw?.output) {
     const output = (
       typeof targetRespRaw.output === 'string'
@@ -138,7 +139,7 @@ export async function getTargetResponse(
     return {
       output,
       sessionId: targetRespRaw.sessionId,
-      tokenUsage: { numRequests: 1, ...targetRespRaw.tokenUsage },
+      tokenUsage,
       guardrails: targetRespRaw.guardrails,
     };
   }
@@ -148,7 +149,7 @@ export async function getTargetResponse(
       output: '',
       error: targetRespRaw.error,
       sessionId: targetRespRaw.sessionId,
-      tokenUsage: { numRequests: 1, ...targetRespRaw.tokenUsage },
+      tokenUsage,
       guardrails: targetRespRaw.guardrails,
     };
   }

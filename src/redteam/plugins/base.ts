@@ -445,6 +445,7 @@ export abstract class RedteamGraderBase {
         jsonOnly: true,
       }),
     });
+    logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 
     let suggestions: ResultSuggestion[] | undefined;
     if (!grade.pass) {
