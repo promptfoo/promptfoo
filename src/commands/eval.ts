@@ -317,7 +317,8 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-    const wantsToShare = cmdObj.share !== false && (cmdObj.share || config.sharing);
+    const wantsToShare =
+      cmdObj.share !== false && (cmdObj.share || config.sharing || cloudConfig.isEnabled());
 
     const shareableUrl =
       wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
