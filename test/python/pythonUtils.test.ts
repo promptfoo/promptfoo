@@ -96,7 +96,7 @@ describe('Python Utils', () => {
       );
     });
 
-    it('should use Windows clean detection first on Windows', async () => {
+    it('should use Windows clean detection strategy first on Windows', async () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
@@ -125,11 +125,11 @@ describe('Python Utils', () => {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
 
-    it('should fall back to sys.executable detection if Windows clean detection fails', async () => {
+    it('should fall back to sys.executable strategy if Windows clean detection fails', async () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 
-      // Mock 'where python' to fail, then sys.executable to succeed
+      // Mock 'where python' to fail, then 'py' sys.executable to succeed
       jest
         .mocked(execAsync)
         .mockRejectedValueOnce(new Error('where command failed'))
@@ -143,7 +143,33 @@ describe('Python Utils', () => {
 
       expect(result).toBe('C:\\Python39\\python.exe');
       expect(execAsync).toHaveBeenCalledWith('where python');
-      expect(execAsync).toHaveBeenCalledWith('python -c "import sys; print(sys.executable)"');
+      expect(execAsync).toHaveBeenCalledWith('py -c "import sys; print(sys.executable)"');
+
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it('should try final fallback strategy if other strategies fail', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      // Mock 'where python' to fail, all py commands to fail, then final python to succeed
+      jest
+        .mocked(execAsync)
+        .mockRejectedValueOnce(new Error('where command failed'))
+        .mockRejectedValueOnce(new Error('py failed'))
+        .mockRejectedValueOnce(new Error('py -3 failed'))
+        .mockRejectedValueOnce(new Error('python3 failed'))
+        .mockResolvedValueOnce({
+          stdout: 'Python 3.9.0\n',
+          stderr: '',
+          child: createMockChildProcess() as ChildProcess,
+        });
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBe('python');
+      expect(execAsync).toHaveBeenCalledWith('where python');
+      expect(execAsync).toHaveBeenCalledWith('python --version');
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -265,25 +291,21 @@ describe('Python Utils', () => {
         jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
 
         if (process.platform === 'win32') {
-          // Windows: getWindowsPythonClean fails, then getSysExecutable tries python, python3, py, py -3 and all fail
+          // Windows: All getSysExecutable strategies eventually succeed via final fallback
           jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // where python fails
-          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // python -c sys.executable fails
-          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // python3 -c sys.executable fails
           jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // py -c sys.executable fails
           jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // py -3 -c sys.executable fails
-          // First fallback (python) validation succeeds
+          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // python3 -c sys.executable fails
+          // Final fallback (python) validation succeeds
           jest.mocked(execAsync).mockResolvedValueOnce({
             stdout: 'Python 3.9.5\n',
             stderr: '',
             child: createMockChildProcess() as ChildProcess,
           });
         } else {
-          // Unix: getSysExecutable tries python3, python and all fail
-          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
-          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
-          // First fallback (python3) validation succeeds
+          // Unix: getSysExecutable strategies succeed on python3
           jest.mocked(execAsync).mockResolvedValueOnce({
-            stdout: 'Python 3.9.5\n',
+            stdout: '/usr/bin/python3\n',
             stderr: '',
             child: createMockChildProcess() as ChildProcess,
           });
@@ -291,7 +313,7 @@ describe('Python Utils', () => {
 
         const result = await pythonUtils.validatePythonPath('non_existent_program', false);
 
-        expect(result).toBe(process.platform === 'win32' ? 'python' : 'python3');
+        expect(result).toBe(process.platform === 'win32' ? 'python' : '/usr/bin/python3');
       });
 
       it('should throw an error for non-existent programs when explicit', async () => {
