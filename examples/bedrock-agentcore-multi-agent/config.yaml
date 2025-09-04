@@ -80,11 +80,10 @@ tests:
     providers:
       - tech-agent
     assert:
-      - type: contains-any
-        value:
-          - 'file size'
-          - 'upload limit'
-          - 'configuration'
+      - type: javascript
+        value: |
+          const v = output.toLowerCase();
+          ['file size', 'upload limit', 'configuration'].some(s => v.includes(s))
       - type: javascript
         value: |
           // Check if technical solution is provided
@@ -99,11 +98,10 @@ tests:
     providers:
       - billing-agent
     assert:
-      - type: contains-any
-        value:
-          - 'refund'
-          - 'duplicate'
-          - 'charge'
+      - type: javascript
+        value: |
+          const v = output.toLowerCase();
+          ['refund', 'duplicate', 'charge'].some(s => v.includes(s))
       - type: javascript
         value: |
           // Check for customer service tone
@@ -118,13 +116,10 @@ tests:
     providers:
       - product-agent
     assert:
-      - type: contains-any
-        value:
-          - 'stream'
-          - 'kafka'
-          - 'kinesis'
-          - 'event'
-          - 'real-time'
+      - type: javascript
+        value: |
+          const v = output.toLowerCase();
+          ['stream', 'kafka', 'kinesis', 'event', 'real-time'].some(s => v.includes(s))
       - type: javascript
         value: |
           // Check if throughput requirements are acknowledged
@@ -167,12 +162,10 @@ tests:
     providers:
       - supervisor-agent
     assert:
-      - type: contains-any
-        value:
-          - 'escalate'
-          - 'manager'
-          - 'supervisor'
-          - 'priority'
+      - type: javascript
+        value: |
+          const v = output.toLowerCase();
+          ['escalate', 'manager', 'supervisor', 'priority'].some(s => v.includes(s))
       - type: javascript
         value: |
           // Check for appropriate escalation handling

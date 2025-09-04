@@ -3,9 +3,18 @@
 
 description: 'AWS Bedrock AgentCore test suite'
 
+prompts:
+  - 'What can you help me with?'
+  - 'Perform a calculation: what is 15 multiplied by 27?'
+  - 'Search for information about AWS Lambda functions'
+
 providers:
   # Basic configuration with agent ID in the path
-  - bedrock:agentcore:ABCDEFGHIJ
+  - id: bedrock:agentcore:basic-agent
+    config:
+      agentId: ABCDEFGHIJ
+      agentAliasId: PROD_ALIAS_ID
+      region: us-east-1
 
   # Configuration with additional options
   - id: bedrock:agentcore:my-agent
@@ -22,12 +31,6 @@ providers:
       # secretAccessKey: YOUR_SECRET_KEY
       # sessionToken: YOUR_SESSION_TOKEN  # For temporary credentials
       # profile: my-aws-profile  # Use AWS SSO profile
-
-prompts:
-  - 'What can you help me with?'
-  - 'Perform a calculation: what is 15 multiplied by 27?'
-  - 'Search for information about AWS Lambda functions'
-
 tests:
   - vars:
       query: 'Tell me about your capabilities'
