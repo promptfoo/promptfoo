@@ -1,11 +1,11 @@
 # AWS Bedrock AgentCore Example
 
-This example demonstrates how to use AWS Bedrock AgentCore with promptfoo to test and evaluate deployed AI agents.
+This example demonstrates how to use AWS Bedrock AgentCore with promptfoo to test and evaluate deployed AI agents, including both single-agent and multi-agent scenarios.
 
 ## Prerequisites
 
 1. An AWS account with Bedrock AgentCore access
-2. A deployed AgentCore agent (get the agent ID from the AWS Console)
+2. One or more deployed AgentCore agents (get agent IDs from the AWS Console)
 3. AWS credentials configured (via environment variables, AWS CLI, or IAM role)
 4. Install the required AWS SDK:
    ```bash
@@ -14,10 +14,10 @@ This example demonstrates how to use AWS Bedrock AgentCore with promptfoo to tes
 
 ## Setup
 
-1. **Get your Agent ID**:
+1. **Get your Agent ID(s)**:
    - Go to the AWS Bedrock Console
    - Navigate to Agents
-   - Copy your agent ID (format: `ABCDEFGHIJ`)
+   - Copy your agent ID(s) (format: `ABCDEFGHIJ`)
 
 2. **Configure AWS Credentials** (choose one method):
 
@@ -37,16 +37,27 @@ This example demonstrates how to use AWS Bedrock AgentCore with promptfoo to tes
 
    Via IAM role (if running on EC2/Lambda)
 
-3. **Update config.yaml**:
-   - Replace `ABCDEFGHIJ` with your actual agent ID
-   - Update the region if your agent is in a different region
-   - Optionally configure agent alias, session, and memory settings
+3. **Choose your configuration**:
+   - `config.yaml`: Basic single-agent configuration
+   - `multi-agent-config.yaml`: Advanced multi-agent system configuration
 
-## Running the Example
+## Running the Examples
+
+### Single Agent Example
 
 ```bash
-# Run the evaluation
+# Run basic agent evaluation
 npx promptfoo eval -c config.yaml
+
+# View results in the web UI
+npx promptfoo view
+```
+
+### Multi-Agent Example
+
+```bash
+# Run multi-agent system evaluation
+npx promptfoo eval -c multi-agent-config.yaml
 
 # View results in the web UI
 npx promptfoo view
@@ -61,7 +72,7 @@ providers:
   - bedrock:agentcore:YOUR_AGENT_ID
 ```
 
-### Advanced Configuration
+### Advanced Single Agent Configuration
 
 ```yaml
 providers:
@@ -73,6 +84,30 @@ providers:
       sessionId: session-123 # Maintain conversation state
       enableTrace: true # Get detailed execution traces
       memoryId: SHORT_TERM_MEMORY # or LONG_TERM_MEMORY
+```
+
+### Multi-Agent System Configuration
+
+```yaml
+providers:
+  # Technical Support Agent
+  - id: tech-agent
+    provider: bedrock:agentcore:TECH_AGENT_ID
+    config:
+      agentId: TECH_AGENT_ID
+      agentAliasId: TECH_ALIAS_ID
+      region: us-east-1
+      enableTrace: true
+      memoryId: LONG_TERM_MEMORY
+
+  # Billing Agent
+  - id: billing-agent
+    provider: bedrock:agentcore:BILLING_AGENT_ID
+    config:
+      agentId: BILLING_AGENT_ID
+      agentAliasId: BILLING_ALIAS_ID
+      region: us-east-1
+      enableTrace: true
 ```
 
 ## Features
@@ -104,14 +139,37 @@ config:
   enableTrace: true # Response will include trace metadata
 ```
 
-## Testing Agent Capabilities
+## Testing Scenarios
 
-The example config includes tests for:
-
+### Single Agent Tests
+The basic config includes tests for:
 - Basic agent responses
 - Tool/function calling (e.g., calculator)
 - Memory retention
 - Multi-turn conversations
+
+### Multi-Agent System Tests
+The multi-agent config includes tests for:
+- Specialized agent capabilities (technical, billing, product)
+- Cross-functional issue handling
+- Agent collaboration and coordination
+- Escalation management
+- Performance and latency validation
+
+## Multi-Agent System Architecture
+
+The multi-agent example demonstrates a customer support system with specialized agents:
+
+```text
+Customer Query
+     ↓
+[Supervisor Agent] ← Monitors & Routes
+     ↓
+┌─────────────────┬─────────────────┬──────────────────┐
+│  Tech Agent     │  Billing Agent  │  Product Agent   │
+│  (Technical)    │  (Payments)     │  (Recommendations)│
+└─────────────────┴─────────────────┴──────────────────┘
+```
 
 ## Troubleshooting
 
@@ -119,6 +177,7 @@ The example config includes tests for:
 2. **Agent Not Found**: Verify the agent ID and region
 3. **Permissions Error**: Check IAM permissions for `bedrock:InvokeAgent`
 4. **Timeout**: Large agent responses may take time; adjust timeout if needed
+5. **Multi-Agent Issues**: Ensure all agent IDs and aliases are correct in the config
 
 ## IAM Permissions
 
