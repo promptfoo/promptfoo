@@ -1040,7 +1040,7 @@ export default function Review({
           <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <ScienceIcon color="action" />
-              <Typography variant="h6">Red Team Probe Usage</Typography>
+              <Typography variant="h6">Red Team Usage</Typography>
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 2 }}>
