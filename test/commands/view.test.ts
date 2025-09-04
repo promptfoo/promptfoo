@@ -62,8 +62,8 @@ describe('viewCommand', () => {
 
     // Use a unique port to avoid confusion with default port
     await viewCmd.parseAsync(['node', 'test', '--no', '--port', '15500']);
-    // --no sets BrowserBehavior.OPEN when both --yes and --no are supplied due to commander behavior
-    expect(startServer).toHaveBeenCalledWith('15500', BrowserBehavior.OPEN);
+    // --no sets BrowserBehavior.SKIP
+    expect(startServer).toHaveBeenCalledWith('15500', BrowserBehavior.SKIP);
   });
 
   it('should ignore filter description option', async () => {
