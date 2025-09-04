@@ -80,6 +80,155 @@ describe('Python Utils', () => {
     jest.mocked(getEnvBool).mockReturnValue(false);
   });
 
+  describe('getSysExecutable', () => {
+    it('should return Python executable path from sys.executable', async () => {
+      jest.mocked(execAsync).mockResolvedValue({
+        stdout: '/usr/bin/python3.8\n',
+        stderr: '',
+        child: createMockChildProcess() as ChildProcess,
+      });
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBe('/usr/bin/python3.8');
+      expect(execAsync).toHaveBeenCalledWith(
+        expect.stringContaining('-c "import sys; print(sys.executable)"'),
+      );
+    });
+
+    it('should use Windows where command first on Windows', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      // Mock 'where python' command to return multiple paths including WindowsApps
+      jest
+        .mocked(execAsync)
+        .mockResolvedValueOnce({
+          stdout:
+            'C:\\Users\\test\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe\nC:\\Python39\\python.exe\n',
+          stderr: '',
+          child: createMockChildProcess() as ChildProcess,
+        })
+        .mockResolvedValueOnce({
+          stdout: 'Python 3.9.0\n',
+          stderr: '',
+          child: createMockChildProcess() as ChildProcess,
+        });
+
+      const result = await pythonUtils.getSysExecutable();
+
+      // Should skip WindowsApps and use the real Python installation
+      expect(result).toBe('C:\\Python39\\python.exe');
+      expect(execAsync).toHaveBeenCalledWith('where python');
+      expect(execAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe --version');
+
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it('should fall back to py commands if Windows where fails', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      // Mock 'where python' to fail, then 'py' sys.executable to succeed
+      jest
+        .mocked(execAsync)
+        .mockRejectedValueOnce(new Error('where command failed'))
+        .mockResolvedValueOnce({
+          stdout: 'C:\\Python39\\python.exe\n',
+          stderr: '',
+          child: createMockChildProcess() as ChildProcess,
+        });
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBe('C:\\Python39\\python.exe');
+      expect(execAsync).toHaveBeenCalledWith('where python');
+      expect(execAsync).toHaveBeenCalledWith('py -c "import sys; print(sys.executable)"');
+
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it('should try direct python command as final Windows fallback', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      // Mock everything to fail except final direct python command
+      jest
+        .mocked(execAsync)
+        .mockRejectedValueOnce(new Error('where failed'))
+        .mockRejectedValueOnce(new Error('py failed'))
+        .mockRejectedValueOnce(new Error('py -3 failed'))
+        .mockResolvedValueOnce({
+          stdout: 'Python 3.9.0\n',
+          stderr: '',
+          child: createMockChildProcess() as ChildProcess,
+        });
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBe('python');
+      expect(execAsync).toHaveBeenCalledWith('where python');
+      expect(execAsync).toHaveBeenCalledWith('python --version');
+
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it('should add .exe suffix on Windows if missing', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      jest
+        .mocked(execAsync)
+        .mockRejectedValueOnce(new Error('where failed'))
+        .mockResolvedValueOnce({
+          stdout: 'C:\\Python39\\python\n',
+          stderr: '',
+          child: createMockChildProcess() as ChildProcess,
+        });
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBe('C:\\Python39\\python.exe');
+
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it('should handle empty where output gracefully', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      // Mock 'where python' to return empty output, then py to succeed
+      jest
+        .mocked(execAsync)
+        .mockResolvedValueOnce({
+          stdout: '',
+          stderr: '',
+          child: createMockChildProcess() as ChildProcess,
+        })
+        .mockResolvedValueOnce({
+          stdout: 'C:\\Python39\\python.exe\n',
+          stderr: '',
+          child: createMockChildProcess() as ChildProcess,
+        });
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBe('C:\\Python39\\python.exe');
+      expect(execAsync).toHaveBeenCalledWith('where python');
+      expect(execAsync).toHaveBeenCalledWith('py -c "import sys; print(sys.executable)"');
+
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it('should return null if no Python executable is found', async () => {
+      jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBeNull();
+    });
+  });
+
   describe('tryPath', () => {
     describe('successful path validation', () => {
       it('should return the path for a valid Python 3 executable', async () => {
@@ -164,19 +313,32 @@ describe('Python Utils', () => {
     describe('fallback behavior', () => {
       it('should fall back to alternative paths for non-existent programs when not explicit', async () => {
         jest.mocked(execAsync).mockReset();
-        jest
-          .mocked(execAsync)
-          .mockRejectedValueOnce(new Error('Command failed'))
-          .mockResolvedValueOnce({
+        // Primary path fails
+        jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
+
+        if (process.platform === 'win32') {
+          // Windows: All getSysExecutable strategies eventually succeed via final fallback
+          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // where python fails
+          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // py -c sys.executable fails
+          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed')); // py -3 -c sys.executable fails
+          // Final fallback (python) validation succeeds
+          jest.mocked(execAsync).mockResolvedValueOnce({
             stdout: 'Python 3.9.5\n',
             stderr: '',
             child: createMockChildProcess() as ChildProcess,
           });
+        } else {
+          // Unix: getSysExecutable strategies succeed on python3
+          jest.mocked(execAsync).mockResolvedValueOnce({
+            stdout: '/usr/bin/python3\n',
+            stderr: '',
+            child: createMockChildProcess() as ChildProcess,
+          });
+        }
 
         const result = await pythonUtils.validatePythonPath('non_existent_program', false);
 
-        expect(result).toBe(process.platform === 'win32' ? 'py -3' : 'python3');
-        expect(execAsync).toHaveBeenCalledTimes(2);
+        expect(result).toBe(process.platform === 'win32' ? 'python' : '/usr/bin/python3');
       });
 
       it('should throw an error for non-existent programs when explicit', async () => {
@@ -193,9 +355,9 @@ describe('Python Utils', () => {
         jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
 
         await expect(pythonUtils.validatePythonPath('python', false)).rejects.toThrow(
-          'Python 3 not found. Tried "python" and',
+          'Python 3 not found. Tried "python", sys.executable detection, and fallback commands.',
         );
-        expect(execAsync).toHaveBeenCalledTimes(2);
+        expect(execAsync).toHaveBeenCalled();
       });
     });
 
