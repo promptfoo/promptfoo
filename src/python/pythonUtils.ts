@@ -18,6 +18,35 @@ export const state: {
 };
 
 /**
+ * Attempts to get the Python executable path using sys.executable.
+ * @returns The sys.executable path if successful, or null if failed.
+ */
+export async function getSysExecutable(): Promise<string | null> {
+  // Try different Python commands to get sys.executable
+  const pythonCommands =
+    process.platform === 'win32'
+      ? ['python', 'python3', 'py', 'py -3'] // Try python first on Windows since py might not exist
+      : ['python3', 'python'];
+
+  for (const cmd of pythonCommands) {
+    try {
+      const result = await execAsync(`${cmd} -c "import sys; print(sys.executable)"`);
+      const executablePath = result.stdout.trim();
+      if (executablePath && executablePath !== 'None') {
+        // On Windows, ensure .exe suffix if missing
+        if (process.platform === 'win32' && !executablePath.toLowerCase().endsWith('.exe')) {
+          return executablePath + '.exe';
+        }
+        return executablePath;
+      }
+    } catch {
+      // Continue to next command
+    }
+  }
+  return null;
+}
+
+/**
  * Attempts to validate a Python executable path.
  * @param path - The path to the Python executable to test.
  * @returns The validated path if successful, or null if invalid.
@@ -87,15 +116,30 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
         );
       }
 
-      const alternativePath = process.platform === 'win32' ? 'py -3' : 'python3';
-      const secondaryPath = await tryPath(alternativePath);
-      if (secondaryPath) {
-        state.cachedPythonPath = secondaryPath;
-        return secondaryPath;
+      // Try to get Python executable using sys.executable
+      const sysExecutablePath = await getSysExecutable();
+      if (sysExecutablePath) {
+        const validSysPath = await tryPath(sysExecutablePath);
+        if (validSysPath) {
+          state.cachedPythonPath = validSysPath;
+          return validSysPath;
+        }
+      }
+
+      // Try common Python commands as fallback
+      const fallbackPaths =
+        process.platform === 'win32' ? ['python', 'python3', 'py -3', 'py'] : ['python3', 'python'];
+
+      for (const fallbackPath of fallbackPaths) {
+        const validPath = await tryPath(fallbackPath);
+        if (validPath) {
+          state.cachedPythonPath = validPath;
+          return validPath;
+        }
       }
 
       throw new Error(
-        `Python 3 not found. Tried "${pythonPath}" and "${alternativePath}". ` +
+        `Python 3 not found. Tried "${pythonPath}", sys.executable detection, and fallback commands. ` +
           `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
           `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
       );
@@ -124,7 +168,7 @@ export async function runPython(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { pythonExecutable?: string } = {},
+  options: { pythonExecutable?: string; pythonPath?: string } = {},
 ): Promise<any> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
@@ -135,7 +179,8 @@ export async function runPython(
     os.tmpdir(),
     `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
-  const customPath = options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON');
+  const customPath =
+    options.pythonExecutable || options.pythonPath || getEnvString('PROMPTFOO_PYTHON');
   let pythonPath = customPath || 'python';
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
@@ -151,7 +196,7 @@ export async function runPython(
   };
 
   try {
-    await fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
+    fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
     logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
 
     await new Promise<void>((resolve, reject) => {
@@ -178,7 +223,7 @@ export async function runPython(
       }
     });
 
-    const output = await fs.readFileSync(outputPath, 'utf-8');
+    const output = fs.readFileSync(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
 
     let result: { type: 'final_result'; data: any } | undefined;
@@ -213,14 +258,12 @@ export async function runPython(
       }`,
     );
   } finally {
-    await Promise.all(
-      [tempJsonPath, outputPath].map((file) => {
-        try {
-          fs.unlinkSync(file);
-        } catch (error) {
-          logger.error(`Error removing ${file}: ${error}`);
-        }
-      }),
-    );
+    [tempJsonPath, outputPath].forEach((file) => {
+      try {
+        fs.unlinkSync(file);
+      } catch (error) {
+        logger.error(`Error removing ${file}: ${error}`);
+      }
+    });
   }
 }

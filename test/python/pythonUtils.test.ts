@@ -80,6 +80,48 @@ describe('Python Utils', () => {
     jest.mocked(getEnvBool).mockReturnValue(false);
   });
 
+  describe('getSysExecutable', () => {
+    it('should return Python executable path from sys.executable', async () => {
+      jest.mocked(execAsync).mockResolvedValue({
+        stdout: '/usr/bin/python3.8\n',
+        stderr: '',
+        child: createMockChildProcess() as ChildProcess,
+      });
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBe('/usr/bin/python3.8');
+      expect(execAsync).toHaveBeenCalledWith(
+        expect.stringContaining('-c "import sys; print(sys.executable)"'),
+      );
+    });
+
+    it('should add .exe suffix on Windows if missing', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      jest.mocked(execAsync).mockResolvedValue({
+        stdout: 'C:\\Python39\\python\n',
+        stderr: '',
+        child: createMockChildProcess() as ChildProcess,
+      });
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBe('C:\\Python39\\python.exe');
+
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it('should return null if no Python executable is found', async () => {
+      jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
+
+      const result = await pythonUtils.getSysExecutable();
+
+      expect(result).toBeNull();
+    });
+  });
+
   describe('tryPath', () => {
     describe('successful path validation', () => {
       it('should return the path for a valid Python 3 executable', async () => {
@@ -164,19 +206,36 @@ describe('Python Utils', () => {
     describe('fallback behavior', () => {
       it('should fall back to alternative paths for non-existent programs when not explicit', async () => {
         jest.mocked(execAsync).mockReset();
-        jest
-          .mocked(execAsync)
-          .mockRejectedValueOnce(new Error('Command failed'))
-          .mockResolvedValueOnce({
+        // Primary path fails
+        jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
+
+        if (process.platform === 'win32') {
+          // getSysExecutable tries python, python3, py, py -3 and all fail
+          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
+          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
+          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
+          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
+          // First fallback (python) validation succeeds
+          jest.mocked(execAsync).mockResolvedValueOnce({
             stdout: 'Python 3.9.5\n',
             stderr: '',
             child: createMockChildProcess() as ChildProcess,
           });
+        } else {
+          // getSysExecutable tries python3, python and all fail
+          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
+          jest.mocked(execAsync).mockRejectedValueOnce(new Error('Command failed'));
+          // First fallback (python3) validation succeeds
+          jest.mocked(execAsync).mockResolvedValueOnce({
+            stdout: 'Python 3.9.5\n',
+            stderr: '',
+            child: createMockChildProcess() as ChildProcess,
+          });
+        }
 
         const result = await pythonUtils.validatePythonPath('non_existent_program', false);
 
-        expect(result).toBe(process.platform === 'win32' ? 'py -3' : 'python3');
-        expect(execAsync).toHaveBeenCalledTimes(2);
+        expect(result).toBe(process.platform === 'win32' ? 'python' : 'python3');
       });
 
       it('should throw an error for non-existent programs when explicit', async () => {
@@ -193,9 +252,9 @@ describe('Python Utils', () => {
         jest.mocked(execAsync).mockRejectedValue(new Error('Command failed'));
 
         await expect(pythonUtils.validatePythonPath('python', false)).rejects.toThrow(
-          'Python 3 not found. Tried "python" and',
+          'Python 3 not found. Tried "python", sys.executable detection, and fallback commands.',
         );
-        expect(execAsync).toHaveBeenCalledTimes(2);
+        expect(execAsync).toHaveBeenCalled();
       });
     });
 
