@@ -192,7 +192,7 @@ describe('ReportIndex', () => {
 
     fireEvent.click(tableRow as Element);
 
-    expect(mockNavigate).toHaveBeenCalledWith(`/report?evalId=${evalId}`);
+    expect(mockNavigate).toHaveBeenCalledWith(`/reports?evalId=${evalId}`);
   });
 
   it('should filter the displayed evaluations by description or evalId when a search query is entered', async () => {

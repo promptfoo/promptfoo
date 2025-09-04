@@ -497,6 +497,7 @@ export async function runEval({
         processedResponse.output = await transform(testTransform, processedResponse.output, {
           vars,
           prompt,
+          ...(response && response.metadata && { metadata: response.metadata }),
         });
       }
 

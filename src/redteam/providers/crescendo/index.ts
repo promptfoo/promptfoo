@@ -76,6 +76,8 @@ interface CrescendoResponse extends ProviderResponse {
 interface CrescendoConfig {
   injectVar: string;
   maxTurns?: number;
+  /** @deprecated Use maxTurns instead */
+  maxRounds?: number;
   maxBacktracks?: number;
   redteamProvider: RedteamFileConfig['provider'];
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
@@ -128,7 +130,8 @@ export class CrescendoProvider implements ApiProvider {
   constructor(config: CrescendoConfig) {
     // Create a copy of config to avoid mutating the original
     this.config = { ...config };
-    this.maxTurns = config.maxTurns || DEFAULT_MAX_TURNS;
+    // Support backwards compatibility: use maxRounds if maxTurns is not provided
+    this.maxTurns = config.maxTurns || config.maxRounds || DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
@@ -291,7 +294,6 @@ export class CrescendoProvider implements ApiProvider {
 
     // Generate goal-specific evaluation rubric
     const additionalRubric = getGoalRubric(this.userGoal);
-
     while (roundNum < this.maxTurns) {
       try {
         roundNum++;

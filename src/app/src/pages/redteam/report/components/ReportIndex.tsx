@@ -183,7 +183,7 @@ const ReportIndex: React.FC = () => {
               <TableRow
                 key={eval_.evalId}
                 hover
-                onClick={() => navigate(`/report?evalId=${eval_.evalId}`)}
+                onClick={() => navigate(`/reports?evalId=${eval_.evalId}`)}
                 sx={{ cursor: 'pointer' }}
               >
                 <TableCell>
