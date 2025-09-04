@@ -1,0 +1,189 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'MCP Testing with Custom Provider (mcp-agent-provider)'
+
+# This configuration assumes you've cloned and set up the mcp-agent-provider repository
+# Repository: https://github.com/promptfoo/mcp-agent-provider
+
+# Custom provider configuration
+providers:
+  - id: file://./mcp-agent-provider/src/openai-agent-provider.js
+    label: 'OpenAI Agent with MCP'
+    config:
+      # OpenAI configuration
+      apiBaseUrl: 'https://api.openai.com/v1'
+      model: 'gpt-4o'  # or gpt-4o-mini, gpt-3.5-turbo
+      temperature: 0.3
+      maxTokens: 1500
+      
+      # MCP Server configuration
+      mcpServers:
+        # Your remote MCP server with authentication
+        - url: 'https://your-mcp-server-url.com/mcp'
+          name: 'my-mcp-server'
+          headers:
+            'x-api-key': '${MCP_API_KEY}'
+            'Authorization': 'Bearer ${MCP_AUTH_TOKEN}'
+            # Add any other custom headers your server requires
+            'X-Tenant-ID': '${TENANT_ID}'
+          
+          # Optional: Specify allowed tools
+          # allowedTools: ['namespaces_list', 'pods_list', 'services_list']
+          
+          # Optional: Tool approval settings
+          # requireApproval: 'never'  # or 'always', 'on_error'
+
+# Test prompts
+prompts:
+  - |
+    You are a Kubernetes assistant with access to MCP tools.
+    {{query}}
+    
+    Use the available tools to provide accurate information.
+
+# Comprehensive test suite
+tests:
+  # Basic connectivity test
+  - description: 'Test MCP server connection'
+    vars:
+      query: 'Can you list the available MCP tools?'
+    assert:
+      - type: not-contains
+        value: 'Failed to connect to MCP server'
+      - type: not-contains
+        value: '424 Failed Dependency'
+      - type: not-contains
+        value: 'ERR_INVALID_ARG_TYPE'
+
+  # Test tool invocation
+  - description: 'Test basic tool usage'
+    vars:
+      query: 'List all namespaces in the cluster'
+    assert:
+      - type: javascript
+        value: |
+          // Verify response contains actual data, not raw tool calls
+          const hasRawJson = output.includes('"type":"function"') || 
+                            output.includes('"function":{"name":"namespaces_list"');
+          const hasNamespaceData = output.toLowerCase().includes('namespace');
+          
+          return {
+            pass: !hasRawJson && hasNamespaceData,
+            score: hasNamespaceData ? 1 : 0,
+            reason: hasRawJson ? 'Response contains raw JSON instead of processed data' : 
+                   hasNamespaceData ? 'Successfully retrieved namespace data' : 
+                   'No namespace data found'
+          };
+
+  # Test multiple tool calls
+  - description: 'Test chained tool usage'
+    vars:
+      query: |
+        1. List all namespaces
+        2. For the first namespace, list all pods
+        3. Provide a summary of what you found
+    assert:
+      - type: contains-all
+        value:
+          - 'namespace'
+          - 'pod'
+      - type: llm-rubric
+        value: 'Response provides a coherent summary of namespaces and pods'
+
+  # Test error handling
+  - description: 'Test handling of non-existent resources'
+    vars:
+      query: 'List pods in namespace "non-existent-namespace-xyz"'
+    assert:
+      - type: contains-any
+        value:
+          - 'not found'
+          - 'does not exist'
+          - 'error'
+      - type: not-contains
+        value: 'Internal Server Error'
+
+  # Test authentication
+  - description: 'Test with invalid authentication (if applicable)'
+    vars:
+      query: 'List all namespaces'
+    # This test would use a provider with invalid credentials
+    provider: file://./mcp-agent-provider/src/openai-agent-provider.js
+    providerConfig:
+      mcpServers:
+        - url: 'https://your-mcp-server-url.com/mcp'
+          name: 'my-mcp-server'
+          headers:
+            'x-api-key': 'invalid-key'
+    assert:
+      - type: contains-any
+        value:
+          - 'unauthorized'
+          - 'authentication failed'
+          - '401'
+          - '403'
+
+  # Test rate limiting
+  - description: 'Test rate limiting behavior'
+    vars:
+      query: 'List namespaces 10 times in rapid succession'
+    assert:
+      - type: not-contains
+        value: 'rate limit exceeded'
+      # Or expect rate limiting:
+      # - type: contains
+      #   value: 'rate limit'
+
+  # Test data filtering
+  - description: 'Test namespace filtering'
+    vars:
+      query: 'List only system namespaces (those starting with "kube-")'
+    assert:
+      - type: contains
+        value: 'kube-system'
+      - type: javascript
+        value: |
+          // Check that non-system namespaces are filtered out
+          const hasUserNamespace = output.includes('default') || 
+                                  output.includes('production');
+          return {
+            pass: true,  // This is informational
+            score: 1,
+            reason: hasUserNamespace ? 
+              'Response includes user namespaces (may need better filtering)' : 
+              'Response correctly filtered to system namespaces only'
+          };
+
+  # Test complex queries
+  - description: 'Test complex resource query'
+    vars:
+      query: |
+        For each namespace:
+        1. Count the number of pods
+        2. List any pods that are not in "Running" state
+        3. Identify any resource quotas
+        Provide a table summary
+    assert:
+      - type: llm-rubric
+        value: |
+          The response should:
+          - Include data from multiple namespaces
+          - Show pod counts
+          - Identify non-running pods if any
+          - Present information in a structured format
+          - Not expose sensitive information
+
+# Environment variables setup
+# Create a .env file with:
+# MCP_API_KEY=your-actual-api-key
+# MCP_AUTH_TOKEN=your-actual-token
+# OPENAI_API_KEY=your-openai-key
+# TENANT_ID=your-tenant-id (if needed)
+
+# Output configuration
+outputPath: 'custom-provider-results.json'
+
+# Display configuration
+display:
+  showPrompt: true
+  showOutput: true
+  showMetadata: true

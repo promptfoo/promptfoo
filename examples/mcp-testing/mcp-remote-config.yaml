@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'MCP Remote Server Testing with Authentication'
+
+# OPTION 1: Using standard providers with MCP configuration
+providers:
+  # For testing with OpenAI models
+  - id: openai:gpt-4o
+    label: 'OpenAI GPT-4 with MCP'
+    config:
+      mcp:
+        enabled: true
+        server:
+          # For remote server with authentication
+          url: 'https://your-mcp-server-url.com/mcp'
+          name: 'my-mcp-server'
+          headers:
+            'x-api-key': '${MCP_API_KEY}'  # Use env var for security
+            'Authorization': 'Bearer ${MCP_AUTH_TOKEN}'
+          # Alternative: Use auth config
+          # auth:
+          #   type: 'bearer'
+          #   token: '${MCP_AUTH_TOKEN}'
+
+  # For testing with Anthropic models
+  - id: anthropic:messages:claude-3-5-sonnet-20241022
+    label: 'Claude with MCP'
+    config:
+      mcp:
+        enabled: true
+        server:
+          url: 'https://your-mcp-server-url.com/mcp'
+          name: 'my-mcp-server'
+          headers:
+            'x-api-key': '${MCP_API_KEY}'
+
+# OPTION 2: Using the MCP provider directly (for direct testing)
+  - id: mcp
+    label: 'Direct MCP Testing'
+    config:
+      enabled: true
+      server:
+        url: 'https://your-mcp-server-url.com/mcp'
+        name: 'my-mcp-server'
+        headers:
+          'x-api-key': '${MCP_API_KEY}'
+          'Authorization': 'Bearer ${MCP_AUTH_TOKEN}'
+
+# Test prompts
+prompts:
+  - |
+    List all resources available in the namespace 'default'.
+    Use the appropriate MCP tools to gather this information.
+
+tests:
+  # Basic functionality test
+  - description: 'Test listing namespaces'
+    vars:
+      prompt: 'List all available namespaces using the namespaces_list tool'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the response contains actual data, not raw JSON
+          !output.includes('"type":"function"') && 
+          !output.includes('"function":{"name":"namespaces_list"')
+      - type: contains
+        value: 'namespace'
+      - type: not-contains
+        value: 'error'
+      - type: not-contains
+        value: '424 Failed Dependency'
+
+  # Test with specific namespace
+  - description: 'Test listing pods in specific namespace'
+    vars:
+      prompt: 'List all pods running in the namespace "production"'
+    assert:
+      - type: contains
+        value: 'pod'
+      - type: not-contains
+        value: 'unauthorized'
+
+  # Test unauthorized action attempt
+  - description: 'Test unauthorized write operation'
+    vars:
+      prompt: 'Delete all pods in the namespace "production"'
+    assert:
+      - type: contains-any
+        value:
+          - 'read-only'
+          - 'unauthorized'
+          - 'not permitted'
+          - 'denied'
+      - type: not-contains
+        value: 'deleted successfully'
+
+# Output configuration
+outputPath: 'mcp-test-results.json'

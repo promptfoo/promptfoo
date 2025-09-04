@@ -1,0 +1,175 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Best practices for cross-lingual RAG evaluation
+
+# This configuration demonstrates the RIGHT way to evaluate cross-lingual RAG
+# Key principle: Use metrics that work, avoid metrics that don't
+
+prompts:
+  - |
+    You are a multilingual assistant with access to a knowledge base.
+    
+    Question: {{query}}
+    Context: {{context}}
+    
+    Provide a comprehensive answer in the same language as the question.
+    Use only information from the provided context.
+
+providers:
+  - openai:gpt-4o-mini
+  - anthropic:messages:claude-3-5-haiku-20241022
+
+# Define reusable assertion sets
+assertions:
+  # For same-language evaluation (all metrics work)
+  monolingual: &monolingual
+    - type: context-faithfulness
+      threshold: 0.85
+    - type: context-relevance
+      threshold: 0.90
+    - type: context-recall
+      value: "{{expected_answer}}"
+      threshold: 0.75
+    - type: answer-relevance
+      threshold: 0.85
+  
+  # For cross-lingual evaluation (only use metrics that work)
+  crosslingual: &crosslingual
+    # ✅ These metrics work well cross-lingually
+    - type: context-relevance
+      threshold: 0.85  # Stays high - this metric is robust
+    - type: context-faithfulness
+      threshold: 0.75  # Small reduction, still meaningful
+    - type: answer-relevance
+      threshold: 0.80  # Works well across languages
+    
+    # ❌ DON'T use context-recall - it doesn't work cross-lingually
+    # Instead, use llm-rubric for conceptual evaluation
+    - type: llm-rubric
+      value: |
+        Evaluate if the answer correctly uses the key information from the context.
+        The context and answer may be in different languages.
+        Check for:
+        1. Factual accuracy based on context
+        2. Complete coverage of main points
+        3. No hallucinated information
+        Score 0-1 based on these criteria.
+      threshold: 0.75
+
+tests:
+  # SAME LANGUAGE TESTS (all metrics work well)
+  - description: "MONOLINGUAL: English question, English context"
+    vars:
+      query: "What are the benefits of solar energy?"
+      context: |
+        Solar energy provides clean, renewable power from the sun.
+        It produces no greenhouse gas emissions during operation.
+        Solar panels can last 25-30 years with minimal maintenance.
+        It reduces electricity bills and provides energy independence.
+      expected_answer: "Solar energy benefits include clean renewable power, no emissions, 25-30 year lifespan, reduced bills, and energy independence"
+    assert: *monolingual
+
+  - description: "MONOLINGUAL: Spanish question, Spanish context"
+    vars:
+      query: "¿Cuáles son los beneficios de la energía solar?"
+      context: |
+        La energía solar proporciona energía limpia y renovable del sol.
+        No produce emisiones de gases de efecto invernadero durante la operación.
+        Los paneles solares pueden durar 25-30 años con mínimo mantenimiento.
+        Reduce las facturas de electricidad y proporciona independencia energética.
+      expected_answer: "Los beneficios incluyen energía limpia renovable, sin emisiones, vida útil de 25-30 años, facturas reducidas e independencia energética"
+    assert: *monolingual
+
+  # CROSS-LINGUAL TESTS (use only appropriate metrics)
+  - description: "CROSS-LINGUAL: English question, Spanish context"
+    vars:
+      query: "What are the benefits of renewable energy?"
+      context: |
+        La energía renovable ofrece numerosos beneficios para la sociedad.
+        Produce pocas o ninguna emisión de gases de efecto invernadero.
+        Las fuentes renovables como solar y eólica son inagotables.
+        Reduce la dependencia de combustibles fósiles importados.
+        El sector de energías renovables crea empleos y estimula el crecimiento económico.
+      # Note: We DON'T use expected_answer with context-recall for cross-lingual
+    assert: *crosslingual
+
+  - description: "CROSS-LINGUAL: Spanish question, English context"
+    vars:
+      query: "¿Cuáles son las aplicaciones de la inteligencia artificial?"
+      context: |
+        Artificial Intelligence has transformative applications across industries.
+        In healthcare, AI assists with disease diagnosis and drug discovery.
+        Financial services use AI for fraud detection and risk assessment.
+        Transportation benefits from AI through autonomous vehicles.
+        Education uses AI for personalized learning systems.
+        Manufacturing employs AI for predictive maintenance and quality control.
+    assert: *crosslingual
+
+  - description: "CROSS-LINGUAL: Japanese question, English context"
+    vars:
+      query: "ブロックチェーンの利点は何ですか？"
+      context: |
+        Blockchain technology offers several key advantages.
+        It provides immutable and transparent record-keeping.
+        Blockchain eliminates the need for intermediaries in transactions.
+        It enhances security through cryptographic protection.
+        The technology enables smart contracts for automated agreements.
+        Blockchain ensures data integrity and prevents tampering.
+    assert: *crosslingual
+
+  # DEMONSTRATING METRIC REPLACEMENT
+  - description: "Using llm-rubric instead of context-recall for cross-lingual"
+    vars:
+      query: "What causes climate change?"
+      context: |
+        El cambio climático es causado principalmente por emisiones de gases de efecto invernadero.
+        La quema de combustibles fósiles libera dióxido de carbono.
+        La deforestación reduce la capacidad de absorber CO2.
+        La agricultura y ganadería producen metano.
+        El transporte y la industria contribuyen significativamente.
+    assert:
+      - type: context-faithfulness
+        threshold: 0.75
+      - type: context-relevance
+        threshold: 0.85
+      # Instead of context-recall (which would fail), use specific rubric
+      - type: llm-rubric
+        value: |
+          Check if the answer mentions these key causes from the Spanish context:
+          1. Greenhouse gas emissions
+          2. Burning fossil fuels releasing CO2
+          3. Deforestation reducing CO2 absorption
+          4. Agriculture/livestock producing methane
+          5. Transportation and industry contributions
+          Score based on coverage of these points.
+        threshold: 0.70
+
+  # ADVANCED: Language-adaptive configuration
+  - description: "Adaptive metrics based on language match"
+    vars:
+      query: "Explain quantum computing"
+      context: "Quantum computing uses quantum mechanical phenomena..."
+      query_lang: "en"
+      context_lang: "en"
+    assert:
+      # Use different metrics based on language match
+      - type: javascript
+        value: |
+          // Dynamically choose metrics based on language match
+          const queryLang = vars.query_lang;
+          const contextLang = vars.context_lang;
+          
+          if (queryLang === contextLang) {
+            // Same language - all metrics work
+            return output.length > 50 ? 1 : 0;
+          } else {
+            // Cross-lingual - avoid context-recall
+            // Focus on conceptual evaluation
+            return output.includes('quantum') || output.includes('cuántico') ? 1 : 0;
+          }
+
+# Best Practices Summary:
+# 1. Use context-relevance, context-faithfulness, answer-relevance for cross-lingual
+# 2. Avoid context-recall for cross-lingual scenarios
+# 3. Use llm-rubric for custom cross-lingual evaluation
+# 4. Keep thresholds meaningful (>0.60) even for cross-lingual
+# 5. Test your specific language pairs to verify metric performance

@@ -1294,7 +1294,7 @@ ${prompt}
       const params: any = {
         messages,
       };
-      
+
       addConfigParam(
         params,
         'max_completion_tokens',
@@ -1325,7 +1325,7 @@ ${prompt}
         config?.presence_penalty,
         getEnvFloat('AWS_BEDROCK_PRESENCE_PENALTY'),
       );
-      
+
       // Add reasoning_effort for o1-style models
       if (config?.reasoning_effort) {
         addConfigParam(params, 'reasoning_effort', config.reasoning_effort, undefined, undefined);
@@ -1460,7 +1460,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
   'us.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'us.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
-  
+
   // OpenAI Models via Bedrock
   'openai.gpt-oss-120b-1:0': BEDROCK_MODEL.OPENAI,
   'openai:gpt-oss-120b-1:0': BEDROCK_MODEL.OPENAI,

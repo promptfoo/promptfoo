@@ -303,10 +303,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Reconstruct the full model name preserving the original format
       const fullModelName = splits.slice(1).join(':');
-      return new AwsBedrockCompletionProvider(
-        fullModelName,
-        providerOptions,
-      );
+      return new AwsBedrockCompletionProvider(fullModelName, providerOptions);
     },
   },
   {

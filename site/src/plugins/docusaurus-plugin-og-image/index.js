@@ -34,7 +34,7 @@ function escapeXml(text) {
 }
 
 // Smart text wrapping that preserves all content
-function wrapText(text, maxWidth, fontSize) {
+function _wrapText(text, maxWidth, fontSize) {
   if (!text) {
     return [];
   }
@@ -64,7 +64,9 @@ function wrapText(text, maxWidth, fontSize) {
 
 // Helper function to truncate text with ellipsis
 function truncateText(text, maxLength) {
-  if (text.length <= maxLength) return text;
+  if (text.length <= maxLength) {
+    return text;
+  }
   return text.substring(0, maxLength - 3) + '...';
 }
 
@@ -76,7 +78,7 @@ function calculateFontSize(text, baseSize = 64, minSize = 40) {
 }
 
 // Dynamic font sizing - much more aggressive scaling
-function calculateOptimalFontSize(text, hasImage = false, isTitle = true) {
+function _calculateOptimalFontSize(text, hasImage = false, isTitle = true) {
   if (!text) {
     return 48;
   }
@@ -179,13 +181,27 @@ async function getImageAsBase64(imagePath, maxWidth = 520, maxHeight = 430) {
 
 // Get page type label
 function getPageTypeLabel(routePath) {
-  if (routePath.includes('/blog/')) return 'Posts';
-  if (routePath.includes('/guides/')) return 'Guide';
-  if (routePath.includes('/red-team')) return 'Security';
-  if (routePath.includes('/providers/')) return 'Provider';
-  if (routePath.includes('/integrations/')) return 'Integration';
-  if (routePath.includes('/enterprise/')) return 'Enterprise';
-  if (routePath.includes('/api-reference/')) return 'API Reference';
+  if (routePath.includes('/blog/')) {
+    return 'Posts';
+  }
+  if (routePath.includes('/guides/')) {
+    return 'Guide';
+  }
+  if (routePath.includes('/red-team')) {
+    return 'Security';
+  }
+  if (routePath.includes('/providers/')) {
+    return 'Provider';
+  }
+  if (routePath.includes('/integrations/')) {
+    return 'Integration';
+  }
+  if (routePath.includes('/enterprise/')) {
+    return 'Enterprise';
+  }
+  if (routePath.includes('/api-reference/')) {
+    return 'API Reference';
+  }
   return 'Documentation';
 }
 
@@ -210,8 +226,6 @@ async function generateSvgTemplate(metadata = {}) {
     routePath = '',
     ogTitle = null,
     ogDescription = null,
-    date = null,
-    author = null,
     image = null,
   } = metadata;
 
@@ -224,7 +238,7 @@ async function generateSvgTemplate(metadata = {}) {
 
   // Truncate for cleaner display
   const escapedTitle = escapeXml(truncateText(displayTitle || 'Promptfoo Documentation', 70));
-  const escapedDescription = escapeXml(displayDescription);
+  const _escapedDescription = escapeXml(displayDescription);
 
   // Check if we have a valid image
   const hasImage = image && !image.startsWith('http');

@@ -1,0 +1,279 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Advanced Multi-lingual RAG Evaluation - Testing edge cases and specific capabilities'
+
+prompts:
+  # Standard RAG prompt
+  - id: standard-rag
+    file://prompts/standard-rag.txt
+  
+  # RAG with explicit language instruction
+  - id: explicit-language
+    file://prompts/explicit-language.txt
+
+providers:
+  - id: gpt-4o-mini
+    config:
+      id: openai:gpt-4o-mini
+      temperature: 0.1
+  
+  - id: gpt-4o
+    config:
+      id: openai:gpt-4o
+      temperature: 0.1
+      
+  - id: claude-haiku
+    config:
+      id: anthropic:messages:claude-3-5-haiku-20241022
+      temperature: 0.1
+
+# Test different scoring models for multilingual grading
+derivedMetrics:
+  - name: avg_faithfulness
+    value: (context_faithfulness_pass_rate)
+  - name: avg_relevance
+    value: (context_relevance_pass_rate + answer_relevance_pass_rate) / 2
+  - name: avg_recall
+    value: (context_recall_pass_rate)
+
+defaultTest:
+  options:
+    rubricProvider: openai:gpt-4o  # Use GPT-4 for grading multilingual content
+  assert:
+    # Test all RAG metrics with different thresholds
+    - type: context-faithfulness
+      threshold: 0.75
+    - type: context-relevance
+      threshold: 0.25
+    - type: answer-relevance
+      threshold: 0.75
+
+tests:
+  # Test 1: Technical terminology across languages
+  - description: "Technical AI/ML terminology - English"
+    vars:
+      query: "What is a neural network and how does backpropagation work?"
+      context: |
+        A neural network is a computational model inspired by biological neural networks. It consists of layers of interconnected nodes (neurons) that process information. Each connection has a weight that gets adjusted during training.
+        
+        Backpropagation is the key algorithm for training neural networks. It calculates the gradient of the loss function with respect to each weight by using the chain rule, efficiently computing gradients layer by layer from the output back to the input.
+        
+        The process involves: forward pass (computing outputs), calculating loss, backward pass (computing gradients), and updating weights using gradient descent.
+    assert:
+      - type: factuality
+        value: "Neural networks use backpropagation to adjust weights through gradient descent"
+      - type: context-recall
+        value: "Backpropagation uses the chain rule to compute gradients layer by layer"
+        threshold: 0.9
+
+  - description: "Technical AI/ML terminology - Japanese"
+    vars:
+      query: "ニューラルネットワークとは何ですか？バックプロパゲーションはどのように機能しますか？"
+      context: |
+        ニューラルネットワークは、生物学的な神経回路網に着想を得た計算モデルです。情報を処理する相互接続されたノード（ニューロン）の層で構成されています。各接続には、トレーニング中に調整される重みがあります。
+        
+        バックプロパゲーション（誤差逆伝播法）は、ニューラルネットワークを訓練するための重要なアルゴリズムです。連鎖律を使用して、各重みに対する損失関数の勾配を計算し、出力から入力まで層ごとに効率的に勾配を計算します。
+        
+        プロセスには以下が含まれます：順伝播（出力の計算）、損失の計算、逆伝播（勾配の計算）、勾配降下法を使用した重みの更新。
+    assert:
+      - type: factuality
+        value: "ニューラルネットワークは勾配降下法を通じて重みを調整するためにバックプロパゲーションを使用する"
+      - type: context-recall
+        value: "バックプロパゲーションは連鎖律を使用して層ごとに勾配を計算する"
+        threshold: 0.9
+
+  # Test 2: Code-switching and mixed language content
+  - description: "Code-switching in context"
+    vars:
+      query: "How do I implement a REST API?"
+      context: |
+        To implement a REST API, you need to follow REST principles. REST（Representational State Transfer）是一种架构风格。
+        
+        Key components include:
+        - Endpoints (URLs) that represent resources
+        - HTTP methods: GET（获取）, POST（创建）, PUT（更新）, DELETE（删除）
+        - Status codes: 200 (OK), 404 (Not Found), 500 (Server Error)
+        - JSON ou XML pour le format des données
+        - Autenticación mediante tokens (JWT が一般的です)
+    assert:
+      - type: context-faithfulness
+        threshold: 0.7
+      - type: answer-relevance
+        threshold: 0.8
+
+  # Test 3: Cultural context and idiomatic expressions
+  - description: "Cultural idioms - English"
+    vars:
+      query: "What does 'it's raining cats and dogs' mean?"
+      context: |
+        The English idiom "it's raining cats and dogs" means it's raining very heavily. This is a colloquial expression used in casual conversation. The origin is uncertain, but it dates back to at least the 17th century. Similar expressions exist in other languages with different imagery.
+    assert:
+      - type: factuality
+        value: "The idiom means heavy rain"
+
+  - description: "Cultural idioms - Spanish"
+    vars:
+      query: "¿Qué significa 'estar en las nubes'?"
+      context: |
+        La expresión española "estar en las nubes" significa estar distraído o no prestar atención a lo que sucede alrededor. Es similar a la expresión inglesa "to have one's head in the clouds". Se usa cuando alguien está soñando despierto o pensando en otras cosas.
+    assert:
+      - type: factuality
+        value: "La expresión significa estar distraído o soñando despierto"
+
+  # Test 4: Numeric and date formats across cultures
+  - description: "Numeric formats - European"
+    vars:
+      query: "What is the population and GDP of Germany?"
+      context: |
+        Germany has a population of 83.240.525 people (2023 estimate). The GDP is €4.121.000.000.000 (4,121 trillion euros) as of 2023. The unemployment rate is 5,7%. The country was reunified on 03.10.1990.
+    assert:
+      - type: factuality
+        value: "Germany has over 83 million people and a GDP over 4 trillion euros"
+      - type: context-recall
+        value: "Germany was reunified in October 1990"
+        threshold: 1.0
+
+  - description: "Numeric formats - American"
+    vars:
+      query: "What is the population and GDP of the United States?"
+      context: |
+        The United States has a population of 335,893,238 people (2024 estimate). The GDP is $27,360,000,000,000 (27.36 trillion dollars) as of 2024. The unemployment rate is 3.9%. Independence was declared on 07/04/1776.
+    assert:
+      - type: factuality
+        value: "The US has over 335 million people and a GDP over 27 trillion dollars"
+      - type: context-recall
+        value: "The United States declared independence in July 1776"
+        threshold: 1.0
+
+  # Test 5: Right-to-left languages
+  - description: "RTL language - Arabic"
+    vars:
+      query: "ما هي عاصمة مصر وما هو تاريخها؟"
+      context: |
+        القاهرة هي عاصمة مصر وأكبر مدنها. تأسست في عام 969 ميلادي من قبل الفاطميين. يبلغ عدد سكانها حوالي 10 ملايين نسمة. تُعرف بـ"مدينة الألف مئذنة" لكثرة مساجدها. تضم العديد من المعالم التاريخية مثل الأهرامات وأبو الهول.
+    assert:
+      - type: factuality
+        value: "القاهرة هي عاصمة مصر وتأسست عام 969"
+      - type: context-recall
+        value: "القاهرة تُعرف بمدينة الألف مئذنة وتضم الأهرامات"
+        threshold: 0.8
+
+  - description: "RTL language - Hebrew"
+    vars:
+      query: "מהי בירת ישראל ומה ההיסטוריה שלה?"
+      context: |
+        ירושלים היא בירת ישראל. היא אחת הערים העתיקות בעולם עם היסטוריה של למעלה מ-3000 שנה. האוכלוסייה מונה כ-950,000 תושבים. העיר קדושה לשלוש הדתות המונותאיסטיות: יהדות, נצרות ואסלאם. העיר העתיקה נכללת ברשימת אתרי מורשת עולמית של אונסק"ו.
+    assert:
+      - type: factuality
+        value: "ירושלים היא בירת ישראל עם היסטוריה של למעלה מ-3000 שנה"
+      - type: context-recall
+        value: "ירושלים קדושה לשלוש דתות והעיר העתיקה היא אתר מורשת עולמית"
+        threshold: 0.8
+
+  # Test 6: Character-based languages (Chinese, Japanese Kanji)
+  - description: "Chinese characters - Simplified"
+    vars:
+      query: "什么是人工智能的主要应用领域？"
+      context: |
+        人工智能（AI）在许多领域都有重要应用：
+        1. 医疗保健：疾病诊断、药物发现、个性化治疗
+        2. 金融：风险评估、欺诈检测、算法交易
+        3. 交通运输：自动驾驶汽车、交通优化
+        4. 教育：个性化学习、智能辅导系统
+        5. 制造业：预测性维护、质量控制、供应链优化
+    assert:
+      - type: context-recall
+        value: "人工智能应用于医疗保健、金融、交通运输、教育和制造业"
+        threshold: 0.9
+
+  - description: "Chinese characters - Traditional"
+    vars:
+      query: "什麼是人工智慧的主要應用領域？"
+      context: |
+        人工智慧（AI）在許多領域都有重要應用：
+        1. 醫療保健：疾病診斷、藥物發現、個性化治療
+        2. 金融：風險評估、欺詐檢測、演算法交易
+        3. 交通運輸：自動駕駛汽車、交通優化
+        4. 教育：個性化學習、智能輔導系統
+        5. 製造業：預測性維護、品質控制、供應鏈優化
+    assert:
+      - type: context-recall
+        value: "人工智慧應用於醫療保健、金融、交通運輸、教育和製造業"
+        threshold: 0.9
+
+  # Test 7: Dialectal variations
+  - description: "Portuguese - Brazilian"
+    vars:
+      query: "Como funciona o sistema de transporte público em São Paulo?"
+      context: |
+        São Paulo possui um dos maiores sistemas de transporte público da América Latina. O metrô tem 6 linhas e 91 estações. Os ônibus municipais operam mais de 1.300 linhas. O Bilhete Único permite integração entre diferentes modais. Nos horários de pico, o sistema transporta milhões de passageiros. A CPTM opera trens metropolitanos que conectam a região metropolitana.
+    assert:
+      - type: factuality
+        value: "O metrô de São Paulo tem 6 linhas e o Bilhete Único permite integração"
+
+  - description: "Portuguese - European"
+    vars:
+      query: "Como funciona o sistema de transportes públicos em Lisboa?"
+      context: |
+        Lisboa tem um sistema de transportes públicos diversificado. O metropolitano tem 4 linhas e 56 estações. Os autocarros da Carris cobrem toda a cidade. Os elétricos são icónicos e servem rotas turísticas e regulares. O passe navegante permite utilizar todos os transportes. A CP opera comboios suburbanos. Os barcos da Transtejo ligam as duas margens do Tejo.
+    assert:
+      - type: factuality
+        value: "O metropolitano de Lisboa tem 4 linhas e o passe navegante permite usar todos os transportes"
+
+  # Test 8: Emoji and special characters
+  - description: "Content with emojis"
+    vars:
+      query: "What are the benefits of exercise?"
+      context: |
+        Regular exercise provides numerous benefits 💪:
+        • ❤️ Cardiovascular health: Strengthens heart and improves circulation
+        • 🧠 Mental health: Reduces stress, anxiety, and depression
+        • 💤 Better sleep quality
+        • ⚖️ Weight management
+        • 🦴 Stronger bones and muscles
+        • 🎯 Improved focus and cognitive function
+        Remember: 30 minutes of exercise, 5 days a week is recommended! 🏃‍♀️🏃‍♂️
+    assert:
+      - type: context-faithfulness
+        threshold: 0.8
+      - type: answer-relevance
+        threshold: 0.8
+
+  # Test 9: Language detection and appropriate response
+  - description: "Automatic language detection"
+    vars:
+      query: "Comment fonctionne le machine learning?"
+      context: |
+        Machine learning is a subset of artificial intelligence that enables systems to learn from data. 
+        Le processus comprend: collecte de données, préparation, choix du modèle, entraînement, validation.
+        Los algoritmos comunes incluyen: regresión, árboles de decisión, redes neuronales.
+        機械学習は大量のデータからパターンを学習します。
+    assert:
+      - type: answer-relevance
+        threshold: 0.7
+      - type: llm-rubric
+        value: "The response should be primarily in French since the question is in French"
+
+  # Test 10: Complex multilingual scenario
+  - description: "International business context"
+    vars:
+      query: "What are the key considerations for expanding a business internationally?"
+      context: |
+        International expansion requires careful planning across multiple dimensions:
+        
+        Legal: Each country has different 法律 (laws) and réglementations. GDPR in EU, 个人信息保护法 in China.
+        
+        Cultural: Understanding local customs is crucial. In Japan, 名刺交換 (business card exchange) follows specific protocol. In Middle East, الجمعة (Friday) is often a day off.
+        
+        Financial: Currency risk (€/$/ تحويل), tax implications (VAT/GST/消費税), and transfer pricing.
+        
+        Language: Localization goes beyond translation. "Slogan" might need complete rework. Colors have different meanings (白 means death in some Asian cultures, luck in others).
+        
+        Market: Local competition, consumer preferences (Germans prefer Datenschutz, Americans value convenience).
+    assert:
+      - type: context-faithfulness
+        threshold: 0.75
+      - type: context-recall
+        value: "International expansion requires consideration of legal, cultural, financial, language, and market factors"
+        threshold: 0.9
+      - type: answer-relevance
+        threshold: 0.85
