@@ -280,4 +280,71 @@ describe('evaluateOptions behavior', () => {
     expect(mergedOptions.maxConcurrency).toBe(3);
     expect(mergedOptions.showProgressBar).toBe(false);
   });
+
+  describe('Edge cases and interactions', () => {
+    it('should handle delay >0 forcing concurrency to 1 even with CLI override', async () => {
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        config: [configPath],
+        maxConcurrency: 10, // This should be overridden to 1 due to delay
+      };
+
+      await doEval(cmdObj, {}, undefined, {});
+
+      const options = evaluateMock.mock.calls[0][2];
+      expect(options.maxConcurrency).toBe(1); // Should be forced to 1 due to delay
+    });
+
+    it('should handle repeat >1 with cache value passed correctly', async () => {
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        config: [configPath],
+        cache: true,
+        repeat: 3,
+      };
+
+      await doEval(cmdObj, {}, undefined, {});
+
+      const options = evaluateMock.mock.calls[0][2];
+      expect(options.cache).toBe(true); // Cache value is passed as-is
+      expect(options.repeat).toBe(3); // Repeat value is correctly set
+      // Note: disableCache() is called globally but options.cache reflects the config
+    });
+
+    it('should handle undefined/null evaluateOptions gracefully', async () => {
+      const tempConfig = path.join(process.cwd(), 'temp-test-config.yaml');
+      fs.writeFileSync(
+        tempConfig,
+        yaml.dump({
+          evaluateOptions: null, // Explicitly null
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['test'],
+          tests: [{ vars: { input: 'test' } }],
+        }),
+      );
+
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        config: [tempConfig],
+      };
+
+      await doEval(cmdObj, {}, undefined, {});
+
+      expect(evaluateMock).toHaveBeenCalled();
+      fs.unlinkSync(tempConfig);
+    });
+
+    it('should handle mixed CLI and config values correctly', async () => {
+      const cmdObj: Partial<CommandLineOptions & Command> = {
+        config: [configPath], // Has delay: 999, maxConcurrency: 9, etc.
+        delay: 0, // CLI override
+        repeat: 1, // CLI override
+        // maxConcurrency not set, should use config value
+      };
+
+      await doEval(cmdObj, {}, undefined, {});
+
+      const options = evaluateMock.mock.calls[0][2];
+      expect(options.delay).toBeUndefined(); // CLI delay 0 should result in undefined
+      expect(options.repeat).toBe(1); // CLI override
+      expect(options.maxConcurrency).toBe(9); // From config
+    });
+  });
 });

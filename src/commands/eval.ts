@@ -197,12 +197,13 @@ export async function doEval(
     // Ensure evaluateOptions from the config file are applied
     if (config.evaluateOptions) {
       evaluateOptions = {
-        ...config.evaluateOptions,
         ...evaluateOptions,
+        ...config.evaluateOptions,
       };
     }
 
-    // Misc settings
+    // Misc settings with proper CLI vs config priority
+    // CLI values explicitly provided by user should override config, but defaults should not
     const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
     const repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
 
@@ -215,7 +216,6 @@ export async function doEval(
 
     let maxConcurrency =
       cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-
     const delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
 
     if (delay > 0) {
@@ -747,23 +747,9 @@ export function evalCommand(
     )
 
     // Execution control
-    .option(
-      '-j, --max-concurrency <number>',
-      'Maximum number of concurrent API calls',
-      defaultConfig.evaluateOptions?.maxConcurrency
-        ? String(defaultConfig.evaluateOptions.maxConcurrency)
-        : `${DEFAULT_MAX_CONCURRENCY}`,
-    )
-    .option(
-      '--repeat <number>',
-      'Number of times to run each test',
-      defaultConfig.evaluateOptions?.repeat ? String(defaultConfig.evaluateOptions.repeat) : '1',
-    )
-    .option(
-      '--delay <number>',
-      'Delay between each test (in milliseconds)',
-      defaultConfig.evaluateOptions?.delay ? String(defaultConfig.evaluateOptions.delay) : '0',
-    )
+    .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls')
+    .option('--repeat <number>', 'Number of times to run each test')
+    .option('--delay <number>', 'Delay between each test (in milliseconds)')
     .option(
       '--no-cache',
       'Do not read or write results to disk cache',
