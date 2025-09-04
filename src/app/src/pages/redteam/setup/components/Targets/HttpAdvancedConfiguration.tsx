@@ -8,13 +8,16 @@ import 'prismjs/themes/prism.css';
 import React from 'react';
 
 import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ClearIcon from '@mui/icons-material/Clear';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HttpsIcon from '@mui/icons-material/Https';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import KeyIcon from '@mui/icons-material/Key';
 import LockIcon from '@mui/icons-material/Lock';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SecurityIcon from '@mui/icons-material/Security';
 import UploadIcon from '@mui/icons-material/Upload';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
@@ -24,9 +27,15 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormGroup from '@mui/material/FormGroup';
+import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Radio from '@mui/material/Radio';
@@ -61,6 +70,18 @@ const highlightJS = (code: string): string => {
   }
 };
 
+const highlightJSON = (code: string): string => {
+  try {
+    const grammar = (Prism as any)?.languages?.json;
+    if (!grammar) {
+      return code;
+    }
+    return Prism.highlight(code, grammar, 'json');
+  } catch {
+    return code;
+  }
+};
+
 const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
   selectedTarget,
   defaultRequestTransform,
@@ -76,12 +97,220 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
 
   const [tlsConfigExpanded, setTlsConfigExpanded] = React.useState(!!selectedTarget.config.tls);
 
+  // Test dialog states
+  const [requestTestOpen, setRequestTestOpen] = React.useState(false);
+  const [responseTestOpen, setResponseTestOpen] = React.useState(false);
+  const [requestTestLoading, setRequestTestLoading] = React.useState(false);
+  const [responseTestLoading, setResponseTestLoading] = React.useState(false);
+  const [requestTestInput, setRequestTestInput] = React.useState('What is the capital of France?');
+  const [responseTestInput, setResponseTestInput] = React.useState(
+    JSON.stringify(
+      {
+        choices: [
+          {
+            message: {
+              content: 'The capital of France is Paris.',
+            },
+          },
+        ],
+        usage: {
+          total_tokens: 42,
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  const [requestTestResult, setRequestTestResult] = React.useState<{
+    success: boolean;
+    result?: any;
+    error?: string;
+  } | null>(null);
+  const [responseTestResult, setResponseTestResult] = React.useState<{
+    success: boolean;
+    result?: any;
+    error?: string;
+  } | null>(null);
+
+  // Editable transform code in modals
+  const [editableRequestTransform, setEditableRequestTransform] = React.useState('');
+  const [editableResponseTransform, setEditableResponseTransform] = React.useState('');
+
+  // Initialize editable code when opening modals
+  React.useEffect(() => {
+    if (requestTestOpen) {
+      setEditableRequestTransform(
+        selectedTarget.config.transformRequest || defaultRequestTransform || '',
+      );
+    }
+  }, [requestTestOpen, selectedTarget.config.transformRequest, defaultRequestTransform]);
+
+  React.useEffect(() => {
+    if (responseTestOpen) {
+      setEditableResponseTransform(selectedTarget.config.transformResponse || '');
+    }
+  }, [responseTestOpen, selectedTarget.config.transformResponse]);
+
   const handleSignatureAuthChange = (_event: React.SyntheticEvent, isExpanded: boolean) => {
     setSignatureAuthExpanded(isExpanded);
   };
 
   const handleTlsConfigChange = (_event: React.SyntheticEvent, isExpanded: boolean) => {
     setTlsConfigExpanded(isExpanded);
+  };
+
+  const testRequestTransform = async () => {
+    const transformCode = editableRequestTransform;
+    if (!transformCode) {
+      setRequestTestResult({
+        success: false,
+        error: 'No transform function provided',
+      });
+      return;
+    }
+
+    if (!requestTestInput || !requestTestInput.trim()) {
+      setRequestTestResult({
+        success: false,
+        error: 'Please provide a test prompt',
+      });
+      return;
+    }
+
+    setRequestTestLoading(true);
+    try {
+      const response = await callApi('/providers/test-request-transform', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transformCode,
+          prompt: requestTestInput,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to test transform';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        setRequestTestResult({
+          success: false,
+          error: errorMessage,
+        });
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setRequestTestResult({
+          success: true,
+          result: data.result,
+        });
+      } else {
+        setRequestTestResult({
+          success: false,
+          error: data.error || 'Transform failed',
+        });
+      }
+    } catch (error) {
+      console.error('Error testing request transform:', error);
+      setRequestTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to test transform',
+      });
+    } finally {
+      setRequestTestLoading(false);
+    }
+  };
+
+  const testResponseTransform = async () => {
+    const transformCode = editableResponseTransform;
+    if (!transformCode) {
+      setResponseTestResult({
+        success: false,
+        error: 'No transform function provided',
+      });
+      return;
+    }
+
+    if (!responseTestInput || !responseTestInput.trim()) {
+      setResponseTestResult({
+        success: false,
+        error: 'Please provide a test response',
+      });
+      return;
+    }
+
+    setResponseTestLoading(true);
+    try {
+      const response = await callApi('/providers/test-response-transform', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transformCode,
+          response: responseTestInput,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to test transform';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        setResponseTestResult({
+          success: false,
+          error: errorMessage,
+        });
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Handle the result which may be a ProviderResponse object
+        const result = data.result;
+        if (typeof result === 'object' && result !== null && 'output' in result) {
+          setResponseTestResult({
+            success: true,
+            result: result.output,
+          });
+        } else {
+          setResponseTestResult({
+            success: true,
+            result,
+          });
+        }
+      } else {
+        setResponseTestResult({
+          success: false,
+          error: data.error || 'Transform failed',
+        });
+      }
+    } catch (error) {
+      console.error('Error testing response transform:', error);
+      setResponseTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to test transform',
+      });
+    } finally {
+      setResponseTestLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    showToast('Copied to clipboard', 'success');
   };
 
   return (
@@ -112,30 +341,49 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               </a>{' '}
               for more information.
             </Typography>
-            <Box
-              sx={{
-                border: 1,
-                borderColor: 'grey.300',
-                borderRadius: 1,
-                position: 'relative',
-                backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-              }}
-            >
-              <Editor
-                value={selectedTarget.config.transformRequest || defaultRequestTransform || ''}
-                onValueChange={(code) => updateCustomTarget('transformRequest', code)}
-                highlight={highlightJS}
-                padding={10}
-                placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API. Format as:
-
-                      A JSON object with prompt variable: \`{ messages: [{ role: 'user', content: prompt }] }\`
-                    `}
-                style={{
-                  fontFamily: '"Fira code", "Fira Mono", monospace',
-                  fontSize: 14,
-                  minHeight: '100px',
+            <Box sx={{ position: 'relative' }}>
+              <Box
+                sx={{
+                  border: 1,
+                  borderColor: 'grey.300',
+                  borderRadius: 1,
+                  backgroundColor: darkMode ? '#1e1e1e' : '#fff',
                 }}
-              />
+              >
+                <Editor
+                  value={selectedTarget.config.transformRequest || defaultRequestTransform || ''}
+                  onValueChange={(code) => updateCustomTarget('transformRequest', code)}
+                  highlight={highlightJS}
+                  padding={10}
+                  placeholder={dedent`Optional: A JavaScript expression to transform the prompt before calling the API. Format as:
+
+                        A JSON object with prompt variable: \`{ messages: [{ role: 'user', content: prompt }] }\`
+                      `}
+                  style={{
+                    fontFamily: '"Fira code", "Fira Mono", monospace',
+                    fontSize: 14,
+                    minHeight: '100px',
+                  }}
+                />
+              </Box>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<PlayArrowIcon />}
+                onClick={async () => {
+                  setRequestTestResult(null);
+                  setRequestTestOpen(true);
+                }}
+                sx={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  zIndex: 1,
+                }}
+                disabled={!selectedTarget.config.transformRequest && !defaultRequestTransform}
+              >
+                Test
+              </Button>
             </Box>
           </AccordionDetails>
         </Accordion>
@@ -160,32 +408,51 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
               </a>{' '}
               for more information.
             </Typography>
-            <Box
-              sx={{
-                border: 1,
-                borderColor: 'grey.300',
-                borderRadius: 1,
-                position: 'relative',
-                backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-              }}
-            >
-              <Editor
-                value={selectedTarget.config.transformResponse || ''}
-                onValueChange={(code) => updateCustomTarget('transformResponse', code)}
-                highlight={highlightJS}
-                padding={10}
-                placeholder={dedent`Optional: Transform the API response before using it. Format as either:
-
-                      1. A JavaScript object path: \`json.choices[0].message.content\`
-                      2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
-
-                      With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
-                style={{
-                  fontFamily: '"Fira code", "Fira Mono", monospace',
-                  fontSize: 14,
-                  minHeight: '100px',
+            <Box sx={{ position: 'relative' }}>
+              <Box
+                sx={{
+                  border: 1,
+                  borderColor: 'grey.300',
+                  borderRadius: 1,
+                  backgroundColor: darkMode ? '#1e1e1e' : '#fff',
                 }}
-              />
+              >
+                <Editor
+                  value={selectedTarget.config.transformResponse || ''}
+                  onValueChange={(code) => updateCustomTarget('transformResponse', code)}
+                  highlight={highlightJS}
+                  padding={10}
+                  placeholder={dedent`Optional: Transform the API response before using it. Format as either:
+
+                        1. A JavaScript object path: \`json.choices[0].message.content\`
+                        2. A function that receives response data: \`(json, text) => json.choices[0].message.content || text\`
+
+                        With guardrails: { output: json.choices[0].message.content, guardrails: { flagged: context.response.status === 500 } }`}
+                  style={{
+                    fontFamily: '"Fira code", "Fira Mono", monospace',
+                    fontSize: 14,
+                    minHeight: '100px',
+                  }}
+                />
+              </Box>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<PlayArrowIcon />}
+                onClick={async () => {
+                  setResponseTestResult(null);
+                  setResponseTestOpen(true);
+                }}
+                sx={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  zIndex: 1,
+                }}
+                disabled={!selectedTarget.config.transformResponse}
+              >
+                Test
+              </Button>
             </Box>
           </AccordionDetails>
         </Accordion>
@@ -2055,6 +2322,378 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
           </AccordionDetails>
         </Accordion>
       </Box>
+
+      {/* Request Transform Test Dialog */}
+      <Dialog
+        open={requestTestOpen}
+        onClose={() => setRequestTestOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Test Request Transform</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <Box>
+              <Typography
+                variant="subtitle2"
+                gutterBottom
+                sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+              >
+                Transform Function
+                {editableRequestTransform !==
+                  (selectedTarget.config.transformRequest || defaultRequestTransform || '') && (
+                  <Chip label="Modified" size="small" color="warning" />
+                )}
+              </Typography>
+              <Box
+                sx={{
+                  border: 1,
+                  borderColor: 'grey.300',
+                  borderRadius: 1,
+                  backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+                  minHeight: '100px',
+                }}
+              >
+                <Editor
+                  value={editableRequestTransform}
+                  onValueChange={(code) => setEditableRequestTransform(code)}
+                  highlight={highlightJS}
+                  padding={10}
+                  placeholder={dedent`Enter a JavaScript expression to transform the prompt:
+                  
+                  Example: { messages: [{ role: 'user', content: prompt }] }`}
+                  style={{
+                    fontFamily: '"Fira code", "Fira Mono", monospace',
+                    fontSize: 14,
+                    minHeight: '100px',
+                  }}
+                />
+              </Box>
+              {editableRequestTransform !==
+                (selectedTarget.config.transformRequest || defaultRequestTransform || '') && (
+                <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      updateCustomTarget('transformRequest', editableRequestTransform);
+                      showToast('Transform function updated', 'success');
+                    }}
+                  >
+                    Apply Changes
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() =>
+                      setEditableRequestTransform(
+                        selectedTarget.config.transformRequest || defaultRequestTransform || '',
+                      )
+                    }
+                  >
+                    Reset
+                  </Button>
+                </Box>
+              )}
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Input Prompt
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={3}
+                value={requestTestInput}
+                onChange={(e) => setRequestTestInput(e.target.value)}
+                placeholder="Enter a sample prompt to test with"
+                error={!requestTestInput.trim() && requestTestResult?.success === false}
+                helperText={
+                  !requestTestInput.trim() && requestTestResult?.success === false
+                    ? 'Input is required'
+                    : ''
+                }
+              />
+            </Box>
+
+            <Button
+              variant="contained"
+              onClick={testRequestTransform}
+              startIcon={<PlayArrowIcon />}
+              disabled={requestTestLoading || !requestTestInput.trim()}
+            >
+              {requestTestLoading ? 'Running...' : 'Run Transform'}
+            </Button>
+
+            {requestTestLoading && <LinearProgress />}
+
+            {requestTestResult && (
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Result{' '}
+                  <Chip
+                    label={requestTestResult.success ? 'Success' : 'Error'}
+                    color={requestTestResult.success ? 'success' : 'error'}
+                    size="small"
+                  />
+                </Typography>
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
+                    position: 'relative',
+                    minHeight: '100px',
+                  }}
+                >
+                  {requestTestResult.success ? (
+                    <>
+                      <IconButton
+                        size="small"
+                        onClick={() =>
+                          copyToClipboard(JSON.stringify(requestTestResult.result, null, 2))
+                        }
+                        sx={{ position: 'absolute', top: 8, right: 8 }}
+                      >
+                        <ContentCopyIcon fontSize="small" />
+                      </IconButton>
+                      <Box sx={{ minHeight: '60px' }}>
+                        <Editor
+                          value={JSON.stringify(requestTestResult.result, null, 2)}
+                          onValueChange={() => {}}
+                          highlight={highlightJSON}
+                          padding={0}
+                          readOnly
+                          style={{
+                            fontFamily: '"Fira code", "Fira Mono", monospace',
+                            fontSize: 14,
+                            minHeight: '60px',
+                          }}
+                        />
+                      </Box>
+                    </>
+                  ) : (
+                    <Alert severity="error" sx={{ m: 0 }}>
+                      {requestTestResult.error}
+                    </Alert>
+                  )}
+                </Paper>
+              </Box>
+            )}
+          </Stack>
+        </DialogContent>
+      </Dialog>
+
+      {/* Response Transform Test Dialog */}
+      <Dialog
+        open={responseTestOpen}
+        onClose={() => setResponseTestOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Test Response Transform</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <Box>
+              <Typography
+                variant="subtitle2"
+                gutterBottom
+                sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+              >
+                Transform Function
+                {editableResponseTransform !== (selectedTarget.config.transformResponse || '') && (
+                  <Chip label="Modified" size="small" color="warning" />
+                )}
+              </Typography>
+              <Box
+                sx={{
+                  border: 1,
+                  borderColor: 'grey.300',
+                  borderRadius: 1,
+                  backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+                  minHeight: '100px',
+                }}
+              >
+                <Editor
+                  value={editableResponseTransform}
+                  onValueChange={(code) => setEditableResponseTransform(code)}
+                  highlight={highlightJS}
+                  padding={10}
+                  placeholder={dedent`Enter a JavaScript expression or function to extract data:
+                  
+                  Examples:
+                  • Path: json.choices[0].message.content
+                  • Function: (json, text) => json.choices?.[0]?.message?.content || text`}
+                  style={{
+                    fontFamily: '"Fira code", "Fira Mono", monospace',
+                    fontSize: 14,
+                    minHeight: '100px',
+                  }}
+                />
+              </Box>
+              {editableResponseTransform !== (selectedTarget.config.transformResponse || '') && (
+                <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      updateCustomTarget('transformResponse', editableResponseTransform);
+                      showToast('Transform function updated', 'success');
+                    }}
+                  >
+                    Apply Changes
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() =>
+                      setEditableResponseTransform(selectedTarget.config.transformResponse || '')
+                    }
+                  >
+                    Reset
+                  </Button>
+                </Box>
+              )}
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Sample API Response
+              </Typography>
+              <Box
+                sx={{
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderRadius: 1,
+                  minHeight: '200px',
+                  backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+                }}
+              >
+                <Editor
+                  value={responseTestInput}
+                  onValueChange={setResponseTestInput}
+                  highlight={highlightJSON}
+                  padding={10}
+                  placeholder="Enter a sample API response (JSON or plain text)"
+                  style={{
+                    fontFamily: '"Fira code", "Fira Mono", monospace',
+                    fontSize: 14,
+                    minHeight: '200px',
+                  }}
+                />
+              </Box>
+              {!responseTestInput.trim() && responseTestResult?.success === false && (
+                <Typography variant="caption" color="error">
+                  Response input is required
+                </Typography>
+              )}
+            </Box>
+
+            <Button
+              variant="contained"
+              onClick={testResponseTransform}
+              startIcon={<PlayArrowIcon />}
+              disabled={responseTestLoading || !responseTestInput.trim()}
+            >
+              {responseTestLoading ? 'Running...' : 'Run Transform'}
+            </Button>
+
+            {responseTestLoading && <LinearProgress />}
+
+            {responseTestResult && (
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Result{' '}
+                  <Chip
+                    label={responseTestResult.success ? 'Success' : 'Error'}
+                    color={responseTestResult.success ? 'success' : 'error'}
+                    size="small"
+                  />
+                </Typography>
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
+                    position: 'relative',
+                    minHeight: '100px',
+                  }}
+                >
+                  {responseTestResult.success ? (
+                    <>
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          const resultStr =
+                            typeof responseTestResult.result === 'string'
+                              ? responseTestResult.result
+                              : JSON.stringify(responseTestResult.result, null, 2);
+                          copyToClipboard(resultStr);
+                        }}
+                        sx={{ position: 'absolute', top: 8, right: 8 }}
+                      >
+                        <ContentCopyIcon fontSize="small" />
+                      </IconButton>
+                      <Box
+                        sx={{
+                          minHeight: '60px',
+                          fontFamily: '"Fira code", "Fira Mono", monospace',
+                          fontSize: 14,
+                        }}
+                      >
+                        {typeof responseTestResult.result === 'string' ? (
+                          <>
+                            {responseTestResult.result === '' && (
+                              <Alert severity="warning" sx={{ mb: 1 }}>
+                                Transform returned an empty string. This might indicate the
+                                extraction path didn't match anything.
+                              </Alert>
+                            )}
+                            <Typography
+                              component="pre"
+                              sx={{
+                                m: 0,
+                                fontFamily: 'inherit',
+                                fontSize: 'inherit',
+                                minHeight: '60px',
+                              }}
+                            >
+                              {responseTestResult.result || '(empty string)'}
+                            </Typography>
+                          </>
+                        ) : responseTestResult.result === null ||
+                          responseTestResult.result === undefined ? (
+                          <Alert severity="warning">
+                            Transform returned null/undefined. Check your extraction path or
+                            transform function.
+                          </Alert>
+                        ) : (
+                          <Editor
+                            value={JSON.stringify(responseTestResult.result, null, 2)}
+                            onValueChange={() => {}}
+                            highlight={highlightJSON}
+                            padding={0}
+                            readOnly
+                            style={{
+                              fontFamily: '"Fira code", "Fira Mono", monospace',
+                              fontSize: 14,
+                              minHeight: '60px',
+                            }}
+                          />
+                        )}
+                      </Box>
+                    </>
+                  ) : (
+                    <Alert severity="error" sx={{ m: 0 }}>
+                      {responseTestResult.error}
+                    </Alert>
+                  )}
+                </Paper>
+              </Box>
+            )}
+          </Stack>
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };
