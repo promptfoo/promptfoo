@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import { updateResult } from '../../util/database';
+import { updateResult } from '../../src/util/database';
 
 // Mock dependencies
-jest.mock('../../util/database');
+jest.mock('../../src/util/database');
 
 // Import the handler directly to avoid Express overhead
 const patchHandler = (req: Request, res: Response): void => {

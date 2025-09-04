@@ -17,7 +17,7 @@ import {
   RedteamStrategySchema,
 } from '../../src/validators/redteam';
 
-import type { RedteamPluginObject, RedteamStrategy } from 'src/redteam/types';
+import type { RedteamPluginObject, RedteamStrategy } from '../../src/redteam/types';
 
 describe('RedteamPluginObjectSchema', () => {
   it('should validate valid plugin object', () => {

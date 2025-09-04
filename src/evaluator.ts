@@ -1,12 +1,10 @@
+import { randomUUID } from 'crypto';
+import * as path from 'path';
+
 import async from 'async';
 import chalk from 'chalk';
-import type { SingleBar } from 'cli-progress';
 import cliProgress from 'cli-progress';
-import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
-import * as path from 'path';
-import type winston from 'winston';
-
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { getCache } from './cache';
 import cliState from './cliState';
@@ -16,7 +14,6 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { selectMaxScore } from './matchers';
-import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
@@ -29,7 +26,6 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
-import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
   type AssertionType,
@@ -52,12 +48,24 @@ import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
-  createEmptyTokenUsage,
-  createEmptyAssertions,
   accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
+  createEmptyAssertions,
+  createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { transform, type TransformContext, TransformInputType } from './util/transform';
+import { type TransformContext, TransformInputType, transform } from './util/transform';
+import type { SingleBar } from 'cli-progress';
+import type winston from 'winston';
+
+import type Eval from './models/eval';
+import type {
+  EvalConversations,
+  EvalRegisters,
+  ProviderOptions,
+  ScoringFunction,
+  TokenUsage,
+  Vars,
+} from './types';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -471,17 +479,25 @@ export async function runEval({
     } else {
       // Create a copy of response so we can potentially mutate it.
       const processedResponse = { ...response };
-      const transforms: string[] = [
-        provider.transform, // Apply provider transform first
-        // NOTE: postprocess is deprecated. Use the first defined transform.
-        [test.options?.transform, test.options?.postprocess].find((s) => s),
-      ]
-        .flat()
-        .filter((s): s is string => typeof s === 'string');
-      for (const t of transforms) {
-        processedResponse.output = await transform(t, processedResponse.output, {
+
+      // Apply provider transform first (if exists)
+      if (provider.transform) {
+        processedResponse.output = await transform(provider.transform, processedResponse.output, {
           vars,
           prompt,
+        });
+      }
+
+      // Store the provider-transformed output for assertions (contextTransform)
+      const providerTransformedOutput = processedResponse.output;
+
+      // Apply test transform (if exists)
+      const testTransform = test.options?.transform || test.options?.postprocess;
+      if (testTransform) {
+        processedResponse.output = await transform(testTransform, processedResponse.output, {
+          vars,
+          prompt,
+          ...(response && response.metadata && { metadata: response.metadata }),
         });
       }
 
@@ -497,10 +513,15 @@ export async function runEval({
         }
       }
 
+      // Pass providerTransformedOutput for contextTransform to use
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
-        providerResponse: processedResponse,
+        providerResponse: {
+          ...processedResponse,
+          // Add provider-transformed output for contextTransform
+          providerTransformedOutput,
+        },
         test,
         latencyMs: response.cached ? undefined : latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
@@ -916,9 +937,29 @@ class Evaluator {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
         ...testCase.metadata,
       };
-      testCase.provider =
-        testCase.provider ||
-        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.provider : undefined);
+      // If the test case doesn't have a provider, use the one from defaultTest
+      // Note: defaultTest.provider may be a raw config object that needs to be loaded
+      if (
+        !testCase.provider &&
+        typeof testSuite.defaultTest === 'object' &&
+        testSuite.defaultTest?.provider
+      ) {
+        const defaultProvider = testSuite.defaultTest.provider;
+        if (isApiProvider(defaultProvider)) {
+          // Already loaded
+          testCase.provider = defaultProvider;
+        } else if (typeof defaultProvider === 'object' && defaultProvider.id) {
+          // Raw config object - load it
+          const { loadApiProvider } = await import('./providers');
+          const providerId =
+            typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
+          testCase.provider = await loadApiProvider(providerId, {
+            options: defaultProvider as ProviderOptions,
+          });
+        } else {
+          testCase.provider = defaultProvider;
+        }
+      }
       testCase.assertScoringFunction =
         testCase.assertScoringFunction ||
         (typeof testSuite.defaultTest === 'object'

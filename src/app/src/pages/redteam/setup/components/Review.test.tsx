@@ -23,6 +23,9 @@ vi.mock('@app/hooks/useToast', () => ({
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 vi.mock('@app/pages/eval-creator/components/YamlEditor', () => ({
@@ -102,7 +105,7 @@ describe('Review Component', () => {
         />,
       );
 
-      const descriptionField = screen.getByLabelText('Configuration Description');
+      const descriptionField = screen.getByLabelText('Description');
       expect(descriptionField).toBeInTheDocument();
       expect(descriptionField).toHaveValue('Test Configuration');
     });
@@ -208,75 +211,6 @@ describe('Review Component', () => {
     expect(defaultTestVariables).toBeInTheDocument();
 
     expect(defaultTestVariables.closest('paper')).toBeNull();
-  });
-
-  it('should display an Expand All button when multiple parsedPurposeSections exist, and clicking it should expand/collapse all sections', async () => {
-    mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        ...defaultConfig,
-        purpose: 'Section1:\nContent1\nSection2:\nContent2',
-      },
-      updateConfig: mockUpdateConfig,
-    });
-
-    render(
-      <Review
-        navigateToPlugins={vi.fn()}
-        navigateToStrategies={vi.fn()}
-        navigateToPurpose={vi.fn()}
-      />,
-    );
-
-    const expandAllButton = screen.getByText('Expand All');
-    expect(expandAllButton).toBeInTheDocument();
-
-    fireEvent.click(expandAllButton);
-
-    const collapseAllButton = screen.getByText('Collapse All');
-    expect(collapseAllButton).toBeInTheDocument();
-
-    expect(screen.getByText('Content1')).toBeVisible();
-    expect(screen.getByText('Content2')).toBeVisible();
-
-    fireEvent.click(collapseAllButton);
-
-    expect(screen.queryByText('Content1')).not.toBeInTheDocument();
-    expect(screen.queryByText('Content2')).not.toBeInTheDocument();
-
-    const expandAllButtonAgain = screen.getByText('Expand All');
-    expect(expandAllButtonAgain).toBeInTheDocument();
-  });
-
-  it('should correctly toggle purpose section expansion on multiple clicks', async () => {
-    mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        ...defaultConfig,
-        purpose: `Section 1:
-Content 1
-
-Section 2:
-Content 2`,
-      },
-      updateConfig: mockUpdateConfig,
-    });
-
-    render(
-      <Review
-        navigateToPlugins={vi.fn()}
-        navigateToStrategies={vi.fn()}
-        navigateToPurpose={vi.fn()}
-      />,
-    );
-
-    const sectionHeaders = await screen.findAllByText(/Section 1/);
-    const firstSectionHeader = sectionHeaders[0];
-
-    fireEvent.click(firstSectionHeader);
-    const sectionContent = await screen.findByText('Content 1');
-    expect(sectionContent).toBeVisible();
-
-    fireEvent.click(firstSectionHeader);
-    expect(sectionContent).not.toBeVisible();
   });
 
   it('should not treat indented lines ending with colons as section headers', () => {

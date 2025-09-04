@@ -587,6 +587,8 @@ function EvalOutputCell({
               metadata={output.metadata}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
+              testIndex={rowIndex}
+              variables={output.testCase?.vars}
             />
           )}
         </>

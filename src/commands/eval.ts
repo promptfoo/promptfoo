@@ -1,9 +1,9 @@
-import chalk from 'chalk';
-import chokidar from 'chokidar';
-import type { Command } from 'commander';
-import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
+
+import chalk from 'chalk';
+import chokidar from 'chokidar';
+import dedent from 'dedent';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
@@ -19,19 +19,10 @@ import { loadApiProvider } from '../providers';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import type {
-  CommandLineOptions,
-  EvaluateOptions,
-  Scenario,
-  TestSuite,
-  TokenUsage,
-  UnifiedConfig,
-} from '../types';
-import { OutputFileExtension, TestSuiteSchema } from '../types';
-import { CommandLineOptionsSchema } from '../types';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
 import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx } from '../util';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { checkCloudPermissions } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -40,14 +31,25 @@ import invariant from '../util/invariant';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
-import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
 import { notCloudEnabledShareInstructions } from './share';
+import type { Command } from 'commander';
+
+import type {
+  CommandLineOptions,
+  EvaluateOptions,
+  Scenario,
+  TestSuite,
+  TokenUsage,
+  UnifiedConfig,
+} from '../types';
+import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
+  noShare: z.boolean().optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -178,12 +180,14 @@ export async function doEval(
       Array.isArray(config.providers) &&
       config.providers.length > 0 &&
       typeof config.providers[0] === 'object' &&
-      config.providers[0].id === 'http' &&
-      config.providers[0].config.url.includes('promptfoo.app')
+      config.providers[0].id === 'http'
     ) {
-      telemetry.record('feature_used', {
-        feature: 'redteam_run_with_example',
-      });
+      const maybeUrl: unknown = (config.providers[0] as any)?.config?.url;
+      if (typeof maybeUrl === 'string' && maybeUrl.includes('promptfoo.app')) {
+        telemetry.record('feature_used', {
+          feature: 'redteam_run_with_example',
+        });
+      }
     }
 
     // Ensure evaluateOptions from the config file are applied
@@ -231,6 +235,8 @@ export async function doEval(
       testSuite.providers,
       cmdObj.filterProviders || cmdObj.filterTargets,
     );
+
+    await checkCloudPermissions(config as UnifiedConfig);
 
     const options: EvaluateOptions = {
       ...evaluateOptions,
@@ -298,7 +304,7 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-    const wantsToShare = cmdObj.share && config.sharing;
+    const wantsToShare = cmdObj.share !== false && (cmdObj.share || config.sharing);
 
     const shareableUrl =
       wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
@@ -771,6 +777,7 @@ export function evalCommand(
       '250',
     )
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
+    .option('--no-share', 'Do not share, this overrides the config file')
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',
@@ -845,7 +852,6 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
       }
-
       doEval(
         validatedOpts as Partial<CommandLineOptions & Command>,
         defaultConfig,

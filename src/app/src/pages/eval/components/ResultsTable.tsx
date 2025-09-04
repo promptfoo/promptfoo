@@ -37,6 +37,7 @@ import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
+import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
@@ -525,6 +526,8 @@ function ResultsTable({
   const { renderMarkdown } = useResultsViewSettingsStore();
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
+      const injectVarName = config?.redteam?.injectVar || 'prompt';
+
       return [
         columnHelper.group({
           id: 'vars',
@@ -537,9 +540,27 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 let value: string | object = info.getValue();
+                const originalValue = value; // Store original value for tooltip
+                let isInjected = false;
 
-                // Get the first output that has metadata for checking file metadata
                 const row = info.row.original;
+
+                // For red team evals, show the final injected prompt for the configured inject variable
+                // This replaces the original prompt with what was actually sent to the model
+                if (varName === injectVarName) {
+                  // Check all outputs to find one with redteamFinalPrompt metadata
+                  for (const output of row.outputs || []) {
+                    // Check if redteamFinalPrompt exists
+                    if (output?.metadata?.redteamFinalPrompt) {
+                      // Replace the original prompt with the injected version
+                      value = output.metadata.redteamFinalPrompt;
+                      isInjected = true;
+                      break;
+                    }
+                  }
+                }
+
+                // Get first output for file metadata check
                 const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
 
                 const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
@@ -547,7 +568,7 @@ function ResultsTable({
                   | undefined;
                 const isMediaFile = fileMetadata && fileMetadata[varName];
 
-                if (isMediaFile) {
+                if (isMediaFile && typeof value === 'string') {
                   // Handle various media types
                   const mediaMetadata = fileMetadata[varName];
                   const mediaType = mediaMetadata.type;
@@ -607,15 +628,47 @@ function ResultsTable({
                   value.length > maxTextLength
                     ? `${value.substring(0, maxTextLength - 3).trim()}...`
                     : value;
+
+                const cellContent = renderMarkdown ? (
+                  <MarkdownErrorBoundary fallback={value}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
+                  </MarkdownErrorBoundary>
+                ) : (
+                  <TruncatedText text={value} maxLength={maxTextLength} />
+                );
+
+                // If this is an injected value, wrap in tooltip showing original
+                if (isInjected && typeof originalValue === 'string') {
+                  return (
+                    <div className="cell" data-capture="true">
+                      <Tooltip
+                        title={
+                          <div style={{ maxWidth: 500, whiteSpace: 'pre-wrap' }}>
+                            <strong>Original Attack:</strong>
+                            <br />
+                            {originalValue}
+                          </div>
+                        }
+                        placement="top"
+                        arrow
+                      >
+                        <div
+                          style={{
+                            cursor: 'help',
+                            borderBottom: '1px dashed #888',
+                            paddingBottom: '2px',
+                          }}
+                        >
+                          {cellContent}
+                        </div>
+                      </Tooltip>
+                    </div>
+                  );
+                }
+
                 return (
                   <div className="cell" data-capture="true">
-                    {renderMarkdown ? (
-                      <MarkdownErrorBoundary fallback={value}>
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
-                      </MarkdownErrorBoundary>
-                    ) : (
-                      <TruncatedText text={value} maxLength={maxTextLength} />
-                    )}
+                    {cellContent}
                   </div>
                 );
               },
@@ -626,7 +679,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength, renderMarkdown]);
+  }, [columnHelper, head.vars, maxTextLength, renderMarkdown, config]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -844,6 +897,7 @@ function ResultsTable({
                           metricTotals={metricTotals}
                           onSearchTextChange={onSearchTextChange}
                           onMetricFilter={handleMetricFilterClick}
+                          onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
                       </Box>
                     ) : null}
@@ -1121,6 +1175,8 @@ function ResultsTable({
       window.removeEventListener('resize', handleScroll);
     };
   }, []);
+
+  const [customMetricsDialogOpen, setCustomMetricsDialogOpen] = React.useState(false);
 
   return (
     // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
@@ -1432,6 +1488,10 @@ function ResultsTable({
           </ButtonGroup>
         </Box>
       </Box>
+      <CustomMetricsDialog
+        open={customMetricsDialogOpen}
+        onClose={() => setCustomMetricsDialogOpen(false)}
+      />
     </>
   );
 }
