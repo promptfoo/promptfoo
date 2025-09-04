@@ -376,3 +376,18 @@ export async function canCreateTargets(teamId: string | undefined): Promise<bool
       ability.action === 'create' && ability.subject === 'Provider',
   );
 }
+
+export async function isEnterpriseCustomer(): Promise<boolean> {
+  try {
+    if (!cloudConfig.isEnabled()) {
+      return false;
+    }
+    const response = await makeRequest(`/user/me`, 'GET');
+
+    const body = await response.json();
+    return body.organization.canUseRedteam;
+  } catch (e) {
+    logger.error(`Failed to check if user is enterprise customer: ${e}`);
+    return false;
+  }
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { getEstimatedProbes, getStrategyId } from './utils';
+import { getEstimatedProbes } from '@promptfoo/redteam/util';
+import { getStrategyId } from './utils';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
 import type { Config } from '../../types';

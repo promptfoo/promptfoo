@@ -8,6 +8,7 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
+import { checkMonthlyProbeLimit, formatProbeUsageMessage } from '../../util/redteamProbeLimit';
 import { doRedteamRun } from '../shared';
 import { poisonCommand } from './poison';
 import type { Command } from 'commander';
@@ -86,6 +87,22 @@ export function redteamRunCommand(program: Command) {
       }
 
       try {
+        // Check monthly probe limit before running redteam
+        const probeStatus = await checkMonthlyProbeLimit();
+
+        if (probeStatus.hasExceeded) {
+          logger.error(
+            chalk.red(`\n❌ Monthly redteam probe limit exceeded!\n`) +
+              `You have used ${probeStatus.usedProbes.toLocaleString()} out of ${probeStatus.limit.toLocaleString()} probes this month.\n` +
+              `The limit will reset at the beginning of next month.\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        // Show current usage
+        logger.info(formatProbeUsageMessage(probeStatus.remainingProbes));
+
         if (opts.remote) {
           cliState.remote = true;
         }

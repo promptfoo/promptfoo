@@ -28,10 +28,12 @@ import {
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
 import invariant from '../../util/invariant';
+import { checkMonthlyProbeLimit, formatProbeUsageMessage } from '../../util/redteamProbeLimit';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
 import {
   ADDITIONAL_STRATEGIES,
+  ALLOWED_PROBE_LIMIT_EXCEEDANCE,
   DEFAULT_STRATEGIES,
   type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
@@ -41,6 +43,7 @@ import {
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { getEstimatedProbes } from '../sharedFrontend';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
@@ -336,6 +339,48 @@ export async function doGenerateRedteam(
       ? { testGenerationInstructions: redteamConfig.testGenerationInstructions }
       : {}),
   };
+
+  // Check probe limit before generating tests
+  const probeStatus = await checkMonthlyProbeLimit();
+  const estimatedProbes = getEstimatedProbes(config);
+
+  // Check if user has exceeded the monthly limit
+  if (probeStatus.hasExceeded) {
+    logger.error(
+      chalk.red(`\n❌ Monthly redteam probe limit exceeded!\n`) +
+        `You have used ${probeStatus.usedProbes.toLocaleString()} out of ${probeStatus.limit.toLocaleString()} probes this month.\n` +
+        `The limit will reset at the beginning of next month.\n`,
+    );
+    process.exitCode = 1;
+    return null;
+  }
+
+  // Check if this scan would exceed the limit by more than the allowed exceedance
+  const exceedsProbeLimit =
+    estimatedProbes > probeStatus.remainingProbes + ALLOWED_PROBE_LIMIT_EXCEEDANCE;
+  if (exceedsProbeLimit) {
+    logger.error(
+      chalk.red(`\n❌ This scan would exceed your probe limit!\n`) +
+        `This scan requires approximately ${estimatedProbes.toLocaleString()} probes, but you only have ${probeStatus.remainingProbes.toLocaleString()} remaining.\n` +
+        `The scan exceeds your limit by more than ${ALLOWED_PROBE_LIMIT_EXCEEDANCE.toLocaleString()} probes and cannot be started.\n` +
+        `Please reduce the number of tests or contact sales@promptfoo.dev to upgrade.\n`,
+    );
+    process.exitCode = 1;
+    return null;
+  }
+
+  // Show warning if close to limit
+  if (estimatedProbes > probeStatus.remainingProbes) {
+    logger.warn(
+      chalk.yellow(`\n⚠️  Warning: This scan may be limited!\n`) +
+        `This scan requires approximately ${estimatedProbes.toLocaleString()} probes, but you only have ${probeStatus.remainingProbes.toLocaleString()} remaining.\n` +
+        `The scan may be limited. Consider reducing the number of tests.\n`,
+    );
+  }
+
+  // Show current usage
+  logger.info(formatProbeUsageMessage(probeStatus.remainingProbes));
+  logger.info(`Estimated probes for this scan: ${estimatedProbes.toLocaleString()}`);
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
     logger.error('Invalid redteam configuration:');

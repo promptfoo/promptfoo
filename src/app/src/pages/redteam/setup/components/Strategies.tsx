@@ -17,6 +17,7 @@ import {
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
+import { getEstimatedProbes } from '@promptfoo/redteam/sharedFrontend';
 import { Link as RouterLink } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
@@ -26,7 +27,7 @@ import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
 import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
-import { getEstimatedProbes, getStrategyId } from './strategies/utils';
+import { getStrategyId } from './strategies/utils';
 import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
 
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
