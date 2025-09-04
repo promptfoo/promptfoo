@@ -18,13 +18,9 @@ export const state: {
 };
 
 /**
- * Strategy function: Try Windows-specific clean detection using 'where' command.
+ * Try to find Python using Windows 'where' command, filtering out Microsoft Store stubs.
  */
-async function tryWindowsCleanDetection(): Promise<string | null> {
-  if (process.platform !== 'win32') {
-    return null;
-  }
-
+async function tryWindowsWhere(): Promise<string | null> {
   try {
     const result = await execAsync('where python');
     const paths = result.stdout.trim().split('\n');
@@ -32,45 +28,28 @@ async function tryWindowsCleanDetection(): Promise<string | null> {
     for (const pythonPath of paths) {
       const trimmedPath = pythonPath.trim();
 
-      // Skip Microsoft Store stubs (major source of Windows issues)
-      if (trimmedPath.includes('WindowsApps')) {
+      // Skip Microsoft Store stubs and non-executables
+      if (trimmedPath.includes('WindowsApps') || !trimmedPath.endsWith('.exe')) {
         continue;
       }
 
-      // Skip if not a real executable
-      if (!trimmedPath.endsWith('.exe')) {
-        continue;
-      }
-
-      // This is likely a real Python installation - validate it works
       const validated = await tryPath(trimmedPath);
       if (validated) {
         return validated;
       }
     }
   } catch (error) {
-    // Log specific errors for debugging, but don't fail
-    if (error instanceof Error && error.message.includes('ENOENT')) {
-      logger.debug('Windows "where" command not available');
-    } else {
-      logger.debug(`Windows Python detection failed: ${error}`);
-    }
+    logger.debug(`Windows 'where python' failed: ${error instanceof Error ? error.message : error}`);
   }
 
   return null;
 }
 
 /**
- * Strategy function: Try sys.executable detection with remaining commands.
+ * Try Python commands to get sys.executable path.
  */
-async function trySysExecutableDetection(): Promise<string | null> {
-  // Use different command sets to avoid duplication with Windows clean detection
-  const pythonCommands =
-    process.platform === 'win32'
-      ? ['py', 'py -3', 'python3'] // Skip 'python' since it was tried in Windows clean detection
-      : ['python3', 'python'];
-
-  for (const cmd of pythonCommands) {
+async function tryPythonCommands(commands: string[]): Promise<string | null> {
+  for (const cmd of commands) {
     try {
       const result = await execAsync(`${cmd} -c "import sys; print(sys.executable)"`);
       const executablePath = result.stdout.trim();
@@ -82,7 +61,6 @@ async function trySysExecutableDetection(): Promise<string | null> {
         return executablePath;
       }
     } catch (error) {
-      // Log command-specific failures for debugging
       logger.debug(`Python command "${cmd}" failed: ${error instanceof Error ? error.message : error}`);
     }
   }
@@ -90,48 +68,42 @@ async function trySysExecutableDetection(): Promise<string | null> {
 }
 
 /**
- * Strategy function: Try common Python command fallbacks.
+ * Try direct command validation as final fallback.
  */
-async function tryCommonCommands(): Promise<string | null> {
-  // Final fallback - try any remaining commands that weren't covered above
-  const fallbackCommands =
-    process.platform === 'win32'
-      ? ['python'] // Only try python if Windows clean detection failed
-      : []; // Unix commands already tried in sys.executable detection
-
-  for (const cmd of fallbackCommands) {
+async function tryDirectCommands(commands: string[]): Promise<string | null> {
+  for (const cmd of commands) {
     try {
       const validated = await tryPath(cmd);
       if (validated) {
         return validated;
       }
     } catch (error) {
-      logger.debug(`Fallback command "${cmd}" failed: ${error instanceof Error ? error.message : error}`);
+      logger.debug(`Direct command "${cmd}" failed: ${error instanceof Error ? error.message : error}`);
     }
   }
   return null;
 }
 
 /**
- * Attempts to get the Python executable path using multiple strategies.
+ * Attempts to get the Python executable path using platform-appropriate strategies.
  * @returns The Python executable path if successful, or null if failed.
  */
 export async function getSysExecutable(): Promise<string | null> {
-  // Strategy pattern: try different detection methods in order
-  const strategies = [
-    tryWindowsCleanDetection,
-    trySysExecutableDetection,
-    tryCommonCommands,
-  ];
+  if (process.platform === 'win32') {
+    // Windows: Try 'where python' first to avoid Microsoft Store stubs
+    const whereResult = await tryWindowsWhere();
+    if (whereResult) return whereResult;
 
-  for (const strategy of strategies) {
-    const result = await strategy();
-    if (result) {
-      return result;
-    }
+    // Then try py launcher and other commands
+    const sysResult = await tryPythonCommands(['py', 'py -3', 'python3']);
+    if (sysResult) return sysResult;
+
+    // Final fallback to direct python command
+    return await tryDirectCommands(['python']);
+  } else {
+    // Unix: Standard python3/python detection
+    return await tryPythonCommands(['python3', 'python']);
   }
-
-  return null;
 }
 
 /**
