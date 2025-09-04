@@ -4258,5 +4258,65 @@ describe('OpenAiResponsesProvider', () => {
       // Empty string arguments should still execute the callback
       expect(result.output).toBe('Hello!');
     });
+
+    it('should handle tool callback integration test with expected result format', async () => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'function_call',
+            name: 'addNumbers',
+            id: 'call_123',
+            arguments: '{"a": 5, "b": 6}',
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
+      };
+
+      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          temperature: 0,
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'addNumbers',
+                description: 'Add two numbers together',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    a: { type: 'number' },
+                    b: { type: 'number' },
+                  },
+                  required: ['a', 'b'],
+                },
+              },
+            },
+          ],
+          tool_choice: 'auto',
+          functionToolCallbacks: {
+            addNumbers: async (parametersJsonString: string) => {
+              const { a, b } = JSON.parse(parametersJsonString);
+              return JSON.stringify(a + b);
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Please add the following numbers together: 5 and 6');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('11');
+    });
   });
 });
