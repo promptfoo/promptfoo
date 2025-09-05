@@ -31,7 +31,29 @@ export interface TruncatedTextProps {
 }
 
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
-  const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
+  // Process text to determine if it should be truncated
+  let text;
+  if (React.isValidElement(rawText) || typeof rawText === 'string') {
+    text = rawText;
+  } else {
+    text = JSON.stringify(rawText);
+  }
+
+  const isOverLength = textLength(text) > maxLength;
+
+  // Initialize truncation state based on whether text actually exceeds maxLength
+  const [isTruncated, setIsTruncated] = React.useState(() => isOverLength);
+
+  // Only reset truncation state when text content changes, not when maxLength changes
+  // This preserves user intent when maxLength is adjusted via slider
+  const prevTextRef = React.useRef(text);
+  React.useEffect(() => {
+    if (prevTextRef.current !== text) {
+      setIsTruncated(isOverLength);
+      prevTextRef.current = text;
+    }
+  }, [text, isOverLength]);
+
   const toggleTruncate = () => {
     setIsTruncated(!isTruncated);
   };
@@ -68,15 +90,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     return node;
   };
 
-  let text;
-  if (React.isValidElement(rawText) || typeof rawText === 'string') {
-    text = rawText;
-  } else {
-    text = JSON.stringify(rawText);
-  }
   const truncatedText = isTruncated ? truncateText(text) : text;
-
-  const isOverLength = textLength(text) > maxLength;
   return (
     <div style={{ position: 'relative' }}>
       <div

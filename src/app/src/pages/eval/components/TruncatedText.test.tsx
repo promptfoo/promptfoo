@@ -145,4 +145,131 @@ describe('TruncatedText', () => {
     expect(mainDiv).toHaveStyle('cursor: pointer');
     expect(screen.getByText('...')).toBeInTheDocument();
   });
+
+  it('should NOT truncate text that is shorter than maxLength on initial render', () => {
+    const shortText = 'Short';
+    const maxLength = 100; // Much longer than the text
+
+    const { container } = render(<TruncatedText text={shortText} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    // Should show the full text without truncation
+    expect(mainDiv).toHaveTextContent(shortText);
+    expect(mainDiv).not.toHaveTextContent('...');
+
+    // Should not be clickable since no truncation is needed
+    expect(mainDiv).toHaveStyle('cursor: normal');
+
+    // Should not show ellipsis button
+    expect(screen.queryByText('...')).not.toBeInTheDocument();
+  });
+
+  it('should properly truncate text that is exactly at maxLength boundary', () => {
+    const exactText = '12345678901234567890'; // Exactly 20 characters
+    const maxLength = 20;
+
+    const { container } = render(<TruncatedText text={exactText} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    // Text at exact length should not be truncated
+    expect(mainDiv).toHaveTextContent(exactText);
+    expect(mainDiv).not.toHaveTextContent('...');
+    expect(mainDiv).toHaveStyle('cursor: normal');
+  });
+
+  it('should properly handle text that is one character over maxLength', () => {
+    const overByOneText = '123456789012345678901'; // Exactly 21 characters
+    const maxLength = 20;
+    const expectedTruncated = overByOneText.slice(0, maxLength);
+
+    const { container } = render(<TruncatedText text={overByOneText} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    // Should be truncated and show ellipsis
+    expect(mainDiv).toHaveTextContent(`${expectedTruncated}...`);
+    expect(mainDiv).toHaveStyle('cursor: pointer');
+    expect(screen.getByText('...')).toBeInTheDocument();
+  });
+
+  it('should preserve user expanded state when maxLength changes', () => {
+    const longText = 'This is a very long piece of text that exceeds maxLength';
+    const { container, rerender } = render(<TruncatedText text={longText} maxLength={20} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+
+    // Initially should be truncated
+    expect(mainDiv).toHaveTextContent(`${longText.slice(0, 20)}...`);
+
+    // User clicks to expand
+    fireEvent.click(mainDiv as Element);
+    expect(screen.getByText(longText)).toBeInTheDocument();
+    expect(screen.getByText('Show less')).toBeInTheDocument();
+
+    // maxLength changes (e.g., user adjusts slider)
+    rerender(<TruncatedText text={longText} maxLength={25} />);
+
+    // User's expanded state should be preserved
+    expect(screen.getByText(longText)).toBeInTheDocument();
+    expect(screen.getByText('Show less')).toBeInTheDocument();
+    expect(mainDiv).toHaveTextContent(longText);
+  });
+
+  it('should update truncation state when text prop changes', () => {
+    const shortText = 'Short';
+    const longText = 'This is a very long piece of text that exceeds maxLength';
+    const maxLength = 20;
+
+    const { container, rerender } = render(
+      <TruncatedText text={shortText} maxLength={maxLength} />,
+    );
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+
+    // Initially should not be truncated
+    expect(mainDiv).toHaveTextContent(shortText);
+    expect(mainDiv).not.toHaveTextContent('...');
+    expect(mainDiv).toHaveStyle('cursor: normal');
+
+    // Re-render with longer text
+    rerender(<TruncatedText text={longText} maxLength={maxLength} />);
+
+    // Now should be truncated
+    expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
+    expect(mainDiv).toHaveStyle('cursor: pointer');
+    expect(screen.getByText('...')).toBeInTheDocument();
+  });
+
+  it('should reset truncation state when props change', () => {
+    const longText = 'This is a very long piece of text that exceeds maxLength';
+    const shortText = 'Short';
+    const maxLength = 20;
+
+    const { container, rerender } = render(<TruncatedText text={longText} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+
+    // Initially should be truncated
+    expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
+
+    // Change to short text
+    rerender(<TruncatedText text={shortText} maxLength={maxLength} />);
+
+    // Should not be truncated
+    expect(mainDiv).toHaveTextContent(shortText);
+    expect(mainDiv).not.toHaveTextContent('...');
+    expect(mainDiv).toHaveStyle('cursor: normal');
+
+    // Change back to long text
+    rerender(<TruncatedText text={longText} maxLength={maxLength} />);
+
+    // Should be truncated again
+    expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
+    expect(screen.getByText('...')).toBeInTheDocument();
+  });
 });
