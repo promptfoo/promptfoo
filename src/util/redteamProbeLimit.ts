@@ -99,9 +99,14 @@ function createFormattedBox(
   const boxWidth = 58;
   const contentWidth = boxWidth - 4; // Account for "│ " on both sides
 
+  // Create top border with embedded title
+  const availableSpace = boxWidth - 2 - title.length - 2; // 2 for corners, 2 for spaces around title
+  const leftDashes = Math.floor(availableSpace / 2);
+  const rightDashes = availableSpace - leftDashes;
+  const topBorder = `┌${'─'.repeat(leftDashes)} ${title} ${'─'.repeat(rightDashes)}┐`;
+
   const lines = [
-    color('┌────────────────────────────────────────────────────────┐'),
-    color(`│ ${'🎯 PROBE USAGE STATUS'.padEnd(contentWidth)} │`),
+    color(topBorder),
     color(`│ ${''.padEnd(contentWidth)} │`),
     color(`│ ${mainLine.padEnd(contentWidth)} │`),
     color(`│ ${progressBar.padEnd(contentWidth)} │`),

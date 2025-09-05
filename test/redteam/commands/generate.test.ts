@@ -103,6 +103,16 @@ jest.mock('../../../src/util/redteamProbeLimit', () => ({
   incrementRedteamProbeUsage: jest.fn(),
   checkMonthlyProbeLimit: jest.fn().mockResolvedValue({ allowed: true, usage: 0, limit: 1000 }),
   formatProbeUsageMessage: jest.fn(),
+  checkProbeLimit: jest.fn().mockResolvedValue({
+    canProceed: true,
+    probeStatus: {
+      hasExceeded: false,
+      usedProbes: 0,
+      remainingProbes: 1000,
+      limit: 1000,
+      enabled: true,
+    },
+  }),
 }));
 
 jest.mock('../../../src/globalConfig/accounts', () => ({

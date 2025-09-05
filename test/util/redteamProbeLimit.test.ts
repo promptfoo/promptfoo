@@ -118,6 +118,18 @@ describe('redteamProbeLimit', () => {
   });
 
   describe('formatProbeUsageMessage', () => {
+    it('should return empty string when probe limiting is disabled', () => {
+      const probeStatus = {
+        hasExceeded: false,
+        usedProbes: 0,
+        remainingProbes: 0,
+        limit: 0,
+        enabled: false,
+      };
+      const message = formatProbeUsageMessage(probeStatus);
+      expect(message).toBe('');
+    });
+
     it('should format message when limit is reached', () => {
       const probeStatus = {
         hasExceeded: true,
@@ -127,8 +139,11 @@ describe('redteamProbeLimit', () => {
         enabled: true,
       };
       const message = formatProbeUsageMessage(probeStatus);
-      expect(message).toContain('Monthly redteam probe limit reached');
+      expect(message).toContain('🚫 PROBE LIMIT REACHED');
       expect(message).toContain(MONTHLY_PROBE_LIMIT.toLocaleString());
+      expect(message).toContain('probes used this month');
+      expect(message).toContain('┌─');
+      expect(message).toContain('└─');
     });
 
     it('should format warning message when probes are low', () => {
@@ -142,9 +157,11 @@ describe('redteamProbeLimit', () => {
         enabled: true,
       };
       const message = formatProbeUsageMessage(probeStatus);
-      expect(message).toContain('Low on probes');
+      expect(message).toContain('⚠️  LOW PROBE COUNT');
       expect(message).toContain(remainingProbes.toLocaleString());
-      expect(message).toContain('15.0%');
+      expect(message).toContain('probes remaining');
+      expect(message).toContain('┌─');
+      expect(message).toContain('└─');
     });
 
     it('should format info message when probes are sufficient', () => {
@@ -158,9 +175,11 @@ describe('redteamProbeLimit', () => {
         enabled: true,
       };
       const message = formatProbeUsageMessage(probeStatus);
-      expect(message).toContain('Redteam probes remaining');
+      expect(message).toContain('🎯 PROBE USAGE STATUS');
       expect(message).toContain(remainingProbes.toLocaleString());
-      expect(message).toContain('60.0%');
+      expect(message).toContain('probes remaining');
+      expect(message).toContain('┌─');
+      expect(message).toContain('└─');
     });
   });
 });
