@@ -383,9 +383,12 @@ export async function isEnterpriseCustomer(): Promise<boolean> {
       return false;
     }
     const response = await makeRequest(`/users/me`, 'GET');
-
-    const body = await response.json();
-    return body.organization.canUseRedteam;
+    if (!response.ok) {
+      logger.warn(`[Cloud] /users/me returned ${response.status} ${response.statusText}`);
+      return false;
+    }
+    const body = await response.json().catch(() => ({}));
+    return Boolean(body?.organization?.canUseRedteam);
   } catch (e) {
     logger.error(`Failed to check if user is enterprise customer: ${e}`);
     return false;
