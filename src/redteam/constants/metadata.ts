@@ -146,6 +146,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
   vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
   xstest: 'Tests for XSTest attacks',
+  simba:
+    'Simulates intelligent multi-turn adversarial conversations using advanced attack generation',
   video: 'Tests handling of video content',
   'other-encodings':
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
@@ -286,6 +288,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   vlguard: 'VLGuard Dataset',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
+  simba: 'Simba',
 };
 
 export enum Severity {
@@ -415,6 +418,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'unverifiable-claims': Severity.Medium,
   vlguard: Severity.Medium,
   xstest: Severity.Low,
+  simba: Severity.Medium,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -664,6 +668,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'unverifiable-claims': 'Unverifiable Claims',
   vlguard: 'VLGuard',
   xstest: 'XSTest',
+  simba: 'Simba',
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -806,6 +811,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
+  simba:
+    'Simulates intelligent multi-turn adversarial conversations using advanced attack generation',
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
@@ -841,6 +848,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
+  simba:
+    'Simulates intelligent multi-turn adversarial conversations using advanced attack generation',
   video: 'Tests detection and handling of video-based malicious payloads',
 };
 
@@ -875,6 +884,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
+  simba: 'Simba',
   video: 'Video',
 };
 
