@@ -239,9 +239,6 @@ interface SettingsState {
   setMaxImageWidth: (maxImageWidth: number) => void;
   maxImageHeight: number;
   setMaxImageHeight: (maxImageHeight: number) => void;
-
-  isCompactView: boolean;
-  setIsCompactView: (isCompactView: boolean) => void;
 }
 
 export const useResultsViewSettingsStore = create<SettingsState>()(
@@ -283,9 +280,6 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       setMaxImageWidth: (maxImageWidth: number) => set(() => ({ maxImageWidth })),
       maxImageHeight: 256,
       setMaxImageHeight: (maxImageHeight: number) => set(() => ({ maxImageHeight })),
-
-      isCompactView: false,
-      setIsCompactView: (isCompactView: boolean) => set(() => ({ isCompactView })),
     }),
     // Default storage is localStorage
     {

@@ -8,7 +8,6 @@ import TextFormatIcon from '@mui/icons-material/TextFormat';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
-import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
 import Slider from '@mui/material/Slider';
 import Stack from '@mui/material/Stack';
@@ -27,7 +26,7 @@ interface SettingRowProps {
 
 const SettingRow: React.FC<SettingRowProps> = ({ label, children, icon }) => {
   const theme = useTheme();
-  
+
   return (
     <Stack
       direction="row"
@@ -66,9 +65,7 @@ const SettingRow: React.FC<SettingRowProps> = ({ label, children, icon }) => {
           {label}
         </Typography>
       </Stack>
-      <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 'auto' }}>
-        {children}
-      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 'auto' }}>{children}</Box>
     </Stack>
   );
 };
@@ -80,7 +77,7 @@ interface SectionProps {
 
 const Section: React.FC<SectionProps> = ({ title, children }) => {
   const theme = useTheme();
-  
+
   return (
     <Box sx={{ mb: 3 }}>
       <Typography
@@ -139,16 +136,19 @@ const CompactSettingsPanel: React.FC = () => {
     maxTextLength === Number.POSITIVE_INFINITY
       ? 1001
       : Number.isFinite(maxTextLength) && maxTextLength >= 25
-      ? maxTextLength
-      : 500;
-      
+        ? maxTextLength
+        : 500;
+
   const [localMaxTextLength, setLocalMaxTextLength] = useState(sanitizedMaxTextLength);
-  
-  const handleTextLengthChange = useCallback((value: number) => {
-    setLocalMaxTextLength(value);
-    const newValue = value === 1001 ? Number.POSITIVE_INFINITY : value;
-    setMaxTextLength(newValue);
-  }, [setMaxTextLength]);
+
+  const handleTextLengthChange = useCallback(
+    (value: number) => {
+      setLocalMaxTextLength(value);
+      const newValue = value === 1001 ? Number.POSITIVE_INFINITY : value;
+      setMaxTextLength(newValue);
+    },
+    [setMaxTextLength],
+  );
 
   const formatTextLength = (value: number) => {
     return value === 1001 ? 'Unlimited' : `${value} chars`;
@@ -166,6 +166,109 @@ const CompactSettingsPanel: React.FC = () => {
       <Grid container spacing={4}>
         {/* Left Column */}
         <Grid item xs={12} md={6}>
+          {/* Hero Text Length Control */}
+          <Box
+            sx={{
+              mb: 4,
+              p: 2.5,
+              border: `2px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+              borderRadius: 2,
+              backgroundColor: alpha(theme.palette.primary.main, 0.02),
+            }}
+          >
+            <Stack spacing={2}>
+              <Stack direction="row" alignItems="center" spacing={1.5}>
+                <Box
+                  sx={{
+                    color: theme.palette.primary.main,
+                    fontSize: '1.2rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <TextFormatIcon />
+                </Box>
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: 600,
+                    color: theme.palette.text.primary,
+                    fontSize: '1rem',
+                  }}
+                >
+                  Text Length Limit
+                </Typography>
+                <Box
+                  sx={{
+                    px: 1.5,
+                    py: 0.5,
+                    backgroundColor: theme.palette.primary.main,
+                    color: 'white',
+                    borderRadius: 1,
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {formatTextLength(localMaxTextLength)}
+                </Box>
+              </Stack>
+
+              <Slider
+                value={localMaxTextLength}
+                onChange={(_, value) => handleTextLengthChange(value as number)}
+                min={25}
+                max={1001}
+                marks={[
+                  { value: 25, label: '25' },
+                  { value: 250, label: '250' },
+                  { value: 500, label: '500' },
+                  { value: 1000, label: '1K' },
+                  { value: 1001, label: '∞' },
+                ]}
+                sx={{
+                  '& .MuiSlider-thumb': {
+                    width: 20,
+                    height: 20,
+                    backgroundColor: theme.palette.primary.main,
+                    border: `2px solid ${theme.palette.background.paper}`,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    '&:hover': {
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+                    },
+                  },
+                  '& .MuiSlider-track': {
+                    height: 6,
+                    backgroundColor: theme.palette.primary.main,
+                  },
+                  '& .MuiSlider-rail': {
+                    height: 6,
+                    backgroundColor: alpha(theme.palette.text.secondary, 0.15),
+                  },
+                  '& .MuiSlider-mark': {
+                    width: 2,
+                    height: 10,
+                    backgroundColor: alpha(theme.palette.text.secondary, 0.4),
+                  },
+                  '& .MuiSlider-markLabel': {
+                    fontSize: '0.7rem',
+                    color: theme.palette.text.secondary,
+                  },
+                }}
+              />
+
+              <Typography
+                variant="caption"
+                sx={{
+                  color: theme.palette.text.secondary,
+                  fontSize: '0.75rem',
+                  textAlign: 'center',
+                }}
+              >
+                Controls how much text appears in each table cell before truncation
+              </Typography>
+            </Stack>
+          </Box>
+
           <Section title="Layout & Display">
             <SettingRow label="Sticky header" icon={<ViewListIcon fontSize="small" />}>
               <Switch
@@ -174,7 +277,7 @@ const CompactSettingsPanel: React.FC = () => {
                 size="small"
               />
             </SettingRow>
-            
+
             <SettingRow label="Word breaking" icon={<FormatAlignLeftIcon fontSize="small" />}>
               <ToggleButtonGroup
                 value={wordBreak}
@@ -199,43 +302,6 @@ const CompactSettingsPanel: React.FC = () => {
                 <ToggleButton value="break-all">Break all</ToggleButton>
               </ToggleButtonGroup>
             </SettingRow>
-
-            <SettingRow label="Text length" icon={<TextFormatIcon fontSize="small" />}>
-              <Stack direction="row" alignItems="center" spacing={2} sx={{ minWidth: 200 }}>
-                <Slider
-                  value={localMaxTextLength}
-                  onChange={(_, value) => handleTextLengthChange(value as number)}
-                  min={25}
-                  max={1001}
-                  size="small"
-                  sx={{
-                    flex: 1,
-                    '& .MuiSlider-thumb': {
-                      width: 16,
-                      height: 16,
-                    },
-                    '& .MuiSlider-track': {
-                      height: 3,
-                    },
-                    '& .MuiSlider-rail': {
-                      height: 3,
-                      backgroundColor: alpha(theme.palette.text.secondary, 0.15),
-                    },
-                  }}
-                />
-                <Typography
-                  variant="caption"
-                  sx={{
-                    fontSize: '0.75rem',
-                    color: theme.palette.text.secondary,
-                    minWidth: 70,
-                    textAlign: 'right',
-                  }}
-                >
-                  {formatTextLength(localMaxTextLength)}
-                </Typography>
-              </Stack>
-            </SettingRow>
           </Section>
 
           <Section title="Content Formatting">
@@ -246,7 +312,7 @@ const CompactSettingsPanel: React.FC = () => {
                 size="small"
               />
             </SettingRow>
-            
+
             <SettingRow label="Prettify JSON" icon={<FormatAlignLeftIcon fontSize="small" />}>
               <Switch
                 checked={prettifyJson}
@@ -267,7 +333,7 @@ const CompactSettingsPanel: React.FC = () => {
                 size="small"
               />
             </SettingRow>
-            
+
             <SettingRow label="Pass/fail indicators" icon={<DoneAllIcon fontSize="small" />}>
               <Switch
                 checked={showPassFail}
@@ -275,7 +341,7 @@ const CompactSettingsPanel: React.FC = () => {
                 size="small"
               />
             </SettingRow>
-            
+
             <SettingRow label="Inference details" icon={<SpeedIcon fontSize="small" />}>
               <Switch
                 checked={showInferenceDetails}
