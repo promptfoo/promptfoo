@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 import CloseIcon from '@mui/icons-material/Close';
 import RestoreIcon from '@mui/icons-material/Restore';
@@ -7,6 +7,7 @@ import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
@@ -26,11 +27,25 @@ interface SettingsModalProps {
 const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
 
   const { hasChanges, resetToDefaults } = useSettingsState(open);
 
   const handleClose = () => {
     onClose();
+  };
+
+  const handleResetClick = () => {
+    setResetDialogOpen(true);
+  };
+
+  const handleResetConfirm = () => {
+    resetToDefaults();
+    setResetDialogOpen(false);
+  };
+
+  const handleResetCancel = () => {
+    setResetDialogOpen(false);
   };
 
   return (
@@ -138,7 +153,7 @@ const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => 
       >
         <Button
           startIcon={<RestoreIcon />}
-          onClick={resetToDefaults}
+          onClick={handleResetClick}
           color="inherit"
           size="small"
           aria-label="Reset settings to defaults"
@@ -179,6 +194,48 @@ const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => 
           {hasChanges ? 'Save Changes' : 'Done'}
         </Button>
       </DialogActions>
+
+      {/* Reset Confirmation Dialog */}
+      <Dialog
+        open={resetDialogOpen}
+        onClose={handleResetCancel}
+        maxWidth="xs"
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+          },
+        }}
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5}>
+            <RestoreIcon color="warning" />
+            <Typography variant="h6" fontWeight={600}>
+              Reset Settings?
+            </Typography>
+          </Stack>
+        </DialogTitle>
+        <DialogContent sx={{ pb: 2 }}>
+          <DialogContentText sx={{ color: theme.palette.text.primary }}>
+            Are you sure you want to reset all settings to their defaults? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleResetCancel} color="inherit" sx={{ mr: 1 }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleResetConfirm}
+            variant="contained"
+            color="warning"
+            startIcon={<RestoreIcon />}
+            sx={{
+              fontWeight: 600,
+            }}
+          >
+            Reset All
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 };

@@ -8,6 +8,7 @@ import TextFormatIcon from '@mui/icons-material/TextFormat';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
+import Grid from '@mui/material/Grid';
 import Slider from '@mui/material/Slider';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
@@ -21,37 +22,170 @@ interface SettingRowProps {
   label: string;
   children: React.ReactNode;
   icon?: React.ReactNode;
+  description?: string;
 }
 
-const SettingRow: React.FC<SettingRowProps> = ({ label, children, icon }) => {
+const SettingRow: React.FC<SettingRowProps> = ({ label, children, icon, description }) => {
   const theme = useTheme();
 
   return (
-    <Stack
-      direction="row"
+    <Grid
+      container
       alignItems="center"
-      justifyContent="space-between"
       sx={{
         py: 1,
         minHeight: 44,
         borderBottom: `1px solid ${alpha(theme.palette.divider, 0.05)}`,
+        transition: 'background-color 150ms ease',
         '&:hover': {
           backgroundColor: alpha(theme.palette.action.hover, 0.03),
         },
       }}
     >
-      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ flex: 1 }}>
-        {icon && (
-          <Box sx={{ color: alpha(theme.palette.text.secondary, 0.7), fontSize: '1rem' }}>
-            {icon}
+      <Grid item xs={5}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          {icon && (
+            <Box sx={{ color: alpha(theme.palette.text.secondary, 0.7), fontSize: '1rem' }}>
+              {icon}
+            </Box>
+          )}
+          <Box>
+            <Typography variant="body2" sx={{ fontSize: '0.875rem', fontWeight: 400, lineHeight: 1.2 }}>
+              {label}
+            </Typography>
+            {description && (
+              <Typography variant="caption" sx={{ fontSize: '0.75rem', color: theme.palette.text.secondary, lineHeight: 1.2 }}>
+                {description}
+              </Typography>
+            )}
           </Box>
-        )}
-        <Typography variant="body2" sx={{ fontSize: '0.875rem', fontWeight: 400 }}>
-          {label}
-        </Typography>
-      </Stack>
-      {children}
+        </Stack>
+      </Grid>
+      <Grid item xs={7}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>{children}</Box>
+      </Grid>
+    </Grid>
+  );
+};
+
+interface EnhancedSliderProps {
+  value: number;
+  onChange: (value: number) => void;
+  onChangeCommitted: (value: number) => void;
+  min: number;
+  max: number;
+  formatValue: (value: number) => string;
+  marks?: Array<{ value: number; label: string }>;
+}
+
+const EnhancedSlider: React.FC<EnhancedSliderProps> = ({
+  value,
+  onChange,
+  onChangeCommitted,
+  min,
+  max,
+  formatValue,
+  marks,
+}) => {
+  const theme = useTheme();
+
+  return (
+    <Stack direction="row" alignItems="center" spacing={2} sx={{ minWidth: 240 }}>
+      <Slider
+        value={value}
+        onChange={(_, val) => onChange(val as number)}
+        onChangeCommitted={(_, val) => onChangeCommitted(val as number)}
+        min={min}
+        max={max}
+        marks={marks}
+        size="small"
+        sx={{
+          flex: 1,
+          '& .MuiSlider-thumb': {
+            width: 18,
+            height: 18,
+            backgroundColor: theme.palette.primary.main,
+            border: `2px solid ${theme.palette.background.paper}`,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+            transition: 'box-shadow 150ms ease',
+            '&:hover': {
+              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            },
+          },
+          '& .MuiSlider-track': {
+            height: 4,
+            backgroundColor: theme.palette.primary.main,
+          },
+          '& .MuiSlider-rail': {
+            height: 4,
+            backgroundColor: alpha(theme.palette.text.secondary, 0.15),
+          },
+          '& .MuiSlider-mark': {
+            display: marks ? 'block' : 'none',
+            width: 2,
+            height: 8,
+            backgroundColor: alpha(theme.palette.text.secondary, 0.4),
+          },
+          '& .MuiSlider-markLabel': {
+            fontSize: '0.7rem',
+            color: theme.palette.text.secondary,
+          },
+        }}
+      />
+      <Typography
+        variant="caption"
+        sx={{
+          minWidth: 75,
+          fontSize: '0.75rem',
+          fontWeight: 500,
+          textAlign: 'right',
+          color: theme.palette.primary.main,
+        }}
+      >
+        {formatValue(value)}
+      </Typography>
     </Stack>
+  );
+};
+
+interface SettingGroupProps {
+  title: string;
+  children: React.ReactNode;
+  accent?: boolean;
+}
+
+const SettingGroup: React.FC<SettingGroupProps> = ({ title, children, accent = false }) => {
+  const theme = useTheme();
+
+  return (
+    <Box
+      sx={{
+        mb: 2,
+        ...(accent && {
+          backgroundColor: alpha(theme.palette.primary.main, 0.02),
+          border: `1px solid ${alpha(theme.palette.primary.main, 0.08)}`,
+          borderRadius: 1,
+          p: 1.5,
+          pb: 0.5,
+        }),
+      }}
+    >
+      <Typography
+        variant="overline"
+        sx={{
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          color: accent ? theme.palette.primary.main : theme.palette.text.secondary,
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          mb: 1,
+          display: 'block',
+        }}
+      >
+        {title}
+      </Typography>
+      <Box>{children}</Box>
+    </Box>
   );
 };
 
@@ -109,37 +243,52 @@ const MainSettingsPanel: React.FC = () => {
   );
 
   const formatTextLength = useCallback((value: number) => {
-    return value === 1001 ? 'Unlimited' : `${value}`;
+    if (value === 1001) { return 'Unlimited'; }
+    if (value <= 50) { return `Short (${value})`; }
+    if (value <= 300) { return `Moderate (${value})`; }
+    return `Long (${value})`;
+  }, []);
+
+  const formatImageSize = useCallback((value: number) => {
+    if (value <= 200) { return `Small (${value}px)`; }
+    if (value <= 500) { return `Medium (${value}px)`; }
+    return `Large (${value}px)`;
   }, []);
 
   return (
-    <Box sx={{ p: 2, height: '100%' }}>
-      <Stack spacing={0}>
-        {/* Text Length - Compact inline row */}
-        <SettingRow label="Text length limit" icon={<TextFormatIcon fontSize="small" />}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ minWidth: 300 }}>
-            <Slider
-              value={localMaxTextLength}
-              onChange={(_, value) => handleTextLengthChange(value as number)}
-              onChangeCommitted={(_, value) => handleTextLengthCommitted(value as number)}
-              min={25}
-              max={1001}
-              size="small"
-              sx={{
-                flex: 1,
-                '& .MuiSlider-thumb': { width: 16, height: 16 },
-                '& .MuiSlider-track': { height: 3 },
-                '& .MuiSlider-rail': { height: 3 },
-              }}
-            />
-            <Typography variant="caption" sx={{ minWidth: 60, fontSize: '0.75rem' }}>
-              {formatTextLength(localMaxTextLength)}
-            </Typography>
-          </Stack>
+    <Box sx={{ p: 2, height: '100%', overflow: 'hidden' }}>
+      {/* Hero Text Length Control */}
+      <SettingGroup title="Text Display" accent>
+        <SettingRow 
+          label="Text length limit" 
+          icon={<TextFormatIcon fontSize="small" />}
+          description="Controls text truncation in table cells"
+        >
+          <EnhancedSlider
+            value={localMaxTextLength}
+            onChange={handleTextLengthChange}
+            onChangeCommitted={handleTextLengthCommitted}
+            min={25}
+            max={1001}
+            formatValue={formatTextLength}
+            marks={[
+              { value: 25, label: '25' },
+              { value: 250, label: '250' },
+              { value: 500, label: '500' },
+              { value: 1000, label: '1K' },
+              { value: 1001, label: '∞' },
+            ]}
+          />
         </SettingRow>
+      </SettingGroup>
 
-        {/* Layout Settings */}
-        <SettingRow label="Sticky header" icon={<ViewListIcon fontSize="small" />}>
+      {/* Layout & Display Settings */}
+      <SettingGroup title="Layout & Display">
+        <SettingRow 
+          label="Sticky header" 
+          icon={<ViewListIcon fontSize="small" />}
+          description="Keep column headers visible while scrolling"
+        >
           <Switch
             checked={stickyHeader}
             onChange={(e) => setStickyHeader(e.target.checked)}
@@ -147,7 +296,11 @@ const MainSettingsPanel: React.FC = () => {
           />
         </SettingRow>
 
-        <SettingRow label="Word breaking" icon={<FormatAlignLeftIcon fontSize="small" />}>
+        <SettingRow 
+          label="Word breaking" 
+          icon={<FormatAlignLeftIcon fontSize="small" />}
+          description="Normal respects word boundaries, Break all maximizes space"
+        >
           <ToggleButtonGroup
             value={wordBreak}
             exclusive
@@ -155,13 +308,18 @@ const MainSettingsPanel: React.FC = () => {
             size="small"
             sx={{
               '& .MuiToggleButton-root': {
-                px: 1,
-                py: 0.25,
+                px: 1.5,
+                py: 0.5,
                 fontSize: '0.75rem',
                 border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                transition: 'all 150ms ease',
                 '&.Mui-selected': {
-                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                  backgroundColor: alpha(theme.palette.primary.main, 0.12),
                   borderColor: theme.palette.primary.main,
+                  color: theme.palette.primary.main,
+                },
+                '&:hover': {
+                  backgroundColor: alpha(theme.palette.action.hover, 0.08),
                 },
               },
             }}
@@ -170,91 +328,112 @@ const MainSettingsPanel: React.FC = () => {
             <ToggleButton value="break-all">Break all</ToggleButton>
           </ToggleButtonGroup>
         </SettingRow>
+      </SettingGroup>
 
-        {/* Content Settings */}
-        <SettingRow label="Show full prompts" icon={<VisibilityIcon fontSize="small" />}>
-          <Switch
-            checked={showPrompts}
-            onChange={(e) => setShowPrompts(e.target.checked)}
-            size="small"
+      {/* Content Visibility Settings */}
+      <SettingGroup title="Content Visibility">
+        <SettingRow 
+          label="Show full prompts" 
+          icon={<VisibilityIcon fontSize="small" />}
+          description="Display complete prompt text in dedicated column"
+        >
+          <Switch checked={showPrompts} onChange={(e) => setShowPrompts(e.target.checked)} size="small" />
+        </SettingRow>
+
+        {/* Cell Metadata Sub-group */}
+        <Box
+          sx={{
+            ml: 2,
+            pl: 2,
+            borderLeft: `2px solid ${alpha(theme.palette.divider, 0.1)}`,
+            backgroundColor: alpha(theme.palette.background.default, 0.3),
+            borderRadius: '0 8px 8px 0',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              color: theme.palette.text.secondary,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              mb: 0.5,
+              display: 'block',
+            }}
+          >
+            Cell Metadata
+          </Typography>
+          
+          <SettingRow 
+            label="Pass/fail indicators" 
+            icon={<DoneAllIcon fontSize="small" />}
+            description="Show success/failure badges in cells"
+          >
+            <Switch checked={showPassFail} onChange={(e) => setShowPassFail(e.target.checked)} size="small" />
+          </SettingRow>
+
+          <SettingRow 
+            label="Inference details" 
+            icon={<SpeedIcon fontSize="small" />}
+            description="Display timing and token usage info"
+          >
+            <Switch checked={showInferenceDetails} onChange={(e) => setShowInferenceDetails(e.target.checked)} size="small" />
+          </SettingRow>
+        </Box>
+      </SettingGroup>
+
+      {/* Formatting Settings */}
+      <SettingGroup title="Text Formatting">
+        <SettingRow 
+          label="Render markdown" 
+          icon={<TextFormatIcon fontSize="small" />}
+          description="Parse and display markdown formatting"
+        >
+          <Switch checked={renderMarkdown} onChange={(e) => setRenderMarkdown(e.target.checked)} size="small" />
+        </SettingRow>
+
+        <SettingRow 
+          label="Prettify JSON" 
+          icon={<FormatAlignLeftIcon fontSize="small" />}
+          description="Format JSON with proper indentation"
+        >
+          <Switch checked={prettifyJson} onChange={(e) => setPrettifyJson(e.target.checked)} size="small" />
+        </SettingRow>
+      </SettingGroup>
+
+      {/* Image Settings */}
+      <SettingGroup title="Image Display">
+        <SettingRow 
+          label="Image max width" 
+          icon={<ImageIcon fontSize="small" />}
+          description="Maximum width for embedded images"
+        >
+          <EnhancedSlider
+            value={maxImageWidth}
+            onChange={setMaxImageWidth}
+            onChangeCommitted={setMaxImageWidth}
+            min={100}
+            max={1000}
+            formatValue={formatImageSize}
           />
         </SettingRow>
 
-        <SettingRow label="Pass/fail indicators" icon={<DoneAllIcon fontSize="small" />}>
-          <Switch
-            checked={showPassFail}
-            onChange={(e) => setShowPassFail(e.target.checked)}
-            size="small"
+        <SettingRow 
+          label="Image max height" 
+          icon={<ImageIcon fontSize="small" />}
+          description="Maximum height for embedded images"
+        >
+          <EnhancedSlider
+            value={maxImageHeight}
+            onChange={setMaxImageHeight}
+            onChangeCommitted={setMaxImageHeight}
+            min={100}
+            max={1000}
+            formatValue={formatImageSize}
           />
         </SettingRow>
-
-        <SettingRow label="Inference details" icon={<SpeedIcon fontSize="small" />}>
-          <Switch
-            checked={showInferenceDetails}
-            onChange={(e) => setShowInferenceDetails(e.target.checked)}
-            size="small"
-          />
-        </SettingRow>
-
-        <SettingRow label="Render markdown" icon={<TextFormatIcon fontSize="small" />}>
-          <Switch
-            checked={renderMarkdown}
-            onChange={(e) => setRenderMarkdown(e.target.checked)}
-            size="small"
-          />
-        </SettingRow>
-
-        <SettingRow label="Prettify JSON" icon={<FormatAlignLeftIcon fontSize="small" />}>
-          <Switch
-            checked={prettifyJson}
-            onChange={(e) => setPrettifyJson(e.target.checked)}
-            size="small"
-          />
-        </SettingRow>
-
-        {/* Image Settings */}
-        <SettingRow label="Image max width" icon={<ImageIcon fontSize="small" />}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ minWidth: 200 }}>
-            <Slider
-              value={maxImageWidth}
-              onChange={(_, value) => setMaxImageWidth(value as number)}
-              min={100}
-              max={1000}
-              size="small"
-              sx={{
-                flex: 1,
-                '& .MuiSlider-thumb': { width: 16, height: 16 },
-                '& .MuiSlider-track': { height: 3 },
-                '& .MuiSlider-rail': { height: 3 },
-              }}
-            />
-            <Typography variant="caption" sx={{ minWidth: 45, fontSize: '0.75rem' }}>
-              {maxImageWidth}px
-            </Typography>
-          </Stack>
-        </SettingRow>
-
-        <SettingRow label="Image max height" icon={<ImageIcon fontSize="small" />}>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ minWidth: 200 }}>
-            <Slider
-              value={maxImageHeight}
-              onChange={(_, value) => setMaxImageHeight(value as number)}
-              min={100}
-              max={1000}
-              size="small"
-              sx={{
-                flex: 1,
-                '& .MuiSlider-thumb': { width: 16, height: 16 },
-                '& .MuiSlider-track': { height: 3 },
-                '& .MuiSlider-rail': { height: 3 },
-              }}
-            />
-            <Typography variant="caption" sx={{ minWidth: 45, fontSize: '0.75rem' }}>
-              {maxImageHeight}px
-            </Typography>
-          </Stack>
-        </SettingRow>
-      </Stack>
+      </SettingGroup>
     </Box>
   );
 };
