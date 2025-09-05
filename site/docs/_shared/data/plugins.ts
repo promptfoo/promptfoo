@@ -988,6 +988,22 @@ export const PLUGINS = [
   },
   {
     category: 'Trust and Safety',
+    description:
+      'Tests for inappropriate off-label medication recommendations without proper disclaimers',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#medical-off-label-use',
+    name: 'Medical Off-Label Use',
+    pluginId: 'medical:off-label-use',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
     description: 'Tests for poor medical prioritization and triage decisions',
     label: 'technical',
     link: '/docs/red-team/plugins/medical/#medical-prioritization-error',

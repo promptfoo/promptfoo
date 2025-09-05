@@ -9,10 +9,11 @@ import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { makeRequest as makeCloudRequest } from './util/cloud';
+import { checkCloudPermissions, makeRequest as makeCloudRequest } from './util/cloud';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
+import type ModelAudit from './models/modelAudit';
 
 interface ShareDomainResult {
   domain: string;
@@ -29,6 +30,22 @@ export function isSharingEnabled(evalRecord: Eval): boolean {
   if (sharingConfigOnEval) {
     return true;
   }
+
+  if (sharingEnvUrl && !sharingEnvUrl.includes('api.promptfoo.app')) {
+    return true;
+  }
+
+  if (cloudSharingUrl) {
+    return true;
+  }
+
+  return false;
+}
+
+export function isModelAuditSharingEnabled(): boolean {
+  // Model audit sharing uses the same configuration as eval sharing
+  const sharingEnvUrl = getShareApiBaseUrl();
+  const cloudSharingUrl = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : null;
 
   if (sharingEnvUrl && !sharingEnvUrl.includes('api.promptfoo.app')) {
     return true;
@@ -97,9 +114,10 @@ async function sendEvalRecord(
 
   if (!response.ok) {
     const responseBody = await response.text();
-    throw new Error(
-      `Failed to send initial eval data to ${url}: ${response.statusText}, body: ${responseBody}`,
-    );
+    // Ensure full error is visible by formatting it properly
+    const errorMessage = `Failed to send initial eval data to ${url}: ${response.statusText}`;
+    const bodyMessage = responseBody ? `\nResponse body: ${responseBody}` : '';
+    throw new Error(`${errorMessage}${bodyMessage}`);
   }
 
   const responseJson = await response.json();
@@ -181,6 +199,8 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
   const isVerbose = isDebugEnabled();
   logger.debug(`Starting chunked results upload to ${url}`);
+
+  await checkCloudPermissions(evalRecord.config);
 
   const sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
@@ -280,6 +300,10 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
     return evalId;
   } catch (e) {
+    if (progressBar) {
+      progressBar.stop();
+    }
+
     logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
 
     if (evalId) {
@@ -391,6 +415,12 @@ export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
+  // If sharing is explicitly disabled, return null
+  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
+    logger.debug('Sharing is explicitly disabled, returning null');
+    return null;
+  }
+
   // 1. Handle email collection
   await handleEmailCollection(evalRecord);
 
@@ -438,4 +468,126 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
     logger.error(`[hasEvalBeenShared]: error checking if eval has been shared: ${e}`);
     return false;
   }
+}
+
+/**
+ * Checks whether a model audit has been shared.
+ * @param audit The model audit to check.
+ * @returns True if the model audit has been shared, false otherwise.
+ */
+export async function hasModelAuditBeenShared(audit: ModelAudit): Promise<boolean> {
+  try {
+    // GET /api/v1/model-audits/:id
+    const res = await makeCloudRequest(`model-audits/${audit.id}`, 'GET');
+    switch (res.status) {
+      // 200: Model audit already exists i.e. it has been shared before.
+      case 200:
+        return true;
+      // 404: Model audit not found i.e. it has not been shared before.
+      case 404:
+        return false;
+      default:
+        throw new Error(
+          `[hasModelAuditBeenShared]: unexpected API error: ${res.status}\n${res.statusText}`,
+        );
+    }
+  } catch (e) {
+    logger.error(`[hasModelAuditBeenShared]: error checking if model audit has been shared: ${e}`);
+    return false;
+  }
+}
+
+/**
+ * Creates a shareable URL for a model audit.
+ * @param auditRecord The model audit to share.
+ * @param showAuth Whether to show the authentication information in the URL.
+ * @returns The shareable URL for the model audit.
+ */
+export async function createShareableModelAuditUrl(
+  auditRecord: ModelAudit,
+  showAuth: boolean = false,
+): Promise<string | null> {
+  // 1. Handle email collection (skip for model audits as they don't have eval config)
+  // Model audits use cloud config directly
+
+  // 2. Get API configuration
+  const apiBaseUrl = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : getShareApiBaseUrl();
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(cloudConfig.isEnabled() && { Authorization: `Bearer ${cloudConfig.getApiKey()}` }),
+  };
+
+  const url = `${apiBaseUrl}/api/v1/model-audits/share`;
+
+  // 3. Send the model audit data
+  logger.debug(`Sharing model audit ${auditRecord.id} to ${url}`);
+
+  try {
+    const payload = {
+      scanId: auditRecord.id,
+      createdAt: auditRecord.createdAt,
+      updatedAt: auditRecord.updatedAt,
+      name: auditRecord.name,
+      author: auditRecord.author,
+      modelPath: auditRecord.modelPath,
+      modelType: auditRecord.modelType,
+      results: auditRecord.results,
+      checks: auditRecord.checks,
+      issues: auditRecord.issues,
+      hasErrors: auditRecord.hasErrors,
+      totalChecks: auditRecord.totalChecks,
+      passedChecks: auditRecord.passedChecks,
+      failedChecks: auditRecord.failedChecks,
+      metadata: auditRecord.metadata,
+    };
+
+    // Log payload size for debugging large model audits
+    const payloadSize = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+    logger.debug(`Model audit payload size: ${(payloadSize / 1024 / 1024).toFixed(2)} MB`);
+
+    const response = await fetchWithProxy(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const responseBody = await response.text();
+      throw new Error(
+        `Failed to share model audit: ${response.status} ${response.statusText}\n${responseBody}`,
+      );
+    }
+
+    const { remoteId } = await response.json();
+    logger.debug(`Model audit shared successfully. Remote ID: ${remoteId}`);
+
+    return getShareableModelAuditUrl(auditRecord, remoteId || auditRecord.id, showAuth);
+  } catch (error) {
+    logger.error(
+      `Error sharing model audit: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Gets the shareable URL for a model audit.
+ * @param audit The model audit.
+ * @param remoteAuditId The remote ID of the model audit.
+ * @param showAuth Whether to show the authentication information in the URL.
+ * @returns The shareable URL for the model audit.
+ */
+export function getShareableModelAuditUrl(
+  audit: ModelAudit,
+  remoteAuditId: string,
+  showAuth: boolean = false,
+): string {
+  const appBaseUrl = cloudConfig.isEnabled()
+    ? cloudConfig.getAppUrl()
+    : getShareViewBaseUrl() || getDefaultShareViewBaseUrl();
+
+  const fullUrl = `${appBaseUrl}/model-audit/scan/${remoteAuditId}`;
+
+  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }

@@ -1,3 +1,4 @@
+import { ModelAuditCheck } from '@promptfoo/types/modelAudit';
 export interface ScanPath {
   path: string;
   type: 'file' | 'directory';
@@ -10,14 +11,15 @@ export interface ScanOptions {
   maxFileSize?: number;
   maxTotalSize?: number;
   verbose: boolean;
+  author?: string;
 }
 
 export interface ScanIssue {
-  // Note: modelaudit scanner outputs 'critical' severity, which is mapped to 'error'
-  // internally. The UI displays 'critical' to users for clarity.
-  severity: 'error' | 'warning' | 'info' | 'debug';
+  // Note: modelaudit scanner can output both 'critical' and 'error' severity.
+  // Both are treated as critical/error level issues in the UI.
+  severity: 'error' | 'critical' | 'warning' | 'info' | 'debug';
   message: string;
-  location?: string | null;
+  location?: string;
   details?: Record<string, any> & {
     path?: string;
     files?: string[];
@@ -25,13 +27,29 @@ export interface ScanIssue {
   timestamp?: number;
 }
 
-export interface ScanResult {
+export type ScanCheck = ModelAuditCheck;
+
+export interface ScanAsset {
   path: string;
-  issues: ScanIssue[];
+  type?: string;
+  size?: number;
+}
+
+// Import the backend type to ensure consistency
+import type { ModelAuditScanResults } from '../../../../types/modelAudit';
+
+/**
+ * Frontend ScanResult type that aligns with backend ModelAuditScanResults
+ * Ensures type consistency between backend and frontend while maintaining compatibility
+ *
+ * This type represents what the frontend actually receives from the API,
+ * which is the ModelAuditScanResults plus some UI-specific required fields.
+ */
+export interface ScanResult extends ModelAuditScanResults {
+  // Fields that are required in UI context but optional in backend
+  path: string;
   success: boolean;
-  scannedFiles?: number;
-  totalFiles?: number;
-  duration?: number;
-  rawOutput?: string;
-  scannedFilesList?: string[];
+
+  // Override issues field to use frontend ScanIssue type
+  issues: ScanIssue[];
 }

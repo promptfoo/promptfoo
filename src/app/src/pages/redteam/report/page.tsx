@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 
-import CrispChat from '@app/components/CrispChat';
+import PylonChat from '@app/components/PylonChat';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
 import { useNavigate } from 'react-router-dom';
 import Report from './components/Report';
 import ReportIndex from './components/ReportIndex';
@@ -29,7 +31,21 @@ export default function ReportPage() {
   }, [isLoading, email, navigate]);
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '9rem',
+        }}
+      >
+        <CircularProgress size={22} />
+        <Box>Waiting for report data</Box>
+      </Box>
+    );
   }
 
   if (!email) {
@@ -40,7 +56,7 @@ export default function ReportPage() {
   return (
     <UserProvider>
       {evalId ? <Report /> : <ReportIndex />}
-      <CrispChat />
+      <PylonChat />
     </UserProvider>
   );
 }

@@ -12,6 +12,10 @@
   color: red !important;
 }
 
+.vuln {
+  text-transform: capitalize !important;
+}
+
 .vuln-critical {
   color: red !important;
   font-weight: bold !important;
