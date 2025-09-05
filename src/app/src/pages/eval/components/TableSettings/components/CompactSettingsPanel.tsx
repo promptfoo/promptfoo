@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
@@ -131,28 +131,37 @@ const CompactSettingsPanel: React.FC = () => {
     setWordBreak,
   } = useResultsViewSettingsStore();
 
-  // Local state for sliders
-  const sanitizedMaxTextLength =
-    maxTextLength === Number.POSITIVE_INFINITY
+  // Optimized slider state management
+  const sanitizedMaxTextLength = useMemo(() => {
+    return maxTextLength === Number.POSITIVE_INFINITY
       ? 1001
       : Number.isFinite(maxTextLength) && maxTextLength >= 25
         ? maxTextLength
         : 500;
+  }, [maxTextLength]);
 
-  const [localMaxTextLength, setLocalMaxTextLength] = useState(sanitizedMaxTextLength);
+  const [localMaxTextLength, setLocalMaxTextLength] = useState(() => sanitizedMaxTextLength);
 
-  const handleTextLengthChange = useCallback(
+  // Sync local state when store changes (e.g., reset button)
+  React.useEffect(() => {
+    setLocalMaxTextLength(sanitizedMaxTextLength);
+  }, [sanitizedMaxTextLength]);
+
+  const handleTextLengthChange = useCallback((value: number) => {
+    setLocalMaxTextLength(value);
+  }, []);
+
+  const handleTextLengthCommitted = useCallback(
     (value: number) => {
-      setLocalMaxTextLength(value);
       const newValue = value === 1001 ? Number.POSITIVE_INFINITY : value;
       setMaxTextLength(newValue);
     },
     [setMaxTextLength],
   );
 
-  const formatTextLength = (value: number) => {
+  const formatTextLength = useCallback((value: number) => {
     return value === 1001 ? 'Unlimited' : `${value} chars`;
-  };
+  }, []);
 
   return (
     <Box
@@ -216,6 +225,7 @@ const CompactSettingsPanel: React.FC = () => {
               <Slider
                 value={localMaxTextLength}
                 onChange={(_, value) => handleTextLengthChange(value as number)}
+                onChangeCommitted={(_, value) => handleTextLengthCommitted(value as number)}
                 min={25}
                 max={1001}
                 marks={[
