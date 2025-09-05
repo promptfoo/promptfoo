@@ -1,9 +1,9 @@
 import fs from 'fs';
 
 import { parse } from 'csv-parse/sync';
-import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { fetchWithTimeout } from '../../util/fetch';
 import { RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types';

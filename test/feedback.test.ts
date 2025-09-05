@@ -1,11 +1,11 @@
 import { gatherFeedback, sendFeedback } from '../src/feedback';
-import { fetchWithProxy } from '../src/fetch';
 import logger from '../src/logger';
+import { fetchWithProxy } from '../src/util/fetch';
 import * as readlineUtils from '../src/util/readline';
 
 const actualFeedback = jest.requireActual('../src/feedback');
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch', () => ({
   fetchWithProxy: jest.fn(),
 }));
 

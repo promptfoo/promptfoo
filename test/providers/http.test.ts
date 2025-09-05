@@ -27,8 +27,8 @@ jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-jest.mock('../../src/fetch', () => ({
-  ...jest.requireActual('../../src/fetch'),
+jest.mock('../../src/util/fetch/index.ts', () => ({
+  ...jest.requireActual('../../src/util/fetch/index.ts'),
   fetchWithRetries: jest.fn(),
   fetchWithTimeout: jest.fn(),
 }));
