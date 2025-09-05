@@ -87,6 +87,44 @@ export async function checkMonthlyProbeLimit(): Promise<ProbeStatus> {
 }
 
 /**
+ * Create a formatted box with the given content and color
+ */
+function createFormattedBox(
+  title: string,
+  mainLine: string,
+  progressBar: string,
+  color: typeof chalk.red,
+  includeContactInfo: boolean = false,
+): string {
+  const boxWidth = 58;
+  const contentWidth = boxWidth - 4; // Account for "│ " on both sides
+
+  const lines = [
+    color('┌────────────────────────────────────────────────────────┐'),
+    color(`│ ${'🎯 PROBE USAGE STATUS'.padEnd(contentWidth)} │`),
+    color(`│ ${''.padEnd(contentWidth)} │`),
+    color(`│ ${mainLine.padEnd(contentWidth)} │`),
+    color(`│ ${progressBar.padEnd(contentWidth)} │`),
+  ];
+
+  if (includeContactInfo) {
+    const emailLine = `📧 Contact: ${PROBE_LIMIT_EMAIL}`;
+    const urlLine = `🌐 Visit: ${PROBE_LIMIT_URL}`;
+
+    lines.push(
+      color(`│ ${''.padEnd(contentWidth)} │`),
+      color(`│ ${'To upgrade to unlimited probes, contact:'.padEnd(contentWidth)} │`),
+      color(`│ ${emailLine.padEnd(contentWidth)} │`),
+      color(`│ ${urlLine.padEnd(contentWidth)} │`),
+    );
+  }
+
+  lines.push(color('└────────────────────────────────────────────────────────┘'));
+
+  return lines.join('\n');
+}
+
+/**
  * Format a message about remaining probes
  * @param remainingProbes Number of remaining probes
  * @returns Formatted message string
@@ -98,53 +136,32 @@ export function formatProbeUsageMessage(probeStatus: ProbeStatus): string {
     return '';
   }
 
+  const progressBar = createRemainingProgressBar(remainingProbes, limit);
+
   if (remainingProbes <= 0) {
-    return (
-      chalk.red('┌─ 🚫 PROBE LIMIT REACHED ─────────────────────┐\n') +
-      chalk.red('│                                              │\n') +
-      chalk.red(
-        `│  ${usedProbes.toLocaleString().padEnd(10)} / ${limit.toLocaleString().padEnd(10)} probes used this month │\n`,
-      ) +
-      chalk.red(`│  ${createRemainingProgressBar(remainingProbes, limit)}              │\n`) +
-      chalk.red('│                                              │\n') +
-      chalk.red('│  📧 Contact: ') +
-      chalk.cyan(PROBE_LIMIT_EMAIL.padEnd(22)) +
-      chalk.red(' │\n') +
-      chalk.red('│  🌐 Visit:   ') +
-      chalk.cyan(PROBE_LIMIT_URL.padEnd(22)) +
-      chalk.red(' │\n') +
-      chalk.red('│                                              │\n') +
-      chalk.red('└──────────────────────────────────────────────┘')
+    return createFormattedBox(
+      '🚫 PROBE LIMIT REACHED',
+      `${usedProbes.toLocaleString().padEnd(1)} / ${limit.toLocaleString().padEnd(1)} probes used this month`,
+      progressBar,
+      chalk.red,
+      true,
     );
   } else if (remainingProbes < limit * 0.2) {
     // Less than 20% remaining
-    return (
-      chalk.yellow('┌─ ⚠️  LOW PROBE COUNT ────────────────────────┐\n') +
-      chalk.yellow('│                                              │\n') +
-      chalk.yellow(
-        `│  ${remainingProbes.toLocaleString().padEnd(10)} / ${limit.toLocaleString().padEnd(10)} probes remaining   │\n`,
-      ) +
-      chalk.yellow(`│  ${createRemainingProgressBar(remainingProbes, limit)}              │\n`) +
-      chalk.yellow('│                                              │\n') +
-      chalk.yellow('│  📧 Contact: ') +
-      chalk.cyan(PROBE_LIMIT_EMAIL.padEnd(22)) +
-      chalk.yellow(' │\n') +
-      chalk.yellow('│  🌐 Visit:   ') +
-      chalk.cyan(PROBE_LIMIT_URL.padEnd(22)) +
-      chalk.yellow(' │\n') +
-      chalk.yellow('│                                              │\n') +
-      chalk.yellow('└──────────────────────────────────────────────┘')
+    return createFormattedBox(
+      '⚠️  LOW PROBE COUNT',
+      `${remainingProbes.toLocaleString().padEnd(1)} / ${limit.toLocaleString().padEnd(1)} probes remaining  `,
+      progressBar,
+      chalk.yellow,
+      true, // Include contact info in box
     );
   } else {
-    return (
-      chalk.green('┌─ 🎯 PROBE USAGE STATUS ──────────────────────┐\n') +
-      chalk.green('│                                              │\n') +
-      chalk.green(
-        `│  ${remainingProbes.toLocaleString().padEnd(10)} / ${limit.toLocaleString().padEnd(10)} probes remaining   │\n`,
-      ) +
-      chalk.green(`│  ${createRemainingProgressBar(remainingProbes, limit)}              │\n`) +
-      chalk.green('│                                              │\n') +
-      chalk.green('└──────────────────────────────────────────────┘')
+    return createFormattedBox(
+      '🎯 PROBE USAGE STATUS',
+      `${remainingProbes.toLocaleString().padEnd(1)} / ${limit.toLocaleString().padEnd(1)} probes remaining  `,
+      progressBar,
+      chalk.green,
+      true, // Include contact info in box
     );
   }
 }
@@ -177,12 +194,19 @@ export async function checkProbeLimit(estimatedProbes?: number): Promise<ProbeCh
 
   // Check if user has exceeded the monthly limit
   if (probeStatus.hasExceeded) {
-    logger.error(
-      chalk.red(`\n❌ Monthly redteam probe limit exceeded!\n`) +
-        `You have used ${probeStatus.usedProbes.toLocaleString()} out of ${probeStatus.limit.toLocaleString()} probes this month.\n` +
-        `The limit will reset at the beginning of next month.\n` +
-        `${CONTACT_MESSAGE}`,
+    const errorMessage = createFormattedBox(
+      '🚫 PROBE LIMIT EXCEEDED',
+      `${probeStatus.usedProbes.toLocaleString()} / ${probeStatus.limit.toLocaleString()} probes used this month`,
+      createRemainingProgressBar(0, probeStatus.limit),
+      chalk.red,
+      false,
     );
+    logger.error(
+      `\n${errorMessage}\n\nYou have exceeded your monthly probe limit. The limit will reset at the beginning of next month.`,
+    );
+    const emailLine = `📧 Contact: ${PROBE_LIMIT_EMAIL}`;
+    const urlLine = `🌐 Visit: ${PROBE_LIMIT_URL}`;
+    logger.error(`\nTo upgrade to unlimited probes, contact:\n${emailLine}\n${urlLine}`);
     return { canProceed: false, probeStatus, exitCode: 1 };
   }
 
@@ -193,17 +217,29 @@ export async function checkProbeLimit(estimatedProbes?: number): Promise<ProbeCh
       estimatedProbes > probeStatus.remainingProbes + ALLOWED_PROBE_LIMIT_EXCEEDANCE;
 
     if (exceedsProbeLimit) {
+      const errorMessage = createFormattedBox(
+        '🚫 SCAN EXCEEDS LIMIT',
+        `Need ${estimatedProbes.toLocaleString()} / Have ${probeStatus.remainingProbes.toLocaleString()} probes remaining`,
+        createRemainingProgressBar(probeStatus.remainingProbes, probeStatus.limit),
+        chalk.red,
+        true,
+      );
       logger.error(
-        chalk.red(`\n❌ This scan would exceed your probe limit!\n`) +
-          `This scan requires approximately ${estimatedProbes.toLocaleString()} probes, but you only have ${probeStatus.remainingProbes.toLocaleString()} remaining.\n` +
-          `The scan exceeds your limit by more than ${ALLOWED_PROBE_LIMIT_EXCEEDANCE.toLocaleString()} probes and cannot be started.\n` +
-          `Please reduce the number of tests or ${CONTACT_MESSAGE}\n`,
+        `\n${errorMessage}\n\n` +
+          `This scan exceeds your limit by more than ${ALLOWED_PROBE_LIMIT_EXCEEDANCE.toLocaleString()} probes and cannot be started.\n` +
+          `Please reduce the number of tests or ${CONTACT_MESSAGE}`,
       );
       return { canProceed: false, probeStatus, exitCode: 1 };
     } else if (estimatedProbes > probeStatus.remainingProbes) {
+      const warningMessage = createFormattedBox(
+        '⚠️  SCAN MAY BE LIMITED',
+        `Need ${estimatedProbes.toLocaleString()} / Have ${probeStatus.remainingProbes.toLocaleString()} probes remaining`,
+        createRemainingProgressBar(probeStatus.remainingProbes, probeStatus.limit),
+        chalk.yellow,
+        true,
+      );
       logger.warn(
-        chalk.yellow(`\n⚠️  Warning: This scan may be limited!\n`) +
-          `This scan requires approximately ${estimatedProbes.toLocaleString()} probes, but you only have ${probeStatus.remainingProbes.toLocaleString()} remaining.\n` +
+        `\n${warningMessage}\n\n` +
           `The scan may be limited. Consider reducing the number of tests.\n` +
           `${CONTACT_MESSAGE}`,
       );
