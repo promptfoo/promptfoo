@@ -258,7 +258,7 @@ function convertErrorsToReadableMessage(
  * @throws Error for other critical permission check failures
  */
 export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Promise<void> {
-  if (!cloudConfig.isEnabled()) {
+  if (!cloudConfig.isEnabled() || config.redteam === undefined) {
     return;
   }
 
