@@ -395,7 +395,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
-  'role-confusion': Severity.High,
+  'role-confusion': Severity.Low,
   'shell-injection': Severity.High,
   'sql-injection': Severity.High,
   ssrf: Severity.High,
@@ -482,6 +482,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'policy',
     'politics',
     'religion',
+    'role-confusion',
   ],
 
   'Domain-Specific Risks': [

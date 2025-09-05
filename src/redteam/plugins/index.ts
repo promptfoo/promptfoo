@@ -336,7 +336,6 @@ const remotePlugins: PluginFactory[] = [
   'rag-poisoning',
   'reasoning-dos',
   'religion',
-  'role-confusion',
   'ssrf',
   'system-prompt-override',
 ].map((key) => createRemotePlugin(key));
@@ -349,6 +348,27 @@ remotePlugins.push(
         config.indirectInjectionVar,
         'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set. If using this plugin in a plugin collection, configure this plugin separately.',
       ),
+  ),
+  createRemotePlugin<{ examples?: string[] }>(
+    'role-confusion',
+    (config: { examples?: string[] }) => {
+      if (config.examples) {
+        invariant(
+          Array.isArray(config.examples),
+          'Role confusion plugin config.examples must be an array of strings',
+        );
+        invariant(
+          config.examples.length > 0,
+          'Role confusion plugin config.examples must not be empty if provided',
+        );
+        config.examples.forEach((example, index) => {
+          invariant(
+            typeof example === 'string' && example.trim().length > 0,
+            `Role confusion plugin config.examples[${index}] must be a non-empty string`,
+          );
+        });
+      }
+    },
   ),
 );
 
