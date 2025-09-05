@@ -1,47 +1,79 @@
 ---
 sidebar_label: Answer Relevance
-description: 'Score LLM response relevance and completeness against user queries using sophisticated AI-powered evaluation metrics'
+description: 'Score LLM response relevance and completeness against user queries'
 ---
 
-# Answer Relevance
+# Answer relevance
 
-The `answer-relevance` assertion evaluates whether an LLM's output is relevant to the original query. It uses a combination of embedding similarity and LLM evaluation to determine relevance.
+The `answer-relevance` assertion checks if the LLM response answers the user's question.
 
-### How to use it
+**What it measures**: Given a user's query and the LLM's response, it evaluates how well the response addresses what was asked. It generates potential questions the response could answer, then compares these with the original query using embedding similarity.
 
-To use the `answer-relevance` assertion type, add it to your test configuration like this:
+**Example**:
+
+- Query: "What is the capital of France?"
+- Good response (high score): "The capital of France is Paris."
+- Poor response (low score): "France has excellent wine and cheese." (doesn't answer the question)
+
+## Required fields
+
+The answer-relevance assertion requires:
+
+- `query` or prompt - The user's question (from test vars or prompt)
+- Output - The LLM's response to evaluate
+- `threshold` (optional but recommended) - Minimum relevance score from 0 to 1 (defaults to 0)
+
+## Configuration
+
+### Basic usage
 
 ```yaml
 assert:
   - type: answer-relevance
-    threshold: 0.7 # Score between 0 and 1
+    threshold: 0.8
 ```
 
-### How it works
+:::warning
+The default threshold is 0, which means the assertion will pass even with completely irrelevant responses. Always set an appropriate threshold value for meaningful evaluation.
+:::
+
+## How it works
 
 The answer relevance checker:
 
-1. Uses an LLM to generate potential questions that the output could be answering
+1. Uses an LLM to generate potential questions the response could be answering
 2. Compares these questions with the original query using embedding similarity
-3. Calculates a relevance score based on the similarity scores
+3. Returns a relevance score from 0 to 1
 
-A higher threshold requires the output to be more closely related to the original query.
+This approach catches responses that are topically related but don't actually answer the specific question asked.
 
-### Example Configuration
+### Complete example
 
-Here's a complete example showing how to use answer relevance:
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Ensure LLM responses are relevant to user queries'
 
-```yaml
 prompts:
   - 'Tell me about {{topic}}'
+
 providers:
-  - openai:gpt-4
+  - id: openai:gpt-4.1-mini
+
 tests:
-  - vars:
+  - description: 'Test response relevance for quantum computing query'
+    vars:
       topic: quantum computing
     assert:
       - type: answer-relevance
         threshold: 0.8
+
+  - description: 'Test with explicit query variable'
+    vars:
+      query: 'What are the benefits of exercise?'
+      topic: 'physical fitness'
+    assert:
+      - type: answer-relevance
+        threshold: 0.85
 ```
 
 ### Overriding the Providers
@@ -58,11 +90,11 @@ defaultTest:
   options:
     provider:
       text:
-        id: openai:gpt-4
+        id: openai:gpt-4.1
         config:
           temperature: 0
       embedding:
-        id: openai:text-embedding-ada-002
+        id: openai:embeddings:text-embedding-3-large
 ```
 
 You can also override providers at the assertion level:
@@ -72,8 +104,8 @@ assert:
   - type: answer-relevance
     threshold: 0.8
     provider:
-      text: anthropic:claude-2
-      embedding: cohere:embed-english-v3.0
+      text: anthropic:messages:claude-opus-4-1-latest
+      embedding: cohere:embedding:embed-english-v3.0
 ```
 
 ### Customizing the Prompt
@@ -90,6 +122,13 @@ defaultTest:
       Make the questions specific and directly related to the content.
 ```
 
-# Further reading
+## Related assertions
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - For custom relevance criteria
+- [`similar`](/docs/configuration/expected-outputs/similar) - For semantic similarity to expected answers
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - When working with RAG systems
+
+## Further reading
+
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
+- [Getting Started](/docs/getting-started) guide
