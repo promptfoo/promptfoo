@@ -19,6 +19,7 @@ import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
+  checkCloudPermissions,
   getCloudDatabaseId,
   getConfigFromCloud,
   getDefaultTeam,
@@ -168,6 +169,8 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
     resolvedConfigMetadata = resolved.config.metadata;
+
+    await checkCloudPermissions(resolved.config);
 
     // Warn if both tests section and redteam config are present
     if (redteamConfig && resolved.testSuite.tests && resolved.testSuite.tests.length > 0) {

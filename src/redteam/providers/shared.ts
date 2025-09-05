@@ -19,7 +19,8 @@ import {
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
-import { transform, type TransformContext, TransformInputType } from '../../util/transform';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { type TransformContext, TransformInputType, transform } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 async function loadRedteamProvider({
@@ -128,6 +129,7 @@ export async function getTargetResponse(
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
     await sleep(targetProvider.delay);
   }
+  const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   if (targetRespRaw?.output) {
     const output = (
       typeof targetRespRaw.output === 'string'
@@ -137,7 +139,7 @@ export async function getTargetResponse(
     return {
       output,
       sessionId: targetRespRaw.sessionId,
-      tokenUsage: targetRespRaw.tokenUsage || { numRequests: 1 },
+      tokenUsage,
       guardrails: targetRespRaw.guardrails,
     };
   }
@@ -147,7 +149,7 @@ export async function getTargetResponse(
       output: '',
       error: targetRespRaw.error,
       sessionId: targetRespRaw.sessionId,
-      tokenUsage: { numRequests: 1 },
+      tokenUsage,
       guardrails: targetRespRaw.guardrails,
     };
   }
@@ -155,7 +157,7 @@ export async function getTargetResponse(
   throw new Error(
     `
     Target returned malformed response: expected either \`output\` or \`error\` to be set.
-    
+
     Instead got: ${safeJsonStringify(targetRespRaw)}
     `,
   );
@@ -317,7 +319,6 @@ export async function tryUnblocking({
 }): Promise<{
   success: boolean;
   unblockingPrompt?: string;
-  tokenUsage?: TokenUsage;
 }> {
   try {
     // Check if the server supports unblocking feature
@@ -333,7 +334,6 @@ export async function tryUnblocking({
       // Return a response that will not increment numRequests
       return {
         success: false,
-        tokenUsage: { numRequests: 0 } as Partial<TokenUsage> as TokenUsage,
       };
     }
 
@@ -341,7 +341,6 @@ export async function tryUnblocking({
       logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');
       return {
         success: false,
-        tokenUsage: { numRequests: 0 } as Partial<TokenUsage> as TokenUsage,
       };
     }
 
@@ -372,9 +371,11 @@ export async function tryUnblocking({
       vars: {},
     });
 
+    TokenUsageTracker.getInstance().trackUsage(unblockingProvider.id(), response.tokenUsage);
+
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);
-      return { success: false, tokenUsage: response.tokenUsage };
+      return { success: false };
     }
 
     const parsed = response.output as any;
@@ -387,13 +388,11 @@ export async function tryUnblocking({
       return {
         success: true,
         unblockingPrompt: parsed.unblockingAnswer,
-        tokenUsage: response.tokenUsage,
       };
     } else {
       logger.debug('[Unblocking] No blocking question detected');
       return {
         success: false,
-        tokenUsage: response.tokenUsage,
       };
     }
   } catch (error) {

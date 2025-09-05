@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
@@ -109,7 +110,7 @@ export async function stopOtlpReceiverIfNeeded(): Promise<void> {
  * Check if tracing is enabled for a test case
  */
 export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean {
-  return test.metadata?.tracingEnabled === true || process.env.PROMPTFOO_TRACING_ENABLED === 'true';
+  return test.metadata?.tracingEnabled === true || getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
 }
 
 /**
