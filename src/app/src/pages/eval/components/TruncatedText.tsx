@@ -38,13 +38,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     Array.isArray(rawText) ||
     React.isValidElement(rawText)
       ? rawText
-      : (() => {
-          try {
-            return JSON.stringify(rawText);
-          } catch {
-            return '[Circular]';
-          }
-        })();
+      : JSON.stringify(rawText);
 
   const contentLen = textLength(text);
   const isOverLength = maxLength > 0 && contentLen > maxLength;

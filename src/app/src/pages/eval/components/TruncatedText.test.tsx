@@ -439,20 +439,4 @@ describe('TruncatedText', () => {
     // Content should be empty or minimal
     expect(mainDiv?.textContent || '').toBe('');
   });
-
-  it('should display "[Circular]" for circular reference objects instead of crashing', () => {
-    const circularObj: any = { name: 'test' };
-    circularObj.self = circularObj; // Create circular reference
-    const maxLength = 20;
-
-    const { container } = render(<TruncatedText text={circularObj} maxLength={maxLength} />);
-
-    const mainDiv = container.querySelector('#eval-output-cell-text');
-    expect(mainDiv).toBeInTheDocument();
-
-    // Should display '[Circular]' instead of crashing
-    expect(mainDiv).toHaveTextContent('[Circular]');
-    expect(mainDiv).toHaveStyle('cursor: normal');
-    expect(screen.queryByText('...')).not.toBeInTheDocument();
-  });
 });
