@@ -17,7 +17,6 @@ export class TokenUsageTracker {
    */
   public static getInstance(): TokenUsageTracker {
     if (!TokenUsageTracker.instance) {
-      logger.error('Creating new TokenUsageTracker instance');
       TokenUsageTracker.instance = new TokenUsageTracker();
     }
     return TokenUsageTracker.instance;

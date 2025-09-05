@@ -123,7 +123,9 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       logger.info('\n' + msg + '\n');
     }
   } catch (err) {
-    logger.debug(`Probe usage check failed: ${err instanceof Error ? err.message : String(err)}`);
+    logger.debug(
+      `Probe usage check failed: ${err instanceof Error ? err.message + '\n' + err.stack : String(err)}`,
+    );
   }
   const command = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
   if (options.loadedFromCloud) {

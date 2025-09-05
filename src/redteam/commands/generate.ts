@@ -341,11 +341,18 @@ export async function doGenerateRedteam(
 
   // Check probe limit before generating tests
   const estimatedProbes = getEstimatedProbes(config);
-  const probeCheckResult = await checkProbeLimit(estimatedProbes);
+  try {
+    const probeCheckResult = await checkProbeLimit(estimatedProbes);
 
-  if (!probeCheckResult.canProceed) {
-    process.exitCode = probeCheckResult.exitCode;
-    return null;
+    if (!probeCheckResult.canProceed) {
+      process.exitCode = probeCheckResult.exitCode;
+      return null;
+    }
+  } catch (error) {
+    logger.warning(
+      `Error checking probe limit: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    logger.debug(`${error instanceof Error ? error.stack : ''}`);
   }
 
   const parsedConfig = RedteamConfigSchema.safeParse(config);
