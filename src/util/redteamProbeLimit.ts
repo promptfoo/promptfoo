@@ -9,7 +9,7 @@ import { isEnterpriseCustomer } from './cloud';
 
 const CONTACT_MESSAGE = `Contact ${PROBE_LIMIT_EMAIL} to upgrade or visit ${PROBE_LIMIT_URL} to upgrade to our enterprise plan.`;
 
-interface ProbeStatus {
+export interface ProbeStatus {
   hasExceeded: boolean;
   usedProbes: number;
   remainingProbes: number;
