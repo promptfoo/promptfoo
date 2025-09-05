@@ -2,7 +2,7 @@ import { Telemetry } from '../src/telemetry';
 import { fetchWithTimeout } from '../src/util/fetch';
 
 jest.mock('../src/util/fetch/index.ts', () => ({
-  fetchWithTimeout: jest.fn(),
+  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 jest.mock('crypto', () => ({
