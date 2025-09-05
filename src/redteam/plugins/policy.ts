@@ -14,8 +14,6 @@ import type {
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 
-import logger from '../../logger';
-
 /**
  * Checks whether a given Policy is a valid PolicyObject.
  * @param policy - The policy to check.
