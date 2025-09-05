@@ -15,6 +15,7 @@ You can run this example with:
 ```bash
 npx promptfoo@latest init --example e2b-code-eval
 ```
+
 ## Environment Variables
 
 Set these in your shell before running the example.
@@ -27,6 +28,7 @@ export OPENAI_API_KEY="sk_xxx_your_key_here"     # OpenAI key (or your chosen LL
 # Recommended
 export PROMPTFOO_PYTHON="$(pwd)/.venv/bin/python"  # tell promptfoo which Python/venv to use
 ```
+
 - If you use a different provider name in promptfooconfig.yaml, add that provider's key instead.
 
 ## Prerequisites
@@ -43,6 +45,7 @@ pip install --upgrade pip
 pip install e2b-code-interpreter
 npm i -g promptfoo
 ```
+
 ## Running the Example
 
 Activate venv and ensure env vars are set:
@@ -53,11 +56,13 @@ export E2B_API_KEY="e2b_xxx"
 export OPENAI_API_KEY="sk_xxx"
 export PROMPTFOO_PYTHON="$(pwd)/.venv/bin/python"
 ```
+
 Run the evaluation:
 
 ```bash
 promptfoo eval
 ```
+
 Open the interactive viewer:
 
 ```bash
