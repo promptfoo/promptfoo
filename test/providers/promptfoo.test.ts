@@ -130,16 +130,17 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   it('should handle successful API call', async () => {
-    const mockResponse = {
-      data: {
+    const mockResponse = new Response(
+      JSON.stringify({
         result: 'test result',
         tokenUsage: { total: 100 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
       },
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    );
+    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
@@ -150,15 +151,16 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   it('should handle missing result', async () => {
-    const mockResponse = {
-      data: {
+    const mockResponse = new Response(
+      JSON.stringify({
         result: null,
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
       },
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    );
+    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
@@ -166,7 +168,7 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   it('should handle API error', async () => {
-    jest.mocked(fetchWithCache).mockRejectedValue(new Error('API Error'));
+    jest.mocked(fetchWithRetries).mockRejectedValue(new Error('API Error'));
 
     const result = await provider.callApi('test prompt');
 
