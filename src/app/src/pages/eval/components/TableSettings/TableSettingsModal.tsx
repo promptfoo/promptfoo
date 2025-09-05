@@ -58,8 +58,8 @@ const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => 
         elevation: tokens.elevation.dialog,
         sx: {
           maxWidth: 760, // Increased from default
-          minHeight: 480,
-          maxHeight: '85vh',
+          minHeight: 560, // Increased from 480 to accommodate grouped sections
+          maxHeight: '90vh', // Increased from 85vh for better accommodation
           borderRadius: tokens.borderRadius.medium,
           overflow: 'hidden',
           backgroundImage:
@@ -122,8 +122,13 @@ const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => 
           p: 0,
           height: {
             xs: 'calc(100% - 125px)',
-            sm: 480,
+            sm: 560, // Increased from 480 to accommodate grouped sections
           },
+          maxHeight: {
+            xs: 'calc(100vh - 200px)',
+            sm: '70vh', // Ensure it doesn't exceed viewport
+          },
+          overflow: 'auto', // Ensure scrolling is enabled
           '&::-webkit-scrollbar': {
             width: '6px',
           },

@@ -256,7 +256,7 @@ const MainSettingsPanel: React.FC = () => {
   }, []);
 
   return (
-    <Box sx={{ p: 2, height: '100%', overflow: 'hidden' }}>
+    <Box sx={{ p: 2, height: '100%' }}>
       {/* Hero Text Length Control */}
       <SettingGroup title="Text Display" accent>
         <SettingRow 
