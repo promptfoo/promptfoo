@@ -306,4 +306,46 @@ describe('TruncatedText', () => {
     // Should be truncated again
     expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
   });
+
+  it('should display full text and normal cursor when maxLength is 0', () => {
+    const longText = 'This is a very long piece of text that would normally be truncated';
+    const maxLength = 0;
+
+    const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    // Should display full text without truncation
+    expect(mainDiv).toHaveTextContent(longText);
+    expect(mainDiv).not.toHaveTextContent('...');
+
+    // Should have normal cursor, not pointer
+    expect(mainDiv).toHaveStyle('cursor: normal');
+
+    // Should not show ellipsis or show less button
+    expect(screen.queryByText('...')).not.toBeInTheDocument();
+    expect(screen.queryByText('Show less')).not.toBeInTheDocument();
+  });
+
+  it('should display full text and normal cursor when maxLength is negative', () => {
+    const longText = 'This is a very long piece of text that would normally be truncated';
+    const maxLength = -10;
+
+    const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    // Should display full text without truncation
+    expect(mainDiv).toHaveTextContent(longText);
+    expect(mainDiv).not.toHaveTextContent('...');
+
+    // Should have normal cursor, not pointer
+    expect(mainDiv).toHaveStyle('cursor: normal');
+
+    // Should not show ellipsis or show less button
+    expect(screen.queryByText('...')).not.toBeInTheDocument();
+    expect(screen.queryByText('Show less')).not.toBeInTheDocument();
+  });
 });
