@@ -150,15 +150,6 @@ export async function doEval(
       }
     }
 
-    // Misc settings
-    const iterations = cmdObj.repeat ?? Number.NaN;
-    const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;
-
-    if (!cmdObj.cache || repeat > 1) {
-      logger.info('Cache is disabled.');
-      disableCache();
-    }
-
     ({
       config,
       testSuite,
@@ -206,14 +197,26 @@ export async function doEval(
     // Ensure evaluateOptions from the config file are applied
     if (config.evaluateOptions) {
       evaluateOptions = {
-        ...config.evaluateOptions,
         ...evaluateOptions,
+        ...config.evaluateOptions,
       };
+    }
+
+    // Misc settings with proper CLI vs config priority
+    // CLI values explicitly provided by user should override config, but defaults should not
+    const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
+    const repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
+
+    const cache = cmdObj.cache ?? evaluateOptions.cache;
+
+    if (!cache || repeat > 1) {
+      logger.info('Cache is disabled.');
+      disableCache();
     }
 
     let maxConcurrency =
       cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-    const delay = cmdObj.delay ?? 0;
+    const delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
 
     if (delay > 0) {
       maxConcurrency = 1;
@@ -253,10 +256,18 @@ export async function doEval(
 
     const options: EvaluateOptions = {
       ...evaluateOptions,
-      showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar !== false,
+      showProgressBar:
+        getLogLevel() === 'debug'
+          ? false
+          : cmdObj.progressBar !== undefined
+            ? cmdObj.progressBar !== false
+            : evaluateOptions.showProgressBar !== undefined
+              ? evaluateOptions.showProgressBar
+              : true,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
+      cache,
     };
 
     if (cmdObj.grader) {
@@ -738,21 +749,10 @@ export function evalCommand(
     // Execution control
     .option(
       '-j, --max-concurrency <number>',
-      'Maximum number of concurrent API calls',
-      defaultConfig.evaluateOptions?.maxConcurrency
-        ? String(defaultConfig.evaluateOptions.maxConcurrency)
-        : `${DEFAULT_MAX_CONCURRENCY}`,
+      `Maximum number of concurrent API calls (default: ${DEFAULT_MAX_CONCURRENCY})`,
     )
-    .option(
-      '--repeat <number>',
-      'Number of times to run each test',
-      defaultConfig.evaluateOptions?.repeat ? String(defaultConfig.evaluateOptions.repeat) : '1',
-    )
-    .option(
-      '--delay <number>',
-      'Delay between each test (in milliseconds)',
-      defaultConfig.evaluateOptions?.delay ? String(defaultConfig.evaluateOptions.delay) : '0',
-    )
+    .option('--repeat <number>', 'Number of times to run each test (default: 1)')
+    .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
     .option(
       '--no-cache',
       'Do not read or write results to disk cache',
