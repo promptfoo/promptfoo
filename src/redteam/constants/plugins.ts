@@ -293,6 +293,7 @@ export const ADDITIONAL_PLUGINS = [
   'reasoning-dos',
   'religion',
   'shell-injection',
+  'special-token-injection',
   'sql-injection',
   'ssrf',
   'system-prompt-override',
