@@ -283,6 +283,7 @@ export const ADDITIONAL_PLUGINS = [
   'reasoning-dos',
   'religion',
   'shell-injection',
+  'simba',
   'sql-injection',
   'ssrf',
   'system-prompt-override',
