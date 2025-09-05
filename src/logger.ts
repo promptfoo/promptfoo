@@ -1,8 +1,10 @@
+import fs from 'fs';
 import path from 'path';
 
 import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
+import { getConfigDirectoryPath } from './util/config/manage';
 
 type LogCallback = (message: string) => void;
 export let globalLogCallback: LogCallback | null = null;
@@ -173,6 +175,87 @@ export function isDebugEnabled(): boolean {
 }
 
 /**
+ * Creates log directory and cleans up old log files
+ */
+function setupLogDirectory(): string {
+  const configDir = getConfigDirectoryPath(true);
+  const logDir = path.join(configDir, 'logs');
+
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+
+  // Clean up old log files, keep only the 9 most recent (so with new one we have 10)
+  try {
+    const logFiles = fs
+      .readdirSync(logDir)
+      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
+      .map((file) => ({
+        name: file,
+        path: path.join(logDir, file),
+        mtime: fs.statSync(path.join(logDir, file)).mtime,
+      }))
+      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
+
+    // Remove old files (keep only 9, so with the new one we'll have 10)
+    if (logFiles.length >= 9) {
+      logFiles.slice(9).forEach((file) => {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (_error) {
+          // Silently ignore errors when cleaning up old logs
+        }
+      });
+    }
+  } catch (_error) {
+    // Silently ignore errors during cleanup
+  }
+
+  return logDir;
+}
+
+/**
+ * Creates a new log file for the current CLI run
+ */
+function createRunLogFile(): string {
+  const logDir = setupLogDirectory();
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
+  const logFile = path.join(logDir, `promptfoo-${timestamp}.log`);
+  return logFile;
+}
+
+// Create a file transport for the current run
+let runLogTransport: winston.transports.FileTransportInstance | null = null;
+
+/**
+ * Initialize per-run logging
+ */
+export function initializeRunLogging(): void {
+  if (runLogTransport) {
+    return; // Already initialized
+  }
+
+  try {
+    const logFile = createRunLogFile();
+    runLogTransport = new winston.transports.File({
+      filename: logFile,
+      level: 'debug', // Capture all levels in the file
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.printf(({ timestamp, level, message }) => {
+          return `${timestamp} [${level.toUpperCase()}]: ${message}`;
+        }),
+      ),
+    });
+
+    winstonLogger.add(runLogTransport);
+  } catch (_error) {
+    // Silently fail if we can't create the log file
+    runLogTransport = null;
+  }
+}
+
+/**
  * Creates a logger method for the specified log level
  */
 function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
@@ -202,6 +285,59 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
   remove: typeof winstonLogger.remove;
   transports: typeof winstonLogger.transports;
 };
+
+/**
+ * Logs request/response details in a formatted way
+ * @param url - Request URL
+ * @param requestBody - Request body object
+ * @param response - Response object (optional)
+ * @param error - Whether to log as error (true) or debug (false)
+ */
+export function logRequestResponse(
+  url: string,
+  requestBody: any,
+  response?: Response | null,
+  error = false,
+): void {
+  const logMethod = error ? logger.error : logger.debug;
+
+  if (response && !response.ok) {
+    // For failed responses, always log as error with full details
+    response
+      .text()
+      .then((responseText) => {
+        const errorDetails = [
+          `Status: ${response.status} ${response.statusText}`,
+          `Request URL: ${url}`,
+          `Request Body: ${JSON.stringify(requestBody, null, 2)}`,
+          `Response: ${responseText || 'Empty response'}`,
+        ].join('\n');
+
+        logger.error(`API request failed:\n${errorDetails}`);
+      })
+      .catch(() => {
+        const errorDetails = [
+          `Status: ${response.status} ${response.statusText}`,
+          `Request URL: ${url}`,
+          `Request Body: ${JSON.stringify(requestBody, null, 2)}`,
+          `Response: Unable to read response`,
+        ].join('\n');
+
+        logger.error(`API request failed:\n${errorDetails}`);
+      });
+  } else {
+    // For successful responses or debug logging
+    const details = [
+      `URL: ${url}`,
+      `Request: ${JSON.stringify(requestBody, null, 2)}`,
+      response ? `Status: ${response.status} ${response.statusText}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    logMethod(`API request${error ? ' failed' : ''}:\n${details}`);
+  }
+}
 
 // Initialize source maps if debug is enabled at startup
 if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
