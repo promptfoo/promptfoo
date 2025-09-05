@@ -1,10 +1,12 @@
 # swe_runner.py (e2b-only skeleton)
 import os
+import shutil
 import subprocess
 import tempfile
-import shutil
 import time
+
 from e2b_code_interpreter import Sandbox
+
 
 def model_call_patch(fail_log: str, relevant_files: dict) -> str:
     """
@@ -16,7 +18,10 @@ def model_call_patch(fail_log: str, relevant_files: dict) -> str:
     """
     raise NotImplementedError("Implement model_call_patch()")
 
-def run_task_local(repo_url: str, failing_test_cmd: str, relevant_paths: list, attempts=3):
+
+def run_task_local(
+    repo_url: str, failing_test_cmd: str, relevant_paths: list, attempts=3
+):
     tmp = tempfile.mkdtemp()
     try:
         subprocess.check_call(["git", "clone", repo_url, tmp])
@@ -40,14 +45,21 @@ def run_task_local(repo_url: str, failing_test_cmd: str, relevant_paths: list, a
                 print("Model call failed:", e)
                 break
             # apply patch locally
-            proc = subprocess.run(["git", "apply", "-"], input=patch, text=True, capture_output=True)
+            proc = subprocess.run(
+                ["git", "apply", "-"], input=patch, text=True, capture_output=True
+            )
             if proc.returncode != 0:
                 print("Patch apply failed:", proc.stderr)
                 continue
             # run tests inside e2b sandbox (safe)
             with Sandbox.create() as sbx:
                 test_script = f"import subprocess; print(subprocess.run('{failing_test_cmd}', shell=True, capture_output=True).returncode)"
-                res = sbx.run_code(code=test_script, language="python", limits={"cputime": 10, "wall_time": 30, "memory": 512}, allow_network=False)
+                res = sbx.run_code(
+                    code=test_script,
+                    language="python",
+                    limits={"cputime": 10, "wall_time": 30, "memory": 512},
+                    allow_network=False,
+                )
             rc = None
             try:
                 if getattr(res, "results", None):
@@ -62,7 +74,7 @@ def run_task_local(repo_url: str, failing_test_cmd: str, relevant_paths: list, a
                 rc = None
             if rc == 0:
                 success = True
-                print("Patch fixed tests on attempt", attempt+1)
+                print("Patch fixed tests on attempt", attempt + 1)
                 break
             else:
                 print("Patch did not fix tests; rc:", rc)
