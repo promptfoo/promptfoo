@@ -107,7 +107,7 @@ export function formatProbeUsageMessage(probeStatus: ProbeStatus): string {
       `${CONTACT_MESSAGE}`
     );
   } else {
-    return `Redteam probes remaining this month: ${remainingProbes.toLocaleString()} / ${limit.toLocaleString()} (${percentage}%)`;
+    return `Red team probes remaining this month: ${remainingProbes.toLocaleString()} / ${limit.toLocaleString()}`;
   }
 }
 

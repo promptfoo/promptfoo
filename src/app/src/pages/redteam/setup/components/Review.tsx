@@ -1099,24 +1099,67 @@ export default function Review({
                   This scan requires approximately {estimatedProbes.toLocaleString()} probes, but
                   you only have {probeLimit.remainingProbes.toLocaleString()} remaining.
                   {exceedsProbeLimit
-                    ? ` The scan cannot be started as it exceeds your limit by more than ${ALLOWED_PROBE_LIMIT_EXCEEDANCE.toLocaleString()} probes. Please reduce the number of tests or contact sales to upgrade.`
+                    ? ` The scan cannot be started as it exceeds your limit by more than ${ALLOWED_PROBE_LIMIT_EXCEEDANCE.toLocaleString()} probes.`
                     : ' The scan may be limited. Consider reducing the number of tests.'}
                 </Typography>
               </Alert>
             )}
 
             <Alert severity="info" sx={{ mt: 2 }}>
-              <Typography variant="body2">
-                Red teaming uses an LLM to generate probes and grade responses. Our community plan
-                includes 10,000 probes per month. Need more capacity? Contact our sales team at{' '}
-                <Link to={`mailto:${PROBE_LIMIT_EMAIL}`} style={{ color: 'inherit' }}>
-                  {PROBE_LIMIT_EMAIL}
-                </Link>{' '}
-                for enterprise options, or visit{' '}
-                <Link to={PROBE_LIMIT_URL} style={{ color: 'inherit' }}>
-                  {PROBE_LIMIT_URL}
-                </Link>{' '}
-              </Typography>
+              <Box>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  Red teaming uses an LLM to generate probes and grade responses. Our community plan
+                  includes 10,000 probes per month.
+                </Typography>
+
+                <Box
+                  sx={{
+                    p: 2,
+                    borderRadius: 1,
+                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                  }}
+                >
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                    Need more capacity?
+                  </Typography>
+
+                  <Stack spacing={1}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2">📧</Typography>
+                      <Typography variant="body2">
+                        Contact our sales team at{' '}
+                        <Link
+                          to={`mailto:${PROBE_LIMIT_EMAIL}`}
+                          style={{ color: 'inherit', textDecoration: 'underline' }}
+                        >
+                          {PROBE_LIMIT_EMAIL}
+                        </Link>
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2">🌐</Typography>
+                      <Typography variant="body2">
+                        Visit{' '}
+                        <Link
+                          to={PROBE_LIMIT_URL}
+                          style={{ color: 'inherit', textDecoration: 'underline' }}
+                        >
+                          {PROBE_LIMIT_URL}
+                        </Link>
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2">💬</Typography>
+                      <Typography variant="body2">
+                        Use the chat in the bottom right corner
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Box>
+              </Box>
             </Alert>
           </Paper>
         )}
@@ -1167,14 +1210,14 @@ export default function Review({
             {probeLimit && probeLimit.hasExceeded && (
               <Alert severity="error" sx={{ mb: 2 }}>
                 You have exceeded your monthly probe limit ({probeLimit.limit.toLocaleString()}{' '}
-                probes). Please contact inquiries@promptfoo.dev to upgrade your account.
+                probes). Please contact {PROBE_LIMIT_EMAIL} to upgrade your account.
               </Alert>
             )}
             {exceedsProbeLimit && !probeLimit?.hasExceeded && (
               <Alert severity="error" sx={{ mb: 2 }}>
-                This scan requires {estimatedProbes.toLocaleString()} probes but you only have{' '}
-                {probeLimit?.remainingProbes.toLocaleString()} remaining. Please reduce the number
-                of tests or plugins to continue.
+                {probeLimit?.remainingProbes && probeLimit?.remainingProbes > 0
+                  ? `This scan requires ${estimatedProbes.toLocaleString()} probes but you only have ${probeLimit?.remainingProbes.toLocaleString()} remaining. Please reduce the number of tests or plugins to continue. `
+                  : `You have no probes remaining this month.`}{' '}
               </Alert>
             )}
             {probeLimit &&
