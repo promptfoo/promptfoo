@@ -29,7 +29,6 @@ export const AGENTIC_STRATEGIES = [
   'jailbreak',
   'jailbreak:tree',
   'mischievous-user',
-  'pandamonium',
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 
@@ -67,7 +66,6 @@ export const ADDITIONAL_STRATEGIES = [
   'mischievous-user',
   'morse',
   'multilingual',
-  'pandamonium',
   'piglatin',
   'prompt-injection',
   'retry',
@@ -97,7 +95,6 @@ export const CONFIGURABLE_STRATEGIES = [
   'best-of-n',
   'goat',
   'crescendo',
-  'pandamonium',
   'jailbreak',
   'jailbreak:tree',
   'gcg',

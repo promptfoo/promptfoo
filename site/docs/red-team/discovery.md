@@ -2,6 +2,7 @@
 sidebar_position: 10
 sidebar_label: Target Discovery
 title: Target Discovery Agent
+description: Red team AI systems through automated target discovery to detect vulnerabilities, extract system information, and improve attack efficacy in production deployments
 ---
 
 # Target Discovery

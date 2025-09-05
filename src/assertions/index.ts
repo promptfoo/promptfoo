@@ -57,6 +57,7 @@ import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
+import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
@@ -138,6 +139,7 @@ export async function runAssertion({
     output = await transform(assertion.transform, output, {
       vars: test.vars,
       prompt: { label: prompt },
+      ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
     });
   }
 
@@ -263,6 +265,7 @@ export async function runAssertion({
     contains: handleContains,
     'contains-all': handleContainsAll,
     'contains-any': handleContainsAny,
+    'contains-html': handleContainsHtml,
     'contains-json': handleContainsJson,
     'contains-sql': handleContainsSql,
     'contains-xml': handleIsXml,
@@ -280,6 +283,7 @@ export async function runAssertion({
     icontains: handleIContains,
     'icontains-all': handleIContainsAll,
     'icontains-any': handleIContainsAny,
+    'is-html': handleIsHtml,
     'is-json': handleIsJson,
     'is-refusal': handleIsRefusal,
     'is-sql': handleIsSql,

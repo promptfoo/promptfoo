@@ -1,6 +1,7 @@
 ---
 sidebar_position: 3
-sidebar_label: 'Configuration'
+sidebar_label: Configuration
+description: Red team your LLM configuration settings using automated vulnerability scanning to detect misconfigurations and prevent unauthorized access to AI system parameters
 ---
 
 import React from 'react';
@@ -826,6 +827,8 @@ Configuration values can be set in multiple ways, with the following precedence 
 2. Remove irrelevant plugins for your use case
 3. Adjust `numTests` for individual plugins based on importance
 4. Run a red team eval and generate additional tests as needed
+
+For more information, see [Best Practices](/docs/red-team/troubleshooting/best-practices/).
 
 ## Example Configurations
 

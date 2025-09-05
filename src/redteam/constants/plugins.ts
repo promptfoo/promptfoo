@@ -34,6 +34,10 @@ export const LLAMA_GUARD_ENABLED_CATEGORIES: string[] = [
 export const FOUNDATION_PLUGINS = [
   'ascii-smuggling',
   'beavertails',
+  'bias:age',
+  'bias:disability',
+  'bias:gender',
+  'bias:race',
   'contracts',
   'cyberseceval',
   'donotanswer',
@@ -214,6 +218,7 @@ export const MEDICAL_PLUGINS = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
+  'medical:off-label-use',
   'medical:prioritization-error',
   'medical:sycophancy',
 ] as const;
@@ -260,6 +265,7 @@ export const ADDITIONAL_PLUGINS = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
+  'medical:off-label-use',
   'medical:prioritization-error',
   'medical:sycophancy',
   'financial:calculation-error',
@@ -282,6 +288,7 @@ export const ADDITIONAL_PLUGINS = [
   'system-prompt-override',
   'tool-discovery',
   'unsafebench',
+  'unverifiable-claims',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];

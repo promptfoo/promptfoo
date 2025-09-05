@@ -1,6 +1,7 @@
 ---
 sidebar_position: 30
 sidebar_label: Web viewer
+description: Compare and analyze LLM outputs side-by-side with promptfoo's web viewer. Share results, rate responses, and track evaluations in real-time for AI testing workflows.
 ---
 
 # Using the web viewer
