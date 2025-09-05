@@ -21,6 +21,7 @@ interface SettingItemProps {
   tooltipText?: string;
   disabled?: boolean;
   component?: 'checkbox' | 'switch';
+  size?: 'normal' | 'compact';
 }
 
 const SettingItem: React.FC<SettingItemProps> = ({
@@ -31,16 +32,19 @@ const SettingItem: React.FC<SettingItemProps> = ({
   tooltipText,
   disabled = false,
   component = 'checkbox',
+  size = 'normal',
 }) => {
   const theme = useTheme();
+  const isCompact = size === 'compact';
   const labelId = `setting-${label.replace(/\s+/g, '-').toLowerCase()}`;
 
   return (
     <Paper
       elevation={0}
       sx={{
-        p: tokens.spacing.padding.item,
-        mb: tokens.spacing.item,
+        p: isCompact ? 1 : tokens.spacing.padding.item,
+        mb: isCompact ? 0.75 : tokens.spacing.item,
+        minHeight: 44, // Enforce WCAG minimum touch target
         border: `1px solid ${alpha(theme.palette.divider, checked ? 0.25 : 0.15)}`,
         borderRadius: tokens.borderRadius.small,
         opacity: disabled ? tokens.opacity.disabled : 1,
@@ -66,9 +70,10 @@ const SettingItem: React.FC<SettingItemProps> = ({
               checked={checked}
               onChange={(e) => !disabled && onChange(e.target.checked)}
               disabled={disabled}
+              size={isCompact ? 'small' : 'medium'}
               sx={{
                 '& .MuiSvgIcon-root': {
-                  fontSize: '1.3rem',
+                  fontSize: isCompact ? '1.1rem' : '1.3rem',
                 },
                 color: theme.palette.primary.main,
                 padding: tokens.spacing.padding.compact,
@@ -140,14 +145,14 @@ const SettingItem: React.FC<SettingItemProps> = ({
               </Box>
             )}
             <Typography
-              variant="body2"
+              variant={isCompact ? 'caption' : 'body2'}
               id={labelId}
               sx={{
                 fontWeight: 400,
                 color: theme.palette.text.primary,
                 transition: 'color 150ms ease',
-                lineHeight: 1.5,
-                fontSize: '0.875rem',
+                lineHeight: isCompact ? 1.4 : 1.5,
+                fontSize: isCompact ? '0.8125rem' : '0.875rem',
                 letterSpacing: '0.01em',
                 paddingTop: 0,
               }}

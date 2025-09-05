@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Slider from '@mui/material/Slider';
@@ -156,6 +157,19 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
         >
           {label}
         </Typography>
+
+        {/* Live Value Display */}
+        <Chip
+          label={isUnlimited ? 'Unlimited' : `${safeValue}${unit}`}
+          size="small"
+          variant="outlined"
+          color="primary"
+          sx={{
+            minWidth: 80,
+            fontWeight: 600,
+            fontSize: '0.75rem',
+          }}
+        />
 
         <Box
           sx={{

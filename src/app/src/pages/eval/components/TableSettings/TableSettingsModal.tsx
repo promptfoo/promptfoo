@@ -38,10 +38,13 @@ const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => 
       open={open}
       onClose={handleClose}
       fullWidth
-      maxWidth="sm"
+      maxWidth="md"
       PaperProps={{
         elevation: tokens.elevation.dialog,
         sx: {
+          maxWidth: 760, // Increased from default
+          minHeight: 480,
+          maxHeight: '85vh',
           borderRadius: tokens.borderRadius.medium,
           overflow: 'hidden',
           backgroundImage:
