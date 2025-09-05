@@ -1404,10 +1404,7 @@ class Evaluator {
           processedIndices.add(idx);
         }
 
-        // Mark serial phase as complete if using progress bar manager
-        if (progressBarManager) {
-          progressBarManager.completePhase('serial');
-        }
+        // Serial phase complete - progress is tracked automatically by updateProgress
       }
 
       // Then run concurrent evaluations
