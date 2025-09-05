@@ -382,7 +382,7 @@ export async function isEnterpriseCustomer(): Promise<boolean> {
     if (!cloudConfig.isEnabled()) {
       return false;
     }
-    const response = await makeRequest(`/user/me`, 'GET');
+    const response = await makeRequest(`/users/me`, 'GET');
 
     const body = await response.json();
     return body.organization.canUseRedteam;

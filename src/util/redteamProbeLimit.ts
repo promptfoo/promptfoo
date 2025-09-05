@@ -7,7 +7,7 @@ import logger from '../logger';
 import { ALLOWED_PROBE_LIMIT_EXCEEDANCE, MONTHLY_PROBE_LIMIT } from '../redteam/constants';
 import { isEnterpriseCustomer } from './cloud';
 
-const CONTACT_MESSAGE = `Contact ${PROBE_LIMIT_EMAIL} to upgrade or visit ${PROBE_LIMIT_URL} for enterprise options.`;
+const CONTACT_MESSAGE = `Contact ${PROBE_LIMIT_EMAIL} to upgrade or visit ${PROBE_LIMIT_URL} to upgrade to our enterprise plan.`;
 
 interface ProbeStatus {
   hasExceeded: boolean;
@@ -92,23 +92,75 @@ export async function checkMonthlyProbeLimit(): Promise<ProbeStatus> {
  * @returns Formatted message string
  */
 export function formatProbeUsageMessage(probeStatus: ProbeStatus): string {
-  const { remainingProbes, usedProbes, limit } = probeStatus;
-  const percentage = ((remainingProbes / limit) * 100).toFixed(1);
+  const { enabled, remainingProbes, usedProbes, limit } = probeStatus;
+
+  if (!enabled) {
+    return '';
+  }
 
   if (remainingProbes <= 0) {
     return (
-      `⚠️  Monthly redteam probe limit reached ${usedProbes.toLocaleString()} / ${limit.toLocaleString()} probes used\n` +
-      `${CONTACT_MESSAGE}`
+      chalk.red('┌─ 🚫 PROBE LIMIT REACHED ─────────────────────┐\n') +
+      chalk.red('│                                              │\n') +
+      chalk.red(
+        `│  ${usedProbes.toLocaleString().padEnd(10)} / ${limit.toLocaleString().padEnd(10)} probes used this month │\n`,
+      ) +
+      chalk.red(`│  ${createRemainingProgressBar(remainingProbes, limit)}              │\n`) +
+      chalk.red('│                                              │\n') +
+      chalk.red('│  📧 Contact: ') +
+      chalk.cyan(PROBE_LIMIT_EMAIL.padEnd(22)) +
+      chalk.red(' │\n') +
+      chalk.red('│  🌐 Visit:   ') +
+      chalk.cyan(PROBE_LIMIT_URL.padEnd(22)) +
+      chalk.red(' │\n') +
+      chalk.red('│                                              │\n') +
+      chalk.red('└──────────────────────────────────────────────┘')
     );
   } else if (remainingProbes < limit * 0.2) {
     // Less than 20% remaining
     return (
-      `⚠️  Low on probes: ${remainingProbes.toLocaleString()} / ${limit.toLocaleString()} remaining this month (${percentage}%)\n` +
-      `${CONTACT_MESSAGE}`
+      chalk.yellow('┌─ ⚠️  LOW PROBE COUNT ────────────────────────┐\n') +
+      chalk.yellow('│                                              │\n') +
+      chalk.yellow(
+        `│  ${remainingProbes.toLocaleString().padEnd(10)} / ${limit.toLocaleString().padEnd(10)} probes remaining   │\n`,
+      ) +
+      chalk.yellow(`│  ${createRemainingProgressBar(remainingProbes, limit)}              │\n`) +
+      chalk.yellow('│                                              │\n') +
+      chalk.yellow('│  📧 Contact: ') +
+      chalk.cyan(PROBE_LIMIT_EMAIL.padEnd(22)) +
+      chalk.yellow(' │\n') +
+      chalk.yellow('│  🌐 Visit:   ') +
+      chalk.cyan(PROBE_LIMIT_URL.padEnd(22)) +
+      chalk.yellow(' │\n') +
+      chalk.yellow('│                                              │\n') +
+      chalk.yellow('└──────────────────────────────────────────────┘')
     );
   } else {
-    return `Red team probes remaining this month: ${remainingProbes.toLocaleString()} / ${limit.toLocaleString()}`;
+    return (
+      chalk.green('┌─ 🎯 PROBE USAGE STATUS ──────────────────────┐\n') +
+      chalk.green('│                                              │\n') +
+      chalk.green(
+        `│  ${remainingProbes.toLocaleString().padEnd(10)} / ${limit.toLocaleString().padEnd(10)} probes remaining   │\n`,
+      ) +
+      chalk.green(`│  ${createRemainingProgressBar(remainingProbes, limit)}              │\n`) +
+      chalk.green('│                                              │\n') +
+      chalk.green('└──────────────────────────────────────────────┘')
+    );
   }
+}
+
+/**
+ * Create a visual progress bar showing remaining probes (not used)
+ */
+function createRemainingProgressBar(remaining: number, total: number, width: number = 20): string {
+  const percentage = Math.min(remaining / total, 1);
+  const filled = Math.floor(percentage * width);
+  const empty = width - filled;
+
+  const filledBar = '█'.repeat(filled);
+  const emptyBar = '░'.repeat(empty);
+
+  return `${filledBar}${emptyBar}`;
 }
 
 export type ProbeCheckResult =
