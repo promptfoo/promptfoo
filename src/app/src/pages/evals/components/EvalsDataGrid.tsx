@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Link from '@mui/material/Link';
@@ -42,6 +43,8 @@ declare module '@mui/x-data-grid' {
   interface ToolbarPropsOverrides {
     showUtilityButtons: boolean;
     focusQuickFilterOnMount: boolean;
+    selectedCount: number;
+    onDeleteSelected: () => void;
   }
 }
 
@@ -72,9 +75,13 @@ QuickFilter.displayName = 'QuickFilter';
 function CustomToolbar({
   showUtilityButtons,
   focusQuickFilterOnMount,
+  selectedCount,
+  onDeleteSelected,
 }: {
   showUtilityButtons: boolean;
   focusQuickFilterOnMount: boolean;
+  selectedCount: number;
+  onDeleteSelected: () => void;
 }) {
   const theme = useTheme();
   const quickFilterRef = useRef<HTMLInputElement>(null);
@@ -87,12 +94,27 @@ function CustomToolbar({
 
   return (
     <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      {showUtilityButtons && (
+      {(showUtilityButtons || selectedCount > 0) && (
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <GridToolbarColumnsButton />
-          <GridToolbarFilterButton />
-          <GridToolbarDensitySelector />
-          <GridToolbarExport />
+          {showUtilityButtons && (
+            <>
+              <GridToolbarColumnsButton />
+              <GridToolbarFilterButton />
+              <GridToolbarDensitySelector />
+              <GridToolbarExport />
+            </>
+          )}
+          {selectedCount > 0 && (
+            <Button
+              color="error"
+              variant="contained"
+              size="small"
+              onClick={onDeleteSelected}
+              data-testid="delete-selected-button"
+            >
+              Delete ({selectedCount})
+            </Button>
+          )}
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
@@ -203,6 +225,34 @@ export default function EvalsDataGrid({
   }, [evals]);
 
   const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
+
+  const handleDeleteSelected = async () => {
+    if (rowSelectionModel.length === 0) {
+      return;
+    }
+
+    const confirm = window.confirm(
+      `Are you sure you want to delete ${rowSelectionModel.length} evaluation(s)?`,
+    );
+    if (!confirm) {
+      return;
+    }
+
+    try {
+      await Promise.all(
+        rowSelectionModel.map((id) =>
+          callApi(`/eval/${id}`, {
+            method: 'DELETE',
+          }),
+        ),
+      );
+      setEvals((prev) => prev.filter((e) => !rowSelectionModel.includes(e.evalId)));
+      setRowSelectionModel([]);
+    } catch (error) {
+      console.error('Failed to delete evaluations:', error);
+      alert('Failed to delete evaluations');
+    }
+  };
 
   const columns: GridColDef<Eval>[] = useMemo(
     () =>
@@ -343,6 +393,7 @@ export default function EvalsDataGrid({
         columns={columns}
         loading={isLoading}
         getRowId={(row) => row.evalId}
+        checkboxSelection
         slots={{
           toolbar: CustomToolbar,
           loadingOverlay: () => (
@@ -403,10 +454,12 @@ export default function EvalsDataGrid({
           toolbar: {
             showUtilityButtons,
             focusQuickFilterOnMount,
+            selectedCount: rowSelectionModel.length,
+            onDeleteSelected: handleDeleteSelected,
           },
         }}
         onCellClick={(params) => {
-          if (params.id !== focusedEvalId) {
+          if (params.id !== focusedEvalId && params.field !== '__check__') {
             handleCellClick(params);
           }
         }}

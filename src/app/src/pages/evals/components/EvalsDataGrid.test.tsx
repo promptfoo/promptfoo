@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor, screen } from '@testing-library/react';
+import { render, waitFor, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { callApi } from '@app/utils/api';
@@ -12,7 +12,15 @@ vi.mock('@app/utils/api');
 
 // Mock the DataGrid component to simplify testing
 vi.mock('@mui/x-data-grid', () => ({
-  DataGrid: ({ rows, loading, slots, getRowClassName }: any) => {
+  DataGrid: ({
+    rows,
+    loading,
+    slots = {},
+    slotProps = {},
+    getRowClassName,
+    rowSelectionModel = [],
+    onRowSelectionModelChange,
+  }: any) => {
     if (loading && slots?.loadingOverlay) {
       const LoadingOverlay = slots.loadingOverlay;
       return <LoadingOverlay />;
@@ -23,17 +31,37 @@ vi.mock('@mui/x-data-grid', () => ({
       return <NoRowsOverlay />;
     }
 
+    const Toolbar = slots.toolbar;
+    const toolbarProps = slotProps.toolbar || {};
+
     return (
-      <div data-testid="data-grid">
-        {!loading &&
-          rows.map((row: any) => {
-            const className = getRowClassName ? getRowClassName({ id: row.evalId }) : '';
-            return (
-              <div key={row.evalId} data-testid={`eval-${row.evalId}`} className={className}>
-                {row.description || row.label}
-              </div>
-            );
-          })}
+      <div>
+        {Toolbar && <Toolbar {...toolbarProps} />}
+        <div data-testid="data-grid">
+          {!loading &&
+            rows.map((row: any) => {
+              const className = getRowClassName ? getRowClassName({ id: row.evalId }) : '';
+              const checked = rowSelectionModel.includes(row.evalId);
+              return (
+                <div key={row.evalId}>
+                  <input
+                    type="checkbox"
+                    data-testid={`checkbox-${row.evalId}`}
+                    checked={checked}
+                    onChange={(e) => {
+                      const newSelection = e.target.checked
+                        ? [...rowSelectionModel, row.evalId]
+                        : rowSelectionModel.filter((id: string) => id !== row.evalId);
+                      onRowSelectionModelChange?.(newSelection);
+                    }}
+                  />
+                  <div data-testid={`eval-${row.evalId}`} className={className}>
+                    {row.description || row.label}
+                  </div>
+                </div>
+              );
+            })}
+        </div>
       </div>
     );
   },
@@ -576,5 +604,43 @@ describe('EvalsDataGrid', () => {
 
     // The first request should have been aborted and not display "Original Description"
     expect(screen.queryByText('Original Description')).not.toBeInTheDocument();
+  });
+
+  it('should delete selected evals when delete button is clicked', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+
+    const mockCall = vi.mocked(callApi);
+    mockCall.mockImplementation((url: string, options?: any) => {
+      if (!options || options.method !== 'DELETE') {
+        return Promise.resolve(mockResponse as any);
+      }
+      return Promise.resolve({ ok: true } as any);
+    });
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
+
+    const deleteButton = await screen.findByTestId('delete-selected-button');
+    fireEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('eval-eval-1')).toBeNull();
+    });
+
+    expect(mockCall).toHaveBeenCalledWith('/eval/eval-1', { method: 'DELETE' });
   });
 });
