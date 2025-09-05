@@ -41,18 +41,38 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 
   const isOverLength = textLength(text) > maxLength;
 
+  // Helper to get a stable string key for the content of text. This is necessary
+  // because React elements are objects, and a new object is created on every
+  // render, causing simple equality checks to fail.
+  function getTextContentKey(node: React.ReactNode): string {
+    if (typeof node === 'string' || typeof node === 'number') {
+      return node.toString();
+    }
+    if (Array.isArray(node)) {
+      return node.map(getTextContentKey).join('');
+    }
+    if (isReactElementWithChildren(node)) {
+      // Note: This is a simplification and might not perfectly capture all
+      // differences in complex children, but it's effective for this component.
+      return getTextContentKey(node.props.children);
+    }
+    return '';
+  }
+
+  const textContentKey = getTextContentKey(text);
+
   // Initialize truncation state based on whether text actually exceeds maxLength
   const [isTruncated, setIsTruncated] = React.useState(() => isOverLength);
 
-  // Only reset truncation state when text content changes, not when maxLength changes
-  // This preserves user intent when maxLength is adjusted via slider
-  const prevTextRef = React.useRef(text);
+  // Only reset truncation state when text content changes, not when maxLength changes.
+  // This preserves user intent when maxLength is adjusted via slider.
+  const prevTextContentKeyRef = React.useRef(textContentKey);
   React.useEffect(() => {
-    if (prevTextRef.current !== text) {
+    if (prevTextContentKeyRef.current !== textContentKey) {
       setIsTruncated(isOverLength);
-      prevTextRef.current = text;
+      prevTextContentKeyRef.current = textContentKey;
     }
-  }, [text, isOverLength]);
+  }, [textContentKey, isOverLength]);
 
   const toggleTruncate = () => {
     setIsTruncated(!isTruncated);

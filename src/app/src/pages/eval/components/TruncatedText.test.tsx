@@ -272,4 +272,35 @@ describe('TruncatedText', () => {
     expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
     expect(screen.getByText('...')).toBeInTheDocument();
   });
+
+  it('should correctly reset state when React element content changes', () => {
+    const longText = 'This is a very long initial React element';
+    const shortText = 'Short element';
+    const maxLength = 20;
+
+    const initialElement = <span>{longText}</span>;
+    const shortElement = <span>{shortText}</span>;
+
+    const { container, rerender } = render(
+      <TruncatedText text={initialElement} maxLength={maxLength} />,
+    );
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+
+    // Initially should be truncated
+    expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
+
+    // Re-render with a shorter element
+    rerender(<TruncatedText text={shortElement} maxLength={maxLength} />);
+
+    // Now should NOT be truncated
+    expect(mainDiv).toHaveTextContent(shortText);
+    expect(mainDiv).not.toHaveTextContent('...');
+
+    // Re-render with the long one again
+    rerender(<TruncatedText text={<span>{longText}</span>} maxLength={maxLength} />);
+
+    // Should be truncated again
+    expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
+  });
 });
