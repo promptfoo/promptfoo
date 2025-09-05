@@ -348,4 +348,111 @@ describe('TruncatedText', () => {
     expect(screen.queryByText('...')).not.toBeInTheDocument();
     expect(screen.queryByText('Show less')).not.toBeInTheDocument();
   });
+
+  it('should correctly handle deeply nested React elements with multiple levels of children', () => {
+    const nestedElement = (
+      <div>
+        <span>
+          <strong>Level 1</strong>
+          <em>
+            <u>Level 2</u>
+            <span>Level 3 with some longer text</span>
+          </em>
+        </span>
+      </div>
+    );
+    const maxLength = 25;
+
+    const { container } = render(<TruncatedText text={nestedElement} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    // Should be truncated since the nested text is longer than maxLength
+    expect(mainDiv).toHaveTextContent('...');
+    expect(mainDiv).toHaveStyle('cursor: pointer');
+    expect(screen.getByText('...')).toBeInTheDocument();
+
+    // Text content should be truncated
+    const fullText = 'Level 1Level 2Level 3 with some longer text';
+    expect(mainDiv?.textContent?.replace('...', '')).toBe(fullText.slice(0, maxLength));
+  });
+
+  it('should handle React elements without children properties', () => {
+    const elementWithoutChildren = React.createElement('img', { src: 'test.jpg', alt: 'test' });
+    const maxLength = 20;
+
+    const { container } = render(
+      <TruncatedText text={elementWithoutChildren} maxLength={maxLength} />,
+    );
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    // Should not show ellipsis since element has no text content
+    expect(mainDiv).not.toHaveTextContent('...');
+    expect(mainDiv).toHaveStyle('cursor: normal');
+    expect(screen.queryByText('...')).not.toBeInTheDocument();
+
+    // Should contain the img element
+    expect(mainDiv?.querySelector('img')).toBeInTheDocument();
+  });
+
+  it('should preserve expanded state when maxLength is reduced', () => {
+    const longText = 'This is a very long piece of text that exceeds any reasonable maxLength';
+    const { container, rerender } = render(<TruncatedText text={longText} maxLength={30} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+
+    // Initially should be truncated
+    expect(mainDiv).toHaveTextContent('...');
+
+    // User clicks to expand
+    fireEvent.click(mainDiv as Element);
+    expect(screen.getByText(longText)).toBeInTheDocument();
+    expect(screen.getByText('Show less')).toBeInTheDocument();
+
+    // Reduce maxLength drastically
+    rerender(<TruncatedText text={longText} maxLength={10} />);
+
+    // Should still be expanded (preserve user's choice)
+    const mainDivAfter = container.querySelector('#eval-output-cell-text');
+    expect(screen.getByText(longText)).toBeInTheDocument();
+    expect(screen.getByText('Show less')).toBeInTheDocument();
+    expect(mainDivAfter).toHaveTextContent(longText);
+  });
+
+  it('should handle empty array as text prop', () => {
+    const emptyArray: React.ReactNode[] = [];
+    const maxLength = 20;
+
+    const { container } = render(<TruncatedText text={emptyArray} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    // Should not show ellipsis since array is empty (no text content)
+    expect(mainDiv).not.toHaveTextContent('...');
+    expect(mainDiv).toHaveStyle('cursor: normal');
+    expect(screen.queryByText('...')).not.toBeInTheDocument();
+
+    // Content should be empty or minimal
+    expect(mainDiv?.textContent || '').toBe('');
+  });
+
+  it('should display "[Circular]" for circular reference objects instead of crashing', () => {
+    const circularObj: any = { name: 'test' };
+    circularObj.self = circularObj; // Create circular reference
+    const maxLength = 20;
+
+    const { container } = render(<TruncatedText text={circularObj} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    // Should display '[Circular]' instead of crashing
+    expect(mainDiv).toHaveTextContent('[Circular]');
+    expect(mainDiv).toHaveStyle('cursor: normal');
+    expect(screen.queryByText('...')).not.toBeInTheDocument();
+  });
 });
