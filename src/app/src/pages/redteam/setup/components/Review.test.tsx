@@ -40,6 +40,7 @@ vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
     plugins: [],
     strategies: [],
   }),
+  getEstimatedProbes: vi.fn().mockReturnValue(10),
 }));
 
 vi.mock('../utils/yamlHelpers', () => ({
