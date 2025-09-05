@@ -1,9 +1,9 @@
 import React from 'react';
 
-import CompactSettingsPanel from './CompactSettingsPanel';
+import MainSettingsPanel from './MainSettingsPanel';
 
 const SettingsPanel: React.FC = () => {
-  return <CompactSettingsPanel />;
+  return <MainSettingsPanel />;
 };
 
 export default React.memo(SettingsPanel);

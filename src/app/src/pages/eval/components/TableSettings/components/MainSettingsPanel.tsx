@@ -34,10 +34,14 @@ const SettingRow: React.FC<SettingRowProps> = ({ label, children, icon }) => {
       justifyContent="space-between"
       sx={{
         py: 1.25,
-        px: 0,
+        px: 1,
+        mx: -1,
         minHeight: 44, // WCAG compliance
+        borderRadius: 1,
+        transition: 'all 150ms ease-out',
         '&:hover': {
-          backgroundColor: alpha(theme.palette.action.hover, 0.04),
+          backgroundColor: alpha(theme.palette.action.hover, 0.06),
+          transform: 'translateX(2px)',
         },
       }}
     >
@@ -45,10 +49,11 @@ const SettingRow: React.FC<SettingRowProps> = ({ label, children, icon }) => {
         {icon && (
           <Box
             sx={{
-              color: theme.palette.text.secondary,
+              color: alpha(theme.palette.primary.main, 0.7),
               fontSize: '1.1rem',
               display: 'flex',
               alignItems: 'center',
+              transition: 'color 150ms ease',
             }}
           >
             {icon}
@@ -78,9 +83,17 @@ interface SectionProps {
 const Section: React.FC<SectionProps> = ({ title, children }) => {
   const theme = useTheme();
 
+  const sectionId = `settings-section-${title.toLowerCase().replace(/\s+/g, '-')}`;
+
   return (
-    <Box sx={{ mb: 3 }}>
+    <Box 
+      sx={{ mb: 3 }} 
+      component="section"
+      aria-labelledby={sectionId}
+      role="group"
+    >
       <Typography
+        id={sectionId}
         variant="subtitle2"
         sx={{
           fontSize: '0.8125rem',
@@ -89,6 +102,17 @@ const Section: React.FC<SectionProps> = ({ title, children }) => {
           textTransform: 'uppercase',
           letterSpacing: '0.5px',
           mb: 1.5,
+          position: 'relative',
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            bottom: -4,
+            left: 0,
+            width: 24,
+            height: 2,
+            backgroundColor: alpha(theme.palette.primary.main, 0.6),
+            borderRadius: 1,
+          },
         }}
       >
         {title}
@@ -183,6 +207,18 @@ const CompactSettingsPanel: React.FC = () => {
               border: `2px solid ${alpha(theme.palette.primary.main, 0.2)}`,
               borderRadius: 2,
               backgroundColor: alpha(theme.palette.primary.main, 0.02),
+              position: 'relative',
+              overflow: 'hidden',
+              boxShadow: `0 2px 8px ${alpha(theme.palette.primary.main, 0.08)}`,
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 3,
+                background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${alpha(theme.palette.secondary.main, 0.8)})`,
+              },
             }}
           >
             <Stack spacing={2}>
@@ -211,11 +247,13 @@ const CompactSettingsPanel: React.FC = () => {
                   sx={{
                     px: 1.5,
                     py: 0.5,
-                    backgroundColor: theme.palette.primary.main,
+                    background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
                     color: 'white',
                     borderRadius: 1,
                     fontSize: '0.75rem',
                     fontWeight: 600,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                    transition: 'all 200ms ease-out',
                   }}
                 >
                   {formatTextLength(localMaxTextLength)}
