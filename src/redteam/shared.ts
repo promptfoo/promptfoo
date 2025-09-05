@@ -116,9 +116,15 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   logger.info(chalk.green('\nRed team scan complete!'));
 
   // Display remaining probe usage after completion
-  const probeStatus = await checkMonthlyProbeLimit();
-  logger.info('\n' + formatProbeUsageMessage(probeStatus) + '\n');
-
+  try {
+    const probeStatus = await checkMonthlyProbeLimit();
+    const msg = formatProbeUsageMessage(probeStatus);
+    if (msg) {
+      logger.info('\n' + msg + '\n');
+    }
+  } catch (err) {
+    logger.debug(`Probe usage check failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
   const command = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
   if (options.loadedFromCloud) {
     const url = await createShareableUrl(evalResult, false);
