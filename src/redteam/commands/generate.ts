@@ -101,9 +101,11 @@ function createHeaderComments({
   ].filter(Boolean) as string[];
 }
 
-export async function doGenerateRedteam(
-  options: Partial<RedteamCliGenerateOptions>,
-): Promise<Partial<UnifiedConfig> | null> {
+export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptions>): Promise<{
+  config: Partial<UnifiedConfig> | null;
+  pluginResults?: Record<string, { requested: number; generated: number }>;
+  strategyResults?: Record<string, { requested: number; generated: number }>;
+}> {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
@@ -149,7 +151,7 @@ export async function doGenerateRedteam(
         logger.warn(
           'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
         );
-        return redteamContent;
+        return { config: redteamContent };
       }
     }
   } else {
@@ -225,7 +227,7 @@ export async function doGenerateRedteam(
         )} first`,
       ),
     );
-    return null;
+    return { config: null };
   }
 
   const startTime = Date.now();
@@ -399,6 +401,8 @@ export async function doGenerateRedteam(
     purpose,
     entities,
     injectVar: finalInjectVar,
+    pluginResults,
+    strategyResults,
   } = await synthesize({
     ...parsedConfig.data,
     purpose: enhancedPurpose,
@@ -415,7 +419,7 @@ export async function doGenerateRedteam(
 
   if (redteamTests.length === 0) {
     logger.warn('No test cases generated. Please check for errors and try again.');
-    return null;
+    return { config: null, pluginResults, strategyResults };
   }
 
   const updatedRedteamConfig = {
@@ -444,7 +448,7 @@ export async function doGenerateRedteam(
       chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
     );
     // No need to return anything, Burp outputs are only invoked via command line.
-    return {};
+    return { config: {}, pluginResults, strategyResults };
   } else if (options.output) {
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
@@ -596,7 +600,7 @@ export async function doGenerateRedteam(
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
 
-  return ret;
+  return { config: ret, pluginResults, strategyResults };
 }
 
 export function redteamGenerateCommand(
