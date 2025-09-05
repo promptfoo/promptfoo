@@ -19,9 +19,10 @@ Instead of a forced redesign, we will implement the new dense layout as an **opt
 
 ### Phase 1: Foundational Safety (Highest Priority)
 
-*Goal: Ensure no user is negatively impacted. Address breaking changes and lay the groundwork for the new feature.*
+_Goal: Ensure no user is negatively impacted. Address breaking changes and lay the groundwork for the new feature._
 
 #### 1.1 Implement Settings Migration Logic
+
 **File**: `src/app/src/pages/eval/components/TableSettings/hooks/useSettingsState.ts` (or similar)
 
 **Task**: Create and integrate a migration function to handle the `wordBreak` setting changing from a `boolean` to a `string`. This is critical to prevent breaking `localStorage` settings for existing users.
@@ -38,6 +39,7 @@ const migrateWordBreakSetting = (value: any): string => {
 ```
 
 #### 1.2 Add "Compact View" Toggle
+
 **File**: `src/app/src/pages/eval/components/TableSettings/components/SettingsPanel.tsx`
 
 **Task**: Add a `Switch` to the top of the modal to control the "Compact View". Its state will be persisted in the Zustand store and `localStorage`.
@@ -54,17 +56,19 @@ const migrateWordBreakSetting = (value: any): string => {
 
 ### Phase 2: Build Accessible Compact Layout (Conditionally Applied)
 
-*Goal: Build the new dense layout, ensuring it only appears when toggled on and that all components are fully accessible.*
+_Goal: Build the new dense layout, ensuring it only appears when toggled on and that all components are fully accessible._
 
 #### 2.1 Conditional Two-Column Grid
+
 **File**: `src/app/src/pages/eval/components/TableSettings/components/SettingsPanel.tsx`
 
 **Task**: Implement the responsive `Grid` layout. The root component will switch from a `Stack` to a `Grid` based on the `isCompactView` state.
 
 #### 2.2 Accessible Section Headers
+
 **File**: `src/app/src/pages/eval/components/TableSettings/components/SettingsSection.tsx`
 
-**Task**: Style section headers to be compact *without* sacrificing semantics. Use `Typography` for the title within a `Box component="section"`.
+**Task**: Style section headers to be compact _without_ sacrificing semantics. Use `Typography` for the title within a `Box component="section"`.
 
 ```typescript
 <Box component="section" aria-labelledby={sectionId} sx={{ mb: 2 }}>
@@ -80,6 +84,7 @@ const migrateWordBreakSetting = (value: any): string => {
 ```
 
 #### 2.3 WCAG-Compliant Compact Items
+
 **File**: `src/app/src/pages/eval/components/TableSettings/components/SettingItem.tsx`
 
 **Task**: Create the `size="compact"` variant, ensuring that touch targets meet the WCAG minimum of 44px.
@@ -101,15 +106,18 @@ const isCompact = size === 'compact' && isCompactView; // Depends on global togg
 
 ### Phase 3: Polish and Refine (Conditionally Applied)
 
-*Goal: Implement the remaining control improvements within the compact layout.*
+_Goal: Implement the remaining control improvements within the compact layout._
 
 #### 3.1 ToggleButtonGroup for Word Break
+
 **Task**: Implement the `ToggleButtonGroup` for the `wordBreak` setting. This will only be visible in the compact layout.
 
 #### 3.2 Enhanced Range Slider & Inline Pairs
+
 **Task**: Implement the range slider with a live value display and the inline boolean pairs. These styles will only apply in compact view.
 
 #### 3.3 Accessible Tooltips
+
 **Task**: Ensure all tooltips are accessible to keyboard and touch users, for example by making the entire `SettingItem` focusable.
 
 ---
