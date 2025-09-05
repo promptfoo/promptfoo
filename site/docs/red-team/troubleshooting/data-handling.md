@@ -55,6 +55,7 @@ Note: Local generation quality depends on your configured model and is generally
 ## Enterprise solutions for complete data control
 
 For organizations requiring complete data isolation, see [Enterprise On-Prem](/docs/enterprise/) which provides:
+
 - Fully airgapped deployments with no external dependencies.
 - Dedicated runner within your infrastructure.
 - Complete control over all data flow.
@@ -64,29 +65,32 @@ For organizations requiring complete data isolation, see [Enterprise On-Prem](/d
 ## Network connectivity requirements
 
 Community version requires access to:
+
 - `api.promptfoo.app` - Test generation and grading.
 - `*.promptfoo.app` - Additional API services.
 
 ### Corporate firewall issues
 
 If blocked by corporate firewall:
+
 1. Request IT allowlist Promptfoo domains.
 2. Test with: `curl https://api.promptfoo.app/version`.
 3. See [remote generation troubleshooting](/docs/red-team/troubleshooting/remote-generation/).
 
 ## Data privacy validation
 
-Community testing confirms that with telemetry disabled and your own API keys, promptfoo transmits only necessary test operation data. 
+Community testing confirms that with telemetry disabled and your own API keys, promptfoo transmits only necessary test operation data.
 
 Validate yourself by:
+
 - Monitoring network traffic (e.g., Burp Suite).
 - Reviewing promptfoo logs for external calls.
 - Testing with dummy data first.
 
 ## Related documentation
 
-- [Telemetry Configuration](/docs/configuration/telemetry/)
-- [Red Team Configuration](/docs/red-team/configuration/) 
-- [Remote Generation Troubleshooting](/docs/red-team/troubleshooting/remote-generation/)
-- [Enterprise Solutions](/docs/enterprise/)
-- [Privacy Policy](/privacy/)
+- [Telemetry configuration](/docs/configuration/telemetry/)
+- [Red Team configuration](/docs/red-team/configuration/)
+- [Remote generation troubleshooting](/docs/red-team/troubleshooting/remote-generation/)
+- [Enterprise solutions](/docs/enterprise/)
+- [Privacy policy](/privacy/)
