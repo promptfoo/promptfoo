@@ -105,8 +105,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
   overreliance: 'Tests for overreliance on system assumptions',
-  pandamonium:
-    "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
   pii: 'Tests handling of personal identifiable information',
   'pii:api-db': 'Tests for PII exposure via API/database access',
   'pii:direct': 'Tests for direct PII exposure vulnerabilities',
@@ -241,7 +239,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   multilingual: 'Cross-Language Attack',
   'other-encodings': 'Collection of Text Encodings',
   overreliance: 'Overreliance',
-  pandamonium: '[Experimental] Pandamonium',
   piglatin: 'Pig Latin Encoding',
   pii: 'PII Protection Suite',
   'pii:api-db': 'PII via API/Database',
@@ -772,7 +769,6 @@ export const strategyDescriptions: Record<Strategy, string> = {
   multilingual: 'Evaluates cross-language attack vector handling',
   'other-encodings':
     'Collection of alternative text transformation strategies for testing evasion techniques',
-  pandamonium: "Promptfoo's exclusive dynamic jailbreak strategy currently in beta",
   piglatin: 'Tests detection and handling of text transformed into Pig Latin',
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
@@ -806,7 +802,6 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   morse: 'Morse Code',
   multilingual: 'Multilingual Translation',
   'other-encodings': 'Collection of Text Encodings',
-  pandamonium: 'Pandamonium',
   piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
