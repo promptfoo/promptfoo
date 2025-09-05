@@ -1342,6 +1342,22 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests for special token injection vulnerabilities using conversation format delimiters',
+    label: 'technical',
+    link: '/docs/red-team/plugins/special-token-injection/',
+    name: 'Special Token Injection',
+    pluginId: 'special-token-injection',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to perform SQL injection attacks to manipulate database queries',
     label: 'technical',
     link: '/docs/red-team/plugins/sql-injection/',
