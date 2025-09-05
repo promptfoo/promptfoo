@@ -215,9 +215,10 @@ describe('TruncatedText', () => {
     rerender(<TruncatedText text={longText} maxLength={25} />);
 
     // User's expanded state should be preserved
+    const mainDivAfter = container.querySelector('#eval-output-cell-text');
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
-    expect(mainDiv).toHaveTextContent(longText);
+    expect(mainDivAfter).toHaveTextContent(longText);
   });
 
   it('should update truncation state when text prop changes', () => {
@@ -240,8 +241,9 @@ describe('TruncatedText', () => {
     rerender(<TruncatedText text={longText} maxLength={maxLength} />);
 
     // Now should be truncated
-    expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
-    expect(mainDiv).toHaveStyle('cursor: pointer');
+    const mainDivAfter = container.querySelector('#eval-output-cell-text');
+    expect(mainDivAfter).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
+    expect(mainDivAfter).toHaveStyle('cursor: pointer');
     expect(screen.getByText('...')).toBeInTheDocument();
   });
 
@@ -269,7 +271,8 @@ describe('TruncatedText', () => {
     rerender(<TruncatedText text={longText} maxLength={maxLength} />);
 
     // Should be truncated again
-    expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
+    const mainDivAfter = container.querySelector('#eval-output-cell-text');
+    expect(mainDivAfter).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
     expect(screen.getByText('...')).toBeInTheDocument();
   });
 
