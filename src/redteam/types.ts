@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 import type { Plugin, Severity } from './constants';
 
@@ -8,7 +10,11 @@ export type Modifier = string | 'tone' | 'style' | 'context' | 'testGenerationIn
 export type Intent = string | string[];
 
 // Policy Types
-export type PolicyObject = { id: string; text?: string };
+export const PolicyObjectSchema = z.object({
+  id: z.string().uuid(),
+  text: z.string().optional(),
+});
+export type PolicyObject = z.infer<typeof PolicyObjectSchema>;
 export type Policy = string | PolicyObject; // Policy Text or Policy ID
 export type PolicyTexts = Record<PolicyObject['id'], Required<PolicyObject>['text']>;
 

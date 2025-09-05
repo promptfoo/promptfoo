@@ -217,12 +217,8 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
 
     const body = await response.json();
     // Deserialize the body into a map of policy IDs to policy texts.
-    return body.reduce(
-      (acc: PolicyTexts, policy: Required<PolicyObject>) => ({
-        ...acc,
-        [policy.id]: policy.text,
-      }),
-      {},
+    return Object.fromEntries(
+      body.map((policy: Required<PolicyObject>) => [policy.id, policy.text]),
     );
   } catch (e) {
     logger.error(`Failed to fetch policies from cloud.`);

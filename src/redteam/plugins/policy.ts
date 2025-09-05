@@ -1,6 +1,6 @@
 import dedent from 'dedent';
-import { validate as uuidValidate } from 'uuid';
 import invariant from '../../util/invariant';
+import { type Policy, type PolicyObject, PolicyObjectSchema } from '../types';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
@@ -11,9 +11,10 @@ import type {
   PluginConfig,
   TestCase,
 } from '../../types';
-import type { Policy, PolicyObject } from '../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
+
+import logger from '../../logger';
 
 /**
  * Checks whether a given Policy is a valid PolicyObject.
@@ -21,12 +22,7 @@ const PLUGIN_ID = 'promptfoo:redteam:policy';
  * @returns True if the policy is a valid PolicyObject, false otherwise.
  */
 export function isValidPolicyObject(policy: Policy): policy is PolicyObject {
-  return (
-    typeof policy === 'object' &&
-    'id' in policy &&
-    typeof policy.id === 'string' &&
-    uuidValidate(policy.id)
-  );
+  return PolicyObjectSchema.safeParse(policy).success;
 }
 
 export class PolicyPlugin extends RedteamPluginBase {
@@ -58,10 +54,13 @@ export class PolicyPlugin extends RedteamPluginBase {
     } else if (typeof config.policy === 'string') {
       this.policy = config.policy; // The policy declaration is itself the policy text
     }
-    // Edge case: Invalid policy format
+    // Edge case: this state should not be reached b/c `createPluginFactory` validates the config
+    // prior to instantiating the plugin. This state is reached within Promptfoo Cloud, so display an
+    // error message which is meaningful to a developer debugging the issue.
     else {
-      throw new Error(
-        `Invalid policy format. Expected string or PolicyObject. Received ${JSON.stringify(config.policy)}`,
+      invariant(
+        false,
+        'This state can only be reached if `createPluginFactory#validate` is not validating the config.',
       );
     }
   }

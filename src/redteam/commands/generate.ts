@@ -23,11 +23,11 @@ import {
   getConfigFromCloud,
   getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
-  getPoliciesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
+import { getCustomPolicyTexts } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
@@ -312,34 +312,18 @@ export async function doGenerateRedteam(
     (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
   );
   if (policyPluginsWithRefs.length > 0) {
-    logger.debug(`Resolving policy references for ${policyPluginsWithRefs.length} plugins`);
-
-    // Get the unique policy ids
-    const ids = Array.from(
-      new Set(policyPluginsWithRefs.map((p) => (p.config!.policy! as PolicyObject).id)),
-    );
-
     // Load the calling user's team id; all policies must belong to the same team.
     const teamId =
       resolvedConfigMetadata?.teamId ??
       (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
       (await getDefaultTeam()).id;
 
-    // Load the policy texts
-    const policyTexts = await getPoliciesFromCloud(ids, teamId);
-
-    // Log a warning if some policies are not found
-    const notFoundPolicyIds = ids.filter((id) => !policyTexts[id]);
-    if (notFoundPolicyIds.length > 0) {
-      logger.warn(
-        `Unable to resolve ${notFoundPolicyIds.length} policies: ${notFoundPolicyIds.join(', ')}`,
-      );
-    }
+    const texts = await getCustomPolicyTexts(policyPluginsWithRefs, teamId);
 
     // Assign, in-place, the policy texts to the plugins
     for (const policyPlugin of policyPluginsWithRefs) {
       const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
-      policyPlugin.config!.policy = { id: policyId, text: policyTexts[policyId] } as PolicyObject;
+      policyPlugin.config!.policy = { id: policyId, text: texts[policyId] } as PolicyObject;
     }
   }
 
