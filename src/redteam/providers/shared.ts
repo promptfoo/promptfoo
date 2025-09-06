@@ -67,7 +67,7 @@ async function loadRedteamProvider({
           }
         }
       }
-    } catch (error) {
+    } catch (_error) {
       logger.debug('Failed to load default redteam provider, falling back to constants');
     }
     
