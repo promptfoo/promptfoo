@@ -21,12 +21,14 @@ August delivered exceptional product velocity with **216+ commits** across criti
 ### 2. Major Leap in Enterprise Security & Connectivity
 
 **Critical Enterprise Infrastructure:**
+
 - **Advanced Authentication:** Support for uploaded signature authentication and database-stored certificates, enabling secure connections for corporations with strict IT requirements
 - **Enhanced Credential Security:** Proactive sanitization of sensitive credentials from debug logs, hardening our security posture
 - **Model Audit Cloud Platform:** Cloud sharing and persistence for security scans, transforming Model Audit into a collaborative enterprise platform with recurring revenue potential
 
 **Advanced Red Team Capabilities:**
-- MCP Agent integration for tool-enabled attack scenarios  
+
+- MCP Agent integration for tool-enabled attack scenarios
 - Unverifiable claims detection plugin for combating hallucinations
 - Multi-turn strategy improvements
 - Enhanced vulnerability reporting and navigation
@@ -36,11 +38,13 @@ August delivered exceptional product velocity with **216+ commits** across criti
 ### 3. Platform Performance and Developer Experience
 
 **Performance Optimizations:**
+
 - **HuggingFace Dataset Optimization:** Up to 3x faster and more reliable dataset fetching for large datasets
 - **Database Performance:** Composite indices for query optimization, reducing load times
 - **UI Performance:** Significant improvements to evaluation results interface load times
 
 **Developer Experience Enhancements:**
+
 - **AI-Powered Configuration:** Auto-fill for HTTP provider setup, simplifying complex workflows
 - **Enhanced UI/UX:** Streamlined evaluation results interface, progress indicators, and navigation flows
 - **Cloud Collaboration:** Persistent, auditable records of security and compliance testing
@@ -50,12 +54,14 @@ August delivered exceptional product velocity with **216+ commits** across criti
 ## Growth and Execution Metrics
 
 **Development Velocity:**
+
 - **216+ commits** with contributions from 17+ developers
 - **High-impact feature ratio:** Major capabilities like GPT-5, Model Audit cloud, and red team plugins
 - **Quality focus:** Comprehensive test coverage additions (300+ new tests)
 - **Documentation:** Enhanced guides for enterprise use cases
 
 **Market Traction:**
+
 - **150,000+ developers** now using the platform
 - **44 Fortune 500 companies** actively evaluating AI with promptfoo
 - Strong enterprise pipeline building for Q4 sales cycles
@@ -75,4 +81,5 @@ August's releases strengthen our competitive moats and market position:
 August's disciplined execution establishes strong foundations for Q4 enterprise sales cycles. Organizations evaluating GPT-5 deployments and requiring security compliance will find our platform uniquely positioned to serve their needs. The combination of cutting-edge model support, enterprise security infrastructure, and proven Fortune 500 adoption creates a compelling value proposition for the anticipated enterprise AI evaluation market expansion.
 
 ---
-*This update reflects 216+ commits from 17 contributors and significant milestones in user growth and enterprise adoption during August 2025.*
+
+_This update reflects 216+ commits from 17 contributors and significant milestones in user growth and enterprise adoption during August 2025._
