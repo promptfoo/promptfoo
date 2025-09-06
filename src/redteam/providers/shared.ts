@@ -23,6 +23,39 @@ import { TokenUsageTracker } from '../../util/tokenUsage';
 import { type TransformContext, TransformInputType, transform } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
+/**
+ * Adapts a provider instance for redteam-specific configuration without mutating the original.
+ * Creates a shallow copy using Object.create() to preserve the original cached provider
+ * while applying request-specific configurations like jsonOnly and temperature.
+ * 
+ * @param provider - The original provider instance from defaults system
+ * @param options - Configuration options to apply
+ * @returns Adapted provider instance with redteam-specific configuration
+ */
+function adaptProviderForRedteam(
+  provider: ApiProvider,
+  options: { jsonOnly?: boolean; preferSmallModel?: boolean }
+): ApiProvider {
+  const { jsonOnly } = options;
+  
+  // Create a shallow, mutable copy to avoid modifying the cached singleton provider
+  // This preserves the original provider instance while allowing instance-specific config
+  const adaptedProvider = Object.create(provider) as ApiProvider;
+  
+  if (adaptedProvider.config && typeof adaptedProvider.config === 'object') {
+    adaptedProvider.config = { ...adaptedProvider.config };
+    if (jsonOnly) {
+      adaptedProvider.config.response_format = { type: 'json_object' };
+    }
+    // Apply temperature for redteam use if not already set
+    if (adaptedProvider.config.temperature === undefined) {
+      adaptedProvider.config.temperature = TEMPERATURE;
+    }
+  }
+  
+  return adaptedProvider;
+}
+
 async function loadRedteamProvider({
   provider,
   jsonOnly = false,
@@ -49,24 +82,7 @@ async function loadRedteamProvider({
       const defaultProviders = await getDefaultProviders();
       if (defaultProviders.redteamProvider) {
         logger.debug(`Using default redteam provider: ${defaultProviders.redteamProvider.id()}`);
-        ret = defaultProviders.redteamProvider;
-        
-        // Apply configuration options to provider from defaults
-        if (ret && typeof ret === 'object') {
-          // Create a shallow, mutable copy to avoid modifying the cached singleton provider
-          // This preserves the original provider instance while allowing instance-specific config
-          ret = Object.create(ret);
-          if (ret.config && typeof ret.config === 'object') {
-            ret.config = { ...ret.config };
-            if (jsonOnly) {
-              ret.config.response_format = { type: 'json_object' };
-            }
-            // Apply temperature for redteam use if not already set
-            if (ret.config.temperature === undefined) {
-              ret.config.temperature = TEMPERATURE;
-            }
-          }
-        }
+        ret = adaptProviderForRedteam(defaultProviders.redteamProvider, { jsonOnly, preferSmallModel });
       }
     } catch (error) {
       logger.debug(`Failed to load default redteam provider: ${(error as Error).message}, falling back to constants`);
@@ -74,6 +90,7 @@ async function loadRedteamProvider({
     
     // Fallback to current logic if defaults failed
     if (!ret) {
+      // Note: preferSmallModel only applies to hardcoded fallback models, not providers from defaults system
       const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
       logger.debug(`Using default redteam provider: ${defaultModel}`);
       ret = new OpenAiChatCompletionProvider(defaultModel, {
