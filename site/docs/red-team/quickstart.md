@@ -29,7 +29,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 ## Prerequisites
 
 - Install [Node 20 or later](https://nodejs.org/en/download/package-manager/)
-- Optional: Set your `OPENAI_API_KEY` environment variable
+- Optional but recommended: Set an environment variable for your preferred LLM provider (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`). Promptfoo will automatically use this to select a powerful model for generating attacks.
 
 ## Initialize the project
 

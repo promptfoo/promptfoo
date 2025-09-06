@@ -138,9 +138,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: azureProvider,
       synthesizeProvider: azureProvider,
-      redteamProvider: new AzureChatCompletionProvider(deploymentName, { 
-        env, 
-        config: { temperature: 0.7 } 
+      redteamProvider: new AzureChatCompletionProvider(deploymentName, {
+        env,
+        config: { temperature: 0.7 },
       }),
     };
   } else if (preferAnthropic) {
@@ -166,9 +166,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GoogleAiStudioSuggestionsProvider,
       synthesizeProvider: GoogleAiStudioSynthesizeProvider,
-      redteamProvider: new AIStudioChatProvider('gemini-2.5-pro', { 
-        env, 
-        config: { temperature: 0.7 } 
+      redteamProvider: new AIStudioChatProvider('gemini-2.5-pro', {
+        env,
+        config: { temperature: 0.7 },
       }),
     };
   } else if (
@@ -185,9 +185,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
-      redteamProvider: new VertexChatProvider('gemini-1.5-pro', { 
-        env, 
-        config: { temperature: 0.7 } 
+      redteamProvider: new VertexChatProvider('gemini-1.5-pro', {
+        env,
+        config: { temperature: 0.7 },
       }),
     };
   } else if (
@@ -205,9 +205,9 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: MistralSuggestionsProvider,
       synthesizeProvider: MistralSynthesizeProvider,
-      redteamProvider: new MistralChatCompletionProvider('mistral-large-latest', { 
-        env, 
-        config: { temperature: 0.7 } 
+      redteamProvider: new MistralChatCompletionProvider('mistral-large-latest', {
+        env,
+        config: { temperature: 0.7 },
       }),
     };
   } else if (
@@ -226,13 +226,13 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
       suggestionsProvider: DefaultGitHubSuggestionsProvider,
       synthesizeProvider: DefaultGitHubGradingJsonProvider,
-      redteamProvider: new OpenAiChatCompletionProvider('gpt-4o', { 
-        env, 
-        config: { 
+      redteamProvider: new OpenAiChatCompletionProvider('gpt-4o', {
+        env,
+        config: {
           temperature: 0.7,
           apiBaseUrl: 'https://models.github.ai',
-          apiKeyEnvar: 'GITHUB_TOKEN'
-        } 
+          apiKeyEnvar: 'GITHUB_TOKEN',
+        },
       }),
     };
   } else {
@@ -272,6 +272,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       providers[provider] = defaultRedteamProvider;
     });
   }
-  
+
   return providers;
 }

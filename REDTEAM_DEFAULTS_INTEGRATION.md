@@ -108,6 +108,7 @@ The integration affects every redteam provider loading location:
 ### Test Results
 
 All tests pass successfully:
+
 - **24/24** defaults provider tests ✅
 - **6/6** integration tests ✅
 - **Build successful** with no TypeScript errors ✅
@@ -121,9 +122,9 @@ All tests pass successfully:
 ```yaml
 # This still works exactly as before
 redteam:
-  provider: "anthropic:chat:claude-3.5-sonnet"
+  provider: 'anthropic:chat:claude-3.5-sonnet'
   numTests: 5
-  plugins: ["hallucination"]
+  plugins: ['hallucination']
 ```
 
 ### For New Users
@@ -145,27 +146,30 @@ promptfoo redteam generate -c config.yaml
 ```yaml
 # Target uses OpenAI for evaluation
 providers:
-  - id: "openai:chat:gpt-4"
+  - id: 'openai:chat:gpt-4'
 
 # Redteam automatically uses Anthropic for generation (if ANTHROPIC_API_KEY set)
 redteam:
   numTests: 10
-  plugins: ["hallucination", "jailbreak"]
+  plugins: ['hallucination', 'jailbreak']
 ```
 
 ## Benefits
 
 ### User Experience
+
 - **Simplified configuration**: No need to specify redteam providers explicitly
 - **Intelligent defaults**: Best models automatically selected per vendor
 - **Consistent behavior**: Same credential-based selection as evaluation providers
 
-### Developer Experience  
+### Developer Experience
+
 - **Unified provider management**: Single system for all provider types
 - **Consistent APIs**: Same override pattern as completion/embedding providers
 - **Enhanced flexibility**: Easy switching between different provider combinations
 
 ### System Architecture
+
 - **Reduced complexity**: Eliminated duplicate provider selection logic
 - **Better maintainability**: Centralized provider configuration
 - **Enhanced testing**: Easier to test different provider combinations
@@ -176,15 +180,15 @@ redteam:
 
 Each vendor's redteam provider is optimized for adversarial generation:
 
-| Vendor | Model | Configuration |
-|--------|-------|---------------|
-| Anthropic | `claude-3.5-sonnet` | `temperature: 0.7` |
-| OpenAI | `gpt-4.1-2025-04-14` | `temperature: 0.7` |
-| Google AI Studio | `gemini-2.5-pro` | Default config |
-| Google Vertex | `gemini` latest | Default config |
-| Mistral | `mistral-large-latest` | Default config |
-| Azure | User deployment | `temperature: 0.7` |
-| GitHub | `gpt-4o` equivalent | Default config |
+| Vendor           | Model                  | Configuration      |
+| ---------------- | ---------------------- | ------------------ |
+| Anthropic        | `claude-3.5-sonnet`    | `temperature: 0.7` |
+| OpenAI           | `gpt-4.1-2025-04-14`   | `temperature: 0.7` |
+| Google AI Studio | `gemini-2.5-pro`       | Default config     |
+| Google Vertex    | `gemini` latest        | Default config     |
+| Mistral          | `mistral-large-latest` | Default config     |
+| Azure            | User deployment        | `temperature: 0.7` |
+| GitHub           | `gpt-4o` equivalent    | Default config     |
 
 ### Configuration Handling
 
@@ -244,6 +248,7 @@ DEBUG=promptfoo* promptfoo redteam generate
 ```
 
 This will show:
+
 - Which provider selection path was taken
 - Default provider loading attempts
 - Final provider selection and configuration

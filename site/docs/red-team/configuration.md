@@ -540,9 +540,89 @@ redteam:
   language: 'German'
 ```
 
-## Providers
+## Attack Generation Provider
 
-The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_.
+The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_. By default, `promptfoo` will automatically select a powerful model based on the environment variables you have set.
+
+### Automatic Provider Selection
+
+If you have set an environment variable for a supported provider, `promptfoo` will use a powerful default model from that provider for attack generation. This is the recommended approach for most users.
+
+| Environment Variable       | Vendor           | Default Redteam Model                     |
+| :------------------------- | :--------------- | :---------------------------------------- |
+| `OPENAI_API_KEY`           | OpenAI           | `gpt-4.1-2025-04-14`                      |
+| `ANTHROPIC_API_KEY`        | Anthropic        | `claude-3.5-sonnet`                       |
+| `GEMINI_API_KEY`           | Google AI Studio | `gemini-2.5-pro`                          |
+| (Google Cloud Credentials) | Google Vertex    | `gemini-1.5-pro`                          |
+| `MISTRAL_API_KEY`          | Mistral          | `mistral-large-latest`                    |
+| `AZURE_OPENAI_API_KEY`     | Azure OpenAI     | Your deployment (GPT-4 class recommended) |
+| `GITHUB_TOKEN`             | GitHub           | `gpt-4o`                                  |
+
+### Overriding the Provider
+
+If you need to use a specific model or a provider that is not listed above, you can explicitly set it using the `provider` field. This will override the automatic selection.
+
+A common use case is to use an alternative platform like [Azure](/docs/providers/azure/), [Bedrock](/docs/providers/aws-bedrock/), or [HuggingFace](/docs/providers/huggingface/).
+
+You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
+
+:::warning
+Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4.1 or Claude 3.5 Sonnet.
+:::
+
+### How attacks are generated
+
+By default, Promptfoo uses your local OpenAI key for redteam attack generation. If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
+
+You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
+
+:::note
+Custom plugins and strategies require an OpenAI key or your own provider configuration.
+:::
+
+### Changing the model
+
+To use the `openai:chat:gpt-4.1-mini` model, you can override the provider on the command line:
+
+```sh
+npx promptfoo@latest redteam generate --provider openai:chat:gpt-4.1-mini
+```
+
+Or in the config:
+
+```yaml
+redteam:
+  provider:
+    id: openai:chat:gpt-4.1-mini
+    # Optional config
+    config:
+      temperature: 0.5
+```
+
+A local model via [ollama](/docs/providers/ollama/) would look similar:
+
+```yaml
+redteam:
+  provider: ollama:chat:llama3.3
+```
+
+:::warning
+Some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
+:::
+
+### Remote Generation
+
+By default, promptfoo uses a remote service for generating adversarial certain inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+
+:::info Cloud Users
+If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
+:::
+
+:::warning
+Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.
+:::
+
+If you need to use a custom provider for generation, you can still benefit from our remote service by leaving `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` set to `false` (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
 
 Note that this is separate from the "target" model(s), which are set in the top-level [`providers` configuration](/docs/configuration/guide/).
 

@@ -59,7 +59,7 @@ describe('shared redteam provider utilities', () => {
     mockedLoadApiProviders.mockClear();
     mockedGetDefaultProviders.mockClear();
     mockedOpenAiProvider.mockClear();
-    
+
     // Ensure defaults mock returns empty object (no redteam provider)
     mockedGetDefaultProviders.mockResolvedValue({} as any);
 

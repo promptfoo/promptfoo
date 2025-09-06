@@ -29,7 +29,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     // Clear any existing providers
     redteamProviderManager.clearProvider();
     setDefaultRedteamProviders(undefined as any);
-    
+
     // Clear API keys to test defaults system
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
@@ -48,16 +48,16 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
   it('should use default redteam provider when no explicit provider is configured', async () => {
     // Set up an environment where defaults system will be used
     const provider = await redteamProviderManager.getProvider({});
-    
+
     expect(provider).toBeDefined();
     expect(provider.id()).toBeDefined();
   });
 
   it('should use Anthropic default redteam provider when ANTHROPIC_API_KEY is set', async () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
-    
+
     const provider = await redteamProviderManager.getProvider({});
-    
+
     expect(provider).toBeDefined();
     expect(provider.id()).toContain('claude');
   });
@@ -65,43 +65,43 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
   it('should override default redteam provider when setDefaultRedteamProviders is called', async () => {
     const customProvider = new MockRedteamProvider('custom-redteam-provider');
     await setDefaultRedteamProviders(customProvider);
-    
+
     const provider = await redteamProviderManager.getProvider({});
-    
+
     expect(provider.id()).toBe('custom-redteam-provider');
   });
 
   it('should prefer explicit provider over defaults system', async () => {
     // Set up defaults
     process.env.ANTHROPIC_API_KEY = 'test-key';
-    
+
     // Request explicit provider
     const provider = await redteamProviderManager.getProvider({
-      provider: 'openai:chat:gpt-3.5-turbo'
+      provider: 'openai:chat:gpt-3.5-turbo',
     });
-    
+
     expect(provider).toBeDefined();
     expect(provider.id()).toContain('openai');
   });
 
   it('should handle jsonOnly configuration with defaults provider', async () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
-    
+
     const provider = await redteamProviderManager.getProvider({
-      jsonOnly: true
+      jsonOnly: true,
     });
-    
+
     expect(provider).toBeDefined();
     expect(provider.id()).toContain('claude');
   });
 
   it('should handle preferSmallModel configuration with defaults provider', async () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
-    
+
     const provider = await redteamProviderManager.getProvider({
-      preferSmallModel: true
+      preferSmallModel: true,
     });
-    
+
     expect(provider).toBeDefined();
     expect(provider.id()).toContain('claude');
   });
