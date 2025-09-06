@@ -139,7 +139,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       env,
       config: { temperature: 0.7 },
     });
-    
+
     const azureSynthesizeProvider = new AzureChatCompletionProvider(deploymentName, {
       env,
       config: { response_format: { type: 'json_object' } },

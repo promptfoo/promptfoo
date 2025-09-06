@@ -40,10 +40,10 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    process.env = { ...originalEnv };
     redteamProviderManager.clearProvider();
     resetDefaultProviders();
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it('should use default redteam provider when no explicit provider is configured', async () => {

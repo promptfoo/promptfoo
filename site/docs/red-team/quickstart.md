@@ -1,6 +1,7 @@
 ---
 sidebar_position: 2
 sidebar_label: Quickstart
+title: Red Team Quickstart
 description: Start red teaming LLMs in minutes by scanning 50+ vulnerabilities including jailbreaks, prompt injection, and data exfiltration
 ---
 
@@ -126,7 +127,7 @@ promptfoo redteam init --no-gui
 
 ## Run the scan
 
-Now that we've generated the test cases, we're ready to run the adversarial evaluation.
+Now that we've generated the test cases, we're ready to run the adversarial eval.
 
 Run this command in the same directory as your `promptfooconfig.yaml` file:
 
@@ -249,7 +250,7 @@ Promptfoo hooks directly into your existing LLM app to attack targets via Python
 
 ## Continuous improvement
 
-Red teaming is not a one-time activity but an ongoing process. As you develop and refine your LLM application, regularly running red team evaluations helps ensure that:
+Red teaming is not a one-time activity but an ongoing process. As you develop and refine your LLM application, regularly running red team evals helps ensure that:
 
 1. New features or changes don't introduce unexpected vulnerabilities
 2. Your application remains robust against evolving attack techniques
