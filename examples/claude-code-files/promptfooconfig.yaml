@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Code with file reading - analyzing a small project'
+
+prompts:
+  - |
+    Analyze the code in the working directory and provide:
+    1. A summary of what this project does
+    2. The main functions/classes and their purposes
+    3. Any potential improvements or issues
+
+providers:
+  - id: claude-code
+    config:
+      working_dir: examples/claude-code-files/sample-project
+      # Using default read-only permissions
+
+tests:
+  - vars:
+      # No vars needed - Claude Code will read the files
+    assert:
+      - type: contains-any
+        value:
+          - Calculator
+          - calculate
+          - arithmetic
+      - type: llm-rubric
+        value: Must identify that this is a calculator implementation
+      - type: llm-rubric
+        value: Must mention the main.py and calculator.py files

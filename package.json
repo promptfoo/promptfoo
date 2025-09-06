@@ -210,6 +210,7 @@
     "@swc/core-win32-x64-msvc": "^1.13.5"
   },
   "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.105",
     "@anthropic-ai/sdk": "^0.60.0",
     "@apidevtools/json-schema-ref-parser": "^12.0.2",
     "@googleapis/sheets": "^9.8.0",

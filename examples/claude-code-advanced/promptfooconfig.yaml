@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Code with write permissions - refactoring code'
+
+prompts:
+  - |
+    Review the code in the working directory and:
+    1. Add type hints to the Python code
+    2. Add a new method called 'power' that calculates a^b
+    3. Add docstrings to all methods
+    
+    Make the actual file modifications.
+
+providers:
+  - id: claude-code
+    config:
+      working_dir: ./workspace
+      permission_mode: 'acceptEdits'  # Allow file modifications
+      # Note: In a real scenario, you might want 'plan' mode first
+
+tests:
+  - vars:
+      # No vars needed - Claude Code will modify the files
+    assert:
+      # Verify the files were modified correctly
+      - type: javascript
+        value: |
+          // Read the modified file and check for type hints
+          const fs = require('fs');
+          const content = fs.readFileSync('./workspace/calculator.py', 'utf8');
+          return content.includes('->') && content.includes(': float');
+      - type: javascript
+        value: |
+          // Check that the power method was added
+          const fs = require('fs');
+          const content = fs.readFileSync('./workspace/calculator.py', 'utf8');
+          return content.includes('def power');
+      - type: javascript
+        value: |
+          // Check that docstrings were added
+          const fs = require('fs');
+          const content = fs.readFileSync('./workspace/calculator.py', 'utf8');
+          return content.includes('"""');
+
+# Clean up after each test
+hooks:
+  afterEach: |
+    # Reset the workspace directory to original state
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Restore original calculator.py
+    const original = `class Calculator:
+    def add(self, a, b):
+        return a + b
+    
+    def subtract(self, a, b):
+        return a - b
+    
+    def multiply(self, a, b):
+        return a * b
+    
+    def divide(self, a, b):
+        if b == 0:
+            raise ValueError("Cannot divide by zero")
+        return a / b`;
+    
+    fs.writeFileSync('./workspace/calculator.py', original);

@@ -212,6 +212,20 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('claude-code'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { ClaudeCodeSDKProvider } = await import('./claudeCode');
+      return new ClaudeCodeSDKProvider({
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) =>
       providerPath.startsWith('azure:') ||
       providerPath.startsWith('azureopenai:') ||
