@@ -11,7 +11,6 @@ import {
   DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
   DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
-  DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
 } from './google/ai.studio';
 import {
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
@@ -23,7 +22,6 @@ import {
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
   DefaultGradingProvider as MistralGradingProvider,
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
-  DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from './mistral/defaults';
 import { MistralChatCompletionProvider } from './mistral';
 import {

@@ -3,7 +3,6 @@ import { randomUUID } from 'crypto';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
   type ApiProvider,
@@ -21,7 +20,7 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { type TransformContext, TransformInputType, transform } from '../../util/transform';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import { TEMPERATURE } from './constants';
 
 /**
  * Adapts a provider instance for redteam-specific configuration without mutating the original.

@@ -260,8 +260,8 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
-      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
+      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(providers.redteamProvider);
@@ -273,8 +273,8 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
-      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
+      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(providers.redteamProvider);
@@ -286,8 +286,8 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
-      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
+      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(providers.redteamProvider);
@@ -301,8 +301,8 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders(envOverrides);
 
-      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
-      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
+      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(providers.redteamProvider);
@@ -340,8 +340,8 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
-      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
+      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(providers.redteamProvider);
     });
@@ -352,8 +352,8 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider).toBe(GoogleAiStudioGradingProvider);
-      expect(providers.gradingJsonProvider).toBe(GoogleAiStudioGradingJsonProvider);
+      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
+      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(providers.redteamProvider);
       expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
