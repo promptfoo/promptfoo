@@ -3554,7 +3554,7 @@ describe('evaluator defaultTest merging', () => {
     jest.clearAllMocks();
   });
 
-  it.skip('should merge defaultTest.options.provider with test case options', async () => {
+  it('should merge defaultTest.options.provider with test case options', async () => {
     const mockProvider: ApiProvider = {
       id: jest.fn().mockReturnValue('mock-provider'),
       callApi: jest.fn().mockResolvedValue({
@@ -3610,7 +3610,7 @@ describe('evaluator defaultTest merging', () => {
         },
       },
     });
-  }, 15000);
+  });
 
   it('should allow test case options to override defaultTest options', async () => {
     const mockProvider: ApiProvider = {
