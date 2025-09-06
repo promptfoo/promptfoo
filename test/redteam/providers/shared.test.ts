@@ -3,11 +3,6 @@ import { loadApiProviders } from '../../../src/providers';
 import { getDefaultProviders } from '../../../src/providers/defaults';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import {
-  ATTACKER_MODEL,
-  ATTACKER_MODEL_SMALL,
-  TEMPERATURE,
-} from '../../../src/redteam/providers/constants';
-import {
   getTargetResponse,
   type Message,
   messagesToRedteamHistory,
@@ -112,7 +107,11 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('uses the provider from the defaults system when available', async () => {
-      const defaultProvider = { id: () => 'default-redteam-provider', callApi: jest.fn(), config: {} };
+      const defaultProvider = {
+        id: () => 'default-redteam-provider',
+        callApi: jest.fn(),
+        config: {},
+      };
       mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: defaultProvider } as any);
 
       const result = await redteamProviderManager.getProvider({});
@@ -120,7 +119,11 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('clears cached providers', async () => {
-      const defaultProvider = { id: () => 'default-redteam-provider', callApi: jest.fn(), config: {} };
+      const defaultProvider = {
+        id: () => 'default-redteam-provider',
+        callApi: jest.fn(),
+        config: {},
+      };
       mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: defaultProvider } as any);
 
       // First call to set up the cache
@@ -129,7 +132,9 @@ describe('shared redteam provider utilities', () => {
       // Clear the cache
       redteamProviderManager.clearProvider();
       mockedGetDefaultProviders.mockClear();
-      mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: { ...defaultProvider, id: () => 'new-provider' } } as any);
+      mockedGetDefaultProviders.mockResolvedValue({
+        redteamProvider: { ...defaultProvider, id: () => 'new-provider' },
+      } as any);
 
       // Second call should use the new provider
       const result = await redteamProviderManager.getProvider({});
@@ -157,7 +162,11 @@ describe('shared redteam provider utilities', () => {
 
     it('sets response_format to json_object when jsonOnly is true', async () => {
       const defaultConfig = { temperature: 0.5 };
-      const defaultProvider = { id: () => 'default-json-provider', callApi: jest.fn(), config: defaultConfig };
+      const defaultProvider = {
+        id: () => 'default-json-provider',
+        callApi: jest.fn(),
+        config: defaultConfig,
+      };
       mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: defaultProvider } as any);
 
       const result = await redteamProviderManager.getProvider({ jsonOnly: true });
