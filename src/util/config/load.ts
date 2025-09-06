@@ -548,7 +548,7 @@ export async function resolveConfigs(
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
   }
 
-  const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
+  const config: Omit<UnifiedConfig, 'commandLineOptions'> = {
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
@@ -568,6 +568,7 @@ export async function resolveConfigs(
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
     tracing: fileConfig.tracing || defaultConfig.tracing,
+    evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
