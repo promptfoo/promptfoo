@@ -180,7 +180,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (await hasGoogleDefaultCredentials())
   ) {
     logger.debug('Using Google Vertex default providers');
-    const vertexRedteamProvider = new VertexChatProvider('gemini-1.5-pro', {
+    const vertexRedteamProvider = new VertexChatProvider('gemini-2.5-pro', {
       env,
       config: { temperature: 0.7 },
     });

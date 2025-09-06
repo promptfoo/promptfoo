@@ -553,7 +553,7 @@ If you have set an environment variable for a supported provider, `promptfoo` wi
 | `OPENAI_API_KEY`           | OpenAI           | `gpt-4.1-2025-04-14`                      |
 | `ANTHROPIC_API_KEY`        | Anthropic        | `claude-sonnet-4-20250514`                |
 | `GEMINI_API_KEY`           | Google AI Studio | `gemini-2.5-pro`                          |
-| (Google Cloud Credentials) | Google Vertex    | `gemini-1.5-pro`                          |
+| (Google Cloud Credentials) | Google Vertex    | `gemini-2.5-pro`                          |
 | `MISTRAL_API_KEY`          | Mistral          | `mistral-large-latest`                    |
 | `AZURE_OPENAI_API_KEY`     | Azure OpenAI     | Your deployment (GPT-4 class recommended) |
 | `GITHUB_TOKEN`             | GitHub           | `gpt-4o`                                  |
