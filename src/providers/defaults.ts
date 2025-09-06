@@ -4,6 +4,7 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
+import { AIStudioChatProvider } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
 import {
   DefaultGradingProvider as GoogleAiStudioGradingProvider,
@@ -16,6 +17,7 @@ import {
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
   DefaultGradingProvider as GeminiGradingProvider,
 } from './google/vertex';
+import { VertexChatProvider } from './google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -23,11 +25,13 @@ import {
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from './mistral/defaults';
+import { MistralChatCompletionProvider } from './mistral';
 import {
   DefaultGitHubGradingProvider,
   DefaultGitHubGradingJsonProvider,
   DefaultGitHubSuggestionsProvider,
 } from './github/defaults';
+import { OpenAiChatCompletionProvider } from './openai/chat';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
@@ -162,7 +166,10 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GoogleAiStudioSuggestionsProvider,
       synthesizeProvider: GoogleAiStudioSynthesizeProvider,
-      redteamProvider: GoogleAiStudioGradingProvider,
+      redteamProvider: new AIStudioChatProvider('gemini-2.5-pro', { 
+        env, 
+        config: { temperature: 0.7 } 
+      }),
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -178,7 +185,10 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
-      redteamProvider: GeminiGradingProvider,
+      redteamProvider: new VertexChatProvider('gemini-1.5-pro', { 
+        env, 
+        config: { temperature: 0.7 } 
+      }),
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -195,7 +205,10 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: MistralSuggestionsProvider,
       synthesizeProvider: MistralSynthesizeProvider,
-      redteamProvider: MistralGradingProvider,
+      redteamProvider: new MistralChatCompletionProvider('mistral-large-latest', { 
+        env, 
+        config: { temperature: 0.7 } 
+      }),
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -213,7 +226,14 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
       suggestionsProvider: DefaultGitHubSuggestionsProvider,
       synthesizeProvider: DefaultGitHubGradingJsonProvider,
-      redteamProvider: DefaultGitHubGradingProvider,
+      redteamProvider: new OpenAiChatCompletionProvider('gpt-4o', { 
+        env, 
+        config: { 
+          temperature: 0.7,
+          apiBaseUrl: 'https://models.github.ai',
+          apiKeyEnvar: 'GITHUB_TOKEN'
+        } 
+      }),
     };
   } else {
     logger.debug('Using OpenAI default providers');

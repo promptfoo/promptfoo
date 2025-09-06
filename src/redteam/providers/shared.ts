@@ -53,7 +53,8 @@ async function loadRedteamProvider({
         
         // Apply configuration options to provider from defaults
         if (ret && typeof ret === 'object') {
-          // Create a copy to avoid modifying the original
+          // Create a shallow, mutable copy to avoid modifying the cached singleton provider
+          // This preserves the original provider instance while allowing instance-specific config
           ret = Object.create(ret);
           if (ret.config && typeof ret.config === 'object') {
             ret.config = { ...ret.config };
@@ -67,8 +68,8 @@ async function loadRedteamProvider({
           }
         }
       }
-    } catch (_error) {
-      logger.debug('Failed to load default redteam provider, falling back to constants');
+    } catch (error) {
+      logger.debug(`Failed to load default redteam provider: ${(error as Error).message}, falling back to constants`);
     }
     
     // Fallback to current logic if defaults failed
