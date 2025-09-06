@@ -27,7 +27,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     // Clear any existing providers
-    redteamProviderManager.clearProvider();
+    // No cleanup needed - RedteamProviderManager is stateless
     resetDefaultProviders();
 
     // Clear API keys to test defaults system
@@ -41,7 +41,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
 
   afterEach(() => {
     process.env = { ...originalEnv };
-    redteamProviderManager.clearProvider();
+    // No cleanup needed - RedteamProviderManager is stateless
     resetDefaultProviders();
     jest.resetAllMocks();
   });

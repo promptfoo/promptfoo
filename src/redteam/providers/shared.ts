@@ -73,6 +73,7 @@ function adaptProviderForRedteam(
   return adaptedProvider;
 }
 
+// Private function - only used internally by RedteamProviderManager
 async function loadRedteamProvider({
   provider,
   jsonOnly = false,
@@ -108,8 +109,10 @@ async function loadRedteamProvider({
     } catch (error) {
       // Final fallback for backward compatibility
       const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-      logger.debug(
-        `Failed to load default redteam provider: ${(error as Error).message}, using hardcoded fallback: ${defaultModel}`,
+      logger.warn(
+        `Failed to load default redteam provider: ${(error as Error).message}. ` +
+        `Using hardcoded fallback: ${defaultModel}. ` +
+        `This requires OPENAI_API_KEY to be set.`,
       );
       baseProvider = new OpenAiChatCompletionProvider(defaultModel, {
         config: { temperature: TEMPERATURE },
@@ -151,15 +154,6 @@ class RedteamProviderManager {
     const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
     logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
     return redteamProvider;
-  }
-
-  /**
-   * Clears any cached state (maintained for backward compatibility).
-   * Note: This is now a no-op since caching is handled by the defaults system.
-   */
-  clearProvider() {
-    // No-op: caching is now handled by the defaults system
-    logger.debug('[RedteamProviderManager] clearProvider() called - no action needed');
   }
 }
 

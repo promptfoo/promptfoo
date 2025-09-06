@@ -59,7 +59,7 @@ describe('shared redteam provider utilities', () => {
     mockedGetDefaultProviders.mockResolvedValue({} as any);
 
     // Clear the redteam provider manager cache
-    redteamProviderManager.clearProvider();
+    // No cleanup needed - RedteamProviderManager is stateless
 
     // Reset cliState to default
     cliState.config = {
@@ -118,28 +118,7 @@ describe('shared redteam provider utilities', () => {
       expect(result.id()).toBe('default-redteam-provider');
     });
 
-    it('clears cached providers', async () => {
-      const defaultProvider = {
-        id: () => 'default-redteam-provider',
-        callApi: jest.fn(),
-        config: {},
-      };
-      mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: defaultProvider } as any);
-
-      // First call to set up the cache
-      await redteamProviderManager.getProvider({});
-
-      // Clear the cache
-      redteamProviderManager.clearProvider();
-      mockedGetDefaultProviders.mockClear();
-      mockedGetDefaultProviders.mockResolvedValue({
-        redteamProvider: { ...defaultProvider, id: () => 'new-provider' },
-      } as any);
-
-      // Second call should use the new provider
-      const result = await redteamProviderManager.getProvider({});
-      expect(result.id()).toBe('new-provider');
-    });
+    // Note: Removed 'clears cached providers' test since RedteamProviderManager is now stateless
 
     it('loads provider from string identifier', async () => {
       mockedLoadApiProviders.mockResolvedValue([mockApiProvider]);
