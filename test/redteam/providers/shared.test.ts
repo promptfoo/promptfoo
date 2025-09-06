@@ -1,5 +1,6 @@
 import cliState from '../../../src/cliState';
 import { loadApiProviders } from '../../../src/providers';
+import { getDefaultProviders } from '../../../src/providers/defaults';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import {
   ATTACKER_MODEL,
@@ -38,9 +39,13 @@ jest.mock('../../../src/providers/openai');
 jest.mock('../../../src/providers', () => ({
   loadApiProviders: jest.fn(),
 }));
+jest.mock('../../../src/providers/defaults', () => ({
+  getDefaultProviders: jest.fn().mockResolvedValue({}),
+}));
 
 const mockedSleep = jest.mocked(sleep);
 const mockedLoadApiProviders = jest.mocked(loadApiProviders);
+const mockedGetDefaultProviders = jest.mocked(getDefaultProviders);
 const mockedOpenAiProvider = jest.mocked(OpenAiChatCompletionProvider);
 
 describe('shared redteam provider utilities', () => {
@@ -52,7 +57,11 @@ describe('shared redteam provider utilities', () => {
     // Reset specific mocks
     mockedSleep.mockClear();
     mockedLoadApiProviders.mockClear();
+    mockedGetDefaultProviders.mockClear();
     mockedOpenAiProvider.mockClear();
+    
+    // Ensure defaults mock returns empty object (no redteam provider)
+    mockedGetDefaultProviders.mockResolvedValue({} as any);
 
     // Clear the redteam provider manager cache
     redteamProviderManager.clearProvider();
