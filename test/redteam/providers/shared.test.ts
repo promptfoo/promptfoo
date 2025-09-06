@@ -3,10 +3,10 @@ import { loadApiProviders } from '../../../src/providers';
 import { getDefaultProviders } from '../../../src/providers/defaults';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import {
+  getRedteamProvider,
   getTargetResponse,
   type Message,
   messagesToRedteamHistory,
-  redteamProviderManager,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { sleep } from '../../../src/util/time';
@@ -101,7 +101,7 @@ describe('shared redteam provider utilities', () => {
       // Ensure getDefaultProviders returns no redteamProvider
       mockedGetDefaultProviders.mockResolvedValue({} as any);
 
-      const result = await redteamProviderManager.getProvider({});
+      const result = await getRedteamProvider({});
       expect(result.id()).toContain('gpt-4.1-2025-04-14');
       expect((result as any).config.temperature).toBe(0.7);
     });
@@ -114,7 +114,7 @@ describe('shared redteam provider utilities', () => {
       };
       mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: defaultProvider } as any);
 
-      const result = await redteamProviderManager.getProvider({});
+      const result = await getRedteamProvider({});
       expect(result.id()).toBe('default-redteam-provider');
     });
 
@@ -123,11 +123,11 @@ describe('shared redteam provider utilities', () => {
     it('loads provider from string identifier', async () => {
       mockedLoadApiProviders.mockResolvedValue([mockApiProvider]);
 
-      const result = await redteamProviderManager.getProvider({ provider: 'test-provider' });
+      const result = await getRedteamProvider({ provider: 'test-provider' });
 
       // Should return adapted provider with same id but with redteam config
       expect(result.id()).toBe('test-provider');
-      expect(result.config).toEqual({ temperature: 0.7 });
+      expect(result.config).toEqual({ temperature: 0.7, response_format: { type: 'json_object' } });
       expect(mockedLoadApiProviders).toHaveBeenCalledWith(['test-provider']);
     });
 
@@ -135,15 +135,15 @@ describe('shared redteam provider utilities', () => {
       const providerOptions = { id: 'test-provider', apiKey: 'test-key' };
       mockedLoadApiProviders.mockResolvedValue([mockApiProvider]);
 
-      const result = await redteamProviderManager.getProvider({ provider: providerOptions });
+      const result = await getRedteamProvider({ provider: providerOptions });
 
       // Should return adapted provider with same id but with redteam config
       expect(result.id()).toBe('test-provider');
-      expect(result.config).toEqual({ temperature: 0.7 });
+      expect(result.config).toEqual({ temperature: 0.7, response_format: { type: 'json_object' } });
       expect(mockedLoadApiProviders).toHaveBeenCalledWith([providerOptions]);
     });
 
-    it('sets response_format to json_object when jsonOnly is true', async () => {
+    it('sets response_format to json_object when enforceJson is true', async () => {
       const defaultConfig = { temperature: 0.5 };
       const defaultProvider = {
         id: () => 'default-json-provider',
@@ -152,12 +152,30 @@ describe('shared redteam provider utilities', () => {
       };
       mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: defaultProvider } as any);
 
-      const result = await redteamProviderManager.getProvider({ jsonOnly: true });
+      const result = await getRedteamProvider({ enforceJson: true });
 
       // Check that the returned provider is a new object with modified config
       expect(result).not.toBe(defaultProvider);
       expect(result.id()).toBe('default-json-provider');
       expect((result as any).config.response_format).toEqual({ type: 'json_object' });
+      expect((result as any).config.temperature).toBe(0.5); // Ensure original config is preserved
+    });
+
+    it('does not set response_format when enforceJson is false', async () => {
+      const defaultConfig = { temperature: 0.5 };
+      const defaultProvider = {
+        id: () => 'default-no-json-provider',
+        callApi: jest.fn(),
+        config: defaultConfig,
+      };
+      mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: defaultProvider } as any);
+
+      const result = await getRedteamProvider({ enforceJson: false });
+
+      // Check that the returned provider is a new object with modified config
+      expect(result).not.toBe(defaultProvider);
+      expect(result.id()).toBe('default-no-json-provider');
+      expect((result as any).config.response_format).toBeUndefined();
       expect((result as any).config.temperature).toBe(0.5); // Ensure original config is preserved
     });
 
@@ -177,11 +195,11 @@ describe('shared redteam provider utilities', () => {
         },
       };
 
-      const result = await redteamProviderManager.getProvider({});
+      const result = await getRedteamProvider({});
 
       // Should return adapted provider with same id but with redteam config
       expect(result.id()).toBe('state-provider');
-      expect(result.config).toEqual({ temperature: 0.7 });
+      expect(result.config).toEqual({ temperature: 0.7, response_format: { type: 'json_object' } });
 
       // Clean up for next test
       cliState.config!.redteam!.provider = undefined;
@@ -198,10 +216,10 @@ describe('shared redteam provider utilities', () => {
       mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
       // Get providers with explicit provider configuration
-      const result = await redteamProviderManager.getProvider({ provider: 'test-provider' });
-      const jsonResult = await redteamProviderManager.getProvider({ 
-        provider: 'test-provider', 
-        jsonOnly: true 
+      const result = await getRedteamProvider({ provider: 'test-provider' });
+      const jsonResult = await getRedteamProvider({
+        provider: 'test-provider',
+        enforceJson: true,
       });
 
       // Both should be adapted versions of the same base provider

@@ -11,9 +11,7 @@ const mockCheckPenalizedPhrases = jest.fn<() => boolean>();
 const mockGetGraderById = jest.fn();
 
 jest.mock('../../../src/redteam/providers/shared', () => ({
-  redteamProviderManager: {
-    getProvider: mockGetProvider,
-  },
+  getRedteamProvider: mockGetProvider,
   getTargetResponse: mockGetTargetResponse,
   checkPenalizedPhrases: mockCheckPenalizedPhrases,
 }));

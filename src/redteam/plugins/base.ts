@@ -7,7 +7,7 @@ import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { redteamProviderManager } from '../providers/shared';
+import { getRedteamProvider } from '../providers/shared';
 import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 import type {
@@ -432,7 +432,7 @@ export abstract class RedteamGraderBase {
 
     const grade = await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
-      provider: await redteamProviderManager.getProvider({
+      provider: await getRedteamProvider({
         provider:
           // First try loading the provider from defaultTest, otherwise fall back to the default red team provider.
           (typeof cliState.config?.defaultTest === 'object' &&
@@ -442,7 +442,7 @@ export abstract class RedteamGraderBase {
           (typeof cliState.config?.defaultTest === 'object' &&
             cliState.config?.defaultTest?.options?.provider) ||
           undefined,
-        jsonOnly: true,
+        enforceJson: true,
       }),
     });
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);

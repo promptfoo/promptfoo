@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { resetDefaultProviders, setDefaultRedteamProviders } from '../../../src/providers/defaults';
-import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { getRedteamProvider } from '../../../src/redteam/providers/shared';
 
 import type { ApiProvider } from '../../../src/types';
 
@@ -48,7 +48,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
 
   it('should use default redteam provider when no explicit provider is configured', async () => {
     // Set up an environment where defaults system will be used
-    const provider = await redteamProviderManager.getProvider({});
+    const provider = await getRedteamProvider({});
 
     expect(provider).toBeDefined();
     expect(provider.id()).toBeDefined();
@@ -57,7 +57,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
   it('should use Anthropic default redteam provider when ANTHROPIC_API_KEY is set', async () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
 
-    const provider = await redteamProviderManager.getProvider({});
+    const provider = await getRedteamProvider({});
 
     expect(provider).toBeDefined();
     expect(provider.id()).toContain('claude');
@@ -67,7 +67,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     const customProvider = new MockRedteamProvider('custom-redteam-provider');
     await setDefaultRedteamProviders(customProvider);
 
-    const provider = await redteamProviderManager.getProvider({});
+    const provider = await getRedteamProvider({});
 
     expect(provider.id()).toBe('custom-redteam-provider');
   });
@@ -77,7 +77,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
 
     // Request explicit provider
-    const provider = await redteamProviderManager.getProvider({
+    const provider = await getRedteamProvider({
       provider: 'openai:chat:gpt-3.5-turbo',
     });
 
@@ -85,22 +85,22 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     expect(provider.id()).toContain('openai');
   });
 
-  it('should handle jsonOnly configuration with defaults provider', async () => {
+  it('should handle enforceJson configuration with defaults provider', async () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
 
-    const provider = await redteamProviderManager.getProvider({
-      jsonOnly: true,
+    const provider = await getRedteamProvider({
+      enforceJson: true,
     });
 
     expect(provider).toBeDefined();
     expect(provider.id()).toContain('claude');
   });
 
-  it('should handle preferSmallModel configuration with defaults provider', async () => {
+  it('should handle preferSmall configuration with defaults provider', async () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
 
-    const provider = await redteamProviderManager.getProvider({
-      preferSmallModel: true,
+    const provider = await getRedteamProvider({
+      preferSmall: true,
     });
 
     expect(provider).toBeDefined();

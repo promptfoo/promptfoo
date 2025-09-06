@@ -10,8 +10,8 @@ import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   createIterationContext,
+  getRedteamProvider,
   getTargetResponse,
-  redteamProviderManager,
   type TargetResponse,
 } from './shared';
 
@@ -548,10 +548,10 @@ class RedteamIterativeProvider implements ApiProvider {
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: await redteamProviderManager.getProvider({
+      redteamProvider: await getRedteamProvider({
         provider: this.redteamProvider,
-        preferSmallModel: false,
-        jsonOnly: true,
+        preferSmall: false,
+        enforceJson: true,
       }),
       targetProvider: context.originalProvider,
       injectVar,

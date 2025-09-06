@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../../src/cache';
-import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { getRedteamProvider } from '../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   addMultilingual,
@@ -41,15 +41,13 @@ jest.mock('../../../src/cache', () => ({
 }));
 
 jest.mock('../../../src/redteam/providers/shared', () => ({
-  redteamProviderManager: {
-    getProvider: jest.fn().mockResolvedValue({
-      callApi: jest.fn().mockResolvedValue({
-        output: '{"de": "Hallo Welt"}',
-      }),
-      config: {},
-      isAvailable: jest.fn().mockResolvedValue(true),
+  getRedteamProvider: jest.fn().mockResolvedValue({
+    callApi: jest.fn().mockResolvedValue({
+      output: '{"de": "Hallo Welt"}',
     }),
-  },
+    config: {},
+    isAvailable: jest.fn().mockResolvedValue(true),
+  }),
 }));
 
 describe('Multilingual Strategy', () => {
@@ -84,7 +82,7 @@ describe('Multilingual Strategy', () => {
           output: '{"es": "Hola", "fr": "Bonjour"}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({
@@ -99,7 +97,7 @@ describe('Multilingual Strategy', () => {
           output: '```json\n{"es": "Hola", "fr": "Bonjour"}\n```',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({
@@ -114,7 +112,7 @@ describe('Multilingual Strategy', () => {
           output: 'es: Hola\nfr: Bonjour',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({
@@ -129,7 +127,7 @@ describe('Multilingual Strategy', () => {
           output: '{"es": "Hola"}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({
@@ -143,7 +141,7 @@ describe('Multilingual Strategy', () => {
           output: 'invalid response',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({});
@@ -153,7 +151,7 @@ describe('Multilingual Strategy', () => {
       const mockProvider = {
         callApi: jest.fn().mockRejectedValue(new Error('API Error')),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']).catch(() => ({}));
       expect(result).toEqual({});
@@ -165,7 +163,7 @@ describe('Multilingual Strategy', () => {
           output: `"es": "Hola"\n"fr": "Bonjour"`,
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({
         es: 'Hola',
@@ -179,7 +177,7 @@ describe('Multilingual Strategy', () => {
           output: 'garbage output',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['zh', 'ja']);
       expect(result).toEqual({});
     });
@@ -190,7 +188,7 @@ describe('Multilingual Strategy', () => {
           output: '{"es": "Hola", "fr": "Bonjour", "extra": "ignored"}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({ es: 'Hola', fr: 'Bonjour' });
     });
@@ -201,7 +199,7 @@ describe('Multilingual Strategy', () => {
           output: '```notjson\n{"es": "Hola", "fr": "Bonjour"}\n```',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({ es: 'Hola', fr: 'Bonjour' });
     });
@@ -212,7 +210,7 @@ describe('Multilingual Strategy', () => {
           output: '{}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', []);
       expect(result).toEqual({});
     });
@@ -223,7 +221,7 @@ describe('Multilingual Strategy', () => {
           output: '```json  \n  { "es": "Hola", "fr": "Bonjour" }   \n```',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({ es: 'Hola', fr: 'Bonjour' });
     });
@@ -234,7 +232,7 @@ describe('Multilingual Strategy', () => {
           output: 'es: Hola',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({ es: 'Hola' });
     });
@@ -247,7 +245,7 @@ describe('Multilingual Strategy', () => {
           output: '{"de": "Hallo Welt"}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Hello world' },
@@ -299,7 +297,7 @@ describe('Multilingual Strategy', () => {
           output: '{"es": "Prueba"}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const testCases = Array(5).fill({ vars: { text: 'Test' } });
       await addMultilingual(testCases, 'text', { languages: ['es'], maxConcurrency: 2 });
@@ -311,7 +309,7 @@ describe('Multilingual Strategy', () => {
       const mockProvider = {
         callApi: jest.fn().mockRejectedValue(new Error('Translation failed')),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const result = await addMultilingual([{ vars: { text: 'Test' } }], 'text', {
         languages: ['es'],
@@ -326,7 +324,7 @@ describe('Multilingual Strategy', () => {
           output: '{"es": "Prueba"}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const testCases = Array(10).fill({ vars: { text: 'Test' } });
       const maxConcurrency = 3;
@@ -346,7 +344,7 @@ describe('Multilingual Strategy', () => {
           .mockResolvedValueOnce({ output: '{"es": "Hola", "fr": "Bonjour"}' })
           .mockResolvedValueOnce({ output: '{"de": "Hallo"}' }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Hello' },
@@ -386,7 +384,7 @@ describe('Multilingual Strategy', () => {
           output: '{"es": "Hola"}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Hello' },
@@ -425,7 +423,7 @@ describe('Multilingual Strategy', () => {
           output: '{"es": "Hola", "fr": "Bonjour", "de": "Hallo"}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Good morning' },
@@ -447,7 +445,7 @@ describe('Multilingual Strategy', () => {
           output: '{"es": "Hola"}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Hi' },
@@ -467,7 +465,7 @@ describe('Multilingual Strategy', () => {
           output: '{}',
         }),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Hi' },
@@ -487,7 +485,7 @@ describe('Multilingual Strategy', () => {
           .mockResolvedValueOnce({ output: '{"es": "Hola"}' })
           .mockRejectedValueOnce(new Error('Batch error')),
       };
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
+      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Morning' },

@@ -4,7 +4,7 @@ import cliState from '../../cliState';
 import logger from '../../logger';
 import { REDTEAM_MODEL } from '../../redteam/constants';
 import { Plugins } from '../../redteam/plugins';
-import { redteamProviderManager } from '../../redteam/providers/shared';
+import { getRedteamProvider } from '../../redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { evalJobs } from './eval';
@@ -101,8 +101,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     }
 
     // Get the red team provider
-    const redteamProvider = await redteamProviderManager.getProvider({
+    const redteamProvider = await getRedteamProvider({
       provider: config?.provider || REDTEAM_MODEL,
+      enforceJson: false,
     });
 
     const testCases = await plugin.action({

@@ -19,8 +19,8 @@ import {
 import {
   checkPenalizedPhrases,
   createIterationContext,
+  getRedteamProvider,
   getTargetResponse,
-  redteamProviderManager,
   type TargetResponse,
 } from './shared';
 
@@ -523,13 +523,13 @@ class RedteamIterativeProvider implements ApiProvider {
     if (shouldGenerateRemote()) {
       this.gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
     } else {
       this.redteamProvider = config.redteamProvider;
@@ -557,13 +557,13 @@ class RedteamIterativeProvider implements ApiProvider {
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: await redteamProviderManager.getProvider({
+      redteamProvider: await getRedteamProvider({
         provider: this.redteamProvider,
-        jsonOnly: true,
+        enforceJson: true,
       }),
-      gradingProvider: await redteamProviderManager.getProvider({
+      gradingProvider: await getRedteamProvider({
         provider: this.gradingProvider,
-        jsonOnly: true,
+        enforceJson: true,
       }),
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,

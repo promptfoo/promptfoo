@@ -114,8 +114,8 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   const options = {
-    jsonOnly: true,
-    preferSmallModel: false,
+    enforceJson: true,
+    preferSmall: false,
     task: 'crescendo' as const,
   };
 

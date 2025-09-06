@@ -45,3 +45,6 @@ export const TERMINAL_MAX_WIDTH =
 export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
 
 export const FILE_METADATA_KEY = '_promptfooFileMetadata';
+
+// Re-export provider utilities
+export { isFoundationModelProvider } from './providers/constants';

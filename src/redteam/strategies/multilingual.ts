@@ -9,7 +9,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { redteamProviderManager } from '../providers/shared';
+import { getRedteamProvider } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types';
@@ -125,9 +125,9 @@ export async function translateBatch(
   text: string,
   languages: string[],
 ): Promise<Record<string, string>> {
-  const redteamProvider = await redteamProviderManager.getProvider({
-    jsonOnly: true,
-    preferSmallModel: true,
+  const redteamProvider = await getRedteamProvider({
+    enforceJson: true,
+    preferSmall: true,
   });
 
   const languagesFormatted = languages.map((lang) => `- ${lang}`).join('\n');
