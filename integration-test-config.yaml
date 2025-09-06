@@ -1,0 +1,20 @@
+description: 'Integration test for redteam provider defaults'
+
+prompts:
+  - 'You are a helpful AI assistant. User query: {{query}}'
+
+targets:
+  - id: 'test-target'
+    config:
+      # This will be a simple echo for testing
+      output: 'Test response to: {{prompt}}'
+
+redteam:
+  # No explicit provider - should use defaults system
+  numTests: 2
+  plugins:
+    - 'hallucination'
+
+defaultTest:
+  vars:
+    query: 'Hello world'

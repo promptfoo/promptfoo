@@ -131,17 +131,19 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       env,
     });
 
+    const azureRedteamProvider = new AzureChatCompletionProvider(deploymentName, {
+      env,
+      config: { temperature: 0.7 },
+    });
+
     providers = {
       embeddingProvider: azureEmbeddingProvider,
       gradingJsonProvider: azureProvider,
       gradingProvider: azureProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: azureProvider,
-      synthesizeProvider: azureProvider,
-      redteamProvider: new AzureChatCompletionProvider(deploymentName, {
-        env,
-        config: { temperature: 0.7 },
-      }),
+      synthesizeProvider: azureRedteamProvider,
+      redteamProvider: azureRedteamProvider,
     };
   } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
@@ -158,6 +160,11 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else if (!hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials) {
     logger.debug('Using Google AI Studio default providers');
+    const googleAiStudioRedteamProvider = new AIStudioChatProvider('gemini-2.5-pro', {
+      env,
+      config: { temperature: 0.7 },
+    });
+
     providers = {
       embeddingProvider: GeminiEmbeddingProvider, // Google AI Studio doesn't support embeddings, fall back to Vertex
       gradingJsonProvider: GoogleAiStudioGradingJsonProvider,
@@ -165,11 +172,8 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       llmRubricProvider: GoogleAiStudioLlmRubricProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GoogleAiStudioSuggestionsProvider,
-      synthesizeProvider: GoogleAiStudioSynthesizeProvider,
-      redteamProvider: new AIStudioChatProvider('gemini-2.5-pro', {
-        env,
-        config: { temperature: 0.7 },
-      }),
+      synthesizeProvider: googleAiStudioRedteamProvider,
+      redteamProvider: googleAiStudioRedteamProvider,
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -178,17 +182,19 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (await hasGoogleDefaultCredentials())
   ) {
     logger.debug('Using Google Vertex default providers');
+    const vertexRedteamProvider = new VertexChatProvider('gemini-1.5-pro', {
+      env,
+      config: { temperature: 0.7 },
+    });
+
     providers = {
       embeddingProvider: GeminiEmbeddingProvider,
       gradingJsonProvider: GeminiGradingProvider,
       gradingProvider: GeminiGradingProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
-      synthesizeProvider: GeminiGradingProvider,
-      redteamProvider: new VertexChatProvider('gemini-1.5-pro', {
-        env,
-        config: { temperature: 0.7 },
-      }),
+      synthesizeProvider: vertexRedteamProvider,
+      redteamProvider: vertexRedteamProvider,
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -198,17 +204,19 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY)
   ) {
     logger.debug('Using Mistral default providers');
+    const mistralRedteamProvider = new MistralChatCompletionProvider('mistral-large-latest', {
+      env,
+      config: { temperature: 0.7 },
+    });
+
     providers = {
       embeddingProvider: MistralEmbeddingProvider,
       gradingJsonProvider: MistralGradingJsonProvider,
       gradingProvider: MistralGradingProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: MistralSuggestionsProvider,
-      synthesizeProvider: MistralSynthesizeProvider,
-      redteamProvider: new MistralChatCompletionProvider('mistral-large-latest', {
-        env,
-        config: { temperature: 0.7 },
-      }),
+      synthesizeProvider: mistralRedteamProvider,
+      redteamProvider: mistralRedteamProvider,
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -219,21 +227,23 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     hasGitHubCredentials
   ) {
     logger.debug('Using GitHub Models default providers');
+    const githubRedteamProvider = new OpenAiChatCompletionProvider('gpt-4o', {
+      env,
+      config: {
+        temperature: 0.7,
+        apiBaseUrl: 'https://models.github.ai',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      },
+    });
+
     providers = {
       embeddingProvider: OpenAiEmbeddingProvider, // GitHub doesn't support embeddings yet
       gradingJsonProvider: DefaultGitHubGradingJsonProvider,
       gradingProvider: DefaultGitHubGradingProvider,
       moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
       suggestionsProvider: DefaultGitHubSuggestionsProvider,
-      synthesizeProvider: DefaultGitHubGradingJsonProvider,
-      redteamProvider: new OpenAiChatCompletionProvider('gpt-4o', {
-        env,
-        config: {
-          temperature: 0.7,
-          apiBaseUrl: 'https://models.github.ai',
-          apiKeyEnvar: 'GITHUB_TOKEN',
-        },
-      }),
+      synthesizeProvider: githubRedteamProvider,
+      redteamProvider: githubRedteamProvider,
     };
   } else {
     logger.debug('Using OpenAI default providers');
@@ -243,7 +253,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       gradingProvider: OpenAiGradingProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: OpenAiSuggestionsProvider,
-      synthesizeProvider: OpenAiGradingJsonProvider,
+      synthesizeProvider: OpenAiRedteamProvider,
       redteamProvider: OpenAiRedteamProvider,
     };
   }

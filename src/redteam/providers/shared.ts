@@ -93,17 +93,11 @@ async function loadRedteamProvider({
       );
     }
 
-    // Fallback to current logic if defaults failed
+    // Throw an error if no provider could be determined.
     if (!ret) {
-      // Note: preferSmallModel only applies to hardcoded fallback models, not providers from defaults system
-      const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-      logger.debug(`Using default redteam provider: ${defaultModel}`);
-      ret = new OpenAiChatCompletionProvider(defaultModel, {
-        config: {
-          temperature: TEMPERATURE,
-          response_format: jsonOnly ? { type: 'json_object' } : undefined,
-        },
-      });
+      throw new Error(
+        'Could not automatically determine a redteam provider. Please set an API key environment variable (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY) or configure a provider explicitly in your promptfooconfig.yaml file.',
+      );
     }
   }
   return ret;

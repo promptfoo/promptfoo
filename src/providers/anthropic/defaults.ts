@@ -110,7 +110,7 @@ const llmRubricProviderFactory = createLazyProvider(
 
 const redteamProviderFactory = createLazyProvider(
   (env?: EnvOverrides) =>
-    new AnthropicMessagesProvider('claude-3.5-sonnet', {
+    new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
       env,
       config: { temperature: 0.7 },
     }),
