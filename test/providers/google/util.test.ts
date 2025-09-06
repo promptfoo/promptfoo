@@ -9,6 +9,7 @@ import {
   maybeCoerceToGeminiFormat,
   normalizeTools,
   parseStringObject,
+  resolveProjectId,
   validateFunctionCall,
 } from '../../../src/providers/google/util';
 
@@ -1507,6 +1508,59 @@ describe('util', () => {
       const tools: any[] = [];
       const normalized = normalizeTools(tools);
       expect(normalized).toEqual([]);
+    });
+  });
+
+  describe('resolveProjectId', () => {
+    const mockProjectId = 'google-auth-project';
+
+    beforeEach(async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Re-mock google-auth-library after module reset
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+    });
+
+    afterEach(() => {
+      jest.dontMock('google-auth-library');
+    });
+
+    it('should prioritize explicit config over environment variables', async () => {
+      // Import resolveProject after mocking in beforeEach
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = { projectId: 'explicit-project' };
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+    });
+
+    it('should use environment variables when no explicit config', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('env-project');
+    });
+
+    it('should fall back to Google Auth Library when no config or env vars', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe(mockProjectId);
     });
   });
 });
