@@ -74,6 +74,12 @@ export async function setDefaultRedteamProviders(provider: ApiProvider) {
   defaultRedteamProvider = provider;
 }
 
+export function resetDefaultProviders() {
+  defaultCompletionProvider = undefined as any;
+  defaultEmbeddingProvider = undefined as any;
+  defaultRedteamProvider = undefined as any;
+}
+
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
   // Check for provider credentials
   const hasAnthropicCredentials = Boolean(

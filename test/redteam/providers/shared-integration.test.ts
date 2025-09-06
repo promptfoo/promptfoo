@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { setDefaultRedteamProviders } from '../../../src/providers/defaults';
+import { resetDefaultProviders, setDefaultRedteamProviders } from '../../../src/providers/defaults';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 
 import type { ApiProvider } from '../../../src/types';
@@ -28,7 +28,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     process.env = { ...originalEnv };
     // Clear any existing providers
     redteamProviderManager.clearProvider();
-    setDefaultRedteamProviders(undefined as any);
+    resetDefaultProviders();
 
     // Clear API keys to test defaults system
     delete process.env.OPENAI_API_KEY;
@@ -42,6 +42,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
   afterEach(() => {
     process.env = originalEnv;
     redteamProviderManager.clearProvider();
+    resetDefaultProviders();
     jest.clearAllMocks();
   });
 
