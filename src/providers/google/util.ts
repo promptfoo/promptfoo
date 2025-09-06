@@ -344,12 +344,12 @@ export async function resolveProjectId(
   });
 
   return (
-    googleProjectId ||
     config.projectId ||
     env?.VERTEX_PROJECT_ID ||
     env?.GOOGLE_PROJECT_ID ||
     getEnvString('VERTEX_PROJECT_ID') ||
     getEnvString('GOOGLE_PROJECT_ID') ||
+    googleProjectId ||
     ''
   );
 }

@@ -1,18 +1,18 @@
-import { fetchWithProxy } from '../../src/fetch';
 import { cloudConfig } from '../../src/globalConfig/cloud';
-import { checkServerFeatureSupport } from '../../src/util/server';
+import * as cloudModule from '../../src/util/cloud';
 import {
-  checkCloudPermissions,
   ConfigPermissionError,
+  checkCloudPermissions,
   getConfigFromCloud,
   getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
   getProviderFromCloud,
   makeRequest,
 } from '../../src/util/cloud';
-import * as cloudModule from '../../src/util/cloud';
+import { fetchWithProxy } from '../../src/util/fetch';
+import { checkServerFeatureSupport } from '../../src/util/server';
 
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts');
 jest.mock('../../src/globalConfig/cloud');
 jest.mock('../../src/util/server');
 jest.mock('../../src/util/cloud', () => ({

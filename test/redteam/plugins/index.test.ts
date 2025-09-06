@@ -130,7 +130,7 @@ describe('Plugins', () => {
     it('should validate policy plugin config', async () => {
       const policyPlugin = Plugins.find((p) => p.key === 'policy');
       expect(() => policyPlugin?.validate?.({})).toThrow(
-        'Policy plugin requires `config.policy` to be set',
+        'Invariant failed: One of the policy plugins is invalid. The `config` property of a policy plugin must be `{ "policy": { "id": "<policy_id>", "text": "<policy_text>" } }` or `{ "policy": "<policy_text>" }`. Received: {}',
       );
     });
 

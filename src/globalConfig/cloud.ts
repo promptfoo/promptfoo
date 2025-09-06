@@ -1,10 +1,11 @@
 import chalk from 'chalk';
 import { getEnvString } from '../envars';
-import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
-export const API_HOST = getEnvString('API_HOST', 'https://api.promptfoo.app');
+export const CLOUD_API_HOST = 'https://api.promptfoo.app';
+
+export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 
 interface CloudUser {
   id: string;
@@ -95,6 +96,7 @@ export class CloudConfig {
     apiHost: string,
   ): Promise<{ user: CloudUser; organization: CloudOrganization; app: CloudApp }> {
     try {
+      const { fetchWithProxy } = await import('../util/fetch');
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`,

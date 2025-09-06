@@ -5,6 +5,8 @@ import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
+import logger from '../src/logger';
+import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
   fetchWithProxy,
   fetchWithRetries,
@@ -12,9 +14,7 @@ import {
   handleRateLimit,
   isRateLimited,
   sanitizeUrl,
-} from '../src/fetch';
-import logger from '../src/logger';
-import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
+} from '../src/util/fetch';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 

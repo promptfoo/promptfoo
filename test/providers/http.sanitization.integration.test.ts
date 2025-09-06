@@ -1,5 +1,5 @@
 import { HttpProvider } from '../../src/providers/http';
-import { sanitizeUrl } from '../../src/fetch';
+import { sanitizeUrl } from '../../src/util/fetch';
 import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 

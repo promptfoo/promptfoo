@@ -2,7 +2,7 @@ import { ContractPlugin, ContractsGrader } from '../../../src/redteam/plugins/co
 
 import type { ApiProvider } from '../../../src/types';
 
-jest.mock('../../../src/fetch');
+jest.mock('../../../src/util/fetch/index.ts');
 
 describe('ContractPlugin', () => {
   let mockProvider: ApiProvider;
