@@ -146,7 +146,9 @@ describe('shared redteam provider utilities', () => {
 
       const result = await redteamProviderManager.getProvider({ provider: 'test-provider' });
 
-      expect(result).toBe(mockApiProvider);
+      // Should return adapted provider with same id but with redteam config
+      expect(result.id()).toBe('test-provider');
+      expect(result.config).toEqual({ temperature: 0.7 });
       expect(mockedLoadApiProviders).toHaveBeenCalledWith(['test-provider']);
     });
 
@@ -156,7 +158,9 @@ describe('shared redteam provider utilities', () => {
 
       const result = await redteamProviderManager.getProvider({ provider: providerOptions });
 
-      expect(result).toBe(mockApiProvider);
+      // Should return adapted provider with same id but with redteam config
+      expect(result.id()).toBe('test-provider');
+      expect(result.config).toEqual({ temperature: 0.7 });
       expect(mockedLoadApiProviders).toHaveBeenCalledWith([providerOptions]);
     });
 
@@ -196,13 +200,15 @@ describe('shared redteam provider utilities', () => {
 
       const result = await redteamProviderManager.getProvider({});
 
-      expect(result).toBe(mockStateProvider);
+      // Should return adapted provider with same id but with redteam config
+      expect(result.id()).toBe('state-provider');
+      expect(result.config).toEqual({ temperature: 0.7 });
 
       // Clean up for next test
       cliState.config!.redteam!.provider = undefined;
     });
 
-    it('sets and reuses providers', async () => {
+    it('loads providers with explicit configuration', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: jest.fn<
@@ -212,16 +218,17 @@ describe('shared redteam provider utilities', () => {
       };
       mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
-      // Set the provider
-      await redteamProviderManager.setProvider('test-provider');
+      // Get providers with explicit provider configuration
+      const result = await redteamProviderManager.getProvider({ provider: 'test-provider' });
+      const jsonResult = await redteamProviderManager.getProvider({ 
+        provider: 'test-provider', 
+        jsonOnly: true 
+      });
 
-      // Get the provider - should use cached version
-      const result = await redteamProviderManager.getProvider({});
-      const jsonResult = await redteamProviderManager.getProvider({ jsonOnly: true });
-
-      expect(result).toBe(mockProvider);
-      expect(jsonResult).toBe(mockProvider);
-      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Once for regular, once for jsonOnly
+      // Both should be adapted versions of the same base provider
+      expect(result.id()).toBe('test-provider');
+      expect(jsonResult.id()).toBe('test-provider');
+      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2);
     });
 
     it('handles thrown errors in getTargetResponse', async () => {
