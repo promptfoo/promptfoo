@@ -20,61 +20,25 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { type TransformContext, TransformInputType, transform } from '../../util/transform';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import { getEnvFloat } from '../../envars';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 
+
+// Hardcoded fallback constants (inline to reduce dependencies)
+const ATTACKER_MODEL = 'gpt-4.1-2025-04-14';
+const ATTACKER_MODEL_SMALL = 'gpt-4o-mini';
+const REDTEAM_TEMPERATURE = getEnvFloat('PROMPTFOO_JAILBREAK_TEMPERATURE') || 0.7;
+
 /**
- * Adapts a provider instance for redteam-specific configuration without mutating the original.
- * Creates a shallow copy to preserve the original cached provider while applying 
- * request-specific configurations like jsonOnly and temperature.
- *
- * @param provider - The original provider instance from defaults system
- * @param options - Configuration options to apply
- * @returns Adapted provider instance with redteam-specific configuration
+ * Gets a redteam provider with the specified configuration.
+ * Uses the defaults system as the primary source, with explicit provider override support.
+ * 
+ * @param provider - Optional explicit provider override
+ * @param jsonOnly - Whether to enforce JSON output format
+ * @param preferSmallModel - Whether to prefer smaller/faster models (only affects hardcoded fallback)
+ * @returns Promise resolving to configured ApiProvider instance
  */
-function adaptProviderForRedteam(
-  provider: ApiProvider,
-  options: { jsonOnly?: boolean; preferSmallModel?: boolean },
-): ApiProvider {
-  if (!provider) {
-    throw new Error('Provider cannot be null or undefined');
-  }
-  
-  if (typeof provider.id !== 'function') {
-    throw new Error(`Invalid provider: missing id() method. Provider: ${JSON.stringify(provider)}`);
-  }
-
-  const { jsonOnly } = options;
-
-  // Create an adapted provider that inherits methods from the original
-  // but allows us to override the config without mutating the original
-  const adaptedProvider = Object.create(provider);
-  
-  // Copy over all enumerable properties to ensure full compatibility
-  Object.assign(adaptedProvider, provider);
-
-  // Ensure config exists and create a copy to avoid mutations
-  if (provider.config && typeof provider.config === 'object') {
-    adaptedProvider.config = { ...provider.config };
-  } else {
-    adaptedProvider.config = {};
-  }
-
-  // Apply redteam-specific configuration
-  if (jsonOnly) {
-    adaptedProvider.config.response_format = { type: 'json_object' };
-  }
-  
-  // Apply temperature for redteam use if not already set
-  if (adaptedProvider.config.temperature === undefined) {
-    adaptedProvider.config.temperature = TEMPERATURE;
-  }
-
-  return adaptedProvider;
-}
-
-// Private function - only used internally by RedteamProviderManager
-async function loadRedteamProvider({
+export async function getRedteamProvider({
   provider,
   jsonOnly = false,
   preferSmallModel = false,
@@ -82,17 +46,17 @@ async function loadRedteamProvider({
   provider?: RedteamFileConfig['provider'];
   jsonOnly?: boolean;
   preferSmallModel?: boolean;
-} = {}) {
+} = {}): Promise<ApiProvider> {
   let baseProvider: ApiProvider;
   
   // Check for explicit provider override (from config or parameter)
   const explicitProvider = provider || cliState.config?.redteam?.provider;
   
   if (isApiProvider(explicitProvider)) {
-    logger.debug(`Using explicit redteam provider: ${explicitProvider.id()}`);
+    logger.debug(`[RedteamProvider] Using explicit provider: ${explicitProvider.id()}`);
     baseProvider = explicitProvider;
   } else if (typeof explicitProvider === 'string' || isProviderOptions(explicitProvider)) {
-    logger.debug(`Loading explicit redteam provider: ${JSON.stringify(explicitProvider)}`);
+    logger.debug(`[RedteamProvider] Loading explicit provider: ${JSON.stringify(explicitProvider)}`);
     const loadApiProvidersModule = await import('../../providers');
     baseProvider = (await loadApiProvidersModule.loadApiProviders([explicitProvider]))[0];
   } else {
@@ -101,63 +65,62 @@ async function loadRedteamProvider({
       const { getDefaultProviders } = await import('../../providers/defaults');
       const defaultProviders = await getDefaultProviders();
       if (defaultProviders.redteamProvider) {
-        logger.debug(`Using default redteam provider: ${defaultProviders.redteamProvider.id()}`);
+        logger.debug(`[RedteamProvider] Using defaults provider: ${defaultProviders.redteamProvider.id()}`);
         baseProvider = defaultProviders.redteamProvider;
       } else {
         throw new Error('No redteam provider available from defaults system');
       }
     } catch (error) {
       // Final fallback for backward compatibility
-      const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
+      const fallbackModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
       logger.warn(
-        `Failed to load default redteam provider: ${(error as Error).message}. ` +
-        `Using hardcoded fallback: ${defaultModel}. ` +
-        `This requires OPENAI_API_KEY to be set.`,
+        `[RedteamProvider] Failed to load defaults provider: ${(error as Error).message}. ` +
+        `Using hardcoded fallback: ${fallbackModel}. This requires OPENAI_API_KEY.`,
       );
-      baseProvider = new OpenAiChatCompletionProvider(defaultModel, {
-        config: { temperature: TEMPERATURE },
+      baseProvider = new OpenAiChatCompletionProvider(fallbackModel, {
+        config: { temperature: REDTEAM_TEMPERATURE },
       });
     }
   }
   
-  // Apply redteam-specific adaptations to the base provider
-  return adaptProviderForRedteam(baseProvider, { jsonOnly, preferSmallModel });
-}
-
-class RedteamProviderManager {
-  /**
-   * Gets a redteam provider with the specified configuration.
-   * Uses the defaults system as the primary source, with explicit provider override support.
-   * 
-   * @param provider - Optional explicit provider override
-   * @param jsonOnly - Whether to enforce JSON output format
-   * @param preferSmallModel - Whether to prefer smaller/faster models
-   * @returns Promise resolving to configured ApiProvider instance
-   */
-  async getProvider({
-    provider,
-    jsonOnly = false,
-    preferSmallModel = false,
-  }: {
-    provider?: RedteamFileConfig['provider'];
-    jsonOnly?: boolean;
-    preferSmallModel?: boolean;
-  } = {}): Promise<ApiProvider> {
-    logger.debug(
-      `[RedteamProviderManager] Loading redteam provider: ${JSON.stringify({
-        providedConfig: typeof provider === 'string' ? provider : (provider?.id ?? 'defaults'),
-        jsonOnly,
-        preferSmallModel,
-      })}`,
-    );
-    
-    const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
-    logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
-    return redteamProvider;
+  // Apply redteam-specific configuration inline (no need for separate function)
+  if (!baseProvider) {
+    throw new Error('Provider cannot be null or undefined');
   }
+  
+  if (typeof baseProvider.id !== 'function') {
+    throw new Error(`Invalid provider: missing id() method. Provider: ${JSON.stringify(baseProvider)}`);
+  }
+
+  // Create adapted provider that inherits from original but allows config override
+  const adaptedProvider = Object.create(baseProvider);
+  Object.assign(adaptedProvider, baseProvider);
+
+  // Set up config with redteam-specific values
+  if (baseProvider.config && typeof baseProvider.config === 'object') {
+    adaptedProvider.config = { ...baseProvider.config };
+  } else {
+    adaptedProvider.config = {};
+  }
+
+  // Apply redteam configuration
+  if (jsonOnly) {
+    adaptedProvider.config.response_format = { type: 'json_object' };
+  }
+  
+  // Apply temperature if not already set
+  if (adaptedProvider.config.temperature === undefined) {
+    adaptedProvider.config.temperature = REDTEAM_TEMPERATURE;
+  }
+
+  logger.debug(`[RedteamProvider] Loaded provider: ${adaptedProvider.id()}`);
+  return adaptedProvider;
 }
 
-export const redteamProviderManager = new RedteamProviderManager();
+// Legacy singleton for backward compatibility - just delegates to the function
+export const redteamProviderManager = {
+  getProvider: getRedteamProvider,
+};
 
 export type TargetResponse = {
   output: string;
