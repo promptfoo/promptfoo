@@ -4,36 +4,39 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
+import { AIStudioChatProvider } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
 import {
   DefaultGradingProvider as GoogleAiStudioGradingProvider,
   DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
   DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
-  DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
 } from './google/ai.studio';
 import {
   DefaultEmbeddingProvider as GeminiEmbeddingProvider,
   DefaultGradingProvider as GeminiGradingProvider,
 } from './google/vertex';
+import { VertexChatProvider } from './google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
   DefaultGradingProvider as MistralGradingProvider,
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
-  DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from './mistral/defaults';
+import { MistralChatCompletionProvider } from './mistral';
 import {
   DefaultGitHubGradingProvider,
   DefaultGitHubGradingJsonProvider,
   DefaultGitHubSuggestionsProvider,
 } from './github/defaults';
+import { OpenAiChatCompletionProvider } from './openai/chat';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
+  DefaultRedteamProvider as OpenAiRedteamProvider,
 } from './openai/defaults';
 
 import type { ApiProvider, DefaultProviders } from '../types';
@@ -49,8 +52,11 @@ const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
 
 const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];
 
+const REDTEAM_PROVIDERS: (keyof DefaultProviders)[] = ['redteamProvider'];
+
 let defaultCompletionProvider: ApiProvider;
 let defaultEmbeddingProvider: ApiProvider;
+let defaultRedteamProvider: ApiProvider;
 
 /**
  * This will override all of the completion type providers defined in the constant COMPLETION_PROVIDERS
@@ -62,6 +68,16 @@ export async function setDefaultCompletionProviders(provider: ApiProvider) {
 
 export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
+}
+
+export async function setDefaultRedteamProviders(provider: ApiProvider) {
+  defaultRedteamProvider = provider;
+}
+
+export function resetDefaultProviders() {
+  defaultCompletionProvider = undefined as any;
+  defaultEmbeddingProvider = undefined as any;
+  defaultRedteamProvider = undefined as any;
 }
 
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
@@ -119,13 +135,24 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       env,
     });
 
+    const azureRedteamProvider = new AzureChatCompletionProvider(deploymentName, {
+      env,
+      config: { temperature: 0.7 },
+    });
+
+    const azureSynthesizeProvider = new AzureChatCompletionProvider(deploymentName, {
+      env,
+      config: { response_format: { type: 'json_object' } },
+    });
+
     providers = {
       embeddingProvider: azureEmbeddingProvider,
       gradingJsonProvider: azureProvider,
       gradingProvider: azureProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: azureProvider,
-      synthesizeProvider: azureProvider,
+      synthesizeProvider: azureSynthesizeProvider,
+      redteamProvider: azureRedteamProvider,
     };
   } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
@@ -138,9 +165,15 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: anthropicProviders.suggestionsProvider,
       synthesizeProvider: anthropicProviders.synthesizeProvider,
+      redteamProvider: anthropicProviders.redteamProvider,
     };
   } else if (!hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials) {
     logger.debug('Using Google AI Studio default providers');
+    const googleAiStudioRedteamProvider = new AIStudioChatProvider('gemini-2.5-pro', {
+      env,
+      config: { temperature: 0.7 },
+    });
+
     providers = {
       embeddingProvider: GeminiEmbeddingProvider, // Google AI Studio doesn't support embeddings, fall back to Vertex
       gradingJsonProvider: GoogleAiStudioGradingJsonProvider,
@@ -148,7 +181,8 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       llmRubricProvider: GoogleAiStudioLlmRubricProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GoogleAiStudioSuggestionsProvider,
-      synthesizeProvider: GoogleAiStudioSynthesizeProvider,
+      synthesizeProvider: GoogleAiStudioGradingJsonProvider,
+      redteamProvider: googleAiStudioRedteamProvider,
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -157,6 +191,11 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (await hasGoogleDefaultCredentials())
   ) {
     logger.debug('Using Google Vertex default providers');
+    const vertexRedteamProvider = new VertexChatProvider('gemini-2.5-pro', {
+      env,
+      config: { temperature: 0.7 },
+    });
+
     providers = {
       embeddingProvider: GeminiEmbeddingProvider,
       gradingJsonProvider: GeminiGradingProvider,
@@ -164,6 +203,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
+      redteamProvider: vertexRedteamProvider,
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -173,13 +213,19 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY)
   ) {
     logger.debug('Using Mistral default providers');
+    const mistralRedteamProvider = new MistralChatCompletionProvider('mistral-large-latest', {
+      env,
+      config: { temperature: 0.7 },
+    });
+
     providers = {
       embeddingProvider: MistralEmbeddingProvider,
       gradingJsonProvider: MistralGradingJsonProvider,
       gradingProvider: MistralGradingProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: MistralSuggestionsProvider,
-      synthesizeProvider: MistralSynthesizeProvider,
+      synthesizeProvider: MistralGradingJsonProvider,
+      redteamProvider: mistralRedteamProvider,
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -190,6 +236,15 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     hasGitHubCredentials
   ) {
     logger.debug('Using GitHub Models default providers');
+    const githubRedteamProvider = new OpenAiChatCompletionProvider('gpt-4o', {
+      env,
+      config: {
+        temperature: 0.7,
+        apiBaseUrl: 'https://models.github.ai',
+        apiKeyEnvar: 'GITHUB_TOKEN',
+      },
+    });
+
     providers = {
       embeddingProvider: OpenAiEmbeddingProvider, // GitHub doesn't support embeddings yet
       gradingJsonProvider: DefaultGitHubGradingJsonProvider,
@@ -197,6 +252,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
       suggestionsProvider: DefaultGitHubSuggestionsProvider,
       synthesizeProvider: DefaultGitHubGradingJsonProvider,
+      redteamProvider: githubRedteamProvider,
     };
   } else {
     logger.debug('Using OpenAI default providers');
@@ -207,6 +263,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: OpenAiSuggestionsProvider,
       synthesizeProvider: OpenAiGradingJsonProvider,
+      redteamProvider: OpenAiRedteamProvider,
     };
   }
 
@@ -227,5 +284,13 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       providers[provider] = defaultEmbeddingProvider;
     });
   }
+
+  if (defaultRedteamProvider) {
+    logger.debug(`Overriding default redteam provider: ${defaultRedteamProvider.id()}`);
+    REDTEAM_PROVIDERS.forEach((provider) => {
+      providers[provider] = defaultRedteamProvider;
+    });
+  }
+
   return providers;
 }
