@@ -22,7 +22,7 @@ class MockRedteamProvider implements ApiProvider {
 }
 
 describe('Redteam Provider Manager Integration with Defaults', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     process.env = { ...originalEnv };

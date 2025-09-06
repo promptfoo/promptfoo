@@ -139,6 +139,11 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       env,
       config: { temperature: 0.7 },
     });
+    
+    const azureSynthesizeProvider = new AzureChatCompletionProvider(deploymentName, {
+      env,
+      config: { response_format: { type: 'json_object' } },
+    });
 
     providers = {
       embeddingProvider: azureEmbeddingProvider,
@@ -146,7 +151,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       gradingProvider: azureProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: azureProvider,
-      synthesizeProvider: azureRedteamProvider,
+      synthesizeProvider: azureSynthesizeProvider,
       redteamProvider: azureRedteamProvider,
     };
   } else if (preferAnthropic) {
@@ -176,7 +181,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       llmRubricProvider: GoogleAiStudioLlmRubricProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GoogleAiStudioSuggestionsProvider,
-      synthesizeProvider: googleAiStudioRedteamProvider,
+      synthesizeProvider: GoogleAiStudioGradingJsonProvider,
       redteamProvider: googleAiStudioRedteamProvider,
     };
   } else if (
@@ -197,7 +202,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       gradingProvider: GeminiGradingProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
-      synthesizeProvider: vertexRedteamProvider,
+      synthesizeProvider: GeminiGradingProvider,
       redteamProvider: vertexRedteamProvider,
     };
   } else if (
@@ -219,7 +224,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       gradingProvider: MistralGradingProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: MistralSuggestionsProvider,
-      synthesizeProvider: mistralRedteamProvider,
+      synthesizeProvider: MistralGradingJsonProvider,
       redteamProvider: mistralRedteamProvider,
     };
   } else if (
@@ -246,7 +251,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       gradingProvider: DefaultGitHubGradingProvider,
       moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
       suggestionsProvider: DefaultGitHubSuggestionsProvider,
-      synthesizeProvider: githubRedteamProvider,
+      synthesizeProvider: DefaultGitHubGradingJsonProvider,
       redteamProvider: githubRedteamProvider,
     };
   } else {
@@ -257,7 +262,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       gradingProvider: OpenAiGradingProvider,
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: OpenAiSuggestionsProvider,
-      synthesizeProvider: OpenAiRedteamProvider,
+      synthesizeProvider: OpenAiGradingJsonProvider,
       redteamProvider: OpenAiRedteamProvider,
     };
   }
