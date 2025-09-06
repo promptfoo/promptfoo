@@ -201,13 +201,10 @@ describe('Server Utilities', () => {
 
       const result = await checkServerFeatureSupport(featureName, requiredDate);
 
-      expect(fetch.fetchWithProxy).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/version',
-        {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        },
-      );
+      expect(fetch.fetchWithProxy).toHaveBeenCalledWith('https://api.promptfoo.app/version', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
       expect(result).toBe(true);
       expect(logger.debug).toHaveBeenCalledWith(
         expect.stringContaining(
