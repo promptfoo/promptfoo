@@ -11,7 +11,6 @@ import {
   type EvaluateResult,
   type GuardrailResponse,
   isApiProvider,
-  isProviderOptions,
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types';
@@ -52,15 +51,17 @@ export async function getRedteamProvider({
   // Check for explicit provider override (from config or parameter)
   const explicitProvider = provider || cliState.config?.redteam?.provider;
 
-  if (isApiProvider(explicitProvider)) {
-    logger.debug(`[RedteamProvider] Using explicit provider: ${explicitProvider.id()}`);
-    baseProvider = explicitProvider;
-  } else if (typeof explicitProvider === 'string' || isProviderOptions(explicitProvider)) {
-    logger.debug(
-      `[RedteamProvider] Loading explicit provider: ${JSON.stringify(explicitProvider)}`,
-    );
-    const loadApiProvidersModule = await import('../../providers');
-    baseProvider = (await loadApiProvidersModule.loadApiProviders([explicitProvider]))[0];
+  if (explicitProvider) {
+    if (isApiProvider(explicitProvider)) {
+      logger.debug(`[RedteamProvider] Using explicit provider: ${explicitProvider.id()}`);
+      baseProvider = explicitProvider;
+    } else {
+      logger.debug(
+        `[RedteamProvider] Loading explicit provider: ${JSON.stringify(explicitProvider)}`,
+      );
+      const { loadApiProviders } = await import('../../providers');
+      baseProvider = (await loadApiProviders([explicitProvider]))[0];
+    }
   } else {
     // Use defaults system as primary source (handles all credential detection and fallbacks)
     try {
@@ -103,11 +104,9 @@ export async function getRedteamProvider({
   Object.assign(adaptedProvider, baseProvider);
 
   // Set up config with redteam-specific values
-  if (baseProvider.config && typeof baseProvider.config === 'object') {
-    adaptedProvider.config = { ...baseProvider.config };
-  } else {
-    adaptedProvider.config = {};
-  }
+  adaptedProvider.config = {
+    ...(baseProvider.config && typeof baseProvider.config === 'object' ? baseProvider.config : {}),
+  };
 
   // Apply redteam configuration - JSON by default for structured outputs
   if (enforceJson) {
