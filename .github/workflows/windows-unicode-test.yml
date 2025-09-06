@@ -1,0 +1,56 @@
+name: Windows Unicode Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'test/providers/pythonCompletion.unicode.test.ts'
+      - 'src/providers/**'
+  pull_request:
+    paths:
+      - 'test/providers/pythonCompletion.unicode.test.ts'
+      - 'src/providers/**'
+
+jobs:
+  windows-unicode-test:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Build project
+        run: npm run build
+        
+      - name: Test Python Unicode handling
+        run: |
+          python -c "import sys; print(f'Python version: {sys.version}')"
+          python -c "print('Unicode test: 🔥 café résumé naïve')"
+        
+      - name: Run Unicode test with extended timeout
+        run: npm test -- test/providers/pythonCompletion.unicode.test.ts --testTimeout=30000 --verbose
+        env:
+          NODE_ENV: test
+          PROMPTFOO_DISABLE_SHARING: true
+          
+      - name: Run Unicode test with debug output
+        if: failure()
+        run: npm test -- test/providers/pythonCompletion.unicode.test.ts --testTimeout=60000 --verbose --detectOpenHandles --forceExit
+        env:
+          NODE_ENV: test
+          PROMPTFOO_DISABLE_SHARING: true
+          DEBUG: "*"
