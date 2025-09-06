@@ -1,6 +1,6 @@
 import opener from 'opener';
 import { getDefaultPort, VERSION } from '../constants';
-import { fetchWithProxy } from '../fetch';
+import { fetchWithProxy } from './fetch';
 import logger from '../logger';
 import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
 import { promptYesNo } from './readline';
