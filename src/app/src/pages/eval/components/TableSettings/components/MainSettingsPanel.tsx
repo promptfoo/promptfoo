@@ -340,47 +340,21 @@ const MainSettingsPanel: React.FC = () => {
           <Switch checked={showPrompts} onChange={(e) => setShowPrompts(e.target.checked)} size="small" />
         </SettingRow>
 
-        {/* Cell Metadata Sub-group */}
-        <Box
-          sx={{
-            ml: 2,
-            pl: 2,
-            borderLeft: `2px solid ${alpha(theme.palette.divider, 0.1)}`,
-            backgroundColor: alpha(theme.palette.background.default, 0.3),
-            borderRadius: '0 8px 8px 0',
-          }}
+        <SettingRow 
+          label="Pass/fail indicators" 
+          icon={<DoneAllIcon fontSize="small" />}
+          description="Show success/failure badges in cells"
         >
-          <Typography
-            variant="caption"
-            sx={{
-              fontSize: '0.7rem',
-              fontWeight: 600,
-              color: theme.palette.text.secondary,
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              mb: 0.5,
-              display: 'block',
-            }}
-          >
-            Cell Metadata
-          </Typography>
-          
-          <SettingRow 
-            label="Pass/fail indicators" 
-            icon={<DoneAllIcon fontSize="small" />}
-            description="Show success/failure badges in cells"
-          >
-            <Switch checked={showPassFail} onChange={(e) => setShowPassFail(e.target.checked)} size="small" />
-          </SettingRow>
+          <Switch checked={showPassFail} onChange={(e) => setShowPassFail(e.target.checked)} size="small" />
+        </SettingRow>
 
-          <SettingRow 
-            label="Inference details" 
-            icon={<SpeedIcon fontSize="small" />}
-            description="Display timing and token usage info"
-          >
-            <Switch checked={showInferenceDetails} onChange={(e) => setShowInferenceDetails(e.target.checked)} size="small" />
-          </SettingRow>
-        </Box>
+        <SettingRow 
+          label="Inference details" 
+          icon={<SpeedIcon fontSize="small" />}
+          description="Display timing and token usage info"
+        >
+          <Switch checked={showInferenceDetails} onChange={(e) => setShowInferenceDetails(e.target.checked)} size="small" />
+        </SettingRow>
       </SettingGroup>
 
       {/* Formatting Settings */}
