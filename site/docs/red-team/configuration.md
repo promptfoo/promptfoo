@@ -551,7 +551,7 @@ If you have set an environment variable for a supported provider, `promptfoo` wi
 | Environment Variable       | Vendor           | Default Redteam Model                     |
 | :------------------------- | :--------------- | :---------------------------------------- |
 | `OPENAI_API_KEY`           | OpenAI           | `gpt-4.1-2025-04-14`                      |
-| `ANTHROPIC_API_KEY`        | Anthropic        | `claude-3.5-sonnet`                       |
+| `ANTHROPIC_API_KEY`        | Anthropic        | `claude-sonnet-4-20250514`                |
 | `GEMINI_API_KEY`           | Google AI Studio | `gemini-2.5-pro`                          |
 | (Google Cloud Credentials) | Google Vertex    | `gemini-1.5-pro`                          |
 | `MISTRAL_API_KEY`          | Mistral          | `mistral-large-latest`                    |

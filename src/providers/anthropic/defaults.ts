@@ -142,7 +142,7 @@ export function getAnthropicProviders(
     gradingProvider,
     llmRubricProvider,
     suggestionsProvider: gradingProvider,
-    synthesizeProvider: gradingProvider,
+    synthesizeProvider: redteamProvider,
     redteamProvider,
   };
 }
