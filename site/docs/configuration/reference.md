@@ -7,7 +7,7 @@ keywords:
   [
     promptfoo reference,
     configuration API,
-    evaluation options,
+    eval options,
     provider settings,
     test configuration,
     assertion types,
@@ -38,7 +38,7 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.showProgressBar | boolean                                                                                          | No       | Whether to display the progress bar                                                                                                                                                                         |
 | evaluateOptions.cache           | boolean                                                                                          | No       | Whether to use disk cache for results (default: true)                                                                                                                                                       |
 | evaluateOptions.timeoutMs       | number                                                                                           | No       | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error. Default is 0 (no timeout).                                                 |
-| evaluateOptions.maxEvalTimeMs   | number                                                                                           | No       | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                           |
+| evaluateOptions.maxEvalTimeMs   | number                                                                                           | No       | Maximum total runtime in milliseconds for the entire eval process. When reached, all remaining tests are marked as errors and the eval ends. Default is 0 (no limit).                           |
 | extensions                      | string[]                                                                                         | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
 | env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                   |
 | commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                        | No       | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                      |
@@ -118,7 +118,7 @@ Set default values for command-line options. These defaults will be used unless 
 | output                   | string[] | Output file paths (csv, txt, json, yaml, yml, html)                             |
 | table                    | boolean  | Show output table (default: true, disable with --no-table)                      |
 | tableCellMaxLength       | number   | Maximum length of table cells in console output                                 |
-| progressBar              | boolean  | Whether to display progress bar during evaluation                               |
+| progressBar              | boolean  | Whether to display progress bar during eval                               |
 | verbose                  | boolean  | Enable verbose output                                                           |
 | share                    | boolean  | Whether to create a shareable URL                                               |
 | **Caching & Storage**    |          |                                                                                 |
@@ -401,9 +401,9 @@ async function extensionHook(hookName, context) {
 module.exports = extensionHook;
 ```
 
-These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
+These hooks provide powerful extensibility to your promptfoo evals, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the eval process.
 
-The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
+The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify eval state. To persist these changes, the hook must return the modified context.
 
 #### beforeAll
 
@@ -637,7 +637,7 @@ interface TestSuiteConfig {
 
 ### UnifiedConfig
 
-UnifiedConfig is an object that includes the test suite configuration, evaluation options, and command line options. It is used to hold the complete configuration for the evaluation.
+UnifiedConfig is an object that includes the test suite configuration, eval options, and command line options. It is used to hold the complete configuration for the eval.
 
 ```typescript
 interface UnifiedConfig extends TestSuiteConfiguration {
