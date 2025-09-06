@@ -148,46 +148,6 @@ const EnhancedSlider: React.FC<EnhancedSliderProps> = ({
   );
 };
 
-interface SettingGroupProps {
-  title: string;
-  children: React.ReactNode;
-  accent?: boolean;
-}
-
-const SettingGroup: React.FC<SettingGroupProps> = ({ title, children, accent = false }) => {
-  const theme = useTheme();
-
-  return (
-    <Box
-      sx={{
-        mb: 2,
-        ...(accent && {
-          backgroundColor: alpha(theme.palette.primary.main, 0.02),
-          border: `1px solid ${alpha(theme.palette.primary.main, 0.08)}`,
-          borderRadius: 1,
-          p: 1.5,
-          pb: 0.5,
-        }),
-      }}
-    >
-      <Typography
-        variant="overline"
-        sx={{
-          fontSize: '0.75rem',
-          fontWeight: 600,
-          color: accent ? theme.palette.primary.main : theme.palette.text.secondary,
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          mb: 1,
-          display: 'block',
-        }}
-      >
-        {title}
-      </Typography>
-      <Box>{children}</Box>
-    </Box>
-  );
-};
 
 const MainSettingsPanel: React.FC = () => {
   const theme = useTheme();
@@ -257,33 +217,39 @@ const MainSettingsPanel: React.FC = () => {
 
   return (
     <Box sx={{ p: 2, height: '100%' }}>
-      {/* Hero Text Length Control */}
-      <SettingGroup title="Text Display" accent>
-        <SettingRow 
-          label="Text length limit" 
-          icon={<TextFormatIcon fontSize="small" />}
-          description="Controls text truncation in table cells"
-        >
-          <EnhancedSlider
-            value={localMaxTextLength}
-            onChange={handleTextLengthChange}
-            onChangeCommitted={handleTextLengthCommitted}
-            min={25}
-            max={1001}
-            formatValue={formatTextLength}
-            marks={[
-              { value: 25, label: '25' },
-              { value: 250, label: '250' },
-              { value: 500, label: '500' },
-              { value: 1000, label: '1K' },
-              { value: 1001, label: '∞' },
-            ]}
-          />
-        </SettingRow>
-      </SettingGroup>
+      <Stack spacing={0}>
+        {/* Text Length - Most Important Setting */}
+        <Box sx={{ 
+          mb: 2, 
+          p: 2, 
+          backgroundColor: alpha(theme.palette.primary.main, 0.03),
+          borderRadius: 1,
+          border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+        }}>
+          <SettingRow 
+            label="Text length limit" 
+            icon={<TextFormatIcon fontSize="small" />}
+            description="Controls text truncation in table cells"
+          >
+            <EnhancedSlider
+              value={localMaxTextLength}
+              onChange={handleTextLengthChange}
+              onChangeCommitted={handleTextLengthCommitted}
+              min={25}
+              max={1001}
+              formatValue={formatTextLength}
+              marks={[
+                { value: 25, label: '25' },
+                { value: 250, label: '250' },
+                { value: 500, label: '500' },
+                { value: 1000, label: '1K' },
+                { value: 1001, label: '∞' },
+              ]}
+            />
+          </SettingRow>
+        </Box>
 
-      {/* Layout & Display Settings */}
-      <SettingGroup title="Layout & Display">
+        {/* All Other Settings - Flat Structure */}
         <SettingRow 
           label="Sticky header" 
           icon={<ViewListIcon fontSize="small" />}
@@ -328,10 +294,7 @@ const MainSettingsPanel: React.FC = () => {
             <ToggleButton value="break-all">Break all</ToggleButton>
           </ToggleButtonGroup>
         </SettingRow>
-      </SettingGroup>
 
-      {/* Content Visibility Settings */}
-      <SettingGroup title="Content Visibility">
         <SettingRow 
           label="Show full prompts" 
           icon={<VisibilityIcon fontSize="small" />}
@@ -355,10 +318,7 @@ const MainSettingsPanel: React.FC = () => {
         >
           <Switch checked={showInferenceDetails} onChange={(e) => setShowInferenceDetails(e.target.checked)} size="small" />
         </SettingRow>
-      </SettingGroup>
 
-      {/* Formatting Settings */}
-      <SettingGroup title="Text Formatting">
         <SettingRow 
           label="Render markdown" 
           icon={<TextFormatIcon fontSize="small" />}
@@ -374,10 +334,7 @@ const MainSettingsPanel: React.FC = () => {
         >
           <Switch checked={prettifyJson} onChange={(e) => setPrettifyJson(e.target.checked)} size="small" />
         </SettingRow>
-      </SettingGroup>
 
-      {/* Image Settings */}
-      <SettingGroup title="Image Display">
         <SettingRow 
           label="Image max width" 
           icon={<ImageIcon fontSize="small" />}
@@ -407,7 +364,7 @@ const MainSettingsPanel: React.FC = () => {
             formatValue={formatImageSize}
           />
         </SettingRow>
-      </SettingGroup>
+      </Stack>
     </Box>
   );
 };
