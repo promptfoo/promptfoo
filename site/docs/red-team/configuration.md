@@ -572,12 +572,12 @@ Your choice of attack provider is extremely important for the quality of your re
 
 ### How attacks are generated
 
-By default, Promptfoo uses your local OpenAI key for redteam attack generation. If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
+By default, promptfoo will automatically select a provider based on your configured API keys (see the table above). If no API keys are configured, it will fall back to using OpenAI's `gpt-4.1-2025-04-14` model, which requires an `OPENAI_API_KEY` to be set.
 
-You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
+For users without API keys, promptfoo provides remote generation capabilities through our API for certain plugins and strategies. You can disable this by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
 
 :::note
-Custom plugins and strategies require an OpenAI key or your own provider configuration.
+Some plugins and strategies may require specific provider configurations or API keys to function properly.
 :::
 
 ### Changing the model
@@ -636,12 +636,12 @@ Your choice of attack provider is extremely important for the quality of your re
 
 ### How attacks are generated
 
-By default, Promptfoo uses your local OpenAI key for redteam attack generation. If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
+By default, promptfoo will automatically select a provider based on your configured API keys (see the table above). If no API keys are configured, it will fall back to using OpenAI's `gpt-4.1-2025-04-14` model, which requires an `OPENAI_API_KEY` to be set.
 
-You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
+For users without API keys, promptfoo provides remote generation capabilities through our API for certain plugins and strategies. You can disable this by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
 
 :::note
-Custom plugins and strategies require an OpenAI key or your own provider configuration.
+Some plugins and strategies may require specific provider configurations or API keys to function properly.
 :::
 
 ### Changing the model

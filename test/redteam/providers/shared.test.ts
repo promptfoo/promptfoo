@@ -102,13 +102,13 @@ describe('shared redteam provider utilities', () => {
       >(),
     };
 
-    it('throws an error when no provider is configured and defaults are empty', async () => {
+    it('uses hardcoded fallback when no provider is configured and defaults are empty', async () => {
       // Ensure getDefaultProviders returns no redteamProvider
       mockedGetDefaultProviders.mockResolvedValue({} as any);
 
-      await expect(redteamProviderManager.getProvider({})).rejects.toThrow(
-        'Could not automatically determine a redteam provider. Please set an API key environment variable (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY) or configure a provider explicitly in your promptfooconfig.yaml file.',
-      );
+      const result = await redteamProviderManager.getProvider({});
+      expect(result.id()).toContain('gpt-4.1-2025-04-14');
+      expect((result as any).config.temperature).toBe(0.7);
     });
 
     it('uses the provider from the defaults system when available', async () => {

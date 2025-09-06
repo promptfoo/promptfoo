@@ -20,7 +20,8 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { type TransformContext, TransformInputType, transform } from '../../util/transform';
-import { TEMPERATURE } from './constants';
+import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 
 /**
  * Adapts a provider instance for redteam-specific configuration without mutating the original.
@@ -92,11 +93,16 @@ async function loadRedteamProvider({
       );
     }
 
-    // Throw an error if no provider could be determined.
+    // Fall back to hardcoded default for backward compatibility
     if (!ret) {
-      throw new Error(
-        'Could not automatically determine a redteam provider. Please set an API key environment variable (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY) or configure a provider explicitly in your promptfooconfig.yaml file.',
-      );
+      const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
+      logger.debug(`Using hardcoded fallback redteam provider: ${defaultModel}`);
+      ret = new OpenAiChatCompletionProvider(defaultModel, {
+        config: {
+          temperature: TEMPERATURE,
+          response_format: jsonOnly ? { type: 'json_object' } : undefined,
+        },
+      });
     }
   }
   return ret;
