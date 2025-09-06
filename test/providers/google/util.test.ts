@@ -9,7 +9,6 @@ import {
   maybeCoerceToGeminiFormat,
   normalizeTools,
   parseStringObject,
-  resolveProjectId,
   validateFunctionCall,
 } from '../../../src/providers/google/util';
 
