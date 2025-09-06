@@ -11,3 +11,8 @@ export const DefaultGradingJsonProvider = new OpenAiChatCompletionProvider('gpt-
 });
 export const DefaultSuggestionsProvider = new OpenAiChatCompletionProvider('gpt-4.1-2025-04-14');
 export const DefaultModerationProvider = new OpenAiModerationProvider('omni-moderation-latest');
+export const DefaultRedteamProvider = new OpenAiChatCompletionProvider('gpt-4.1-2025-04-14', {
+  config: {
+    temperature: 0.7,
+  },
+});

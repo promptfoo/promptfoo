@@ -228,4 +228,5 @@ export interface DefaultProviders {
   moderationProvider: ApiProvider;
   suggestionsProvider: ApiProvider;
   synthesizeProvider: ApiProvider;
+  redteamProvider?: ApiProvider;
 }

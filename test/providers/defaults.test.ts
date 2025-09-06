@@ -4,6 +4,7 @@ import {
   getDefaultProviders,
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
+  setDefaultRedteamProviders,
 } from '../../src/providers/defaults';
 import {
   DefaultGradingProvider as GoogleAiStudioGradingProvider,
@@ -52,6 +53,7 @@ describe('Provider override tests', () => {
     process.env = { ...originalEnv };
     setDefaultCompletionProviders(undefined as any);
     setDefaultEmbeddingProviders(undefined as any);
+    setDefaultRedteamProviders(undefined as any);
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.MISTRAL_API_KEY;
@@ -108,6 +110,49 @@ describe('Provider override tests', () => {
     expect(providers.synthesizeProvider.id()).toBe('test-completion-provider');
 
     expect(providers.embeddingProvider.id()).toBe('test-embedding-provider');
+  });
+
+  it('should override redteam provider when setDefaultRedteamProviders is called', async () => {
+    const mockProvider = new MockProvider('test-redteam-provider');
+    await setDefaultRedteamProviders(mockProvider);
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.redteamProvider?.id()).toBe('test-redteam-provider');
+  });
+
+  it('should include redteam provider for Anthropic when credentials are set', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.redteamProvider).toBeDefined();
+    expect(providers.redteamProvider?.id()).toContain('claude');
+  });
+
+  it('should include redteam provider for OpenAI when no other credentials are set', async () => {
+    const providers = await getDefaultProviders();
+
+    expect(providers.redteamProvider).toBeDefined();
+    expect(providers.redteamProvider?.id()).toContain('openai');
+  });
+
+  it('should include redteam provider for Google AI Studio when credentials are set', async () => {
+    process.env.GEMINI_API_KEY = 'test-key';
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.redteamProvider).toBeDefined();
+    expect(providers.redteamProvider?.id()).toContain('google');
+  });
+
+  it('should include redteam provider for Mistral when credentials are set', async () => {
+    process.env.MISTRAL_API_KEY = 'test-key';
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.redteamProvider).toBeDefined();
+    expect(providers.redteamProvider?.id()).toContain('mistral');
   });
 
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is set', async () => {

@@ -34,6 +34,7 @@ import {
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultModerationProvider as OpenAiModerationProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
+  DefaultRedteamProvider as OpenAiRedteamProvider,
 } from './openai/defaults';
 
 import type { ApiProvider, DefaultProviders } from '../types';
@@ -49,8 +50,11 @@ const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
 
 const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];
 
+const REDTEAM_PROVIDERS: (keyof DefaultProviders)[] = ['redteamProvider'];
+
 let defaultCompletionProvider: ApiProvider;
 let defaultEmbeddingProvider: ApiProvider;
+let defaultRedteamProvider: ApiProvider;
 
 /**
  * This will override all of the completion type providers defined in the constant COMPLETION_PROVIDERS
@@ -62,6 +66,10 @@ export async function setDefaultCompletionProviders(provider: ApiProvider) {
 
 export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
+}
+
+export async function setDefaultRedteamProviders(provider: ApiProvider) {
+  defaultRedteamProvider = provider;
 }
 
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
@@ -126,6 +134,10 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: azureProvider,
       synthesizeProvider: azureProvider,
+      redteamProvider: new AzureChatCompletionProvider(deploymentName, { 
+        env, 
+        config: { temperature: 0.7 } 
+      }),
     };
   } else if (preferAnthropic) {
     logger.debug('Using Anthropic default providers');
@@ -138,6 +150,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: anthropicProviders.suggestionsProvider,
       synthesizeProvider: anthropicProviders.synthesizeProvider,
+      redteamProvider: anthropicProviders.redteamProvider,
     };
   } else if (!hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials) {
     logger.debug('Using Google AI Studio default providers');
@@ -149,6 +162,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GoogleAiStudioSuggestionsProvider,
       synthesizeProvider: GoogleAiStudioSynthesizeProvider,
+      redteamProvider: GoogleAiStudioGradingProvider,
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -164,6 +178,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
+      redteamProvider: GeminiGradingProvider,
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -180,6 +195,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: MistralSuggestionsProvider,
       synthesizeProvider: MistralSynthesizeProvider,
+      redteamProvider: MistralGradingProvider,
     };
   } else if (
     !hasOpenAiCredentials &&
@@ -197,6 +213,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
       suggestionsProvider: DefaultGitHubSuggestionsProvider,
       synthesizeProvider: DefaultGitHubGradingJsonProvider,
+      redteamProvider: DefaultGitHubGradingProvider,
     };
   } else {
     logger.debug('Using OpenAI default providers');
@@ -207,6 +224,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: OpenAiSuggestionsProvider,
       synthesizeProvider: OpenAiGradingJsonProvider,
+      redteamProvider: OpenAiRedteamProvider,
     };
   }
 
@@ -227,5 +245,13 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       providers[provider] = defaultEmbeddingProvider;
     });
   }
+
+  if (defaultRedteamProvider) {
+    logger.debug(`Overriding default redteam provider: ${defaultRedteamProvider.id()}`);
+    REDTEAM_PROVIDERS.forEach((provider) => {
+      providers[provider] = defaultRedteamProvider;
+    });
+  }
+  
   return providers;
 }

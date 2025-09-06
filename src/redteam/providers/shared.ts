@@ -43,14 +43,45 @@ async function loadRedteamProvider({
     // Async import to avoid circular dependency
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
   } else {
-    const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-    logger.debug(`Using default redteam provider: ${defaultModel}`);
-    ret = new OpenAiChatCompletionProvider(defaultModel, {
-      config: {
-        temperature: TEMPERATURE,
-        response_format: jsonOnly ? { type: 'json_object' } : undefined,
-      },
-    });
+    // NEW: Try defaults system first
+    try {
+      const { getDefaultProviders } = await import('../../providers/defaults');
+      const defaultProviders = await getDefaultProviders();
+      if (defaultProviders.redteamProvider) {
+        logger.debug(`Using default redteam provider: ${defaultProviders.redteamProvider.id()}`);
+        ret = defaultProviders.redteamProvider;
+        
+        // Apply configuration options to provider from defaults
+        if (ret && typeof ret === 'object') {
+          // Create a copy to avoid modifying the original
+          ret = Object.create(ret);
+          if (ret.config && typeof ret.config === 'object') {
+            ret.config = { ...ret.config };
+            if (jsonOnly) {
+              ret.config.response_format = { type: 'json_object' };
+            }
+            // Apply temperature for redteam use if not already set
+            if (ret.config.temperature === undefined) {
+              ret.config.temperature = TEMPERATURE;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logger.debug('Failed to load default redteam provider, falling back to constants');
+    }
+    
+    // Fallback to current logic if defaults failed
+    if (!ret) {
+      const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
+      logger.debug(`Using default redteam provider: ${defaultModel}`);
+      ret = new OpenAiChatCompletionProvider(defaultModel, {
+        config: {
+          temperature: TEMPERATURE,
+          response_format: jsonOnly ? { type: 'json_object' } : undefined,
+        },
+      });
+    }
   }
   return ret;
 }
