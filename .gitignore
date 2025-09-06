@@ -42,3 +42,13 @@ examples/grok-4-political-bias/results-multi-judge.json
 # LLM Tool Settings
 **/.claude/settings.local.json
 .serena/
+
+# Planning documents (kept locally but not committed)
+IMPLEMENTATION_SUMMARY.md
+REDTEAM_DEFAULTS_INTEGRATION.md
+task.md
+task2.md
+task3.md
+task4.md
+integration-test-config.yaml
+task-consolidated.md
