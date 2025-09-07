@@ -67,21 +67,24 @@ For more information on factuality, see the [guide on LLM factuality](/docs/guid
 
 ## Non-English Evaluation
 
-For multilingual applications, you can get evaluation output in other languages. This works with `llm-rubric` assertions:
+For multilingual applications, you can get evaluation output in other languages by including language instructions in your criteria:
 
 ```yaml
-# Option 1: Add language instruction to English rubric
+# llm-rubric with language instruction
 assert:
   - type: llm-rubric
     value: "Responds helpfully without being overly verbose. Provide your evaluation reason in German."
 
-# Option 2: Write entire rubric in target language
+# g-eval with language instruction
 assert:
-  - type: llm-rubric
+  - type: g-eval
     value: "Antwortet hilfreich ohne zu wortreich zu sein. Begründung auf Deutsch geben."
 ```
 
-This produces: `{"reason": "Die Antwort ist hilfreich und präzise.", "pass": true, "score": 1.0}`
+Example outputs:
+
+- **llm-rubric**: `{"pass": true, "score": 1.0, "reason": "Die Antwort ist hilfreich und direkt."}`
+- **g-eval**: `{"score": 8, "reason": "Die Antwort ist klar und beinhaltet keine überflüssigen Informationen."}`
 
 Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading)):
 
