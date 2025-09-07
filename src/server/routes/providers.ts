@@ -188,3 +188,61 @@ providersRouter.post(
     }
   },
 );
+
+providersRouter.post('/http-generator', async (req: Request, res: Response): Promise<void> => {
+  const { requestExample, responseExample } = req.body;
+
+  if (!requestExample) {
+    res.status(400).json({ error: 'Request example is required' });
+    return;
+  }
+
+  const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
+
+  try {
+    logger.debug(
+      dedent`[POST /providers/http-generator] Calling HTTP provider generator API
+        requestExample: ${requestExample?.substring(0, 200)}
+        hasResponseExample: ${!!responseExample}`,
+    );
+
+    const response = await fetch(`${HOST}/api/v1/http-provider-generator`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        requestExample,
+        responseExample,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(
+        dedent`[POST /providers/http-generator] Error from cloud API
+          status: ${response.status}
+          error: ${errorText}`,
+      );
+      res.status(response.status).json({
+        error: `HTTP error! status: ${response.status}`,
+        details: errorText,
+      });
+      return;
+    }
+
+    const data = await response.json();
+    logger.debug('[POST /providers/http-generator] Successfully generated config');
+    res.status(200).json(data);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(
+      dedent`[POST /providers/http-generator] Error calling HTTP provider generator
+        error: ${errorMessage}`,
+    );
+    res.status(500).json({
+      error: 'Failed to generate HTTP configuration',
+      details: errorMessage,
+    });
+  }
+});

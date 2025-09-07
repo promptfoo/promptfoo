@@ -255,6 +255,10 @@ function ResultsTable({
   invariant(table, 'Table should be defined');
   const { head, body } = table;
 
+  const isRedteam = React.useMemo(() => {
+    return config?.redteam !== undefined;
+  }, [config?.redteam]);
+
   const visiblePromptCount = React.useMemo(
     () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
     [head.prompts, columnVisibility],
@@ -768,6 +772,12 @@ function ResultsTable({
 
               const details = showStats ? (
                 <div className="prompt-detail collapse-hidden">
+                  {prompt.metrics?.tokenUsage?.numRequests !== undefined && (
+                    <div>
+                      <strong>{isRedteam ? 'Probes:' : 'Requests:'}</strong>{' '}
+                      {prompt.metrics.tokenUsage.numRequests}
+                    </div>
+                  )}
                   {numAsserts[idx] ? (
                     <div>
                       <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
@@ -961,6 +971,7 @@ function ResultsTable({
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                     onMetricFilter={handleMetricFilterClick}
+                    isRedteam={isRedteam}
                   />
                 </ErrorBoundary>
               ) : (

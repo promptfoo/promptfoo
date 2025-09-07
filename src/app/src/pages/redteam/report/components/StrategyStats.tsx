@@ -6,7 +6,7 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Drawer from '@mui/material/Drawer';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -309,7 +309,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
             }}
           >
             <Grid container spacing={3}>
-              <Grid item xs={4}>
+              <Grid size={4}>
                 <Typography variant="h6" align="center">
                   {selectedStrategy && strategyStats[selectedStrategy]?.total}
                 </Typography>
@@ -317,7 +317,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                   Total Attempts
                 </Typography>
               </Grid>
-              <Grid item xs={4}>
+              <Grid size={4}>
                 <Typography variant="h6" align="center" color="error.main">
                   {selectedStrategy &&
                     strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass}
@@ -326,7 +326,7 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
                   Flagged Attempts
                 </Typography>
               </Grid>
-              <Grid item xs={4}>
+              <Grid size={4}>
                 <Typography variant="h6" align="center">
                   {selectedStrategy &&
                     `${(

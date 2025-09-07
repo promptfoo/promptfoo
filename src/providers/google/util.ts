@@ -1,5 +1,6 @@
 import Clone from 'rfdc';
 import { z } from 'zod';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -343,12 +344,12 @@ export async function resolveProjectId(
   });
 
   return (
-    googleProjectId ||
     config.projectId ||
     env?.VERTEX_PROJECT_ID ||
     env?.GOOGLE_PROJECT_ID ||
-    process.env.VERTEX_PROJECT_ID ||
-    process.env.GOOGLE_PROJECT_ID ||
+    getEnvString('VERTEX_PROJECT_ID') ||
+    getEnvString('GOOGLE_PROJECT_ID') ||
+    googleProjectId ||
     ''
   );
 }
