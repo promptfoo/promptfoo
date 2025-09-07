@@ -72,11 +72,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
 
       // Don't truncate if this string contains base64 image data
       // This preserves the integrity of markdown images with large base64 data
-      if (
-        nodeAsString.includes('![') &&
-        nodeAsString.includes('data:image') &&
-        nodeAsString.includes('base64,')
-      ) {
+      if (/!\[[^\]]*\]\(data:image\/[a-zA-Z0-9.+-]+;base64,[^)]+\)/.test(nodeAsString)) {
         return nodeAsString;
       }
 
