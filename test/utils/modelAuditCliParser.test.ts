@@ -358,7 +358,17 @@ describe('ModelAudit CLI Parser', () => {
       });
 
       it('should accept valid maxSize formats', () => {
-        const validSizes = ['1GB', '500MB', '1.5GB', '100KB', '1024B', '1 GB', '500 MB', ' 1GB ', '2.5 TB'];
+        const validSizes = [
+          '1GB',
+          '500MB',
+          '1.5GB',
+          '100KB',
+          '1024B',
+          '1 GB',
+          '500 MB',
+          ' 1GB ',
+          '2.5 TB',
+        ];
 
         for (const size of validSizes) {
           expect(() => validateModelAuditOptions({ maxSize: size })).not.toThrow();

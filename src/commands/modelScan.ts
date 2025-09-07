@@ -8,11 +8,9 @@ import { checkModelAuditUpdates } from '../updates';
 import type { Command } from 'commander';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
-import { 
-  parseModelAuditArgs, 
-  formatUnsupportedArgsError, 
+import {
+  parseModelAuditArgs,
   DEPRECATED_OPTIONS_MAP,
-  type ModelAuditCliOptions 
 } from '../utils/modelAuditCliParser';
 import { z } from 'zod';
 
@@ -69,31 +67,27 @@ export function modelScanCommand(program: Command): void {
       }
 
       // Check for deprecated options and warn users
-      const deprecatedOptionsUsed = [];
-      for (const [deprecated, replacement] of Object.entries(DEPRECATED_OPTIONS_MAP)) {
-        const optionName = deprecated.replace(/^--/, '').replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
-        if (options[optionName] !== undefined) {
-          deprecatedOptionsUsed.push(deprecated);
+      const deprecatedOptionsUsed = Object.keys(options).filter((opt) => {
+        const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+        return DEPRECATED_OPTIONS_MAP[fullOption] !== undefined;
+      });
+
+      if (deprecatedOptionsUsed.length > 0) {
+        deprecatedOptionsUsed.forEach((opt) => {
+          const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+          const replacement = DEPRECATED_OPTIONS_MAP[fullOption];
           if (replacement) {
-            logger.warn(`⚠️  Warning: ${deprecated} is deprecated. Please use ${replacement} instead.`);
+            logger.warn(
+              `⚠️  Warning: The '${fullOption}' option is deprecated. Please use '${replacement}' instead.`,
+            );
           } else {
-            logger.warn(`⚠️  Warning: ${deprecated} is deprecated and is now handled automatically by modelaudit.`);
+            logger.warn(
+              `⚠️  Warning: The '${fullOption}' option is deprecated and has been removed. It may be handled automatically or via environment variables. See documentation for details.`,
+            );
           }
-        }
-      }
-      
-      // Special case for camelCase options that might be passed
-      if (options.maxFileSize !== undefined) {
-        logger.warn('⚠️  Warning: --max-file-size is deprecated. Please use --max-size instead.');
-      }
-      if (options.jfrogApiToken !== undefined) {
-        logger.warn('⚠️  Warning: --jfrog-api-token is deprecated. Please set JFROG_API_TOKEN environment variable instead.');
-      }
-      if (options.jfrogAccessToken !== undefined) {
-        logger.warn('⚠️  Warning: --jfrog-access-token is deprecated. Please set JFROG_ACCESS_TOKEN environment variable instead.');
-      }
-      if (options.registryUri !== undefined) {
-        logger.warn('⚠️  Warning: --registry-uri is deprecated. Please set JFROG_URL environment variable instead.');
+        });
+        // It's a good practice to exit or confirm with the user if they want to proceed
+        // For now, we'll just warn and continue.
       }
 
       // Check if modelaudit is installed
@@ -127,7 +121,7 @@ export function modelScanCommand(program: Command): void {
       try {
         const result = parseModelAuditArgs(paths, cliOptions);
         args = result.args;
-        
+
         // Optional: Handle any unsupported options (though shouldn't occur with our CLI)
         if (result.unsupportedOptions.length > 0) {
           logger.warn(`Unsupported options detected: ${result.unsupportedOptions.join(', ')}`);

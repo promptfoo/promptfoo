@@ -37,143 +37,137 @@ promptfoo scan-model large-model.bin --timeout 7200
 promptfoo scan-model model.pkl --quiet
 ```
 
+## Authentication and Configuration
 
+ModelAudit v0.2.5 centralizes authentication and configuration through environment variables, replacing previous CLI flags for a more secure and standardized approach.
 
-## Remote Model Scanning
+### Cloud & Artifact Registry Authentication
 
-ModelAudit can scan models directly from various remote sources without manual downloading.
+Authentication for all remote services is now handled exclusively via environment variables.
 
-### HuggingFace URL Scanning
+#### HuggingFace
+
+- `HF_TOKEN`: Your HuggingFace Hub token for accessing private models.
 
 ```bash
-# Standard HuggingFace URL
-promptfoo scan-model https://huggingface.co/bert-base-uncased
-
-# Short HuggingFace URL
-promptfoo scan-model https://hf.co/gpt2
-
-# HuggingFace protocol
-promptfoo scan-model hf://microsoft/resnet-50
-
-# Private models (requires HF_TOKEN environment variable)
+# Authenticate for private models
 export HF_TOKEN=your_token_here
-promptfoo scan-model hf://your-org/private-model
-
-# Using .env file (create a .env file in your project root)
-echo "HF_TOKEN=your_token_here" > .env
 promptfoo scan-model hf://your-org/private-model
 ```
 
-### Cloud Storage
+#### JFrog Artifactory
+
+- `JFROG_URL`: The base URL of your JFrog Artifactory instance.
+- `JFROG_API_TOKEN` or `JFROG_ACCESS_TOKEN`: Your API or access token.
+
+```bash
+# Authenticate using an API token
+export JFROG_URL="https://your-domain.jfrog.io"
+export JFROG_API_TOKEN="your-api-token"
+promptfoo scan-model "https://your-domain.jfrog.io/artifactory/repo/model.pkl"
+```
+
+#### MLflow Model Registry
+
+- `MLFLOW_TRACKING_URI`: The URI of your MLflow tracking server.
+- `MLFLOW_TRACKING_USERNAME` / `MLFLOW_TRACKING_PASSWORD`: Credentials for MLflow authentication.
+
+```bash
+# Authenticate with MLflow
+export MLFLOW_TRACKING_URI="https://your-mlflow-server.com"
+export MLFLOW_TRACKING_USERNAME="your-username"
+export MLFLOW_TRACKING_PASSWORD="your-password"
+promptfoo scan-model models:/model-name/version
+```
 
 #### Amazon S3
 
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`: Standard AWS credentials.
+
 ```bash
-# Using environment variables
 export AWS_ACCESS_KEY_ID="your-access-key"
 export AWS_SECRET_ACCESS_KEY="your-secret-key"
 export AWS_DEFAULT_REGION="us-east-1"
-
 promptfoo scan-model s3://my-bucket/model.pkl
 ```
 
 #### Google Cloud Storage
 
+- `GOOGLE_APPLICATION_CREDENTIALS`: Path to your service account key file.
+
 ```bash
-# Using service account
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 promptfoo scan-model gs://my-bucket/model.pt
 ```
 
 #### Cloudflare R2
 
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`: Your R2 credentials.
+- `AWS_ENDPOINT_URL`: The S3-compatible endpoint for your R2 account.
+
 ```bash
-# R2 uses S3-compatible authentication
 export AWS_ACCESS_KEY_ID="your-r2-access-key"
 export AWS_SECRET_ACCESS_KEY="your-r2-secret-key"
 export AWS_ENDPOINT_URL="https://your-account.r2.cloudflarestorage.com"
-
 promptfoo scan-model r2://my-bucket/model.safetensors
 ```
 
-### Artifact Registry Authentication
+### Migration from Deprecated Flags
 
-ModelAudit v0.2.5 now uses **environment variables** for artifact registry authentication instead of CLI flags.
+The following CLI flags have been **removed** and replaced by environment variables. Attempting to use them will result in an error.
 
-#### JFrog Artifactory
+| Removed Flag           | Replacement Environment Variable     |
+| ---------------------- | ------------------------------------ |
+| `--jfrog-api-token`    | `JFROG_API_TOKEN`                    |
+| `--jfrog-access-token` | `JFROG_ACCESS_TOKEN`                 |
+| `--registry-uri`       | `JFROG_URL` or `MLFLOW_TRACKING_URI` |
+
+**Why the change?** Using environment variables is more secure than passing secrets as CLI flags, as it prevents them from being exposed in shell history or process lists. This aligns with industry best practices for managing credentials.
+
+## Remote Model Scanning
+
+ModelAudit can scan models directly from various remote sources without manual downloading.
+
+### HuggingFace
+
+Scan public or private models from the HuggingFace Hub.
 
 ```bash
-# Option 1: Using API token (recommended)
-export JFROG_API_TOKEN="your-api-token"
-promptfoo scan-model "https://your-domain.jfrog.io/artifactory/repo/model.pkl"
+# Public model
+promptfoo scan-model https://huggingface.co/bert-base-uncased
 
-# Option 2: Using access token
-export JFROG_ACCESS_TOKEN="your-access-token"
-promptfoo scan-model "https://your-domain.jfrog.io/artifactory/repo/model.pkl"
-
-# Optional: Specify JFrog URL if non-standard
-export JFROG_URL="https://your-custom-domain.jfrog.io"
+# Private model (requires HF_TOKEN to be set)
+promptfoo scan-model hf://your-org/private-model
 ```
 
-#### MLflow Model Registry
+### Cloud Storage (S3, GCS, R2)
+
+Scan models stored in cloud buckets. See the [Authentication](#authentication-and-configuration) section for setup.
 
 ```bash
-# Set MLflow tracking URI
-export MLFLOW_TRACKING_URI="https://your-mlflow-server.com"
+# Scan from S3
+promptfoo scan-model s3://my-bucket/model.pkl
 
-# Optional: Authentication for MLflow
-export MLFLOW_TRACKING_USERNAME="your-username"
-export MLFLOW_TRACKING_PASSWORD="your-password"
+# Scan from Google Cloud Storage
+promptfoo scan-model gs://my-bucket/model.pt
 
-promptfoo scan-model models:/model-name/version
+# Scan from Cloudflare R2
+promptfoo scan-model r2://my-bucket/model.safetensors
 ```
 
-### Migration from CLI Flags
+### Model Registries (MLflow, JFrog)
 
-The following CLI flags were **removed** in v0.2.5 in favor of environment variables:
-
-| Removed CLI Flag | Environment Variable | Example |
-|---|---|---|
-| `--jfrog-api-token` | `JFROG_API_TOKEN` | `export JFROG_API_TOKEN="abc123"` |
-| `--jfrog-access-token` | `JFROG_ACCESS_TOKEN` | `export JFROG_ACCESS_TOKEN="xyz789"` |
-| `--registry-uri` | `JFROG_URL` | `export JFROG_URL="https://company.jfrog.io"` |
-
-**Why the change?** Environment variables are more secure than CLI flags (which appear in process lists and shell history) and align with industry best practices for credential management.
-
-### Model Registries
-
-#### MLflow
+Scan models from MLflow or JFrog Artifactory. See the [Authentication](#authentication-and-configuration) section for setup.
 
 ```bash
-# Set MLflow tracking URI
-export MLFLOW_TRACKING_URI=http://mlflow-server:5000
-
-# Scan specific version
-promptfoo scan-model models:/MyModel/1
-
-# Scan latest version
+# Scan from MLflow
 promptfoo scan-model models:/MyModel/Latest
 
-# With custom registry URI
-promptfoo scan-model models:/MyModel/1 --registry-uri https://mlflow.company.com
+# Scan from JFrog Artifactory
+promptfoo scan-model "https://your-domain.jfrog.io/artifactory/models/model.pkl"
 ```
 
-#### JFrog Artifactory
-
-```bash
-# Using API token (recommended)
-export JFROG_API_TOKEN=your_token_here
-promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pkl
-
-# Or pass directly
-promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pkl --jfrog-api-token YOUR_TOKEN
-
-# Using .env file (recommended for CI/CD)
-echo "JFROG_API_TOKEN=your_token_here" > .env
-promptfoo scan-model https://company.jfrog.io/artifactory/models/model.pkl
-```
-
-#### DVC Integration
+### DVC Integration
 
 ModelAudit automatically resolves DVC pointer files:
 

@@ -122,12 +122,9 @@ export default function AdvancedOptionsDialog({
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
               Maximum Size Limit
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              Override auto-detected size limits. Examples: <code>1GB</code>, <code>500MB</code>, <code>2TB</code>, <code>100KB</code>
-            </Typography>
             <TextField
               fullWidth
-              placeholder="e.g., 1GB, 500MB"
+              placeholder="Auto-detected"
               value={localOptions.maxSize || ''}
               onChange={(e) =>
                 setLocalOptions({
@@ -135,10 +132,10 @@ export default function AdvancedOptionsDialog({
                   maxSize: e.target.value || undefined,
                 })
               }
-              InputProps={{
-                endAdornment: <InputAdornment position="end">size</InputAdornment>,
-              }}
             />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              Examples: 500MB, 2GB, 1.5TB
+            </Typography>
           </Box>
 
           {/* Output Format */}
