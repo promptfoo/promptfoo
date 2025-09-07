@@ -129,8 +129,8 @@ providers:
 
 ```yaml
 providers:
-  - anthropic:claude-4.1-opus
-  - anthropic:claude-4.1-sonnet
+  - anthropic:claude-opus-4-1
+  - anthropic:claude-sonnet-4
     config:
       temperature: 0.1
 ```
@@ -158,7 +158,7 @@ providers:
 
 ```yaml
 providers:
-  - openrouter:anthropic/claude-4.1-opus
+  - openrouter:anthropic/claude-opus-4-1
   - openrouter:google/gemini-pro
     config:
       temperature: 0.1
@@ -189,7 +189,7 @@ You can test multiple providers simultaneously to compare their safety performan
 ```yaml
 providers:
   - openai:chat:gpt-4
-  - anthropic:claude-4.1-opus
+  - anthropic:claude-opus-4-1
   - ollama:chat:llama3.3
   - bedrock:anthropic.claude-3
     config:

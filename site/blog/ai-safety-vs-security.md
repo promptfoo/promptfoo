@@ -461,7 +461,7 @@ defaultTest:
   options:
     rubricProvider: openai:gpt-4o # Use a more powerful judge
     # Or use Claude for evaluation:
-    # rubricProvider: anthropic:claude-4.1-sonnet
+    # rubricProvider: anthropic:claude-sonnet-4
 ```
 
 ### Advanced Testing with Multiple Rubrics
@@ -472,7 +472,7 @@ For comprehensive testing, combine multiple rubrics to catch edge cases:
 # Advanced Safety & Security Testing
 providers:
   - openai:gpt-5
-  - anthropic:claude-4.1-sonnet
+  - anthropic:claude-sonnet-4
 
 tests:
   # Combined Safety/Security: Authority + Jailbreak
@@ -728,7 +728,7 @@ prompts:
     {{content}}
 
 providers:
-  - anthropic:claude-4.1-opus
+  - anthropic:claude-opus-4-1
 
 tests:
   # Safety: Harmful content
