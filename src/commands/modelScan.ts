@@ -222,7 +222,7 @@ export function modelScanCommand(program: Command): void {
                 paths,
                 options: {
                   blacklist: options.blacklist,
-                  timeout: options.timeout,
+                  timeout: cliOptions.timeout,
                   maxSize: options.maxSize,
                   verbose: options.verbose,
                   sbom: options.sbom,
@@ -288,9 +288,9 @@ export function modelScanCommand(program: Command): void {
               }
 
               console.log(
-                `\nScanned ${results.files_scanned ?? 0} files (${(results.bytes_scanned ?? 0 / 1024 / 1024).toFixed(2)} MB)`,
+                `\nScanned ${results.files_scanned ?? 0} files (${(((results.bytes_scanned ?? 0) / 1024) / 1024).toFixed(2)} MB)`,
               );
-              console.log(`Duration: ${(results.duration ?? 0 / 1000).toFixed(2)} seconds`);
+              console.log(`Duration: ${((results.duration ?? 0) / 1000).toFixed(2)} seconds`);
               console.log(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
             }
 

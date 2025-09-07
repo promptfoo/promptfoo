@@ -8,6 +8,7 @@ import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
+import { parseModelAuditArgs } from '../../utils/modelAuditCliParser';
 import type { Request, Response } from 'express';
 
 import type { ModelAuditScanResults } from '../../types/modelAudit';
@@ -120,37 +121,14 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Build command arguments
-    const args = ['scan'];
-
-    // Add resolved paths
-    args.push(...resolvedPaths);
-
-    // Add options
-    if (options.blacklist && Array.isArray(options.blacklist)) {
-      options.blacklist.forEach((pattern: string) => {
-        args.push('--blacklist', pattern);
-      });
-    }
-
-    // Always use JSON format for API responses
-    args.push('--format', 'json');
-
-    if (options.timeout) {
-      args.push('--timeout', String(options.timeout));
-    }
-
-    if (options.maxFileSize) {
-      args.push('--max-file-size', String(options.maxFileSize));
-    }
-
-    if (options.maxTotalSize) {
-      args.push('--max-total-size', String(options.maxTotalSize));
-    }
-
-    if (options.verbose) {
-      args.push('--verbose');
-    }
+    // Use the centralized CLI parser to build command arguments
+    const { args } = parseModelAuditArgs(resolvedPaths, {
+      ...options,
+      // Force JSON format for API responses (required for parsing)
+      format: 'json',
+      // Don't write to database at this point (we handle persistence ourselves)
+      write: false,
+    });
 
     logger.info(`Running model scan on: ${resolvedPaths.join(', ')}`);
 

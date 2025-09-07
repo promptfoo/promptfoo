@@ -33,6 +33,7 @@ export const ModelAuditCliOptionsSchema = z.object({
   // Preview/debugging
   dryRun: z.boolean().optional(),
   cache: z.boolean().optional(), // when false, adds --no-cache
+  write: z.boolean().optional(), // when false, adds --no-write
 });
 
 export type ModelAuditCliOptions = z.infer<typeof ModelAuditCliOptionsSchema>;
@@ -66,6 +67,7 @@ export const VALID_MODELAUDIT_OPTIONS = new Set([
   '--max-size',
   '--dry-run',
   '--no-cache',
+  '--no-write',
 ]);
 
 /**
@@ -116,6 +118,7 @@ const CLI_ARG_MAP: Record<
   maxSize: { flag: '--max-size', type: 'string' },
   dryRun: { flag: '--dry-run', type: 'boolean' },
   cache: { flag: '--no-cache', type: 'inverted-boolean' },
+  write: { flag: '--no-write', type: 'inverted-boolean' },
 };
 
 /**
