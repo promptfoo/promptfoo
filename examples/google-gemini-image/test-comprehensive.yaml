@@ -123,10 +123,77 @@ tests:
     assert:
       - type: contains
         value: '![Generated Image]'
-      - type: javascript
+      - type: llm-rubric
         value: |
-          // Validate image format
-          const imageMatch = output.match(/!\[Generated Image\]\(data:image\/([^;]+);base64,([^)]+)\)/);
-          return imageMatch !== null;
+          Evaluate this generated circus image on a scale of 1-10 based on:
+
+          **Visual Complexity (40%)**
+          - Multiple circus elements (acrobats, lions, tents)
+          - Three-ring circus layout
+          - Rich detail and vibrant colors
+          - Professional spotlight lighting
+
+          **Artistic Quality (30%)**
+          - Composition and visual balance
+          - Color harmony and vibrancy
+          - Professional illustration quality
+          - Clarity and sharpness
+
+          **Prompt Adherence (30%)**
+          - Contains circus performers (acrobats)
+          - Shows lions or circus animals
+          - Features colorful circus tents
+          - Includes spotlight/dramatic lighting
+
+          Score 8+ for excellent circus scenes with rich detail and multiple elements.
+        provider: google:gemini-2.5-flash
+      - type: cost
+        threshold: 0.05
+
+  # 🎨 Enhanced Artistic Quality Assessment
+  - description: '🎭 Professional artistic evaluation - Van Gogh style robot'
+    vars:
+      style: 'Van Gogh swirly impressionist'
+      subject: 'a friendly robot gardening flowers'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: llm-rubric
+        value: |
+          As a professional art critic, evaluate this Van Gogh style robot image comprehensively:
+
+          **Artistic Style Adherence (35%)**
+          - Characteristic swirling brushstrokes of Van Gogh
+          - Post-impressionist color palette and technique
+          - Expressive, emotional quality typical of Van Gogh
+          - Proper interpretation of the impressionist style
+
+          **Composition & Design (25%)**
+          - Visual balance and focal points
+          - Use of space and proportion
+          - Dynamic composition that draws the eye
+          - Integration of robot and garden elements
+
+          **Technical Execution (20%)**
+          - Quality of brushwork simulation
+          - Color harmony and contrast
+          - Lighting and shadow work
+          - Overall image clarity and definition
+
+          **Creative Interpretation (20%)**
+          - Originality in combining robot with Van Gogh style
+          - Meaningful integration of gardening theme
+          - Emotional resonance and artistic impact
+          - Innovation within the style constraints
+
+          **Scoring Guidelines:**
+          - 9-10: Masterful execution worthy of gallery display
+          - 7-8: Excellent artistic quality with minor improvements possible
+          - 5-6: Good attempt with notable artistic merit
+          - 3-4: Adequate but lacks artistic sophistication
+          - 1-2: Poor execution, does not capture Van Gogh style
+
+          Provide detailed feedback on strengths and areas for improvement.
+        provider: google:gemini-2.5-flash
       - type: cost
         threshold: 0.05

@@ -27,14 +27,14 @@ tests:
       - type: llm-rubric
         value: |
           You are a professional e-commerce photography reviewer. 
-          
+
           Look at this product image and rate it on a scale of 1-10 for e-commerce use.
-          
+
           Consider:
           - Is the product clearly visible?
           - Is the lighting professional?
           - Is the background clean and white?
           - Would this work for an online store?
-          
+
           Just give me a score from 1-10 and brief reason why.
         provider: google:gemini-2.5-flash
