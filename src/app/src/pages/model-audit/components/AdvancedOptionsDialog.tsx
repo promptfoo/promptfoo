@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -51,13 +51,13 @@ export default function AdvancedOptionsDialog({
     ...scanOptions,
   });
 
-  // Update local options when scanOptions prop changes
+  // Update local options when scanOptions prop changes or when dialog opens
   useEffect(() => {
     setLocalOptions({
       ...defaultScanOptions,
       ...scanOptions,
     });
-  }, [scanOptions]);
+  }, [scanOptions, open]);
 
   const handleAddBlacklist = () => {
     if (blacklistInput.trim()) {
