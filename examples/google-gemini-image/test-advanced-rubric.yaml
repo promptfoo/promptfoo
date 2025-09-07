@@ -1,0 +1,162 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: '🎯 Advanced LLM-Rubric Showcase - Multi-Dimensional Quality Assessment'
+
+prompts:
+  - 'Create a {{style}} illustration of {{subject}} that would be suitable for {{use_case}}'
+
+providers:
+  - id: google:gemini-2.5-flash-image-preview
+    label: 'Advanced Quality Testing 🎨'
+    config:
+      generationConfig:
+        temperature: 0.8
+        maxOutputTokens: 1024
+        responseModalities:
+          - IMAGE
+          - TEXT
+
+tests:
+  # 🎨 Comprehensive Multi-Criteria Evaluation
+  - description: '🎨 Professional Brand Identity Assessment'
+    vars:
+      style: 'modern minimalist'
+      subject: 'a coffee shop logo with mountains and a coffee cup'
+      use_case: 'corporate branding and marketing materials'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: llm-rubric
+        value: |
+          You are a senior brand identity designer with 15+ years of experience. Evaluate this logo design comprehensively:
+
+          **Visual Design Quality (25%)**
+          - Clean, professional execution
+          - Appropriate use of negative space
+          - Balance and proportion
+          - Visual hierarchy and focal points
+
+          **Brand Suitability (25%)**
+          - Memorable and distinctive
+          - Scalable across different sizes
+          - Works in black & white
+          - Appropriate for target industry (coffee shop)
+
+          **Style Adherence (20%)**
+          - Genuinely minimalist approach
+          - Modern aesthetic sensibilities
+          - Avoids unnecessary complexity
+          - Contemporary design trends
+
+          **Technical Excellence (15%)**
+          - Sharp, clean edges
+          - Consistent line weights
+          - Professional color choices
+          - Print-ready appearance
+
+          **Marketing Viability (15%)**
+          - Eye-catching at small sizes
+          - Versatile for multiple applications
+          - Appeals to target demographic
+          - Differentiates from competitors
+
+          **Scoring Scale:**
+          - 9-10: Exceptional - Ready for professional use
+          - 7-8: Strong - Minor refinements needed
+          - 5-6: Adequate - Needs significant improvement
+          - 3-4: Poor - Major redesign required
+          - 1-2: Unusable - Does not meet basic requirements
+
+          Provide specific feedback on strengths and areas for improvement.
+        provider: google:gemini-2.5-flash
+      - type: cost
+        threshold: 0.05
+
+  # 📚 Educational Content Assessment
+  - description: '📚 Educational Infographic Evaluation'
+    vars:
+      style: 'educational infographic'
+      subject: 'the water cycle with labeled stages and arrows'
+      use_case: 'elementary school science education'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: llm-rubric
+        value: |
+          You are an elementary science education specialist. Evaluate this educational infographic:
+
+          **Educational Effectiveness (35%)**
+          - Clearly shows all water cycle stages
+          - Logical flow and sequence
+          - Age-appropriate complexity
+          - Supports learning objectives
+
+          **Visual Clarity (30%)**
+          - Easy to read labels
+          - Clear directional arrows
+          - Good contrast and visibility
+          - Uncluttered design
+
+          **Engagement Factor (20%)**
+          - Visually appealing to children
+          - Colorful and inviting
+          - Maintains scientific accuracy
+          - Encourages curiosity
+
+          **Accessibility (15%)**
+          - Large, readable text
+          - Color-blind friendly
+          - Simple, clear illustrations
+          - Suitable for classroom display
+
+          Rate 1-10 with specific recommendations for classroom use.
+        provider: google:gemini-2.5-flash
+      - type: cost
+        threshold: 0.05
+
+  # 🎯 Marketing Material Assessment  
+  - description: '🎯 Social Media Marketing Content Review'
+    vars:
+      style: 'vibrant social media post'
+      subject: 'a fitness challenge announcement with motivational text'
+      use_case: 'Instagram and Facebook marketing campaign'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: llm-rubric
+        value: |
+          You are a social media marketing strategist. Evaluate this promotional content:
+
+          **Engagement Potential (30%)**
+          - Grabs attention in feed
+          - Encourages interaction
+          - Shareable content
+          - Clear call-to-action
+
+          **Platform Optimization (25%)**
+          - Appropriate for Instagram/Facebook
+          - Mobile-friendly design
+          - Proper aspect ratio
+          - Text legibility on small screens
+
+          **Brand Consistency (20%)**
+          - Professional appearance
+          - Consistent with fitness brand
+          - Appropriate tone and style
+          - Target audience alignment
+
+          **Visual Impact (25%)**
+          - Eye-catching colors
+          - Dynamic composition
+          - Motivational energy
+          - Clear messaging hierarchy
+
+          Score 1-10 with specific advice for campaign optimization.
+        provider: google:gemini-2.5-flash
+      - type: javascript
+        value: |
+          // Ensure we get both image and quality assessment
+          const hasImage = output.includes('![Generated Image]');
+          const hasText = output.length > 200; // Should have substantial text response
+          return hasImage && hasText;
+      - type: cost
+        threshold: 0.05
