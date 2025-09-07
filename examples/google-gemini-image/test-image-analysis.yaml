@@ -1,0 +1,116 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: '📸 Image Analysis + Generation Test Suite'
+
+prompts:
+  # Image analysis prompts  
+  - |
+    Analyze this image and describe what you see in detail: 
+    
+    {{input_image}}
+    
+  - |
+    Look at this image and create a new image that transforms it in this way: {{transformation}}
+    
+    {{input_image}}
+
+  - |
+    Using the style and colors from this reference image, create a new image of: {{new_subject}}
+    
+    {{input_image}}
+
+providers:
+  - id: google:gemini-2.5-flash-image-preview
+    label: 'Image Analysis + Generation 🎨'
+    config:
+      generationConfig:
+        temperature: 0.8
+        maxOutputTokens: 1024
+        responseModalities:
+          - IMAGE
+          - TEXT
+
+tests:
+  # 🔍 Image Analysis Tests
+  - description: '🟦 Analyze geometric shapes'
+    vars:
+      input_image: file://images/geometric-shapes.png
+    assert:
+      - type: contains
+        value: 'rectangle'
+      - type: contains  
+        value: 'circle'
+      - type: cost
+        threshold: 0.10
+
+  - description: '🌈 Describe color gradient'
+    vars:
+      input_image: file://images/color-gradient.png  
+    assert:
+      - type: contains
+        value: 'color'
+      - type: cost
+        threshold: 0.10
+
+  - description: '🌳 Identify landscape elements'
+    vars:
+      input_image: file://images/simple-landscape.png
+    assert:
+      - type: contains
+        value: 'tree'  
+      - type: cost
+        threshold: 0.10
+
+  # 🎨 Image Transformation Tests
+  - description: '🔄 Transform geometric to organic'
+    vars:
+      input_image: file://images/geometric-shapes.png
+      transformation: 'make all the shapes look like organic, flowing forms - turn rectangles into clouds and circles into flowers'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.10
+
+  - description: '🎭 Style transfer landscape to abstract'  
+    vars:
+      input_image: file://images/simple-landscape.png
+      transformation: 'recreate this scene in a Picasso cubist style with bold geometric shapes'
+    assert:
+      - type: contains
+        value: 'data:image'
+      - type: cost
+        threshold: 0.10
+
+  # 🖼️ Style-Based Generation Tests
+  - description: '🏢 Use gradient colors for architecture'
+    vars:
+      input_image: file://images/color-gradient.png
+      new_subject: 'a modern skyscraper at sunset'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.10
+
+  - description: '🦋 Apply landscape colors to wildlife'
+    vars:
+      input_image: file://images/simple-landscape.png  
+      new_subject: 'a beautiful butterfly with intricate wing patterns'
+    assert:
+      - type: contains
+        value: 'data:image'
+      - type: cost
+        threshold: 0.10
+      - type: javascript
+        value: |
+          // Validate that we get both analysis and generation
+          const hasImageAnalysis = output.toLowerCase().includes('green') || 
+                                   output.toLowerCase().includes('blue') ||
+                                   output.toLowerCase().includes('landscape');
+          const hasNewImage = output.includes('![Generated Image]') || output.includes('data:image');
+          
+          return { 
+            pass: hasImageAnalysis && hasNewImage, 
+            score: hasImageAnalysis && hasNewImage ? 1 : 0,
+            reason: `Analysis present: ${hasImageAnalysis}, New image: ${hasNewImage}`
+          };

@@ -282,6 +282,7 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-3-pro-preview` - Gemini 3.0 Pro preview with advanced reasoning, multimodal understanding, and agentic capabilities
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
+- `google:gemini-2.5-flash-image-preview` - Gemini 2.5 Flash with native image generation capabilities (generates base64 images)
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
 - `google:gemini-2.5-flash-preview-09-2025` - Gemini 2.5 Flash preview with quality improvements
 - `google:gemini-2.5-flash-lite-preview-09-2025` - Gemini 2.5 Flash Lite preview with cost and latency optimizations
@@ -367,9 +368,25 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation:
 
 - `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.13/image)
-- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
+- `google:gemini-2.5-flash-image-preview` - Gemini 2.5 Flash with built-in image generation (~$0.039 per image)
 
-Configuration options:
+Unlike Imagen models which are specialized for image generation, Gemini image models can generate images as part of their text responses and support both text and image outputs in a single interaction.
+
+#### Configuration for Image Generation
+
+```yaml
+providers:
+  - id: google:gemini-2.5-flash-image-preview
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 1024
+        responseModalities:
+          - IMAGE # Enable image generation
+          - TEXT # Include text responses
+```
+
+For Gemini 3 models, you can also configure aspect ratio and resolution:
 
 ```yaml
 providers:
@@ -380,15 +397,44 @@ providers:
       temperature: 0.7
 ```
 
+#### Output Format
+
+Generated images are returned as base64-encoded markdown images:
+
+```
+Generated a vibrant image for you!
+
+![Generated Image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...)
+```
+
+#### Example Usage
+
+```yaml
+providers:
+  - google:gemini-2.5-flash-image-preview
+
+prompts:
+  - 'Generate an image of {{subject}}'
+
+tests:
+  - vars:
+      subject: 'a rainbow unicorn in a cyberpunk city'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.05
+```
+
 Key differences from Imagen:
 
 - Uses same namespace as Gemini chat (`google:model-name`)
-- More aspect ratio options (includes 2:3, 3:2, 4:5, 5:4, 21:9)
+- More aspect ratio options (includes 2:3, 3:2, 4:5, 5:4, 21:9) - Gemini 3 models only
 - Resolution control via `imageSize` (1K, 2K, 4K) - Gemini 3 models only
 - Can return both text and images in the same response
 - Uses same authentication as Gemini chat models
 
-See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) for Gemini image generation configurations.
+For complete examples, see [google-gemini-image examples](https://github.com/promptfoo/promptfoo/tree/main/examples/google-gemini-image).
 
 ### Basic Configuration
 

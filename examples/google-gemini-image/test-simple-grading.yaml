@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: '🎯 Simple Test: Gemini Generates + Gemini Grades'
+
+prompts:
+  - 'Generate a professional product photograph of {{product}} on a clean white background'
+
+providers:
+  - id: google:gemini-2.5-flash-image-preview
+    label: 'Gemini Image Generator 🎨'
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 1024
+        responseModalities:
+          - IMAGE
+          - TEXT
+
+tests:
+  - description: '📱 Professional Product Photo Test'
+    vars:
+      product: 'wireless earbuds'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.05
+      - type: llm-rubric
+        value: |
+          You are a professional e-commerce photography reviewer. 
+          
+          Look at this product image and rate it on a scale of 1-10 for e-commerce use.
+          
+          Consider:
+          - Is the product clearly visible?
+          - Is the lighting professional?
+          - Is the background clean and white?
+          - Would this work for an online store?
+          
+          Just give me a score from 1-10 and brief reason why.
+        provider: google:gemini-2.5-flash
