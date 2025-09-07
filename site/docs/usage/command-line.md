@@ -234,7 +234,7 @@ Deletes a specific resource.
 
 ## `promptfoo import <filepath>`
 
-Import an eval file from JSON format.
+Import an eval file from JSON format. Supports both v2 and v3 format files for backup and restore workflows.
 
 ## `promptfoo export`
 
@@ -247,6 +247,18 @@ Export an eval record to JSON format. To export the most recent, use evalId `lat
 | Option                    | Description                                 |
 | ------------------------- | ------------------------------------------- |
 | `-o, --output <filepath>` | File to write. Writes to stdout by default. |
+
+**Examples:**
+```bash
+# Export the latest evaluation to a file
+promptfoo export latest -o my-eval.json
+
+# Import an evaluation from a file  
+promptfoo import my-eval.json
+
+# Export a specific evaluation by ID
+promptfoo export eval-abc-2024-01-01 -o backup.json
+```
 
 ### `promptfoo export logs`
 
