@@ -67,7 +67,7 @@ For more information on factuality, see the [guide on LLM factuality](/docs/guid
 
 ## Non-English Evaluation
 
-For multilingual evaluation output, use a custom `rubricPrompt` that works with **all** model-graded assertion types:
+For multilingual evaluation output with compatible assertion types, use a custom `rubricPrompt`:
 
 ```yaml
 defaultTest:
@@ -80,20 +80,22 @@ defaultTest:
         },
         {
           "role": "user", 
-          "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}\nKontext: {{ context }}\nFrage: {{ query }}\nErwartet: {{ expected }}"
+          "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}"
         }
       ]
 
 assert:
   - type: llm-rubric
     value: 'Antwortet hilfreich'
-  - type: factuality
-    value: 'Berlin ist die Hauptstadt'
-  - type: context-recall
-    value: 'Kontext enthält notwendige Informationen'
+  - type: g-eval
+    value: 'Klar und präzise'
+  - type: model-graded-closedqa
+    value: 'Gibt direkte Antwort'
 ```
 
-This produces German reasoning for any assertion type: `{"reason": "Die Antwort ist hilfreich und klar.", "pass": true, "score": 1.0}`
+This produces German reasoning: `{"reason": "Die Antwort ist hilfreich und klar.", "pass": true, "score": 1.0}`
+
+**Note:** This approach works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. Other assertions like `factuality` and `context-recall` require specific output formats and need assertion-specific prompts.
 
 For more language options and alternative approaches, see the [llm-rubric language guide](/docs/configuration/expected-outputs/model-graded/llm-rubric#non-english-evaluation).
 

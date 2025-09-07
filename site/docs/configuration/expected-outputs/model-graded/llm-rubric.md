@@ -143,9 +143,9 @@ defaultTest:
 
 To get evaluation output in languages other than English, you can use different approaches:
 
-### Option 1: Universal rubricPrompt Override (Recommended)
+### Option 1: rubricPrompt Override (Recommended)
 
-For reliable multilingual output across all assertion types:
+For reliable multilingual output with compatible assertion types:
 
 ```yaml
 defaultTest:
@@ -189,7 +189,31 @@ assert:
     value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
 ```
 
-**Note:** Option 1 is most reliable. If Options 2-3 still produce English reasoning, use the rubricPrompt override.
+**Note:** Option 1 works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. For other assertion types like `factuality` or `context-recall`, create assertion-specific prompts that match their expected formats.
+
+### Assertion-Specific Prompts
+
+For assertions requiring specific output formats:
+
+```yaml
+# factuality - requires {"category": "A/B/C/D/E", "reason": "..."}
+tests:
+  - options:
+      rubricPrompt: |
+        [
+          {
+            "role": "system",
+            "content": "Du vergleichst Faktentreue. Antworte mit JSON: {\"category\": \"A/B/C/D/E\", \"reason\": \"string\"}. A=Teilmenge, B=Obermenge, C=identisch, D=Widerspruch, E=irrelevant. ALLE Antworten auf Deutsch."
+          },
+          {
+            "role": "user",
+            "content": "Expertenantwort: {{ rubric }}\nEingereichte Antwort: {{ output }}"
+          }
+        ]
+    assert:
+      - type: factuality
+        value: 'Berlin ist die Hauptstadt von Deutschland'
+```
 
 ### Object handling in rubric prompts
 
