@@ -240,12 +240,7 @@ export function initializeRunLogging(): void {
     runLogTransport = new winston.transports.File({
       filename: logFile,
       level: 'debug', // Capture all levels in the file
-      format: winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.printf(({ timestamp, level, message }) => {
-          return `${timestamp} [${level.toUpperCase()}]: ${message}`;
-        }),
-      ),
+      format: winston.format.combine(winston.format.simple(), fileFormatter),
     });
 
     winstonLogger.add(runLogTransport);
@@ -293,50 +288,36 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
  * @param response - Response object (optional)
  * @param error - Whether to log as error (true) or debug (false)
  */
-export function logRequestResponse(
-  url: string,
-  requestBody: any,
-  response?: Response | null,
-  error = false,
-): void {
-  const logMethod = error ? logger.error : logger.debug;
+export async function logRequestResponse(options: {
+  url: string;
+  requestBody: any;
+  requestMethod: string;
+  response?: Response | null;
+  error?: boolean;
+}): Promise<void> {
+  const { url, requestBody, requestMethod, response, error } = options;
+  const logMethod = error || (response && !response.ok) ? logger.error : logger.debug;
 
-  if (response && !response.ok) {
-    // For failed responses, always log as error with full details
-    response
-      .text()
-      .then((responseText) => {
-        const errorDetails = [
-          `Status: ${response.status} ${response.statusText}`,
-          `Request URL: ${url}`,
-          `Request Body: ${JSON.stringify(requestBody, null, 2)}`,
-          `Response: ${responseText || 'Empty response'}`,
-        ].join('\n');
-
-        logger.error(`API request failed:\n${errorDetails}`);
-      })
-      .catch(() => {
-        const errorDetails = [
-          `Status: ${response.status} ${response.statusText}`,
-          `Request URL: ${url}`,
-          `Request Body: ${JSON.stringify(requestBody, null, 2)}`,
-          `Response: Unable to read response`,
-        ].join('\n');
-
-        logger.error(`API request failed:\n${errorDetails}`);
-      });
-  } else {
-    // For successful responses or debug logging
-    const details = [
-      `URL: ${url}`,
-      `Request: ${JSON.stringify(requestBody, null, 2)}`,
-      response ? `Status: ${response.status} ${response.statusText}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    logMethod(`API request${error ? ' failed' : ''}:\n${details}`);
+  let responseText = '';
+  if (response) {
+    try {
+      responseText = await response.clone().text();
+    } catch {
+      responseText = 'Unable to read response';
+    }
   }
+
+  const details = [
+    `URL: ${url}`,
+    `Request Method: ${requestMethod}`,
+    `Request Body: ${JSON.stringify(requestBody, null, 2)}`,
+    response ? `Status: ${response.status} ${response.statusText}` : '',
+    responseText ? `Response: ${responseText}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  logMethod(`API request:\n${details}`);
 }
 
 // Initialize source maps if debug is enabled at startup

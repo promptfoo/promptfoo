@@ -8,7 +8,7 @@ import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
-import logger from '../../logger';
+import logger, { logRequestResponse } from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
@@ -36,6 +36,13 @@ global.fetch = async (...args) => {
 
   // Call the original fetch
   const response = await originalFetch(url, opts);
+  await logRequestResponse({
+    url: url.toString(),
+    requestBody: opts.body,
+    requestMethod: opts.method || 'GET',
+    response,
+  });
+
   return response;
 };
 
@@ -193,7 +200,9 @@ export async function fetchWithProxy(
     setGlobalDispatcher(agent);
   }
 
-  return fetch(finalUrl, finalOptions);
+  const response = await fetch(finalUrl, finalOptions);
+
+  return response;
 }
 
 export function fetchWithTimeout(
