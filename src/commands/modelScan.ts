@@ -8,10 +8,7 @@ import { checkModelAuditUpdates } from '../updates';
 import type { Command } from 'commander';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
-import {
-  parseModelAuditArgs,
-  DEPRECATED_OPTIONS_MAP,
-} from '../utils/modelAuditCliParser';
+import { parseModelAuditArgs, DEPRECATED_OPTIONS_MAP } from '../utils/modelAuditCliParser';
 import { z } from 'zod';
 
 export async function checkModelAuditInstalled(): Promise<boolean> {
@@ -81,13 +78,26 @@ export function modelScanCommand(program: Command): void {
               `⚠️  Warning: The '${fullOption}' option is deprecated. Please use '${replacement}' instead.`,
             );
           } else {
-            logger.warn(
-              `⚠️  Warning: The '${fullOption}' option is deprecated and has been removed. It may be handled automatically or via environment variables. See documentation for details.`,
-            );
+            // Provide specific guidance for common cases
+            if (fullOption === '--jfrog-api-token') {
+              logger.warn(
+                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_API_TOKEN environment variable instead.`,
+              );
+            } else if (fullOption === '--jfrog-access-token') {
+              logger.warn(
+                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_ACCESS_TOKEN environment variable instead.`,
+              );
+            } else if (fullOption === '--registry-uri') {
+              logger.warn(
+                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_URL or MLFLOW_TRACKING_URI environment variable instead.`,
+              );
+            } else {
+              logger.warn(
+                `⚠️  Warning: The '${fullOption}' option is deprecated and has been removed. It may be handled automatically or via environment variables. See documentation for details.`,
+              );
+            }
           }
         });
-        // It's a good practice to exit or confirm with the user if they want to proceed
-        // For now, we'll just warn and continue.
       }
 
       // Check if modelaudit is installed

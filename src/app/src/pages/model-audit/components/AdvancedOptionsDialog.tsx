@@ -124,7 +124,7 @@ export default function AdvancedOptionsDialog({
             </Typography>
             <TextField
               fullWidth
-              placeholder="Auto-detected"
+              placeholder="e.g., 1GB, 500MB"
               value={localOptions.maxSize || ''}
               onChange={(e) =>
                 setLocalOptions({
@@ -134,7 +134,8 @@ export default function AdvancedOptionsDialog({
               }
             />
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              Examples: 500MB, 2GB, 1.5TB
+              Format examples: <strong>500MB</strong>, <strong>2GB</strong>, <strong>1.5TB</strong>,{' '}
+              <strong>100KB</strong>
             </Typography>
           </Box>
 
