@@ -387,5 +387,4 @@ describe('AdvancedOptionsDialog', () => {
       expect(onOptionsChange).toHaveBeenCalledWith(expect.objectContaining({ quiet: true }));
     });
   });
-
 });

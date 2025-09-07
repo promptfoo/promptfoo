@@ -164,21 +164,21 @@ See the [Advanced Usage](./usage.md) guide for detailed authentication setup for
 
 ### Options
 
-| Option                    | Description                                                         |
-| ------------------------- | ------------------------------------------------------------------- |
-| `--blacklist`, `-b`       | Additional blacklist patterns to check against model names          |
-| `--format`, `-f`          | Output format (`text` \| `json` \| `sarif`) [default: text]         |
-| `--output`, `-o`          | Output file path (prints to stdout if not specified)                |
-| `--timeout`, `-t`         | Scan timeout in seconds [default: 300]                              |
-| `--verbose`, `-v`         | Enable verbose output                                               |
-| `--max-size`              | Maximum total size to scan (e.g., `500MB`, `1GB`)                   |
-| `--sbom`                  | Generate CycloneDX Software Bill of Materials with license info     |
-| `--strict`                | Fail on warnings; enable stricter validation                        |
-| `--dry-run`               | Preview scan without processing files                               |
-| `--quiet`                 | Suppress non-critical output                                        |
-| `--progress`              | Force-enable progress reporting                                     |
-| `--no-cache`              | Disable caching of downloaded files                                 |
-| `--no-write`              | Skip writing results to database                                    |
+| Option              | Description                                                     |
+| ------------------- | --------------------------------------------------------------- |
+| `--blacklist`, `-b` | Additional blacklist patterns to check against model names      |
+| `--format`, `-f`    | Output format (`text` \| `json` \| `sarif`) [default: text]     |
+| `--output`, `-o`    | Output file path (prints to stdout if not specified)            |
+| `--timeout`, `-t`   | Scan timeout in seconds [default: 300]                          |
+| `--verbose`, `-v`   | Enable verbose output                                           |
+| `--max-size`        | Maximum total size to scan (e.g., `500MB`, `1GB`)               |
+| `--sbom`            | Generate CycloneDX Software Bill of Materials with license info |
+| `--strict`          | Fail on warnings; enable stricter validation                    |
+| `--dry-run`         | Preview scan without processing files                           |
+| `--quiet`           | Suppress non-critical output                                    |
+| `--progress`        | Force-enable progress reporting                                 |
+| `--no-cache`        | Disable caching of downloaded files                             |
+| `--no-write`        | Skip writing results to database                                |
 
 ## Web Interface
 
