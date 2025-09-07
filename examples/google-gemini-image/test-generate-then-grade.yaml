@@ -28,18 +28,18 @@ tests:
       - type: llm-rubric
         value: |
           You are an e-commerce quality reviewer. Rate this generated product image 1-10.
-          
+
           **SCORING CRITERIA:**
           - **8-10**: Professional, ready for e-commerce use
           - **6-7**: Good quality, minor improvements needed  
           - **4-5**: Average, significant improvements required
           - **1-3**: Poor quality, not suitable for business use
-          
+
           **What to evaluate:**
           - Is the product clearly visible and well-lit?
           - Is the background clean and professional?
           - Would this work on an e-commerce website?
           - Does it look professional and trustworthy?
-          
+
           Just give me a score 1-10 and brief reasoning.
         provider: google:gemini-2.5-flash

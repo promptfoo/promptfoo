@@ -2,20 +2,20 @@
 description: '📸 Image Analysis + Generation Test Suite'
 
 prompts:
-  # Image analysis prompts  
+  # Image analysis prompts
   - |
     Analyze this image and describe what you see in detail: 
-    
+
     {{input_image}}
-    
+
   - |
     Look at this image and create a new image that transforms it in this way: {{transformation}}
-    
+
     {{input_image}}
 
   - |
     Using the style and colors from this reference image, create a new image of: {{new_subject}}
-    
+
     {{input_image}}
 
 providers:
@@ -37,14 +37,14 @@ tests:
     assert:
       - type: contains
         value: 'rectangle'
-      - type: contains  
+      - type: contains
         value: 'circle'
       - type: cost
         threshold: 0.10
 
   - description: '🌈 Describe color gradient'
     vars:
-      input_image: file://images/color-gradient.png  
+      input_image: file://images/color-gradient.png
     assert:
       - type: contains
         value: 'color'
@@ -56,7 +56,7 @@ tests:
       input_image: file://images/simple-landscape.png
     assert:
       - type: contains
-        value: 'tree'  
+        value: 'tree'
       - type: cost
         threshold: 0.10
 
@@ -71,7 +71,7 @@ tests:
       - type: cost
         threshold: 0.10
 
-  - description: '🎭 Style transfer landscape to abstract'  
+  - description: '🎭 Style transfer landscape to abstract'
     vars:
       input_image: file://images/simple-landscape.png
       transformation: 'recreate this scene in a Picasso cubist style with bold geometric shapes'
@@ -94,7 +94,7 @@ tests:
 
   - description: '🦋 Apply landscape colors to wildlife'
     vars:
-      input_image: file://images/simple-landscape.png  
+      input_image: file://images/simple-landscape.png
       new_subject: 'a beautiful butterfly with intricate wing patterns'
     assert:
       - type: contains
@@ -108,7 +108,7 @@ tests:
                                    output.toLowerCase().includes('blue') ||
                                    output.toLowerCase().includes('landscape');
           const hasNewImage = output.includes('![Generated Image]') || output.includes('data:image');
-          
+
           return { 
             pass: hasImageAnalysis && hasNewImage, 
             score: hasImageAnalysis && hasNewImage ? 1 : 0,

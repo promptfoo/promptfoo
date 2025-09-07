@@ -1253,7 +1253,7 @@ describe('AIStudioChatProvider', () => {
         cached: false,
         output: 'response with search retrieval',
         raw: mockResponse.data,
-        cost: 0.00003,
+        cost: 0.0000045,
         tokenUsage: {
           numRequests: 1,
           total: 15,

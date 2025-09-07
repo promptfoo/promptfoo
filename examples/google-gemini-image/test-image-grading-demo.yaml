@@ -4,7 +4,7 @@ description: '🎯 Demo: AI Grading Business Images (Load + Grade Pattern)'
 prompts:
   - |
     Analyze this business image and rate its professional quality:
-    
+
     {{test_image}}
 
 providers:
@@ -22,7 +22,7 @@ tests:
           You are a professional design reviewer. Rate this image on a scale of 1-10 for business use.
 
           **DESIGN QUALITY ASSESSMENT:**
-          
+
           **Technical Quality (30%)**
           - Clean, crisp edges and shapes
           - Professional color choices
