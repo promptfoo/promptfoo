@@ -47,3 +47,6 @@ export const TERMINAL_MAX_WIDTH =
 export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
 
 export const FILE_METADATA_KEY = '_promptfooFileMetadata';
+
+export const PROBE_LIMIT_EMAIL = 'sales@promptfoo.dev';
+export const PROBE_LIMIT_URL = 'https://promptfoo.dev/pricing/';

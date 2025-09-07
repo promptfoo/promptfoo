@@ -3,5 +3,5 @@ langchain==0.3.26
 langchain-chroma==0.2.4
 langchain-community==0.3.27
 langchain-openai==0.3.27
-pypdf==5.7.0
+pypdf==6.0.0
 tqdm==4.67.1

@@ -10,6 +10,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -20,7 +21,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Link from '@mui/material/Link';
@@ -590,6 +591,24 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       p.plugins.size === selectedPlugins.size,
   );
 
+  // Check if user has selected all or most plugins
+  const hasSelectedMostPlugins = useMemo(() => {
+    // Get all unique plugins from risk categories (excluding intent and policy)
+    const allAvailablePlugins = new Set<Plugin>();
+    Object.values(riskCategories).forEach((plugins) => {
+      plugins.forEach((plugin) => {
+        if (plugin !== 'intent' && plugin !== 'policy') {
+          allAvailablePlugins.add(plugin);
+        }
+      });
+    });
+
+    const totalAvailable = allAvailablePlugins.size;
+    const totalSelected = selectedPlugins.size;
+    // Show warning if more than 80% of plugins are selected or all plugins are selected
+    return totalSelected >= totalAvailable * 0.8 || totalSelected === totalAvailable;
+  }, [selectedPlugins]);
+
   return (
     <PageWrapper
       title="Plugins"
@@ -620,6 +639,38 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         !isConfigValid() || !hasAnyPluginsConfigured() ? getNextButtonTooltip() : undefined
       }
     >
+      {/* Warning banner when all/most plugins are selected - full width sticky */}
+      {hasSelectedMostPlugins && (
+        <Alert
+          severity="warning"
+          icon={<WarningAmberIcon />}
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 9,
+            margin: -3,
+            marginBottom: 3,
+            padding: theme.spacing(2, 3),
+            borderRadius: 0,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            '& .MuiAlert-message': {
+              width: '100%',
+            },
+          }}
+        >
+          <Box>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Performance Warning: Too Many Plugins Selected
+            </Typography>
+            <Typography variant="body2">
+              Selecting many plugins is usually not efficient and will significantly increase
+              evaluation time and cost. It's recommended to use the preset configurations or select
+              only the plugins specifically needed for your use case.
+            </Typography>
+          </Box>
+        </Alert>
+      )}
+
       <ErrorBoundary FallbackComponent={ErrorFallback}>
         <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
           {/* Main content */}
@@ -645,11 +696,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       : preset.name === currentlySelectedPreset?.name;
                   return (
                     <Grid
-                      item
-                      xs={12}
-                      sm={6}
-                      md={4}
-                      lg={3}
+                      size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
                       key={preset.name}
                       sx={{ minWidth: '200px' }}
                     >
@@ -766,23 +813,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 <Paper
                   key={plugin}
                   variant="outlined"
-                  onClick={(e) => {
-                    // Don't toggle if clicking on checkbox, buttons, or other interactive elements
-                    if (
-                      e.target instanceof Element &&
-                      (e.target.closest('input[type="checkbox"]') ||
-                        e.target.closest('button') ||
-                        e.target.closest('[role="checkbox"]'))
-                    ) {
-                      return;
-                    }
-                    handlePluginToggle(plugin);
-                  }}
+                  onClick={() => handlePluginToggle(plugin)}
                   sx={{
-                    border: '2px solid',
+                    border: '1px solid',
                     borderColor: (() => {
                       if (selectedPlugins.has(plugin)) {
-                        // Show red border if plugin is selected but missing required config
+                        // Show red border if missing required config
                         if (
                           PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
                           !isPluginConfigured(plugin)
@@ -791,9 +827,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         }
                         return 'primary.main';
                       }
-                      return 'divider';
+                      return theme.palette.divider;
                     })(),
-                    borderRadius: 2,
+                    borderRadius: 1,
+                    cursor: 'pointer',
                     bgcolor: (() => {
                       if (selectedPlugins.has(plugin)) {
                         // Show red background if plugin is selected but missing required config
@@ -855,6 +892,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       onChange={(e) => {
                         e.stopPropagation();
                         handlePluginToggle(plugin);
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
                       }}
                       color="primary"
                       size="small"
@@ -1380,26 +1420,24 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       Generating test case...
                     </Typography>
                   </Box>
-                ) : generatedTestCase ? (
-                  <Box>
-                    {/* Context first as an alert */}
-                    {generatedTestCase.context && (
-                      <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
-                        {generatedTestCase.context}
-                      </Alert>
-                    )}
-
-                    {/* Generated Prompt */}
-                    <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-                      Generated Prompt:
+                ) : generatedTestCase && testCaseDialogMode === 'result' ? (
+                  <Box sx={{ pt: 2 }}>
+                    <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
+                      <Typography variant="body2">
+                        This is a sample test case generated for the <code>{generatingPlugin}</code>{' '}
+                        plugin. Fine tune it by adjusting your application details.
+                      </Typography>
+                    </Alert>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Test Case:
                     </Typography>
                     <Box
                       sx={{
                         p: 2,
-                        backgroundColor: 'grey.50',
+                        backgroundColor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
                         borderRadius: 1,
                         border: '1px solid',
-                        borderColor: 'grey.300',
+                        borderColor: theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
                         fontFamily: 'monospace',
                         fontSize: '0.875rem',
                         whiteSpace: 'pre-wrap',
@@ -1410,10 +1448,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     </Box>
                   </Box>
                 ) : null}
-
-                {/* Documentation link */}
+              </DialogContent>
+              <DialogActions>
+                {/* Documentation link in footer */}
                 {generatingPlugin && hasSpecificPluginDocumentation(generatingPlugin) && (
-                  <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                  <Box sx={{ flex: 1, mr: 2 }}>
                     <Link
                       href={getPluginDocumentationUrl(generatingPlugin)}
                       target="_blank"
@@ -1427,21 +1466,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         '&:hover': {
                           textDecoration: 'underline',
                         },
+                        paddingLeft: 2,
                       }}
                     >
-                      Learn more about the{' '}
+                      Learn more about{' '}
                       {displayNameOverrides[generatingPlugin] ||
                         categoryAliases[generatingPlugin] ||
-                        generatingPlugin}{' '}
-                      plugin
+                        generatingPlugin}
                       <Box component="span" sx={{ fontSize: '0.75rem' }}>
                         ↗
                       </Box>
                     </Link>
                   </Box>
                 )}
-              </DialogContent>
-              <DialogActions>
                 <Button
                   onClick={() => {
                     setTestCaseDialogOpen(false);

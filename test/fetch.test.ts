@@ -5,6 +5,8 @@ import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
+import logger from '../src/logger';
+import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
   fetchWithProxy,
   fetchWithRetries,
@@ -12,9 +14,7 @@ import {
   handleRateLimit,
   isRateLimited,
   sanitizeUrl,
-} from '../src/fetch';
-import logger from '../src/logger';
-import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
+} from '../src/util/fetch';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 
@@ -926,6 +926,172 @@ describe('sanitizeUrl', () => {
   it('should return original string for invalid URLs', () => {
     const invalidUrl = 'not-a-url';
     expect(sanitizeUrl(invalidUrl)).toBe(invalidUrl);
+  });
+
+  describe('query parameter sanitization', () => {
+    it('should sanitize api_key parameter', () => {
+      const url = 'https://example.com/api?api_key=sk_live_abc123&other=value';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?api_key=%5BREDACTED%5D&other=value');
+    });
+
+    it('should sanitize api-key parameter (hyphenated)', () => {
+      const url = 'https://example.com/api?api-key=secret123';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?api-key=%5BREDACTED%5D');
+    });
+
+    it('should sanitize token parameter', () => {
+      const url = 'https://example.com/api?token=bearer_token_123&normal=param';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?token=%5BREDACTED%5D&normal=param');
+    });
+
+    it('should sanitize password parameter', () => {
+      const url = 'https://example.com/api?username=user&password=secret123';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?username=user&password=%5BREDACTED%5D');
+    });
+
+    it('should sanitize secret parameter', () => {
+      const url = 'https://example.com/api?secret=mysecret&client_secret=clientsecret';
+      const result = sanitizeUrl(url);
+      expect(result).toBe(
+        'https://example.com/api?secret=%5BREDACTED%5D&client_secret=%5BREDACTED%5D',
+      );
+    });
+
+    it('should sanitize signature and sig parameters', () => {
+      const url = 'https://example.com/api?signature=sig123&sig=sig456';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?signature=%5BREDACTED%5D&sig=%5BREDACTED%5D');
+    });
+
+    it('should sanitize access_token and refresh_token parameters', () => {
+      const url = 'https://example.com/api?access_token=access123&refresh_token=refresh456';
+      const result = sanitizeUrl(url);
+      expect(result).toBe(
+        'https://example.com/api?access_token=%5BREDACTED%5D&refresh_token=%5BREDACTED%5D',
+      );
+    });
+
+    it('should sanitize id_token parameter', () => {
+      const url = 'https://example.com/api?id_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?id_token=%5BREDACTED%5D');
+    });
+
+    it('should sanitize authorization parameter', () => {
+      const url = 'https://example.com/api?authorization=Bearer%20token123';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?authorization=%5BREDACTED%5D');
+    });
+
+    it('should handle case-insensitive parameter matching', () => {
+      const url = 'https://example.com/api?API_KEY=secret&Token=bearer&PASSWORD=pass';
+      const result = sanitizeUrl(url);
+      expect(result).toBe(
+        'https://example.com/api?API_KEY=%5BREDACTED%5D&Token=%5BREDACTED%5D&PASSWORD=%5BREDACTED%5D',
+      );
+    });
+
+    it('should handle multiple sensitive parameters', () => {
+      const url =
+        'https://example.com/api?api_key=key123&token=tok456&password=pass789&normal=value';
+      const result = sanitizeUrl(url);
+      expect(result).toBe(
+        'https://example.com/api?api_key=%5BREDACTED%5D&token=%5BREDACTED%5D&password=%5BREDACTED%5D&normal=value',
+      );
+    });
+
+    it('should handle URLs with both credentials and sensitive parameters', () => {
+      const url = 'https://user:pass@example.com/api?api_key=secret123&normal=value';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://***:***@example.com/api?api_key=%5BREDACTED%5D&normal=value');
+    });
+
+    it('should preserve non-sensitive parameters', () => {
+      const url = 'https://example.com/api?limit=10&offset=20&format=json&api_key=secret';
+      const result = sanitizeUrl(url);
+      expect(result).toBe(
+        'https://example.com/api?limit=10&offset=20&format=json&api_key=%5BREDACTED%5D',
+      );
+    });
+
+    it('should handle URLs with no query parameters', () => {
+      const url = 'https://example.com/api';
+      const result = sanitizeUrl(url);
+      expect(result).toBe(url);
+    });
+
+    it('should handle empty query parameter values', () => {
+      const url = 'https://example.com/api?api_key=&normal=value';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?api_key=%5BREDACTED%5D&normal=value');
+    });
+
+    it('should continue sanitizing if search params handling fails', () => {
+      // Mock a scenario where searchParams throws an error
+      const originalURL = global.URL;
+      const mockURL = jest.fn().mockImplementation((url) => {
+        const urlObj = new originalURL(url);
+        Object.defineProperty(urlObj, 'searchParams', {
+          get: () => {
+            throw new Error('SearchParams error');
+          },
+        });
+        return urlObj;
+      });
+      global.URL = mockURL as any;
+
+      const url = 'https://user:pass@example.com/api?api_key=secret';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://***:***@example.com/api?api_key=secret'); // Credentials masked, params not
+
+      global.URL = originalURL;
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should handle empty string input', () => {
+      expect(sanitizeUrl('')).toBe('');
+    });
+
+    it('should handle whitespace-only input', () => {
+      expect(sanitizeUrl('   ')).toBe('   ');
+    });
+
+    it('should handle non-string input gracefully', () => {
+      expect(sanitizeUrl(null as any)).toBe(null);
+      expect(sanitizeUrl(undefined as any)).toBe(undefined);
+      expect(sanitizeUrl(123 as any)).toBe(123);
+    });
+
+    it('should handle URLs with port numbers', () => {
+      const url = 'https://user:pass@example.com:8080/api?api_key=secret';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://***:***@example.com:8080/api?api_key=%5BREDACTED%5D');
+    });
+
+    it('should handle URLs with hash fragments', () => {
+      const url = 'https://example.com/api?api_key=secret#section';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?api_key=%5BREDACTED%5D#section');
+    });
+
+    it('should handle URLs with encoded characters', () => {
+      const url = 'https://example.com/api?api_key=secret%20key&normal=value%20with%20spaces';
+      const result = sanitizeUrl(url);
+      expect(result).toBe(
+        'https://example.com/api?api_key=%5BREDACTED%5D&normal=value+with+spaces',
+      );
+    });
+
+    it('should handle malformed URLs gracefully', () => {
+      const malformedUrl = 'https://[invalid-host]/api?api_key=secret';
+      const result = sanitizeUrl(malformedUrl);
+      expect(result).toBe(malformedUrl); // Should return original if URL parsing fails
+    });
   });
 });
 

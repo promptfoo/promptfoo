@@ -1,5 +1,6 @@
 ---
 sidebar_label: Llama vs GPT benchmark
+description: Compare Llama 3.1 405B vs GPT-4 performance on custom datasets using automated benchmarks and side-by-side evaluations to identify the best model for your use case
 ---
 
 # Llama 3.1 vs GPT: Benchmark on your own data

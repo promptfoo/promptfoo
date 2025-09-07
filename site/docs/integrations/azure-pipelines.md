@@ -1,5 +1,6 @@
 ---
 sidebar_label: Azure Pipelines
+description: Integrate promptfoo LLM testing with Azure Pipelines CI/CD using step-by-step setup, environment variables, and matrix testing configurations for automated AI evaluation
 ---
 
 # Azure Pipelines Integration
@@ -30,7 +31,7 @@ variables:
 steps:
   - task: NodeTool@0
     inputs:
-      versionSpec: '18.x'
+      versionSpec: '20.x'
     displayName: 'Install Node.js'
 
   - task: Cache@2
@@ -127,7 +128,7 @@ Run promptfoo only when certain files change:
 steps:
   - task: NodeTool@0
     inputs:
-      versionSpec: '18.x'
+      versionSpec: '20.x'
     displayName: 'Install Node.js'
 
   - script: |
@@ -182,6 +183,6 @@ If you encounter issues with your Azure Pipelines integration:
 - **Check logs**: Review detailed logs in Azure DevOps to identify errors
 - **Verify API keys**: Ensure your API keys are correctly set as pipeline variables
 - **Permissions**: Make sure the pipeline has access to read your configuration files
-- **Node.js version**: Promptfoo requires Node.js >= 18.0.0
+- **Node.js version**: Promptfoo requires Node.js >= 20.0.0
 
 If you're getting timeouts during evaluations, you may need to adjust the pipeline timeout settings or consider using a [self-hosted agent](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/agents) for better stability with long-running evaluations.

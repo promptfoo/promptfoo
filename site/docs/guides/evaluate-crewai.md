@@ -1,5 +1,6 @@
 ---
 sidebar_label: Red teaming a CrewAI Agent
+description: Evaluate CrewAI agent security and performance with automated red team testing. Compare agent responses across 100+ test cases to identify vulnerabilities.
 ---
 
 # Red Teaming a CrewAI Agent
@@ -42,7 +43,7 @@ promptfoo eval
 Before starting, make sure you have:
 
 - Python 3.10+
-- Node.js v18+
+- Node.js v20+
 - OpenAI API access (for GPT-4.1, GPT-4o, GPT-4o-mini, or other models)
 - An OpenAI API key
 
@@ -76,7 +77,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-In our example, you can see `v21.7.3` for Node and `10.5.0` for npm — that’s solid. Anything Node v18+ is usually fine.
+In our example, you can see `v21.7.3` for Node and `10.5.0` for npm — that's solid. Anything Node v20+ is usually fine.
 
 **Why do we need these?**
 

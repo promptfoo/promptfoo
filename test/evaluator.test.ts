@@ -112,6 +112,34 @@ jest.mock('../src/util/transform', () => ({
       if (code.includes('test2UpperCase: vars.test2.toUpperCase()')) {
         return { ...input, test2UpperCase: input.test2.toUpperCase() };
       }
+      // Handle metadata transforms
+      if (code.includes('context?.metadata')) {
+        if (code.includes('Output:') && context?.metadata) {
+          return `Output: ${input}, Metadata: ${JSON.stringify(context.metadata)}`;
+        }
+        if (code.includes('Has metadata') && context?.metadata) {
+          return `Has metadata: ${input}`;
+        }
+        if (code.includes('No metadata') && !context?.metadata) {
+          return `No metadata: ${input}`;
+        }
+        if (
+          code.includes('Empty metadata') &&
+          context?.metadata &&
+          Object.keys(context.metadata).length === 0
+        ) {
+          return `Empty metadata: ${input}`;
+        }
+        if (code.includes('All context') && context?.vars && context?.prompt && context?.metadata) {
+          return `All context: ${input}`;
+        }
+        if (
+          code.includes('Missing context') &&
+          !(context?.vars && context?.prompt && context?.metadata)
+        ) {
+          return `Missing context: ${input}`;
+        }
+      }
     }
     return input;
   }),
@@ -1075,6 +1103,159 @@ describe('evaluator', () => {
     );
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('evaluate with metadata passed to test transform', async () => {
+    const mockApiProviderWithMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { responseTime: 123, modelVersion: 'v1.0' },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Output: Test output, Metadata: {"responseTime":123,"modelVersion":"v1.0"}',
+            },
+          ],
+          options: {
+            transform:
+              'context?.metadata ? `Output: ${output}, Metadata: ${JSON.stringify(context.metadata)}` : output',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderWithMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe(
+      'Output: Test output, Metadata: {"responseTime":123,"modelVersion":"v1.0"}',
+    );
+  });
+
+  it('evaluate with metadata passed to test transform - no metadata case', async () => {
+    const mockApiProviderNoMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'No metadata: Test output',
+            },
+          ],
+          options: {
+            transform: 'context?.metadata ? `Has metadata: ${output}` : `No metadata: ${output}`',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderNoMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('No metadata: Test output');
+  });
+
+  it('evaluate with metadata passed to test transform - empty metadata', async () => {
+    const mockApiProviderEmptyMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-empty-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: {},
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderEmptyMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Empty metadata: Test output',
+            },
+          ],
+          options: {
+            transform:
+              '(context?.metadata && Object.keys(context.metadata).length === 0) ? `Empty metadata: ${output}` : output',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderEmptyMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Empty metadata: Test output');
+  });
+
+  it('evaluate with metadata preserved alongside other context properties', async () => {
+    const mockApiProviderWithMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-metadata-context'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { modelInfo: 'gpt-4' },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithMetadata],
+      prompts: [toPrompt('Test {{ var }}')],
+      tests: [
+        {
+          vars: { var: 'value' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'All context: Test output',
+            },
+          ],
+          options: {
+            transform:
+              '(Boolean(context?.vars) && Boolean(context?.prompt) && Boolean(context?.metadata)) ? `All context: ${output}` : `Missing context: ${output}`',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderWithMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('All context: Test output');
   });
 
   it('evaluate with context in vars transform in defaultTest', async () => {

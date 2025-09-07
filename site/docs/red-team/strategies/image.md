@@ -1,7 +1,7 @@
 ---
 sidebar_label: Image Inputs
 title: Image Jailbreaking Strategy
-description: Test how AI systems handle image-encoded text inputs that may bypass content filters
+description: Probe vision-language model security with image-encoded text attacks targeting content filter and safety mechanism bypasses
 ---
 
 # Image Jailbreaking

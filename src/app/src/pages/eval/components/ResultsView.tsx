@@ -472,31 +472,6 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  /**
-   * Apply filters from URL params.
-   */
-  React.useEffect(() => {
-    const pluginParam = searchParams.get('plugin');
-
-    if (pluginParam) {
-      const { addFilter, resetFilters } = useTableStore.getState();
-
-      resetFilters();
-
-      addFilter({
-        type: 'plugin',
-        operator: 'equals',
-        value: pluginParam,
-      });
-
-      setSearchParams((prev) => {
-        const newParams = new URLSearchParams(prev);
-        newParams.delete('plugin');
-        return newParams;
-      });
-    }
-  }, [searchParams, setSearchParams]);
-
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
@@ -667,6 +642,11 @@ export default function ResultsView({
                           displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
                           filter.value;
                         label = `Strategy: ${displayName}`;
+                      } else if (filter.type === 'severity') {
+                        // Capitalize the first letter of severity value for display
+                        const severityDisplay =
+                          filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
+                        label = `Severity: ${severityDisplay}`;
                       } else {
                         // metadata type
                         label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
@@ -805,7 +785,7 @@ export default function ResultsView({
                       color="primary"
                       variant="contained"
                       startIcon={<EyeIcon />}
-                      onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
+                      onClick={() => navigate(`/reports/?evalId=${evalId || defaultEvalId}`)}
                     >
                       Vulnerability Report
                     </Button>

@@ -14,19 +14,25 @@ interface CreateEvalOptions {
   withHighlights?: boolean;
   withNamedScores?: boolean;
   searchableContent?: string;
+  isRedteam?: boolean;
 }
 
 export default class EvalFactory {
   static async create(options?: CreateEvalOptions) {
+    const config = {
+      providers: [{ id: 'test-provider' }],
+      prompts: ['What is the capital of {{state}}?'],
+      tests: [
+        { vars: { state: 'colorado' }, assert: [{ type: 'contains' as const, value: 'Denver' }] },
+        {
+          vars: { state: 'california' },
+          assert: [{ type: 'contains' as const, value: 'Sacramento' }],
+        },
+      ],
+      ...(options?.isRedteam && { redteam: {} }),
+    };
     const eval_ = await Eval.create(
-      {
-        providers: [{ id: 'test-provider' }],
-        prompts: ['What is the capital of {{state}}?'],
-        tests: [
-          { vars: { state: 'colorado' }, assert: [{ type: 'contains', value: 'Denver' }] },
-          { vars: { state: 'california' }, assert: [{ type: 'contains', value: 'Sacramento' }] },
-        ],
-      },
+      config,
       [
         { raw: 'What is the capital of california?', label: 'What is the capital of {{state}}?' },
         { raw: 'What is the capital of colorado?', label: 'What is the capital of {{state}}?' },

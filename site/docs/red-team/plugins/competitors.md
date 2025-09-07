@@ -1,5 +1,6 @@
 ---
 sidebar_label: Competitors
+description: Red team competitor mentions and endorsements by testing AI responses to comparative queries, protecting brand loyalty and preventing inadvertent competitor promotion
 ---
 
 # Competitors Plugin

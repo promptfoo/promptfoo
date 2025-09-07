@@ -51,12 +51,25 @@ const ReportSettingsDialogButton: React.FC = () => {
             </label>
           </Typography>
           <Typography component="div" sx={{ padding: '16px 0' }}>
-            <label>Plugin Pass Rate Threshold: {(pluginPassRateThreshold * 100).toFixed(0)}%</label>
+            <label>
+              Plugin Pass Rate Threshold: {(() => {
+                // Handle NaN and out-of-range values
+                if (Number.isNaN(pluginPassRateThreshold)) {
+                  return 'NaN';
+                }
+                const clampedThreshold = Math.min(1, Math.max(0, pluginPassRateThreshold || 0));
+                return (clampedThreshold * 100).toFixed(0);
+              })()}%
+            </label>
             <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
               Sets the threshold for considering a plugin as passed on the risk cards.
             </Typography>
             <Slider
-              value={pluginPassRateThreshold}
+              value={
+                Number.isNaN(pluginPassRateThreshold)
+                  ? 0
+                  : Math.min(1, Math.max(0, pluginPassRateThreshold || 0))
+              }
               onChange={(_, newValue) => setPluginPassRateThreshold(newValue as number)}
               aria-labelledby="plugin-pass-rate-threshold-slider"
               step={0.05}

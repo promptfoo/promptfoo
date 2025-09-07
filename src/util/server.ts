@@ -1,6 +1,6 @@
 import opener from 'opener';
-import { fetchWithCache } from '../cache';
 import { getDefaultPort, VERSION } from '../constants';
+import { fetchWithProxy } from './fetch';
 import logger from '../logger';
 import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
 import { promptYesNo } from './readline';
@@ -49,14 +49,12 @@ export async function checkServerFeatureSupport(
     const versionUrl = getRemoteVersionUrl();
 
     if (versionUrl) {
-      const { data } = await fetchWithCache(
-        versionUrl,
-        {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        },
-        5000,
-      );
+      const response = await fetchWithProxy(versionUrl, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
 
       if (data.buildDate) {
         // Parse build date and check if it's after the required date

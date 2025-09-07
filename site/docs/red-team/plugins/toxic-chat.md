@@ -1,6 +1,6 @@
 ---
 title: ToxicChat
-description: Test model behavior against toxic and jailbreaking prompts using the ToxicChat dataset
+description: Evaluate model resilience against 7,599 toxic and jailbreaking prompts from real user conversations in the ToxicChat dataset
 ---
 
 # ToxicChat Plugin

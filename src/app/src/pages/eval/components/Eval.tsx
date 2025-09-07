@@ -38,6 +38,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setAuthor,
     fetchEvalData,
     resetFilters,
+    addFilter,
     setIsStreaming,
   } = useTableStore();
 
@@ -79,9 +80,16 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         setEvalId(id);
 
+        const { filters } = useTableStore.getState();
+
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
+          filters: Object.values(filters.values).filter((filter) =>
+            filter.type === 'metadata'
+              ? Boolean(filter.value && filter.field)
+              : Boolean(filter.value),
+          ),
         });
 
         if (!data) {
@@ -119,6 +127,35 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Reset filters when navigating to a different eval; necessary because Zustand
     // is a global store.
     resetFilters();
+
+    // Check for a `plugin` param in the URL; we support filtering on plugins via the URL which
+    // enables the "View Logs" functionality in Vulnerability reports.
+    const pluginParams = searchParams.getAll('plugin');
+
+    // Check for >=1 metric params in the URL.
+    const metricParams = searchParams.getAll('metric');
+
+    if (pluginParams.length > 0) {
+      pluginParams.forEach((pluginParam) => {
+        addFilter({
+          type: 'plugin',
+          operator: 'equals',
+          value: pluginParam,
+          logicOperator: 'or',
+        });
+      });
+    }
+
+    if (metricParams.length > 0) {
+      metricParams.forEach((metricParam) => {
+        addFilter({
+          type: 'metric',
+          operator: 'equals',
+          value: metricParam,
+          logicOperator: 'or',
+        });
+      });
+    }
 
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });

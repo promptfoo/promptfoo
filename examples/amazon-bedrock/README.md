@@ -35,7 +35,8 @@ npx promptfoo@latest init --example amazon-bedrock
 
 This directory contains several example configurations for different Bedrock models:
 
-- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 3.7 Sonnet
+- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude 3.7 Sonnet
+- [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
 - [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
@@ -79,6 +80,25 @@ The example includes questions about promptfoo configuration, providers, and eva
 **Note**: You'll need to update the `knowledgeBaseId` with your actual Knowledge Base ID and ensure the Knowledge Base is configured to work with the selected Claude model.
 
 For detailed Knowledge Base setup instructions, see the [AWS Bedrock Knowledge Base Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html).
+
+## OpenAI Models Example
+
+The OpenAI example (`promptfooconfig.openai.yaml`) demonstrates OpenAI's GPT-OSS models available through AWS Bedrock:
+
+- **openai.gpt-oss-120b-1:0** - 120 billion parameter model with strong reasoning capabilities
+- **openai.gpt-oss-20b-1:0** - 20 billion parameter model, more cost-effective
+
+### Key Features
+
+- **Reasoning Effort**: Control reasoning depth with `low`, `medium`, or `high` settings
+- **OpenAI API Format**: Uses familiar OpenAI parameters like `max_completion_tokens`
+- **Available in us-west-2**: Ensure you have model access in the correct region
+
+Run the OpenAI example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.openai.yaml
+```
 
 ## Getting Started
 

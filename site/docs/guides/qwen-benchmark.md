@@ -1,5 +1,6 @@
 ---
 sidebar_label: Qwen vs Llama vs GPT
+description: Compare Qwen-2-72B vs GPT-4o vs Llama-3-70B performance on customer support tasks with custom benchmarks to optimize your chatbot's response quality
 ---
 
 # Qwen vs Llama vs GPT: Run a Custom Benchmark
@@ -18,7 +19,7 @@ The chatbot should provide accurate information, respond quickly, and handle com
 
 ## Requirements
 
-- Node 18 or above.
+- Node 20 or above.
 - Access to OpenRouter for Qwen and Llama (set environment variable `OPENROUTER_API_KEY`)
 - Access to OpenAI for GPT-4o (set environment variable `OPENAI_API_KEY`)
 

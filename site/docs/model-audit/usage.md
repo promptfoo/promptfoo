@@ -1,6 +1,7 @@
 ---
 sidebar_label: Advanced Usage
 sidebar_position: 120
+description: Automate LLM model scanning across cloud providers with remote storage integration, CI/CD workflows, and programmatic controls for advanced security testing
 ---
 
 # Advanced Usage
@@ -168,21 +169,21 @@ jobs:
           pip install modelaudit[all]
 
       - name: Scan models
-        run: promptfoo scan-model models/ --format json --output scan-results.json
+        run: promptfoo scan-model models/ --format sarif --output model-scan.sarif
 
-      - name: Check for critical issues
-        run: |
-          if grep -q '"severity":"critical"' scan-results.json; then
-            echo "Critical security issues found in models!"
-            exit 1
-          fi
+      - name: Upload SARIF to GitHub Advanced Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: model-scan.sarif
+          category: model-security
 
-      - name: Upload scan results
+      - name: Upload scan results as artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: model-scan-results
-          path: scan-results.json
+          path: model-scan.sarif
 ```
 
 ### GitLab CI
@@ -303,6 +304,142 @@ When using `--format json`, ModelAudit outputs structured results:
 }
 ```
 
+## SARIF Output Format
+
+ModelAudit supports SARIF (Static Analysis Results Interchange Format) 2.1.0 output for seamless integration with security tools and CI/CD pipelines:
+
+```bash
+# Output SARIF to stdout
+promptfoo scan-model model.pkl --format sarif
+
+# Save SARIF to file
+promptfoo scan-model model.pkl --format sarif --output results.sarif
+
+# Scan multiple models with SARIF output
+promptfoo scan-model models/ --format sarif --output scan-results.sarif
+```
+
+### SARIF Structure
+
+The SARIF output includes:
+
+- **Rules**: Unique security patterns detected (e.g., pickle issues, dangerous imports)
+- **Results**: Individual findings with severity levels, locations, and fingerprints
+- **Artifacts**: Information about scanned files including hashes
+- **Tool Information**: ModelAudit version and capabilities
+- **Invocation Details**: Command-line arguments and scan statistics
+
+Example SARIF output structure:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "ModelAudit",
+          "version": "0.2.3",
+          "rules": [
+            {
+              "id": "MA-PICKLE-ISSUE",
+              "name": "Pickle Security Issue",
+              "defaultConfiguration": {
+                "level": "error",
+                "rank": 90.0
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "MA-PICKLE-ISSUE",
+          "level": "error",
+          "message": {
+            "text": "Suspicious module reference found: os.system"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "model.pkl"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Severity Mapping
+
+ModelAudit severities are mapped to SARIF levels:
+
+- `CRITICAL` → `error`
+- `WARNING` → `warning`
+- `INFO` → `note`
+- `DEBUG` → `none`
+
+### Integration with Security Tools
+
+SARIF output enables integration with:
+
+#### GitHub Advanced Security
+
+```yaml
+# .github/workflows/security.yml
+- name: Scan models
+  run: promptfoo scan-model models/ --format sarif --output model-scan.sarif
+
+- name: Upload SARIF to GitHub
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: model-scan.sarif
+    category: model-security
+```
+
+#### Azure DevOps
+
+```yaml
+# azure-pipelines.yml
+- script: |
+    promptfoo scan-model models/ --format sarif --output $(Build.ArtifactStagingDirectory)/model-scan.sarif
+  displayName: 'Scan models'
+
+- task: PublishSecurityAnalysisLogs@3
+  inputs:
+    ArtifactName: 'CodeAnalysisLogs'
+    ArtifactType: 'Container'
+    AllTools: false
+    ToolLogsNotFoundAction: 'Standard'
+```
+
+#### VS Code SARIF Viewer
+
+```bash
+# Generate SARIF for local viewing
+promptfoo scan-model . --format sarif --output scan.sarif
+
+# Open in VS Code with SARIF Viewer extension
+code scan.sarif
+```
+
+#### Static Analysis Platforms
+
+SARIF output is compatible with:
+
+- SonarQube/SonarCloud (via import)
+- Fortify
+- Checkmarx
+- CodeQL
+- Snyk
+- And many other SARIF-compatible tools
+
 ## Software Bill of Materials (SBOM)
 
 Generate CycloneDX-compliant SBOMs with license information:
@@ -373,7 +510,7 @@ Automatic protection in archives:
    Solution: Increase the timeout:
 
    ```bash
-   promptfoo scan-model model.pkl --timeout 600
+   promptfoo scan-model model.pkl --timeout 7200  # 2 hours for very large models
    ```
 
 3. **File Size Limits**
@@ -403,6 +540,34 @@ Automatic protection in archives:
    ```
 
    Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner.
+
+6. **Disk Space Issues**
+
+   ```
+   Error: Insufficient disk space for download
+   ```
+
+   Solution: Free up disk space or use a different cache directory:
+
+   ```bash
+   promptfoo scan-model s3://bucket/model.bin --cache-dir /mnt/large-disk/cache
+   ```
+
+7. **License Compliance Failures**
+
+   ```
+   Error: AGPL license detected (strict mode enabled)
+   ```
+
+   Solution: Review the license implications or disable strict mode:
+
+   ```bash
+   # Without strict mode (warnings only)
+   promptfoo scan-model model.pkl
+
+   # With strict mode (fails on incompatible licenses)
+   promptfoo scan-model model.pkl --strict-license
+   ```
 
 ## Extending ModelAudit
 

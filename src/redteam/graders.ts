@@ -51,6 +51,7 @@ import { MCPPluginGrader } from './plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from './plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from './plugins/medical/medicalHallucination';
 import { MedicalIncorrectKnowledgePluginGrader } from './plugins/medical/medicalIncorrectKnowledge';
+import { MedicalOffLabelUsePluginGrader } from './plugins/medical/medicalOffLabelUse';
 import { MedicalPrioritizationErrorPluginGrader } from './plugins/medical/medicalPrioritizationError';
 import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophancy';
 import { OffTopicPluginGrader } from './plugins/offTopic';
@@ -70,6 +71,7 @@ import { SsrfGrader } from './plugins/ssrf';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
+import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
 
 import type { RedteamGraderBase } from './plugins/base';
 import type { RedteamAssertionTypes } from './types';
@@ -137,6 +139,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
   'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
   'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),
+  'promptfoo:redteam:medical:off-label-use': new MedicalOffLabelUsePluginGrader(),
   'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritizationErrorPluginGrader(),
   'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
@@ -160,9 +163,15 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
   'promptfoo:redteam:toxic-chat': new ToxicChatGrader(),
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
+  'promptfoo:redteam:unverifiable-claims': new UnverifiableClaimsGrader(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {
+  // Handle null or undefined IDs
+  if (!id) {
+    return undefined;
+  }
+
   // First try to get the exact grader
   const grader = id in GRADERS ? GRADERS[id as keyof typeof GRADERS] : undefined;
 

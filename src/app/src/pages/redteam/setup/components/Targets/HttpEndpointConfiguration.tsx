@@ -1,6 +1,10 @@
+import './syntax-highlighting.css';
+
 import React, { useCallback, useState } from 'react';
 
+import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -12,7 +16,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
@@ -23,17 +27,10 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import yaml from 'js-yaml';
-// @ts-expect-error: No types available
-import { highlight, languages } from 'prismjs/components/prism-core';
 import Editor from 'react-simple-code-editor';
-import 'prismjs/components/prism-http';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-yaml';
-
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 
 import type { ProviderOptions } from '../../types';
-import './syntax-highlighting.css';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -82,7 +79,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
       value: String(value),
     })),
   );
-  const [isJsonContentType] = useState(true); // Used for syntax highlighting
+
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [request, setRequest] = useState(
     `POST /v1/chat HTTP/1.1
@@ -111,6 +108,16 @@ Content-Type: application/json
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Auto-size the raw request textarea between 10rem and 40rem based on line count
+  const computeRawTextareaHeight = useCallback((text: string) => {
+    const lineCount = (text?.match(/\n/g)?.length || 0) + 1;
+    const lineHeightPx = 20; // approx for 14px monospace
+    const minPx = 10 * 16; // ~10rem
+    const maxPx = 40 * 16; // ~40rem
+    const desired = lineCount * lineHeightPx + 20; // padding allowance
+    return `${Math.min(maxPx, Math.max(minPx, desired))}px`;
+  }, []);
 
   const resetState = useCallback(
     (isRawMode: boolean) => {
@@ -253,7 +260,7 @@ ${exampleRequest}`;
     setGenerating(true);
     setError('');
     try {
-      const res = await fetch('https://api.promptfoo.app/api/http-provider-generator', {
+      const res = await callApi('/providers/http-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -263,7 +270,8 @@ ${exampleRequest}`;
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
       }
 
       const data = await res.json();
@@ -326,21 +334,37 @@ ${exampleRequest}`;
 
   return (
     <Box>
-      <FormControlLabel
-        control={
-          <Switch
-            checked={Boolean(selectedTarget.config.request)}
-            onChange={(e) => {
-              resetState(e.target.checked);
-              if (e.target.checked) {
-                updateCustomTarget('request', exampleRequest);
-              }
-            }}
-          />
-        }
-        label="Use Raw HTTP Request"
-        sx={{ mb: 2, display: 'block' }}
-      />
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={Boolean(selectedTarget.config.request)}
+              onChange={(e) => {
+                resetState(e.target.checked);
+                if (e.target.checked) {
+                  updateCustomTarget('request', exampleRequest);
+                }
+              }}
+            />
+          }
+          label="Use Raw HTTP Request"
+        />
+        <Button
+          variant="outlined"
+          startIcon={<AutoFixHighIcon />}
+          onClick={() => setConfigDialogOpen(true)}
+          sx={{
+            borderColor: 'primary.main',
+            color: 'primary.main',
+            '&:hover': {
+              borderColor: 'primary.dark',
+              backgroundColor: 'action.hover',
+            },
+          }}
+        >
+          AI Auto-fill from Example
+        </Button>
+      </Box>
       {selectedTarget.config.request ? (
         <Box
           mt={2}
@@ -368,19 +392,29 @@ ${exampleRequest}`;
             label="Use HTTPS"
             sx={{ mb: 2, display: 'block' }}
           />
-          <Editor
+          <textarea
             value={selectedTarget.config.request || ''}
-            onValueChange={handleRawRequestChange}
-            highlight={(code) => highlight(code, languages.http)}
-            padding={10}
+            onChange={(e) => handleRawRequestChange(e.target.value)}
+            placeholder={placeholderText}
             style={{
+              width: '100%',
+              height: computeRawTextareaHeight(selectedTarget.config.request || ''),
+              minHeight: '10rem',
+              maxHeight: '40rem',
+              maxWidth: '100%',
+              padding: '10px',
+              border: '1px solid',
+              borderColor: theme.palette.divider,
+              outline: 'none',
+              resize: 'vertical',
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
               backgroundColor: 'transparent',
               color: theme.palette.text.primary,
+              whiteSpace: 'pre',
+              overflowX: 'auto',
+              overflowY: 'auto',
             }}
-            placeholder={placeholderText}
-            className={theme.palette.mode === 'dark' ? 'dark-syntax' : ''}
           />
           {bodyError && (
             <Typography color="error" variant="body2" sx={{ mt: 1 }}>
@@ -464,9 +498,7 @@ ${exampleRequest}`;
                   : requestBody || ''
               }
               onValueChange={handleRequestBodyChange}
-              highlight={(code) =>
-                highlight(code, isJsonContentType ? languages.json : languages.text)
-              }
+              highlight={(code) => code}
               padding={10}
               style={{
                 fontFamily: '"Fira code", "Fira Mono", monospace',
@@ -488,18 +520,22 @@ ${exampleRequest}`;
         maxWidth="lg"
         fullWidth
       >
-        <DialogTitle>Generate HTTP Configuration</DialogTitle>
+        <DialogTitle>AI Auto-fill HTTP Configuration</DialogTitle>
         <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Paste an example HTTP request and optionally a response. AI will automatically generate
+            the configuration for you.
+          </Typography>
           <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" gutterBottom>
-                Example Request
+                Example Request (paste your HTTP request here)
               </Typography>
               <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
                 <Editor
                   value={request}
                   onValueChange={(val) => setRequest(val)}
-                  highlight={(code) => highlight(code, languages.http)}
+                  highlight={(code) => code}
                   padding={10}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
@@ -510,15 +546,15 @@ ${exampleRequest}`;
                 />
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" gutterBottom>
-                Example Response
+                Example Response (optional, improves accuracy)
               </Typography>
               <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
                 <Editor
                   value={response}
                   onValueChange={(val) => setResponse(val)}
-                  highlight={(code) => highlight(code, languages.json)}
+                  highlight={(code) => code}
                   padding={10}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
@@ -530,12 +566,12 @@ ${exampleRequest}`;
               </Paper>
             </Grid>
             {error && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Typography color="error">Error: {error}</Typography>
               </Grid>
             )}
             {generatedConfig && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
                   <Typography variant="h6" sx={{ flexGrow: 1 }}>
                     Generated Configuration
@@ -553,7 +589,7 @@ ${exampleRequest}`;
                   <Editor
                     value={yaml.dump(generatedConfig.config)}
                     onValueChange={() => {}} // Read-only
-                    highlight={(code) => highlight(code, languages.yaml)}
+                    highlight={(code) => code}
                     padding={10}
                     style={{
                       fontFamily: '"Fira code", "Fira Mono", monospace',

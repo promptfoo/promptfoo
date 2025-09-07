@@ -1,0 +1,18 @@
+{
+  "name": "agent_custom_provider",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@faker-js/faker": "^9.9.0",
+    "@modelcontextprotocol/sdk": "^1.15.0",
+    "dotenv": "^17.2.0",
+    "openai": "^5.8.3"
+  }
+}
