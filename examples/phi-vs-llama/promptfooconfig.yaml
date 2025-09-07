@@ -3,7 +3,7 @@ description: Phi vs Llama
 prompts:
   - Write a tweet about {{topic}}
 providers:
-  - ollama:chat:llama3.3
+  - ollama:chat:llama4
   - ollama:chat:phi4
 tests:
   - vars:

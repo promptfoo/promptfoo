@@ -97,7 +97,7 @@ prompts:
 
 providers:
   - openai:gpt-5-mini
-  - ollama:chat:llama3.3
+  - ollama:chat:llama4
   # Add other providers as needed
 
 defaultTest:
@@ -140,7 +140,7 @@ providers:
 First, start your Ollama server and pull the models you want to test:
 
 ```bash
-ollama pull llama2
+ollama pull llama4
 ollama pull mistral
 ```
 
@@ -148,7 +148,7 @@ Then configure them in your `promptfooconfig.yaml`:
 
 ```yaml
 providers:
-  - ollama:llama2
+  - ollama:llama4
     config:
       temperature: 0.1
       max_tokens: 150
@@ -188,9 +188,9 @@ You can test multiple providers simultaneously to compare their safety performan
 
 ```yaml
 providers:
-  - openai:chat:gpt-4
+  - openai:chat:gpt-5
   - anthropic:claude-opus-4-1
-  - ollama:chat:llama3.3
+  - ollama:chat:llama4
   - bedrock:anthropic.claude-3
     config:
       temperature: 0.1
