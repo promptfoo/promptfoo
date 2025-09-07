@@ -21,11 +21,11 @@ export function importCommand(program: Command) {
         if (evalData.results.version === 3) {
           logger.debug('Importing v3 eval');
           const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
-            id: evalData.id,
-            createdAt: evalData.createdAt,
-            author: evalData.author || 'Unknown',
+            id: evalData.evalId || evalData.id,
+            createdAt: new Date(evalData.metadata?.evaluationCreatedAt || evalData.createdAt),
+            author: evalData.metadata?.author || evalData.author || 'Unknown',
           });
-          await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
+          EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
           evalId = evalRecord.id;
         } else {
           logger.debug('Importing v2 eval');
@@ -46,7 +46,7 @@ export function importCommand(program: Command) {
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
         telemetry.record('command_used', {
           name: 'import',
-          evalId: evalData.id,
+          evalId: evalData.evalId || evalData.id,
         });
       } catch (error) {
         logger.error(`Failed to import eval: ${error}`);
