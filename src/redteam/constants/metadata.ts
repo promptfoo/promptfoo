@@ -96,10 +96,17 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
   'financial:compliance-violation':
     'Tests for suggestions that violate securities laws, enable insider trading, or circumvent regulations',
+  'financial:confidential-disclosure':
+    'Tests for inappropriate disclosure of MNPI, proprietary strategies, or confidential financial data',
+  'financial:counterfactual':
+    'Tests for false financial narratives or misleading market information',
   'financial:data-leakage':
     'Tests for exposure of proprietary trading strategies or confidential financial data',
+  'financial:defamation': 'Tests for false statements damaging financial entity reputations',
   'financial:hallucination':
     'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
+  'financial:impartiality': 'Tests for unauthorized financial advice or transaction facilitation',
+  'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
   'financial:sycophancy':
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
   'off-topic':
@@ -128,6 +135,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
   'shell-injection': 'Tests for command injection vulnerabilities',
+  'special-token-injection':
+    'Tests vulnerability to token injection attacks using format-specific delimiters',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
@@ -181,8 +190,13 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:sycophancy': 'Medical Sycophancy',
   'financial:calculation-error': 'Financial Calculation Error',
   'financial:compliance-violation': 'Financial Compliance Violation',
+  'financial:confidential-disclosure': 'Financial Confidential Disclosure',
+  'financial:counterfactual': 'Financial Counterfactual Narrative',
   'financial:data-leakage': 'Financial Data Leakage',
+  'financial:defamation': 'Financial Defamation',
   'financial:hallucination': 'Financial Hallucination',
+  'financial:impartiality': 'Financial Services Impartiality',
+  'financial:misconduct': 'Financial Services Misconduct',
   'financial:sycophancy': 'Financial Sycophancy',
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
@@ -259,6 +273,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
+  'special-token-injection': 'Special Token Injection',
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
@@ -297,8 +312,13 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   cca: Severity.High,
   'financial:calculation-error': Severity.Low,
   'financial:compliance-violation': Severity.Medium,
+  'financial:confidential-disclosure': Severity.High,
+  'financial:counterfactual': Severity.Medium,
   'financial:data-leakage': Severity.Medium,
+  'financial:defamation': Severity.Medium,
   'financial:hallucination': Severity.Low,
+  'financial:impartiality': Severity.Medium,
+  'financial:misconduct': Severity.High,
   'financial:sycophancy': Severity.Low,
   competitors: Severity.Low,
   contracts: Severity.Medium,
@@ -376,6 +396,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
   'shell-injection': Severity.High,
+  'special-token-injection': Severity.Medium,
   'sql-injection': Severity.High,
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
@@ -395,6 +416,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'indirect-prompt-injection',
     'rbac',
     'shell-injection',
+    'special-token-injection',
     'sql-injection',
     'ssrf',
     'tool-discovery',
@@ -466,8 +488,13 @@ export const riskCategories: Record<string, Plugin[]> = {
   'Domain-Specific Risks': [
     'financial:calculation-error',
     'financial:compliance-violation',
+    'financial:confidential-disclosure',
+    'financial:counterfactual',
     'financial:data-leakage',
+    'financial:defamation',
     'financial:hallucination',
+    'financial:impartiality',
+    'financial:misconduct',
     'financial:sycophancy',
     'medical:hallucination',
     'medical:anchoring-bias',
@@ -538,8 +565,13 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:sycophancy': 'MedicalSycophancy',
   'financial:calculation-error': 'FinancialCalculationError',
   'financial:compliance-violation': 'FinancialComplianceViolation',
+  'financial:confidential-disclosure': 'FinancialConfidentialDisclosure',
+  'financial:counterfactual': 'FinancialCounterfactual',
   'financial:data-leakage': 'FinancialDataLeakage',
+  'financial:defamation': 'FinancialDefamation',
   'financial:hallucination': 'FinancialHallucination',
+  'financial:impartiality': 'FinancialImpartiality',
+  'financial:misconduct': 'FinancialMisconduct',
   'financial:sycophancy': 'FinancialSycophancy',
   'off-topic': 'OffTopic',
   'divergent-repetition': 'DivergentRepetition',
@@ -604,6 +636,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
   'shell-injection': 'ShellInjection',
+  'special-token-injection': 'SpecialTokenInjection',
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
@@ -701,10 +734,20 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for errors in option pricing, risk calculations, portfolio optimization, or other quantitative financial analysis that could lead to significant losses',
   'financial:compliance-violation':
     'Tests for suggestions that enable insider trading, market manipulation, money laundering, or other violations of securities laws and financial regulations',
+  'financial:confidential-disclosure':
+    'Tests for inappropriate disclosure of material non-public information (MNPI), proprietary trading strategies, client portfolios, deal information, or other confidential financial data',
+  'financial:counterfactual':
+    'Tests for false financial narratives including fabricated market events, fictional corporate actions, misleading causation, or manipulated timelines that could mislead investors',
   'financial:data-leakage':
     'Tests for exposure of proprietary trading algorithms, customer account information, M&A details, or other confidential financial data',
+  'financial:defamation':
+    'Tests for false statements that damage the reputation of financial entities, including unfounded fraud accusations, fabricated scandals, or false insolvency claims',
   'financial:hallucination':
     'Tests for fabricated market data, non-existent financial instruments, fictional company financials, or invented market events',
+  'financial:impartiality':
+    'Tests for inappropriate provision of financial advice, investment recommendations, broker suggestions, or transaction facilitation without proper authorization or disclaimers',
+  'financial:misconduct':
+    'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
   'financial:sycophancy':
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
   'off-topic':
@@ -729,6 +772,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
+  'special-token-injection':
+    'Tests for token injection vulnerabilities using conversation format delimiters',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',

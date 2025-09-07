@@ -22,11 +22,13 @@ import {
   checkCloudPermissions,
   getCloudDatabaseId,
   getConfigFromCloud,
+  getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
+import { getCustomPolicyTexts } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { checkProbeLimit } from '../../util/redteamProbeLimit';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
@@ -41,14 +43,17 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { isValidPolicyObject } from '../plugins/policy';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { getEstimatedProbes } from '../sharedFrontend';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import type {
+  PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
+  RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
@@ -111,6 +116,7 @@ export async function doGenerateRedteam(
   let redteamConfig: RedteamFileConfig | undefined;
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
+  let resolvedConfigMetadata: Record<string, any> | undefined;
 
   // Write a remote config to a temporary file
   if (options.configFromCloud) {
@@ -164,6 +170,8 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+    resolvedConfigMetadata = resolved.config.metadata;
+
     await checkCloudPermissions(resolved.config);
 
     // Warn if both tests section and redteam config are present
@@ -232,7 +240,7 @@ export async function doGenerateRedteam(
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
 
-  let plugins;
+  let plugins: RedteamPluginObject[] = [];
 
   // If plugins are defined in the config file
   if (redteamConfig?.plugins && redteamConfig.plugins.length > 0) {
@@ -301,6 +309,27 @@ export async function doGenerateRedteam(
     });
 
     logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
+  }
+
+  // Resolve policy references.
+  // Each reference is an id of the policy record stored in Promptfoo Cloud; load their respective texts.
+  const policyPluginsWithRefs = plugins.filter(
+    (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
+  );
+  if (policyPluginsWithRefs.length > 0) {
+    // Load the calling user's team id; all policies must belong to the same team.
+    const teamId =
+      resolvedConfigMetadata?.teamId ??
+      (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
+      (await getDefaultTeam()).id;
+
+    const texts = await getCustomPolicyTexts(policyPluginsWithRefs, teamId);
+
+    // Assign, in-place, the policy texts to the plugins
+    for (const policyPlugin of policyPluginsWithRefs) {
+      const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
+      policyPlugin.config!.policy = { id: policyId, text: texts[policyId] } as PolicyObject;
+    }
   }
 
   let strategies: (string | { id: string })[] =

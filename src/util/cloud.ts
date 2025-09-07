@@ -1,13 +1,13 @@
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
-import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { type UnifiedConfig } from '../types';
 import { ProviderOptionsSchema } from '../validators/providers';
+import { fetchWithProxy } from './fetch';
 import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
 
 import type { Plugin, Severity } from '../redteam/constants';
+import type { PolicyObject, PolicyTexts, UnifiedConfig } from '../types';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
@@ -206,7 +206,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 }
 
 /**
- * Retrieves the default team for the current user from PromptFoo Cloud.
+ * Retrieves the default team for the current user from Promptfoo Cloud.
  * The default team is determined as the oldest team by creation date.
  * @returns Promise resolving to an object with team id and name
  * @throws Error if the request fails or no teams are found
@@ -392,5 +392,46 @@ export async function isEnterpriseCustomer(): Promise<boolean> {
   } catch (e) {
     logger.error(`Failed to check if user is enterprise customer: ${e}`);
     return false;
+  }
+}
+/**
+ * Given a list of policy IDs, fetches custom policies from Promptfoo Cloud.
+ * @param ids - The IDs of the policies to fetch.
+ * @param teamId - The ID of the team to fetch policies from. Note that all policies must belong to this team.
+ * @returns A record mapping policy IDs to their texts.
+ */
+export async function getPoliciesFromCloud(ids: string[], teamId: string): Promise<PolicyTexts> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch policies from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+  try {
+    // Encode the ids as search params
+    const searchParams = new URLSearchParams();
+    ids.forEach((id) => {
+      searchParams.append('id', id);
+    });
+    const response = await makeRequest(
+      `/custom-policies/?${searchParams.toString()}&teamId=${teamId}`,
+      'GET',
+    );
+
+    if (!response.ok) {
+      const errorMessage = await response.text();
+      throw new Error(
+        `Failed to fetch policies from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
+      );
+    }
+
+    const body = await response.json();
+    // Deserialize the body into a map of policy IDs to policy texts.
+    return Object.fromEntries(
+      body.map((policy: Required<PolicyObject>) => [policy.id, policy.text]),
+    );
+  } catch (e) {
+    logger.error(`Failed to fetch policies from cloud.`);
+    logger.error(String(e));
+    throw new Error(`Failed to fetch policies from cloud.`);
   }
 }
