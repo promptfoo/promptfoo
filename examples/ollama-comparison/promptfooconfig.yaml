@@ -8,12 +8,12 @@ prompts:
     label: llama_prompt
 
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama4-scout
     prompts:
       - llama_prompt
     config:
       num_predict: 1024
-  - id: ollama:llama2-uncensored
+  - id: ollama:chat:llama4-maverick
     prompts:
       - llama_prompt
     config:

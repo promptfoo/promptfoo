@@ -5,8 +5,8 @@ prompts:
   - '{{task}}'
 
 providers:
-  # Text generation with Llama 3
-  - id: replicate:meta/meta-llama-3-8b-instruct
+  # Text generation with Llama 4
+  - id: replicate:meta/llama-4-scout-instruct
     config:
       temperature: 0.5
       max_new_tokens: 200
@@ -33,7 +33,7 @@ tests:
             pass: lines.length >= 3,
             reason: `Found ${lines.length} lines, expected at least 3 for haiku`
           };
-        provider: replicate:meta/meta-llama-3-8b-instruct
+        provider: replicate:meta/llama-4-scout-instruct
 
   - vars:
       task: 'Explain quantum computing in one paragraph'
@@ -42,7 +42,7 @@ tests:
         value: ['quantum', 'qubit', 'superposition', 'entanglement']
       - type: javascript
         value: 'output.length > 100'
-        provider: replicate:meta/meta-llama-3-8b-instruct
+        provider: replicate:meta/llama-4-scout-instruct
 
   # Image generation test
   - vars:
