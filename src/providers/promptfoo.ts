@@ -107,8 +107,8 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 interface PromptfooChatCompletionOptions {
   env?: EnvOverrides;
   id?: string;
-  jsonOnly: boolean;
-  preferSmallModel: boolean;
+  enforceJson: boolean;
+  preferSmall: boolean;
   task:
     | 'crescendo'
     | 'goat'
@@ -140,8 +140,8 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const body = {
-      jsonOnly: this.options.jsonOnly,
-      preferSmallModel: this.options.preferSmallModel,
+      enforceJson: this.options.enforceJson,
+      preferSmall: this.options.preferSmall,
       prompt,
       step: context?.prompt.label,
       task: this.options.task,

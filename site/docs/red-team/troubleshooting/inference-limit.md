@@ -40,7 +40,7 @@ redteam:
       # ...
 ```
 
-See the [Red Team Configuration documentation](/docs/red-team/configuration/#providers) for detailed setup instructions.
+See the [Red Team Configuration documentation](/docs/red-team/configuration/#custom-providerstargets) for detailed setup instructions.
 
 ### 3. Use Local Models
 

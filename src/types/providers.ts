@@ -228,4 +228,10 @@ export interface DefaultProviders {
   moderationProvider: ApiProvider;
   suggestionsProvider: ApiProvider;
   synthesizeProvider: ApiProvider;
+  /**
+   * Default provider used to generate adversarial inputs for red teaming.
+   * Do not mutate this instance directly at call sites; use the redteam adapter
+   * (e.g., getRedteamProvider) to derive per-request variants such as enforceJson.
+   */
+  redteamProvider?: ApiProvider;
 }

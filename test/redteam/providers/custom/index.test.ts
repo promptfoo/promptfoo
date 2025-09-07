@@ -1,6 +1,6 @@
 import { getGraderById } from '../../../../src/redteam/graders';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom';
-import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
+import { getRedteamProvider, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
@@ -19,6 +19,7 @@ jest.mock('../../../../src/util/server', () => ({
 
 jest.mock('../../../../src/redteam/providers/shared', () => ({
   ...jest.requireActual('../../../../src/redteam/providers/shared'),
+  getRedteamProvider: jest.fn(),
   tryUnblocking: jest.fn(),
 }));
 
@@ -107,14 +108,14 @@ describe('CustomProvider', () => {
       stateful: true,
     });
 
-    // Set up redteamProviderManager mock
-    jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async (options) => {
-      // When the provider is already an object (not a string), return it for jsonOnly requests
-      // For non-jsonOnly requests (scoring), return the scoring provider
-      if (options.provider && typeof options.provider === 'object') {
-        return options.jsonOnly ? options.provider : mockScoringProvider;
+    // Set up getRedteamProvider mock
+    jest.mocked(getRedteamProvider).mockImplementation(async (options) => {
+      // When the provider is already an object (not a string), return it for enforceJson requests
+      // For non-enforceJson requests (scoring), return the scoring provider
+      if (options?.provider && typeof options.provider === 'object') {
+        return options.enforceJson ? options.provider : mockScoringProvider;
       }
-      return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+      return options?.enforceJson ? mockRedTeamProvider : mockScoringProvider;
     });
 
     // Mock server feature support to return true so unblocking logic runs

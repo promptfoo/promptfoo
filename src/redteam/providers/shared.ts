@@ -3,7 +3,6 @@ import { randomUUID } from 'crypto';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
   type ApiProvider,
@@ -12,7 +11,6 @@ import {
   type EvaluateResult,
   type GuardrailResponse,
   isApiProvider,
-  isProviderOptions,
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types';
@@ -21,82 +19,108 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { type TransformContext, TransformInputType, transform } from '../../util/transform';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import { getEnvFloat } from '../../envars';
+import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 
-async function loadRedteamProvider({
+// Hardcoded fallback constants (inline to reduce dependencies)
+const ATTACKER_MODEL = 'gpt-4.1-2025-04-14';
+const ATTACKER_MODEL_SMALL = 'gpt-4o-mini';
+const REDTEAM_TEMPERATURE = getEnvFloat('PROMPTFOO_JAILBREAK_TEMPERATURE') || 0.7;
+
+/**
+ * Gets a redteam provider optimized for adversarial input generation.
+ * Uses the defaults system with automatic credential detection and fallbacks.
+ *
+ * @param options Configuration options
+ * @param options.provider - Optional explicit provider override
+ * @param options.enforceJson - Whether to enforce JSON output (default: true for redteam use)
+ * @param options.preferSmall - Whether to prefer smaller/faster models for simple tasks
+ * @returns Promise resolving to configured ApiProvider instance
+ */
+export async function getRedteamProvider({
   provider,
-  jsonOnly = false,
-  preferSmallModel = false,
+  enforceJson = true,
+  preferSmall = false,
 }: {
   provider?: RedteamFileConfig['provider'];
-  jsonOnly?: boolean;
-  preferSmallModel?: boolean;
-} = {}) {
-  let ret;
-  const redteamProvider = provider || cliState.config?.redteam?.provider;
-  if (isApiProvider(redteamProvider)) {
-    logger.debug(`Using redteam provider: ${redteamProvider}`);
-    ret = redteamProvider;
-  } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
-    logger.debug(`Loading redteam provider: ${JSON.stringify(redteamProvider)}`);
-    const loadApiProvidersModule = await import('../../providers');
-    // Async import to avoid circular dependency
-    ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
-  } else {
-    const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-    logger.debug(`Using default redteam provider: ${defaultModel}`);
-    ret = new OpenAiChatCompletionProvider(defaultModel, {
-      config: {
-        temperature: TEMPERATURE,
-        response_format: jsonOnly ? { type: 'json_object' } : undefined,
-      },
-    });
-  }
-  return ret;
-}
+  enforceJson?: boolean;
+  preferSmall?: boolean;
+} = {}): Promise<ApiProvider> {
+  let baseProvider: ApiProvider;
 
-class RedteamProviderManager {
-  private provider: ApiProvider | undefined;
-  private jsonOnlyProvider: ApiProvider | undefined;
+  // Check for explicit provider override (from config or parameter)
+  const explicitProvider = provider || cliState.config?.redteam?.provider;
 
-  clearProvider() {
-    this.provider = undefined;
-    this.jsonOnlyProvider = undefined;
-  }
-
-  async setProvider(provider: RedteamFileConfig['provider']) {
-    this.provider = await loadRedteamProvider({ provider });
-    this.jsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
-  }
-
-  async getProvider({
-    provider,
-    jsonOnly = false,
-    preferSmallModel = false,
-  }: {
-    provider?: RedteamFileConfig['provider'];
-    jsonOnly?: boolean;
-    preferSmallModel?: boolean;
-  }): Promise<ApiProvider> {
-    if (this.provider && this.jsonOnlyProvider) {
-      logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
-      return jsonOnly ? this.jsonOnlyProvider : this.provider;
+  if (explicitProvider) {
+    if (isApiProvider(explicitProvider)) {
+      logger.debug(`[RedteamProvider] Using explicit provider: ${explicitProvider.id()}`);
+      baseProvider = explicitProvider;
+    } else {
+      logger.debug(
+        `[RedteamProvider] Loading explicit provider: ${JSON.stringify(explicitProvider)}`,
+      );
+      const { loadApiProviders } = await import('../../providers');
+      baseProvider = (await loadApiProviders([explicitProvider]))[0];
     }
-
-    logger.debug(
-      `[RedteamProviderManager] Loading redteam provider: ${JSON.stringify({
-        providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
-        jsonOnly,
-        preferSmallModel,
-      })}`,
-    );
-    const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
-    logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
-    return redteamProvider;
+  } else {
+    // Use defaults system as primary source (handles all credential detection and fallbacks)
+    try {
+      const { getDefaultProviders } = await import('../../providers/defaults');
+      const defaultProviders = await getDefaultProviders();
+      if (defaultProviders.redteamProvider) {
+        logger.debug(
+          `[RedteamProvider] Using defaults provider: ${defaultProviders.redteamProvider.id()}`,
+        );
+        baseProvider = defaultProviders.redteamProvider;
+      } else {
+        throw new Error('No redteam provider available from defaults system');
+      }
+    } catch (error) {
+      // Final fallback - prefer small model for efficiency
+      const fallbackModel = preferSmall ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
+      logger.warn(
+        `[RedteamProvider] Defaults system unavailable: ${(error as Error).message}. ` +
+          `Using OpenAI fallback: ${fallbackModel}. Requires OPENAI_API_KEY.`,
+      );
+      baseProvider = new OpenAiChatCompletionProvider(fallbackModel, {
+        config: { temperature: REDTEAM_TEMPERATURE },
+      });
+    }
   }
-}
 
-export const redteamProviderManager = new RedteamProviderManager();
+  // Apply redteam-specific configuration inline (no need for separate function)
+  if (!baseProvider) {
+    throw new Error('Provider cannot be null or undefined');
+  }
+
+  if (typeof baseProvider.id !== 'function') {
+    throw new Error(
+      `Invalid provider: missing id() method. Provider: ${JSON.stringify(baseProvider)}`,
+    );
+  }
+
+  // Create adapted provider that inherits from original but allows config override
+  const adaptedProvider = Object.create(baseProvider);
+  Object.assign(adaptedProvider, baseProvider);
+
+  // Set up config with redteam-specific values
+  adaptedProvider.config = {
+    ...(baseProvider.config && typeof baseProvider.config === 'object' ? baseProvider.config : {}),
+  };
+
+  // Apply redteam configuration - JSON by default for structured outputs
+  if (enforceJson) {
+    adaptedProvider.config.response_format = { type: 'json_object' };
+  }
+
+  // Apply temperature if not already set
+  if (adaptedProvider.config.temperature === undefined) {
+    adaptedProvider.config.temperature = REDTEAM_TEMPERATURE;
+  }
+
+  logger.debug(`[RedteamProvider] Loaded provider: ${adaptedProvider.id()}`);
+  return adaptedProvider;
+}
 
 export type TargetResponse = {
   output: string;
@@ -349,8 +373,8 @@ export async function tryUnblocking({
     // Create unblocking provider
     const unblockingProvider = new PromptfooChatCompletionProvider({
       task: 'blocking-question-analysis',
-      jsonOnly: true,
-      preferSmallModel: false,
+      enforceJson: true,
+      preferSmall: false,
     });
 
     const unblockingRequest = {

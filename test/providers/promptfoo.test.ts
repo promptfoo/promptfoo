@@ -1,4 +1,3 @@
-import { fetchWithCache } from '../../src/cache';
 import { getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
@@ -114,8 +113,8 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   const options = {
-    jsonOnly: true,
-    preferSmallModel: false,
+    enforceJson: true,
+    preferSmall: false,
     task: 'crescendo' as const,
   };
 

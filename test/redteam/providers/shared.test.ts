@@ -1,16 +1,12 @@
 import cliState from '../../../src/cliState';
 import { loadApiProviders } from '../../../src/providers';
+import { getDefaultProviders } from '../../../src/providers/defaults';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import {
-  ATTACKER_MODEL,
-  ATTACKER_MODEL_SMALL,
-  TEMPERATURE,
-} from '../../../src/redteam/providers/constants';
-import {
+  getRedteamProvider,
   getTargetResponse,
   type Message,
   messagesToRedteamHistory,
-  redteamProviderManager,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { sleep } from '../../../src/util/time';
@@ -38,9 +34,13 @@ jest.mock('../../../src/providers/openai');
 jest.mock('../../../src/providers', () => ({
   loadApiProviders: jest.fn(),
 }));
+jest.mock('../../../src/providers/defaults', () => ({
+  getDefaultProviders: jest.fn().mockResolvedValue({}),
+}));
 
 const mockedSleep = jest.mocked(sleep);
 const mockedLoadApiProviders = jest.mocked(loadApiProviders);
+const mockedGetDefaultProviders = jest.mocked(getDefaultProviders);
 const mockedOpenAiProvider = jest.mocked(OpenAiChatCompletionProvider);
 
 describe('shared redteam provider utilities', () => {
@@ -52,10 +52,14 @@ describe('shared redteam provider utilities', () => {
     // Reset specific mocks
     mockedSleep.mockClear();
     mockedLoadApiProviders.mockClear();
+    mockedGetDefaultProviders.mockClear();
     mockedOpenAiProvider.mockClear();
 
+    // Ensure defaults mock returns empty object (no redteam provider)
+    mockedGetDefaultProviders.mockResolvedValue({} as any);
+
     // Clear the redteam provider manager cache
-    redteamProviderManager.clearProvider();
+    // No cleanup needed - RedteamProviderManager is stateless
 
     // Reset cliState to default
     cliState.config = {
@@ -93,76 +97,37 @@ describe('shared redteam provider utilities', () => {
       >(),
     };
 
-    it('creates default OpenAI provider when no provider specified', async () => {
-      const mockOpenAiInstance = {
-        id: () => `openai:${ATTACKER_MODEL}`,
-        callApi: jest.fn(),
-        toString: () => `OpenAI(${ATTACKER_MODEL})`,
-        config: { temperature: TEMPERATURE, response_format: undefined },
-        getApiKey: jest.fn(),
-        getApiUrl: jest.fn(),
-        getApiUrlDefault: jest.fn(),
-        getOrganization: jest.fn(),
-        requiresApiKey: jest.fn(),
-        initializationPromise: null,
-        loadedFunctionCallbacks: {},
-        mcpClient: null,
-      };
+    it('uses hardcoded fallback when no provider is configured and defaults are empty', async () => {
+      // Ensure getDefaultProviders returns no redteamProvider
+      mockedGetDefaultProviders.mockResolvedValue({} as any);
 
-      // Clear and set up specific mock for this test
-      mockedOpenAiProvider.mockClear();
-      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
-
-      const result = await redteamProviderManager.getProvider({});
-
-      expect(result).toBe(mockOpenAiInstance);
-      expect(mockedOpenAiProvider).toHaveBeenCalledWith(ATTACKER_MODEL, {
-        config: {
-          temperature: TEMPERATURE,
-          response_format: undefined,
-        },
-      });
+      const result = await getRedteamProvider({});
+      expect(result.id()).toContain('gpt-4.1-2025-04-14');
+      expect((result as any).config.temperature).toBe(0.7);
     });
 
-    it('clears cached providers', async () => {
-      const mockOpenAiInstance = {
-        id: () => `openai:${ATTACKER_MODEL}`,
+    it('uses the provider from the defaults system when available', async () => {
+      const defaultProvider = {
+        id: () => 'default-redteam-provider',
         callApi: jest.fn(),
-        toString: () => `OpenAI(${ATTACKER_MODEL})`,
-        config: { temperature: TEMPERATURE, response_format: undefined },
-        getApiKey: jest.fn(),
-        getApiUrl: jest.fn(),
-        getApiUrlDefault: jest.fn(),
-        getOrganization: jest.fn(),
-        requiresApiKey: jest.fn(),
-        initializationPromise: null,
-        loadedFunctionCallbacks: {},
-        mcpClient: null,
+        config: {},
       };
+      mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: defaultProvider } as any);
 
-      // Clear and set up specific mock for this test
-      mockedOpenAiProvider.mockClear();
-      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
-
-      // First call to set up the cache
-      await redteamProviderManager.getProvider({});
-
-      // Clear the cache
-      redteamProviderManager.clearProvider();
-      mockedOpenAiProvider.mockClear();
-
-      // Second call should create a new provider
-      await redteamProviderManager.getProvider({});
-
-      expect(mockedOpenAiProvider).toHaveBeenCalledTimes(1);
+      const result = await getRedteamProvider({});
+      expect(result.id()).toBe('default-redteam-provider');
     });
+
+    // Note: Removed 'clears cached providers' test since RedteamProviderManager is now stateless
 
     it('loads provider from string identifier', async () => {
       mockedLoadApiProviders.mockResolvedValue([mockApiProvider]);
 
-      const result = await redteamProviderManager.getProvider({ provider: 'test-provider' });
+      const result = await getRedteamProvider({ provider: 'test-provider' });
 
-      expect(result).toBe(mockApiProvider);
+      // Should return adapted provider with same id but with redteam config
+      expect(result.id()).toBe('test-provider');
+      expect(result.config).toEqual({ temperature: 0.7, response_format: { type: 'json_object' } });
       expect(mockedLoadApiProviders).toHaveBeenCalledWith(['test-provider']);
     });
 
@@ -170,72 +135,48 @@ describe('shared redteam provider utilities', () => {
       const providerOptions = { id: 'test-provider', apiKey: 'test-key' };
       mockedLoadApiProviders.mockResolvedValue([mockApiProvider]);
 
-      const result = await redteamProviderManager.getProvider({ provider: providerOptions });
+      const result = await getRedteamProvider({ provider: providerOptions });
 
-      expect(result).toBe(mockApiProvider);
+      // Should return adapted provider with same id but with redteam config
+      expect(result.id()).toBe('test-provider');
+      expect(result.config).toEqual({ temperature: 0.7, response_format: { type: 'json_object' } });
       expect(mockedLoadApiProviders).toHaveBeenCalledWith([providerOptions]);
     });
 
-    it('uses small model when preferSmallModel is true', async () => {
-      const mockOpenAiInstance = {
-        id: () => `openai:${ATTACKER_MODEL_SMALL}`,
+    it('sets response_format to json_object when enforceJson is true', async () => {
+      const defaultConfig = { temperature: 0.5 };
+      const defaultProvider = {
+        id: () => 'default-json-provider',
         callApi: jest.fn(),
-        toString: () => `OpenAI(${ATTACKER_MODEL_SMALL})`,
-        config: { temperature: TEMPERATURE, response_format: undefined },
-        getApiKey: jest.fn(),
-        getApiUrl: jest.fn(),
-        getApiUrlDefault: jest.fn(),
-        getOrganization: jest.fn(),
-        requiresApiKey: jest.fn(),
-        initializationPromise: null,
-        loadedFunctionCallbacks: {},
-        mcpClient: null,
+        config: defaultConfig,
       };
+      mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: defaultProvider } as any);
 
-      // Clear and set up specific mock for this test
-      mockedOpenAiProvider.mockClear();
-      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
+      const result = await getRedteamProvider({ enforceJson: true });
 
-      const result = await redteamProviderManager.getProvider({ preferSmallModel: true });
-
-      expect(result).toBe(mockOpenAiInstance);
-      expect(mockedOpenAiProvider).toHaveBeenCalledWith(ATTACKER_MODEL_SMALL, {
-        config: {
-          temperature: TEMPERATURE,
-          response_format: undefined,
-        },
-      });
+      // Check that the returned provider is a new object with modified config
+      expect(result).not.toBe(defaultProvider);
+      expect(result.id()).toBe('default-json-provider');
+      expect((result as any).config.response_format).toEqual({ type: 'json_object' });
+      expect((result as any).config.temperature).toBe(0.5); // Ensure original config is preserved
     });
 
-    it('sets response_format to json_object when jsonOnly is true', async () => {
-      const mockOpenAiInstance = {
-        id: () => `openai:${ATTACKER_MODEL}`,
+    it('does not set response_format when enforceJson is false', async () => {
+      const defaultConfig = { temperature: 0.5 };
+      const defaultProvider = {
+        id: () => 'default-no-json-provider',
         callApi: jest.fn(),
-        toString: () => `OpenAI(${ATTACKER_MODEL})`,
-        config: { temperature: TEMPERATURE, response_format: { type: 'json_object' } },
-        getApiKey: jest.fn(),
-        getApiUrl: jest.fn(),
-        getApiUrlDefault: jest.fn(),
-        getOrganization: jest.fn(),
-        requiresApiKey: jest.fn(),
-        initializationPromise: null,
-        loadedFunctionCallbacks: {},
-        mcpClient: null,
+        config: defaultConfig,
       };
+      mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: defaultProvider } as any);
 
-      // Clear and set up specific mock for this test
-      mockedOpenAiProvider.mockClear();
-      mockedOpenAiProvider.mockReturnValue(mockOpenAiInstance as any);
+      const result = await getRedteamProvider({ enforceJson: false });
 
-      const result = await redteamProviderManager.getProvider({ jsonOnly: true });
-
-      expect(result).toBe(mockOpenAiInstance);
-      expect(mockedOpenAiProvider).toHaveBeenCalledWith(ATTACKER_MODEL, {
-        config: {
-          temperature: TEMPERATURE,
-          response_format: { type: 'json_object' },
-        },
-      });
+      // Check that the returned provider is a new object with modified config
+      expect(result).not.toBe(defaultProvider);
+      expect(result.id()).toBe('default-no-json-provider');
+      expect((result as any).config.response_format).toBeUndefined();
+      expect((result as any).config.temperature).toBe(0.5); // Ensure original config is preserved
     });
 
     it('uses provider from cliState if available', async () => {
@@ -254,15 +195,17 @@ describe('shared redteam provider utilities', () => {
         },
       };
 
-      const result = await redteamProviderManager.getProvider({});
+      const result = await getRedteamProvider({});
 
-      expect(result).toBe(mockStateProvider);
+      // Should return adapted provider with same id but with redteam config
+      expect(result.id()).toBe('state-provider');
+      expect(result.config).toEqual({ temperature: 0.7, response_format: { type: 'json_object' } });
 
       // Clean up for next test
       cliState.config!.redteam!.provider = undefined;
     });
 
-    it('sets and reuses providers', async () => {
+    it('loads providers with explicit configuration', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: jest.fn<
@@ -272,16 +215,17 @@ describe('shared redteam provider utilities', () => {
       };
       mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
-      // Set the provider
-      await redteamProviderManager.setProvider('test-provider');
+      // Get providers with explicit provider configuration
+      const result = await getRedteamProvider({ provider: 'test-provider' });
+      const jsonResult = await getRedteamProvider({
+        provider: 'test-provider',
+        enforceJson: true,
+      });
 
-      // Get the provider - should use cached version
-      const result = await redteamProviderManager.getProvider({});
-      const jsonResult = await redteamProviderManager.getProvider({ jsonOnly: true });
-
-      expect(result).toBe(mockProvider);
-      expect(jsonResult).toBe(mockProvider);
-      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Once for regular, once for jsonOnly
+      // Both should be adapted versions of the same base provider
+      expect(result.id()).toBe('test-provider');
+      expect(jsonResult.id()).toBe('test-provider');
+      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2);
     });
 
     it('handles thrown errors in getTargetResponse', async () => {

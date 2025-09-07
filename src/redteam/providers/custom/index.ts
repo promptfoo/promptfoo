@@ -15,9 +15,9 @@ import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts'
 import { getGoalRubric } from '../prompts';
 import {
   getLastMessageContent,
+  getRedteamProvider,
   getTargetResponse,
   messagesToRedteamHistory,
-  redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -193,14 +193,14 @@ export class CustomProvider implements ApiProvider {
       if (shouldGenerateRemote()) {
         this.redTeamProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
-          jsonOnly: true,
-          preferSmallModel: false,
+          enforceJson: true,
+          preferSmall: false,
         });
       } else {
-        this.redTeamProvider = await redteamProviderManager.getProvider({
+        this.redTeamProvider = await getRedteamProvider({
           provider: this.config.redteamProvider,
-          preferSmallModel: false,
-          jsonOnly: true,
+          preferSmall: false,
+          enforceJson: true,
         });
       }
     }
@@ -212,13 +212,14 @@ export class CustomProvider implements ApiProvider {
       if (shouldGenerateRemote()) {
         this.scoringProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
-          jsonOnly: false,
-          preferSmallModel: false,
+          enforceJson: false,
+          preferSmall: false,
         });
       } else {
-        this.scoringProvider = await redteamProviderManager.getProvider({
+        this.scoringProvider = await getRedteamProvider({
           provider: this.config.redteamProvider,
-          preferSmallModel: false,
+          preferSmall: false,
+          enforceJson: false,
         });
       }
     }
