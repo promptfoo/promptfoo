@@ -49,7 +49,7 @@ prompts:
   {% if prompts.length > 0 and not prompts[0].startsWith('file://') -%}
   # You can also reference external prompts, e.g.
   # - file:///path/to/prompt.json
-  # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
+  # Learn more: https://promptfoo.dev/docs/configuration/prompts/
   {% endif %}
 {% endif -%}
 
