@@ -143,7 +143,31 @@ defaultTest:
 
 To get evaluation output in languages other than English, you can use different approaches:
 
-### Option 1: Add language instruction to English rubric
+### Option 1: Universal rubricPrompt Override (Recommended)
+
+For reliable multilingual output across all assertion types:
+
+```yaml
+defaultTest:
+  options:
+    rubricPrompt: |
+      [
+        {
+          "role": "system",
+          "content": "Du bewertest Ausgaben nach Kriterien. Antworte mit JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALLE Antworten auf Deutsch."
+        },
+        {
+          "role": "user", 
+          "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}"
+        }
+      ]
+
+assert:
+  - type: llm-rubric
+    value: 'Antwortet höflich und hilfreich'
+```
+
+### Option 2: Language Instructions in Rubric
 
 ```yaml
 assert:
@@ -151,26 +175,21 @@ assert:
     value: 'Responds politely and helpfully. Provide your evaluation reason in German.'
 ```
 
-### Option 2: Write the entire rubric in the target language
+### Option 3: Full Native Language Rubric
 
 ```yaml
-# German: "Responds politely and helpfully. Provide reasoning in German."
+# German
 assert:
   - type: llm-rubric
     value: "Antwortet höflich und hilfreich. Begründung auf Deutsch geben."
 
-# Japanese: "Does not contain harmful content. Provide evaluation reason in Japanese."
+# Japanese
 assert:
   - type: llm-rubric
     value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
-
-# Spanish: "Uses formal language. Provide evaluation reason in Spanish."
-assert:
-  - type: llm-rubric
-    value: "Usa lenguaje formal. Proporciona tu razón de evaluación en español."
 ```
 
-Both approaches produce native-language reasoning: `{"reason": "Die Antwort ist höflich und bietet hilfreiche Informationen.", "pass": true, "score": 1.0}`
+**Note:** Option 1 is most reliable. If Options 2-3 still produce English reasoning, use the rubricPrompt override.
 
 ### Object handling in rubric prompts
 

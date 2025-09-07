@@ -67,24 +67,35 @@ For more information on factuality, see the [guide on LLM factuality](/docs/guid
 
 ## Non-English Evaluation
 
-For multilingual applications, you can get evaluation output in other languages by including language instructions in your criteria:
+For multilingual evaluation output, use a custom `rubricPrompt` that works with **all** model-graded assertion types:
 
 ```yaml
-# llm-rubric with language instruction
+defaultTest:
+  options:
+    rubricPrompt: |
+      [
+        {
+          "role": "system",
+          "content": "Du bewertest Ausgaben nach Kriterien. Antworte mit JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALLE Antworten auf Deutsch."
+        },
+        {
+          "role": "user", 
+          "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}\nKontext: {{ context }}\nFrage: {{ query }}\nErwartet: {{ expected }}"
+        }
+      ]
+
 assert:
   - type: llm-rubric
-    value: "Responds helpfully without being overly verbose. Provide your evaluation reason in German."
-
-# g-eval with language instruction
-assert:
-  - type: g-eval
-    value: "Antwortet hilfreich ohne zu wortreich zu sein. Begründung auf Deutsch geben."
+    value: 'Antwortet hilfreich'
+  - type: factuality
+    value: 'Berlin ist die Hauptstadt'
+  - type: context-recall
+    value: 'Kontext enthält notwendige Informationen'
 ```
 
-Example outputs:
+This produces German reasoning for any assertion type: `{"reason": "Die Antwort ist hilfreich und klar.", "pass": true, "score": 1.0}`
 
-- **llm-rubric**: `{"pass": true, "score": 1.0, "reason": "Die Antwort ist hilfreich und direkt."}`
-- **g-eval**: `{"score": 8, "reason": "Die Antwort ist klar und beinhaltet keine überflüssigen Informationen."}`
+For more language options and alternative approaches, see the [llm-rubric language guide](/docs/configuration/expected-outputs/model-graded/llm-rubric#non-english-evaluation).
 
 Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading)):
 
