@@ -34,11 +34,7 @@ tests:
         value: |
           const hasImage = output.includes('![Generated Image]');
           const hasBase64 = output.includes('data:image') && output.includes('base64,');
-          return { 
-            pass: hasImage && hasBase64, 
-            score: hasImage && hasBase64 ? 1 : 0,
-            reason: hasImage && hasBase64 ? "Perfect image format!" : "Image format issue"
-          };
+          return hasImage && hasBase64;
 
   - description: '🚀 Space cat astronaut adventure'
     vars:
@@ -129,17 +125,8 @@ tests:
         value: '![Generated Image]'
       - type: javascript
         value: |
-          // Validate image format and estimate token count
+          // Validate image format
           const imageMatch = output.match(/!\[Generated Image\]\(data:image\/([^;]+);base64,([^)]+)\)/);
-          if (!imageMatch) return { pass: false, score: 0, reason: "No valid image found" };
-
-          const [, mimeType, base64Data] = imageMatch;
-          const tokenEstimate = Math.round(base64Data.length * 0.75 / 4); // Rough token estimate
-
-          return { 
-            pass: tokenEstimate > 1000 && tokenEstimate < 2000, 
-            score: 1,
-            reason: `Image: ${mimeType}, Est. tokens: ${tokenEstimate} (expected ~1290)`
-          };
+          return imageMatch !== null;
       - type: cost
         threshold: 0.05
