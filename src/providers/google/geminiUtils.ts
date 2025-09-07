@@ -44,16 +44,3 @@ export function calculateGeminiCost(modelName: string, totalTokens: number): num
   return (totalTokens / 1000000) * 2.0;
 }
 
-/**
- * Configure request body for image generation if needed
- * @param modelName - The name of the model
- * @param body - Request body to modify
- */
-export function configureImageGeneration(modelName: string, body: any): void {
-  // Enable image generation for Gemini 2.5 Flash Image models
-  if (modelName.includes('gemini-2.5-flash-image')) {
-    // Allow both text and image responses for image generation models
-    body.generationConfig = body.generationConfig || {};
-    body.generationConfig.responseModalities = ['IMAGE', 'TEXT'];
-  }
-}

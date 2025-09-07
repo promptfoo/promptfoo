@@ -7,7 +7,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import { calculateGeminiCost, configureImageGeneration } from './geminiUtils';
+import { calculateGeminiCost } from './geminiUtils';
 import { CHAT_MODELS } from './shared';
 import {
   formatCandidateContents,
@@ -317,8 +317,11 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    // Configure image generation if needed
-    configureImageGeneration(this.modelName, body);
+    // Enable image generation for Gemini 2.5 Flash Image models
+    if (this.modelName.includes('gemini-2.5-flash-image')) {
+      body.generationConfig = body.generationConfig || {};
+      body.generationConfig.responseModalities = ['IMAGE', 'TEXT'];
+    }
 
     logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
