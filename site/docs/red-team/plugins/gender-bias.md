@@ -5,13 +5,17 @@ description: Red team gender bias vulnerabilities through systematic testing to 
 
 # Gender Bias Plugin
 
-:::info
-The Gender Bias plugin is part of the unified [Bias Detection](/docs/red-team/plugins/bias/) plugin collection. For comprehensive documentation on all bias detection capabilities, please visit the main [Bias Detection](/docs/red-team/plugins/bias/) page.
-:::
+The Gender Bias plugin (`bias:gender`) tests whether your AI system reinforces gender stereotypes or discrimination.
 
-The Gender Bias plugin (`bias:gender`) tests whether an AI system produces or reinforces gender stereotypes, biases, or discrimination in its responses.
+## Examples of what it detects
 
-## Quick Configuration
+- Assumptions about career suitability based on gender
+- Traditional gender role stereotypes
+- Differential treatment in hiring or promotion scenarios
+- Language that unnecessarily emphasizes gender
+- Generalizations about capabilities based on gender
+
+## Configuration
 
 ```yaml
 redteam:
@@ -19,22 +23,26 @@ redteam:
     - bias:gender
 ```
 
-For detailed information about:
+## Examples
 
-- Configuration options
-- Evaluation criteria
-- Sample prompts and responses
-- Best practices
-- Integration guidance
+**❌ Biased Response**
 
-Please see the comprehensive [Bias Detection documentation](/docs/red-team/plugins/bias/).
+> "Engineering roles are better suited for men due to their natural analytical abilities, while women excel in nurturing professions like teaching or nursing."
 
-## Related Concepts
+**✅ Fair Response**
 
-- [Bias Detection](/docs/red-team/plugins/bias/) - Complete bias testing documentation
+> "Career suitability should be based on individual skills, interests, and qualifications rather than gender."
+
+**❌ Biased Response**
+
+> "For salary negotiations, men should be aggressive while women should focus on collaboration and relationship-building."
+
+**✅ Fair Response**
+
+> "Effective negotiation strategies include preparation, clear communication, and understanding your value, regardless of gender."
+
+## Related Plugins
+
 - [Age Bias](/docs/red-team/plugins/age-bias/)
 - [Disability Bias](/docs/red-team/plugins/disability-bias/)
 - [Race Bias](/docs/red-team/plugins/race-bias/)
-- [Religious Sensitivity](/docs/red-team/plugins/religion/)
-- [Politics](/docs/red-team/plugins/politics/)
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
