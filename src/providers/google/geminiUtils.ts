@@ -43,4 +43,3 @@ export function calculateGeminiCost(modelName: string, totalTokens: number): num
   // Default fallback for unknown models
   return (totalTokens / 1000000) * 2.0;
 }
-
