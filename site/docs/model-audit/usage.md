@@ -8,38 +8,9 @@ description: Automate LLM model scanning across cloud providers with remote stor
 
 This page covers advanced ModelAudit features including cloud storage integration, CI/CD workflows, and programmatic usage.
 
-## Smart Detection & Auto-Configuration
-
-ModelAudit v0.2.5 introduces **smart detection** that automatically configures optimal settings based on your input type and environment. This replaces many manual configuration options with intelligent defaults.
-
-### What's Auto-Detected
-
-- **Progress reporting**: Automatically enabled for large files (>1GB) and disabled in CI environments
-- **Caching**: Enabled for cloud/remote operations, disabled for local files
-- **Timeouts**: Adjusted based on file size and source type
-- **Output format**: Optimized for terminal vs programmatic usage
-
-### Manual Override Options
-
-While smart detection works well for most cases, you can override specific behaviors:
-
-```bash
-# Force enable progress reporting (even for small files)
-promptfoo scan-model model.pkl --progress
-
-# Disable caching (even for cloud operations)
-promptfoo scan-model s3://bucket/model.pkl --no-cache
-
-# Override timeout detection
-promptfoo scan-model large-model.bin --timeout 7200
-
-# Force quiet mode (even in interactive terminals)
-promptfoo scan-model model.pkl --quiet
-```
-
 ## Authentication and Configuration
 
-ModelAudit v0.2.5 centralizes authentication and configuration through environment variables, replacing previous CLI flags for a more secure and standardized approach.
+ModelAudit uses environment variables for authentication with cloud services and model registries.
 
 ### Cloud & Artifact Registry Authentication
 
@@ -209,7 +180,6 @@ promptfoo scan-model models/ \
   --output security-scan.sarif
 ```
 
-Note: Advanced scanner-specific configurations (like pickle opcodes limits or weight distribution thresholds) are currently hardcoded and cannot be modified via CLI.
 
 ## CI/CD Integration
 
@@ -532,36 +502,6 @@ The SBOM includes:
 - Risk scoring based on scan findings
 - Model/dataset classification
 
-## Advanced Security Features
-
-### File Type Validation
-
-ModelAudit performs comprehensive file type validation:
-
-```bash
-# File type mismatches are flagged
-⚠ File type validation failed: extension indicates tensor_binary but magic bytes indicate pickle.
-   This could indicate file spoofing, corruption, or a security threat.
-```
-
-### Resource Exhaustion Protection
-
-Built-in protection against various attacks:
-
-- **Zip bombs**: Detects suspicious compression ratios (>100x)
-- **Decompression bombs**: Limits decompressed file sizes
-- **Memory exhaustion**: Enforces limits on array sizes and nested structures
-- **Infinite recursion**: Limits nesting depth in recursive formats
-- **DoS prevention**: Enforces timeouts and maximum file sizes
-
-### Path Traversal Protection
-
-Automatic protection in archives:
-
-```bash
-🔴 Archive entry ../../etc/passwd attempted path traversal outside the archive
-```
-
 ## Troubleshooting
 
 ### Common Issues
@@ -608,43 +548,7 @@ Automatic protection in archives:
    Warning: Unknown or unhandled format
    ```
 
-   Solution: Ensure the file is in a supported format or create a custom scanner.
-
-5. **Binary File Format Detection**
-
-   ```
-   Info: Detected safetensors format in .bin file
-   ```
-
-   Note: ModelAudit automatically detects the actual format of `.bin` files and applies the appropriate scanner.
-
-6. **Disk Space Issues**
-
-   ```
-   Error: Insufficient disk space for download
-   ```
-
-   Solution: Free up disk space or use a different cache directory:
-
-   ```bash
-   promptfoo scan-model s3://bucket/model.bin --cache-dir /mnt/large-disk/cache
-   ```
-
-7. **License Compliance Failures**
-
-   ```
-   Error: AGPL license detected (strict mode enabled)
-   ```
-
-   Solution: Review the license implications or disable strict mode:
-
-   ```bash
-   # Without strict mode (warnings only)
-   promptfoo scan-model model.pkl
-
-   # With strict mode (fails on incompatible licenses)
-   promptfoo scan-model model.pkl --strict-license
-   ```
+   Solution: Ensure the file is in a supported format.
 
 ## Extending ModelAudit
 
