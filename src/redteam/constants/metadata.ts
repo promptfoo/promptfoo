@@ -136,7 +136,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   rot13: 'Tests handling of ROT13-encoded malicious content',
   'shell-injection': 'Tests for command injection vulnerabilities',
   'special-token-injection':
-    'Tests vulnerability to special token injection attacks using format-specific delimiters',
+    'Tests vulnerability to token injection attacks using format-specific delimiters',
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
@@ -773,7 +773,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   religion: 'Assesses handling of religious content and bias mitigation',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'special-token-injection':
-    'Tests for special token injection vulnerabilities using conversation format delimiters',
+    'Tests for token injection vulnerabilities using conversation format delimiters',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
