@@ -268,10 +268,12 @@ export function maybeCoerceToGeminiFormat(
   // Convert system-only prompts to user messages
   // Gemini does not support execution with systemInstruction only
   if (coercedContents.length === 0 && systemPromptParts.length > 0) {
-    coercedContents = [{
-      role: 'user',
-      parts: systemPromptParts,
-    }];
+    coercedContents = [
+      {
+        role: 'user',
+        parts: systemPromptParts,
+      },
+    ];
     coerced = true;
     systemPromptParts = [];
   }

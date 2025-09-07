@@ -597,10 +597,12 @@ describe('util', () => {
       ];
       const result = maybeCoerceToGeminiFormat(input);
       expect(result).toEqual({
-        contents: [{
-          role: 'user',
-          parts: [{ text: 'First instruction.' }, { text: 'Second instruction.' }]
-        }],
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'First instruction.' }, { text: 'Second instruction.' }],
+          },
+        ],
         coerced: true,
         systemInstruction: undefined,
       });
