@@ -1,7 +1,7 @@
 ---
 title: GPT-4.1 vs GPT-4o MMLU Benchmark Comparison
 description: Compare GPT-4.1 and GPT-4o performance on MMLU academic reasoning tasks using promptfoo with step-by-step setup and research-backed optimization techniques.
-image: /img/docs/gpt-5-vs-gpt-4o-mmlu.png
+image: /img/docs/gpt-4.1-vs-gpt-4o-mmlu.png
 keywords: [gpt-5, gpt-4o, mmlu, benchmark, comparison, academic reasoning, openai, evaluation]
 sidebar_label: GPT-4.1 vs GPT-4o MMLU
 ---
@@ -124,7 +124,7 @@ npx promptfoo@latest view
 
 You should see GPT-4.1 outperforming GPT-4o on reasoning questions.
 
-![GPT-4.1 vs GPT-4o MMLU Results](/img/docs/gpt-5-vs-gpt-4o-mmlu-results.png)
+![GPT-4.1 vs GPT-4o MMLU Results](/img/docs/gpt-4.1-vs-gpt-4o-mmlu-results.png)
 
 The results above show GPT-4.1 achieving a 92.5% pass rate on MMLU questions, demonstrating the improved reasoning capabilities compared to GPT-4o.
 

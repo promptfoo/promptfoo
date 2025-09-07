@@ -11,7 +11,7 @@ New model releases often score well on benchmarks. But generic benchmarks are fo
 
 The end result will be a side-by-side comparison that looks like this:
 
-![gpt gpt-5-mini vs gpt 4o](/img/docs/gpt-5-mini-vs-gpt-4o.png)
+![gpt 4o-mini vs gpt 4o](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
 
 ## Prerequisites
 
@@ -169,7 +169,7 @@ For more info on setting up the config, see the [configuration guide](/docs/conf
 
 In the end, you will see a result like this:
 
-![gpt gpt-5-mini vs gpt 4o](/img/docs/gpt-5-mini-vs-gpt-4o.png)
+![gpt 4o-mini vs gpt 4o](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
 
 In this particular eval, the models performed very similarly in terms of answers, but it looks like GPT-4.1-mini exceeded our maximum latency. Notably, 4o was about 35x more expensive compared to gpt-5-mini.
 
