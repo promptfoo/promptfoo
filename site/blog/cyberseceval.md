@@ -101,8 +101,8 @@ And lastly, we'll [download the CyberSecEval test cases](https://github.com/prom
 
 ```yaml
 targets:
-  - openai:chat:gpt-4
-  - openai:chat:gpt-3.5-turbo
+  - openai:chat:gpt-5
+  - openai:chat:gpt-5-mini
 ```
 
 ### Ollama Models

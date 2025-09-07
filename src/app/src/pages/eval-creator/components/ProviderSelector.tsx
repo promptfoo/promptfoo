@@ -598,8 +598,8 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openrouter:google/gemini-1.5-pro',
-      label: 'OpenRouter: Gemini 1.5 Pro',
+      id: 'openrouter:google/gemini-2.5-pro',
+      label: 'OpenRouter: Gemini 2.5 Pro',
       config: {
         temperature: 0.7,
         max_tokens: 8192,

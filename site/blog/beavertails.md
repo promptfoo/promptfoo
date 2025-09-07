@@ -119,8 +119,8 @@ You can run BeaverTails evaluations against any LLM provider. Here are configura
 
 ```yaml
 providers:
-  - openai:chat:gpt-4
-  - openai:chat:gpt-3.5-turbo
+  - openai:chat:gpt-5
+  - openai:chat:gpt-5-mini
     config:
       temperature: 0.1  # Lower temperature for more consistent safety responses
 ```
@@ -129,8 +129,8 @@ providers:
 
 ```yaml
 providers:
-  - anthropic:claude-3-opus
-  - anthropic:claude-3-5-sonnet-latest
+  - anthropic:claude-4.1-opus
+  - anthropic:claude-4.1-sonnet
     config:
       temperature: 0.1
 ```
@@ -158,7 +158,7 @@ providers:
 
 ```yaml
 providers:
-  - openrouter:anthropic/claude-3-opus
+  - openrouter:anthropic/claude-4.1-opus
   - openrouter:google/gemini-pro
     config:
       temperature: 0.1
@@ -189,7 +189,7 @@ You can test multiple providers simultaneously to compare their safety performan
 ```yaml
 providers:
   - openai:chat:gpt-4
-  - anthropic:claude-3-opus
+  - anthropic:claude-4.1-opus
   - ollama:chat:llama3.3
   - bedrock:anthropic.claude-3
     config:

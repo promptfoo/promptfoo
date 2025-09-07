@@ -55,7 +55,7 @@ Examples:
 
 - `adaline:openai:chat:gpt-5-mini`
 - `adaline:azureopenai:chat:my-gpt-4o-deployment`
-- `adaline:google:chat:gemini-1.5-flash`
+- `adaline:google:chat:gemini-2.5-flash`
 - `adaline:togetherai:chat:meta-llama/Meta-Llama-3-8B-Instruct-Turbo`
 - `adaline:openai:embedding:text-embedding-3-large`
 - `adaline:voyage:embedding:voyage-3`
@@ -426,7 +426,7 @@ prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: adaline:google:chat:gemini-1.5-flash
+  - id: adaline:google:chat:gemini-2.5-flash
     config:
       tools:
         [
@@ -499,7 +499,7 @@ prompts:
 providers:
   - id: adaline:openai:chat:gpt-5
   - id: adaline:anthropic:chat:claude-3-opus-20240229
-  - id: adaline:google:chat:gemini-1.5-pro
+  - id: adaline:google:chat:gemini-2.5-pro
 
 tests:
   - vars:
