@@ -139,6 +139,29 @@ defaultTest:
     ]
 ```
 
+## Non-English Evaluation
+
+To get evaluation output in languages other than English, include a language instruction in your rubric:
+
+```yaml
+# German: "Responds politely. Provide reasoning in German."
+assert:
+  - type: llm-rubric
+    value: "Antwortet höflich. Begründung auf Deutsch geben."
+
+# Japanese: "Responds politely. Provide evaluation reason in Japanese."
+assert:
+  - type: llm-rubric
+    value: "丁寧に応答している。評価理由は日本語で答えてください。"
+
+# Korean: "Responds politely. Provide evaluation reason in Korean."
+assert:
+  - type: llm-rubric
+    value: "정중하게 응답한다. 평가 이유를 한국어로 제공하세요."
+```
+
+This produces native-language reasoning: `{"reason": "Die Antwort ist höflich und respektvoll.", "pass": true, "score": 1.0}`
+
 ### Object handling in rubric prompts
 
 When using `{{output}}` or `{{rubric}}` variables that contain objects, promptfoo automatically converts them to JSON strings by default to prevent display issues. If you need to access specific properties of objects in your rubric prompts, you can enable object property access:
