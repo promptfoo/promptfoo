@@ -4,6 +4,8 @@ import {
   suggestReplacements,
   formatUnsupportedArgsError,
   isValidFormat,
+  validateModelAuditOptions,
+  safeValidateModelAuditOptions,
   VALID_MODELAUDIT_OPTIONS,
   DEPRECATED_OPTIONS_MAP,
   type ModelAuditCliOptions,
@@ -279,21 +281,27 @@ describe('ModelAudit CLI Parser', () => {
   describe('Constants', () => {
     it('should have correct valid options', () => {
       const expectedOptions = [
-        '--format', '-f',
-        '--output', '-o',
-        '--verbose', '-v',
-        '--quiet', '-q',
-        '--blacklist', '-b',
+        '--format',
+        '-f',
+        '--output',
+        '-o',
+        '--verbose',
+        '-v',
+        '--quiet',
+        '-q',
+        '--blacklist',
+        '-b',
         '--strict',
         '--progress',
         '--sbom',
-        '--timeout', '-t',
+        '--timeout',
+        '-t',
         '--max-size',
         '--dry-run',
         '--no-cache',
       ];
 
-      expectedOptions.forEach(option => {
+      expectedOptions.forEach((option) => {
         expect(VALID_MODELAUDIT_OPTIONS.has(option)).toBe(true);
       });
     });
@@ -304,6 +312,103 @@ describe('ModelAudit CLI Parser', () => {
       expect(DEPRECATED_OPTIONS_MAP['--strict-license']).toBe('--strict');
       expect(DEPRECATED_OPTIONS_MAP['--registry-uri']).toBeNull();
       expect(DEPRECATED_OPTIONS_MAP['--cache-dir']).toBeNull();
+    });
+  });
+
+  describe('Zod Schema Validation', () => {
+    describe('validateModelAuditOptions', () => {
+      it('should validate correct options', () => {
+        const validOptions = {
+          format: 'json',
+          verbose: true,
+          timeout: 300,
+          maxSize: '1GB',
+        };
+
+        expect(() => validateModelAuditOptions(validOptions)).not.toThrow();
+        const result = validateModelAuditOptions(validOptions);
+        expect(result.format).toBe('json');
+        expect(result.verbose).toBe(true);
+        expect(result.timeout).toBe(300);
+        expect(result.maxSize).toBe('1GB');
+      });
+
+      it('should reject invalid format', () => {
+        const invalidOptions = {
+          format: 'xml',
+        };
+
+        expect(() => validateModelAuditOptions(invalidOptions)).toThrow();
+      });
+
+      it('should reject invalid timeout', () => {
+        const invalidOptions = {
+          timeout: -1,
+        };
+
+        expect(() => validateModelAuditOptions(invalidOptions)).toThrow();
+      });
+
+      it('should reject invalid maxSize format', () => {
+        const invalidOptions = {
+          maxSize: 'invalid-size',
+        };
+
+        expect(() => validateModelAuditOptions(invalidOptions)).toThrow();
+      });
+
+      it('should accept valid maxSize formats', () => {
+        const validSizes = ['1GB', '500MB', '1.5GB', '100KB', '1024B'];
+
+        for (const size of validSizes) {
+          expect(() => validateModelAuditOptions({ maxSize: size })).not.toThrow();
+        }
+      });
+    });
+
+    describe('safeValidateModelAuditOptions', () => {
+      it('should return success for valid options', () => {
+        const validOptions = {
+          format: 'sarif',
+          strict: true,
+        };
+
+        const result = safeValidateModelAuditOptions(validOptions);
+        expect(result.success).toBe(true);
+        expect(result.data).toEqual(validOptions);
+        expect(result.error).toBeUndefined();
+      });
+
+      it('should return error for invalid options', () => {
+        const invalidOptions = {
+          format: 'invalid-format',
+          timeout: -5,
+        };
+
+        const result = safeValidateModelAuditOptions(invalidOptions);
+        expect(result.success).toBe(false);
+        expect(result.data).toBeUndefined();
+        expect(result.error).toBeDefined();
+        expect(result.error?.issues).toHaveLength(2); // format and timeout errors
+      });
+
+      it('should handle empty options', () => {
+        const result = safeValidateModelAuditOptions({});
+        expect(result.success).toBe(true);
+        expect(result.data).toEqual({});
+      });
+    });
+
+    describe('parseModelAuditArgs with invalid input', () => {
+      it('should throw on invalid options passed to parseModelAuditArgs', () => {
+        const paths = ['model.pkl'];
+        const invalidOptions = {
+          format: 'xml', // Invalid format
+          timeout: -1, // Invalid timeout
+        };
+
+        expect(() => parseModelAuditArgs(paths, invalidOptions)).toThrow();
+      });
     });
   });
 });

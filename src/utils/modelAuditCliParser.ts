@@ -3,48 +3,66 @@
  * Ensures compatibility between promptfoo and modelaudit CLI interfaces
  */
 
-export interface ModelAuditCliOptions {
+import { z } from 'zod';
+
+/**
+ * Zod schema for ModelAudit CLI options
+ */
+export const ModelAuditCliOptionsSchema = z.object({
   // Core output control
-  blacklist?: string[];
-  format?: 'text' | 'json' | 'sarif';
-  output?: string;
-  verbose?: boolean;
-  quiet?: boolean;
+  blacklist: z.array(z.string()).optional(),
+  format: z.enum(['text', 'json', 'sarif']).optional(),
+  output: z.string().optional(),
+  verbose: z.boolean().optional(),
+  quiet: z.boolean().optional(),
 
   // Security behavior
-  strict?: boolean;
+  strict: z.boolean().optional(),
 
   // Progress & reporting
-  progress?: boolean;
-  sbom?: string;
+  progress: z.boolean().optional(),
+  sbom: z.string().optional(),
 
   // Override smart detection
-  timeout?: number;
-  maxSize?: string;
+  timeout: z.number().positive().optional(),
+  maxSize: z
+    .string()
+    .regex(/^\d+(\.\d+)?(GB|MB|KB|B)$/i, 'Invalid size format (e.g., 1GB, 500MB)')
+    .optional(),
 
   // Preview/debugging
-  dryRun?: boolean;
-  cache?: boolean; // when false, adds --no-cache
-}
+  dryRun: z.boolean().optional(),
+  cache: z.boolean().optional(), // when false, adds --no-cache
+});
 
-export interface ValidatedModelAuditArgs {
-  args: string[];
-  unsupportedOptions: string[];
-}
+export type ModelAuditCliOptions = z.infer<typeof ModelAuditCliOptionsSchema>;
+
+export const ValidatedModelAuditArgsSchema = z.object({
+  args: z.array(z.string()),
+  unsupportedOptions: z.array(z.string()),
+});
+
+export type ValidatedModelAuditArgs = z.infer<typeof ValidatedModelAuditArgsSchema>;
 
 /**
  * Valid ModelAudit CLI options as of version 0.2.5
  */
 export const VALID_MODELAUDIT_OPTIONS = new Set([
-  '--format', '-f',
-  '--output', '-o', 
-  '--verbose', '-v',
-  '--quiet', '-q',
-  '--blacklist', '-b',
+  '--format',
+  '-f',
+  '--output',
+  '-o',
+  '--verbose',
+  '-v',
+  '--quiet',
+  '-q',
+  '--blacklist',
+  '-b',
   '--strict',
   '--progress',
   '--sbom',
-  '--timeout', '-t',
+  '--timeout',
+  '-t',
   '--max-size',
   '--dry-run',
   '--no-cache',
@@ -76,74 +94,73 @@ export const DEPRECATED_OPTIONS_MAP: Record<string, string | null> = {
 };
 
 /**
- * Parses promptfoo CLI options into valid modelaudit arguments
+ * Configuration mapping from option keys to CLI arguments
  */
-export function parseModelAuditArgs(
-  paths: string[],
-  options: ModelAuditCliOptions
-): ValidatedModelAuditArgs {
-  const args: string[] = ['scan', ...paths];
-  const unsupportedOptions: string[] = [];
+const CLI_ARG_MAP: Record<
+  keyof ModelAuditCliOptions,
+  {
+    flag: string;
+    type: 'boolean' | 'string' | 'number' | 'array' | 'inverted-boolean';
+    transform?: (value: any) => string;
+  }
+> = {
+  blacklist: { flag: '--blacklist', type: 'array' },
+  format: { flag: '--format', type: 'string' },
+  output: { flag: '--output', type: 'string' },
+  verbose: { flag: '--verbose', type: 'boolean' },
+  quiet: { flag: '--quiet', type: 'boolean' },
+  strict: { flag: '--strict', type: 'boolean' },
+  progress: { flag: '--progress', type: 'boolean' },
+  sbom: { flag: '--sbom', type: 'string' },
+  timeout: { flag: '--timeout', type: 'number', transform: (v) => v.toString() },
+  maxSize: { flag: '--max-size', type: 'string' },
+  dryRun: { flag: '--dry-run', type: 'boolean' },
+  cache: { flag: '--no-cache', type: 'inverted-boolean' },
+};
 
-  // Core output control
-  if (options.blacklist && options.blacklist.length > 0) {
-    for (const pattern of options.blacklist) {
-      args.push('--blacklist', pattern);
+/**
+ * Elegant, configuration-driven CLI argument parser
+ */
+export function parseModelAuditArgs(paths: string[], options: unknown): ValidatedModelAuditArgs {
+  const validatedOptions = ModelAuditCliOptionsSchema.parse(options);
+  const args: string[] = ['scan', ...paths];
+
+  // Build arguments using configuration map
+  for (const [key, config] of Object.entries(CLI_ARG_MAP) as Array<
+    [keyof ModelAuditCliOptions, (typeof CLI_ARG_MAP)[keyof ModelAuditCliOptions]]
+  >) {
+    const value = validatedOptions[key];
+
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    switch (config.type) {
+      case 'boolean':
+        if (value) {
+          args.push(config.flag);
+        }
+        break;
+      case 'inverted-boolean':
+        if (value === false) {
+          args.push(config.flag);
+        }
+        break;
+      case 'string':
+        args.push(config.flag, String(value));
+        break;
+      case 'number':
+        args.push(config.flag, config.transform?.(value) ?? String(value));
+        break;
+      case 'array':
+        if (Array.isArray(value)) {
+          value.forEach((item) => args.push(config.flag, String(item)));
+        }
+        break;
     }
   }
 
-  if (options.format) {
-    args.push('--format', options.format);
-  }
-
-  if (options.output) {
-    args.push('--output', options.output);
-  }
-
-  if (options.verbose) {
-    args.push('--verbose');
-  }
-
-  if (options.quiet) {
-    args.push('--quiet');
-  }
-
-  // Security behavior
-  if (options.strict) {
-    args.push('--strict');
-  }
-
-  // Progress & reporting
-  if (options.progress) {
-    args.push('--progress');
-  }
-
-  if (options.sbom) {
-    args.push('--sbom', options.sbom);
-  }
-
-  // Override smart detection
-  if (options.timeout) {
-    args.push('--timeout', options.timeout.toString());
-  }
-
-  if (options.maxSize) {
-    args.push('--max-size', options.maxSize);
-  }
-
-  // Preview/debugging
-  if (options.dryRun) {
-    args.push('--dry-run');
-  }
-
-  if (options.cache === false) {
-    args.push('--no-cache');
-  }
-
-  return {
-    args,
-    unsupportedOptions,
-  };
+  return { args, unsupportedOptions: [] };
 }
 
 /**
@@ -154,25 +171,25 @@ export function validateModelAuditArgs(args: string[]): {
   unsupportedArgs: string[];
 } {
   const unsupportedArgs: string[] = [];
-  
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    
+
     // Skip non-option arguments (paths, values)
     if (!arg.startsWith('--') && !arg.startsWith('-')) {
       continue;
     }
-    
+
     // Skip 'scan' command
     if (arg === 'scan') {
       continue;
     }
-    
+
     if (!VALID_MODELAUDIT_OPTIONS.has(arg)) {
       unsupportedArgs.push(arg);
     }
   }
-  
+
   return {
     valid: unsupportedArgs.length === 0,
     unsupportedArgs,
@@ -184,13 +201,13 @@ export function validateModelAuditArgs(args: string[]): {
  */
 export function suggestReplacements(deprecatedOptions: string[]): Record<string, string | null> {
   const suggestions: Record<string, string | null> = {};
-  
+
   for (const option of deprecatedOptions) {
     if (option in DEPRECATED_OPTIONS_MAP) {
       suggestions[option] = DEPRECATED_OPTIONS_MAP[option];
     }
   }
-  
+
   return suggestions;
 }
 
@@ -201,33 +218,43 @@ export function formatUnsupportedArgsError(unsupportedArgs: string[]): string {
   if (unsupportedArgs.length === 0) {
     return '';
   }
-  
+
   const suggestions = suggestReplacements(unsupportedArgs);
   let message = `Unsupported ModelAudit arguments: ${unsupportedArgs.join(', ')}`;
-  
+
   const replacements = Object.entries(suggestions)
     .filter(([_, replacement]) => replacement !== null)
     .map(([old, replacement]) => `${old} → ${replacement}`);
-    
+
   const noReplacements = Object.entries(suggestions)
     .filter(([_, replacement]) => replacement === null)
     .map(([old, _]) => old);
-  
+
   if (replacements.length > 0) {
     message += `\n\nSuggested replacements:\n${replacements.join('\n')}`;
   }
-  
+
   if (noReplacements.length > 0) {
     message += `\n\nNo replacement available for: ${noReplacements.join(', ')}`;
-    message += '\nThese options may be handled automatically by modelaudit or use environment variables.';
+    message +=
+      '\nThese options may be handled automatically by modelaudit or use environment variables.';
   }
-  
+
   return message;
 }
 
 /**
- * Type guard to check if format is valid
+ * Compact validation utilities using Zod
  */
-export function isValidFormat(format: string): format is 'text' | 'json' | 'sarif' {
-  return ['text', 'json', 'sarif'].includes(format);
-}
+export const isValidFormat = (format: unknown): format is 'text' | 'json' | 'sarif' =>
+  z.enum(['text', 'json', 'sarif']).safeParse(format).success;
+
+export const validateModelAuditOptions = (options: unknown): ModelAuditCliOptions =>
+  ModelAuditCliOptionsSchema.parse(options);
+
+export const safeValidateModelAuditOptions = (options: unknown) => {
+  const result = ModelAuditCliOptionsSchema.safeParse(options);
+  return result.success
+    ? { success: true as const, data: result.data }
+    : { success: false as const, error: result.error };
+};
