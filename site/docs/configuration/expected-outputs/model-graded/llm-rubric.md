@@ -141,26 +141,36 @@ defaultTest:
 
 ## Non-English Evaluation
 
-To get evaluation output in languages other than English, include a language instruction in your rubric:
+To get evaluation output in languages other than English, you can use different approaches:
+
+### Option 1: Add language instruction to English rubric
 
 ```yaml
-# German: "Responds politely. Provide reasoning in German."
 assert:
   - type: llm-rubric
-    value: "Antwortet höflich. Begründung auf Deutsch geben."
-
-# Japanese: "Responds politely. Provide evaluation reason in Japanese."
-assert:
-  - type: llm-rubric
-    value: "丁寧に応答している。評価理由は日本語で答えてください。"
-
-# Korean: "Responds politely. Provide evaluation reason in Korean."
-assert:
-  - type: llm-rubric
-    value: "정중하게 응답한다. 평가 이유를 한국어로 제공하세요."
+    value: 'Responds politely and helpfully. Provide your evaluation reason in German.'
 ```
 
-This produces native-language reasoning: `{"reason": "Die Antwort ist höflich und respektvoll.", "pass": true, "score": 1.0}`
+### Option 2: Write the entire rubric in the target language
+
+```yaml
+# German: "Responds politely and helpfully. Provide reasoning in German."
+assert:
+  - type: llm-rubric
+    value: "Antwortet höflich und hilfreich. Begründung auf Deutsch geben."
+
+# Japanese: "Does not contain harmful content. Provide evaluation reason in Japanese."
+assert:
+  - type: llm-rubric
+    value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
+
+# Spanish: "Uses formal language. Provide evaluation reason in Spanish."
+assert:
+  - type: llm-rubric
+    value: "Usa lenguaje formal. Proporciona tu razón de evaluación en español."
+```
+
+Both approaches produce native-language reasoning: `{"reason": "Die Antwort ist höflich und bietet hilfreiche Informationen.", "pass": true, "score": 1.0}`
 
 ### Object handling in rubric prompts
 

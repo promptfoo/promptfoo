@@ -65,6 +65,24 @@ assert:
 
 For more information on factuality, see the [guide on LLM factuality](/docs/guides/factuality-eval).
 
+## Non-English Evaluation
+
+For multilingual applications, you can get evaluation output in other languages. This works with `llm-rubric` assertions:
+
+```yaml
+# Option 1: Add language instruction to English rubric
+assert:
+  - type: llm-rubric
+    value: "Responds helpfully without being overly verbose. Provide your evaluation reason in German."
+
+# Option 2: Write entire rubric in target language
+assert:
+  - type: llm-rubric
+    value: "Antwortet hilfreich ohne zu wortreich zu sein. Begründung auf Deutsch geben."
+```
+
+This produces: `{"reason": "Die Antwort ist hilfreich und präzise.", "pass": true, "score": 1.0}`
+
 Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading)):
 
 [![LLM prompt quality evaluation with PASS/FAIL expectations](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)
