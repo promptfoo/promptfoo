@@ -8,6 +8,13 @@ import { checkModelAuditUpdates } from '../updates';
 import type { Command } from 'commander';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
+import { 
+  parseModelAuditArgs, 
+  formatUnsupportedArgsError, 
+  DEPRECATED_OPTIONS_MAP,
+  type ModelAuditCliOptions 
+} from '../utils/modelAuditCliParser';
+import { z } from 'zod';
 
 export async function checkModelAuditInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -61,6 +68,34 @@ export function modelScanCommand(program: Command): void {
         process.exit(1);
       }
 
+      // Check for deprecated options and warn users
+      const deprecatedOptionsUsed = [];
+      for (const [deprecated, replacement] of Object.entries(DEPRECATED_OPTIONS_MAP)) {
+        const optionName = deprecated.replace(/^--/, '').replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+        if (options[optionName] !== undefined) {
+          deprecatedOptionsUsed.push(deprecated);
+          if (replacement) {
+            logger.warn(`⚠️  Warning: ${deprecated} is deprecated. Please use ${replacement} instead.`);
+          } else {
+            logger.warn(`⚠️  Warning: ${deprecated} is deprecated and is now handled automatically by modelaudit.`);
+          }
+        }
+      }
+      
+      // Special case for camelCase options that might be passed
+      if (options.maxFileSize !== undefined) {
+        logger.warn('⚠️  Warning: --max-file-size is deprecated. Please use --max-size instead.');
+      }
+      if (options.jfrogApiToken !== undefined) {
+        logger.warn('⚠️  Warning: --jfrog-api-token is deprecated. Please set JFROG_API_TOKEN environment variable instead.');
+      }
+      if (options.jfrogAccessToken !== undefined) {
+        logger.warn('⚠️  Warning: --jfrog-access-token is deprecated. Please set JFROG_ACCESS_TOKEN environment variable instead.');
+      }
+      if (options.registryUri !== undefined) {
+        logger.warn('⚠️  Warning: --registry-uri is deprecated. Please set JFROG_URL environment variable instead.');
+      }
+
       // Check if modelaudit is installed
       const isModelAuditInstalled = await checkModelAuditInstalled();
       if (!isModelAuditInstalled) {
@@ -73,59 +108,39 @@ export function modelScanCommand(program: Command): void {
       // Check for modelaudit updates
       await checkModelAuditUpdates();
 
-      const args = ['scan', ...paths];
-
-      // Add options
-      if (options.blacklist && options.blacklist.length > 0) {
-        options.blacklist.forEach((pattern: string) => {
-          args.push('--blacklist', pattern);
-        });
-      }
-
       // When saving to database (default), always use JSON format internally
-      const saveToDatabase = options.write !== false;
+      // Note: --no-write flag sets options.write to false
+      const saveToDatabase = options.write === undefined || options.write === true;
       const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
-      args.push('--format', outputFormat);
 
-      if (options.output && !saveToDatabase) {
-        args.push('--output', options.output);
-      }
+      // Prepare options for CLI parser, excluding output when saving to database
+      // Convert string values from Commander to expected types
+      const cliOptions = {
+        ...options,
+        format: outputFormat,
+        output: options.output && !saveToDatabase ? options.output : undefined,
+        timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+      };
 
-      if (options.sbom) {
-        args.push('--sbom', options.sbom);
-      }
-
-      if (options.timeout) {
-        args.push('--timeout', options.timeout);
-      }
-
-      if (options.verbose) {
-        args.push('--verbose');
-      }
-
-      if (options.maxSize) {
-        args.push('--max-size', options.maxSize);
-      }
-
-      // Scanning behavior options
-      if (options.strict) {
-        args.push('--strict');
-      }
-
-      if (options.dryRun) {
-        args.push('--dry-run');
-      }
-
-      if (options.cache === false) {
-        args.push('--no-cache');
-      }
-
-      if (options.quiet) {
-        args.push('--quiet');
-      }
-
-      if (options.progress) {
-        args.push('--progress');
+      // Use centralized CLI argument parser with error handling
+      let args: string[];
+      try {
+        const result = parseModelAuditArgs(paths, cliOptions);
+        args = result.args;
+        
+        // Optional: Handle any unsupported options (though shouldn't occur with our CLI)
+        if (result.unsupportedOptions.length > 0) {
+          logger.warn(`Unsupported options detected: ${result.unsupportedOptions.join(', ')}`);
+        }
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          logger.error('Invalid model audit options provided:');
+          error.errors.forEach((err) => {
+            logger.error(`  - ${err.path.join('.')}: ${err.message}`);
+          });
+          process.exit(1);
+        }
+        throw error;
       }
 
       logger.info(`Running model scan on: ${paths.join(', ')}`);

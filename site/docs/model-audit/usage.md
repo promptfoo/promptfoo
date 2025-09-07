@@ -8,6 +8,37 @@ description: Automate LLM model scanning across cloud providers with remote stor
 
 This page covers advanced ModelAudit features including cloud storage integration, CI/CD workflows, and programmatic usage.
 
+## Smart Detection & Auto-Configuration
+
+ModelAudit v0.2.5 introduces **smart detection** that automatically configures optimal settings based on your input type and environment. This replaces many manual configuration options with intelligent defaults.
+
+### What's Auto-Detected
+
+- **Progress reporting**: Automatically enabled for large files (>1GB) and disabled in CI environments
+- **Caching**: Enabled for cloud/remote operations, disabled for local files
+- **Timeouts**: Adjusted based on file size and source type
+- **Output format**: Optimized for terminal vs programmatic usage
+
+### Manual Override Options
+
+While smart detection works well for most cases, you can override specific behaviors:
+
+```bash
+# Force enable progress reporting (even for small files)
+promptfoo scan-model model.pkl --progress
+
+# Disable caching (even for cloud operations)
+promptfoo scan-model s3://bucket/model.pkl --no-cache
+
+# Override timeout detection
+promptfoo scan-model large-model.bin --timeout 7200
+
+# Force quiet mode (even in interactive terminals)
+promptfoo scan-model model.pkl --quiet
+```
+
+
+
 ## Remote Model Scanning
 
 ModelAudit can scan models directly from various remote sources without manual downloading.
@@ -64,6 +95,50 @@ export AWS_ENDPOINT_URL="https://your-account.r2.cloudflarestorage.com"
 
 promptfoo scan-model r2://my-bucket/model.safetensors
 ```
+
+### Artifact Registry Authentication
+
+ModelAudit v0.2.5 now uses **environment variables** for artifact registry authentication instead of CLI flags.
+
+#### JFrog Artifactory
+
+```bash
+# Option 1: Using API token (recommended)
+export JFROG_API_TOKEN="your-api-token"
+promptfoo scan-model "https://your-domain.jfrog.io/artifactory/repo/model.pkl"
+
+# Option 2: Using access token
+export JFROG_ACCESS_TOKEN="your-access-token"
+promptfoo scan-model "https://your-domain.jfrog.io/artifactory/repo/model.pkl"
+
+# Optional: Specify JFrog URL if non-standard
+export JFROG_URL="https://your-custom-domain.jfrog.io"
+```
+
+#### MLflow Model Registry
+
+```bash
+# Set MLflow tracking URI
+export MLFLOW_TRACKING_URI="https://your-mlflow-server.com"
+
+# Optional: Authentication for MLflow
+export MLFLOW_TRACKING_USERNAME="your-username"
+export MLFLOW_TRACKING_PASSWORD="your-password"
+
+promptfoo scan-model models:/model-name/version
+```
+
+### Migration from CLI Flags
+
+The following CLI flags were **removed** in v0.2.5 in favor of environment variables:
+
+| Removed CLI Flag | Environment Variable | Example |
+|---|---|---|
+| `--jfrog-api-token` | `JFROG_API_TOKEN` | `export JFROG_API_TOKEN="abc123"` |
+| `--jfrog-access-token` | `JFROG_ACCESS_TOKEN` | `export JFROG_ACCESS_TOKEN="xyz789"` |
+| `--registry-uri` | `JFROG_URL` | `export JFROG_URL="https://company.jfrog.io"` |
+
+**Why the change?** Environment variables are more secure than CLI flags (which appear in process lists and shell history) and align with industry best practices for credential management.
 
 ### Model Registries
 
@@ -130,7 +205,10 @@ promptfoo scan-model models/ \
   --timeout 600 \
   --verbose
 
-# Strict mode for security-critical scans
+# Enable strict mode for enhanced security validation
+promptfoo scan-model model.pkl --strict
+
+# Strict mode with additional output options
 promptfoo scan-model models/ \
   --strict \
   --format sarif \

@@ -27,7 +27,7 @@ export const ModelAuditCliOptionsSchema = z.object({
   timeout: z.number().positive().optional(),
   maxSize: z
     .string()
-    .regex(/^\d+(\.\d+)?(GB|MB|KB|B)$/i, 'Invalid size format (e.g., 1GB, 500MB)')
+    .regex(/^\s*\d+(\.\d+)?\s*(TB|GB|MB|KB|B)\s*$/i, 'Invalid size format (e.g., 1GB, 500MB, 1 GB)')
     .optional(),
 
   // Preview/debugging
