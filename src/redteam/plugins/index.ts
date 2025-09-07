@@ -340,6 +340,7 @@ const remotePlugins: PluginFactory[] = [
   'rag-poisoning',
   'reasoning-dos',
   'religion',
+  'special-token-injection',
   'ssrf',
   'system-prompt-override',
 ].map((key) => createRemotePlugin(key));
