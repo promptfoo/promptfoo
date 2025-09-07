@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -23,6 +23,22 @@ interface AdvancedOptionsDialogProps {
   onOptionsChange: (options: ScanOptions) => void;
 }
 
+const defaultScanOptions: ScanOptions = {
+  blacklist: [],
+  timeout: 300,
+  maxSize: undefined,
+  verbose: false,
+  format: 'text',
+  strict: false,
+  dryRun: false,
+  cache: true,
+  quiet: false,
+  progress: false,
+  sbom: undefined,
+  output: undefined,
+  author: undefined,
+};
+
 export default function AdvancedOptionsDialog({
   open,
   onClose,
@@ -30,7 +46,18 @@ export default function AdvancedOptionsDialog({
   onOptionsChange,
 }: AdvancedOptionsDialogProps) {
   const [blacklistInput, setBlacklistInput] = useState('');
-  const [localOptions, setLocalOptions] = useState(scanOptions);
+  const [localOptions, setLocalOptions] = useState({
+    ...defaultScanOptions,
+    ...scanOptions,
+  });
+
+  // Update local options when scanOptions prop changes
+  useEffect(() => {
+    setLocalOptions({
+      ...defaultScanOptions,
+      ...scanOptions,
+    });
+  }, [scanOptions]);
 
   const handleAddBlacklist = () => {
     if (blacklistInput.trim()) {
