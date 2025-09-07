@@ -144,15 +144,13 @@ describe('modelScanCommand', () => {
       '--timeout',
       '600',
       '--verbose',
-      '--max-file-size',
-      '1000000',
-      '--max-total-size',
-      '5000000',
-      '--no-write', // Changed from --no-save to --no-write to match the actual command option
-      '--progress-format',
-      'tqdm',
-      '--progress-interval',
-      '2.0',
+      '--max-size',
+      '1GB',
+      '--no-write',
+      '--strict',
+      '--dry-run',
+      '--quiet',
+      '--progress',
     ]);
 
     expect(spawn).toHaveBeenCalledWith('modelaudit', ['--version']);
@@ -171,16 +169,12 @@ describe('modelScanCommand', () => {
         '--timeout',
         '600',
         '--verbose',
-        '--max-file-size',
-        '1000000',
-        '--max-total-size',
-        '5000000',
-        '--selective',
-        '--no-skip-files',
-        '--progress-format',
-        'tqdm',
-        '--progress-interval',
-        '2.0',
+        '--max-size',
+        '1GB',
+        '--strict',
+        '--dry-run',
+        '--quiet',
+        '--progress',
       ],
       {
         stdio: 'inherit',
@@ -416,5 +410,207 @@ describe('checkModelAuditInstalled', () => {
     const result = await checkModelAuditInstalled();
     expect(result).toBe(false);
     expect(spawn).toHaveBeenCalledWith('modelaudit', ['--version']);
+  });
+});
+
+describe('Command Options Validation', () => {
+  let program: Command;
+  let mockExit: jest.SpyInstance;
+
+  beforeEach(() => {
+    program = new Command();
+    mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    mockExit.mockRestore();
+  });
+
+  it('should register only supported CLI options', () => {
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+    expect(command).toBeDefined();
+
+    const options = command?.options || [];
+    const optionNames = options.map((opt) => opt.long);
+
+    // Valid options that should be present
+    const validOptions = [
+      '--blacklist',
+      '--output',
+      '--format',
+      '--sbom',
+      '--no-write',
+      '--name',
+      '--timeout',
+      '--max-size',
+      '--strict',
+      '--dry-run',
+      '--no-cache',
+      '--quiet',
+      '--progress',
+      '--verbose',
+    ];
+
+    validOptions.forEach((option) => {
+      expect(optionNames).toContain(option);
+    });
+
+    // Invalid options that should NOT be present
+    const invalidOptions = [
+      '--registry-uri',
+      '--max-file-size',
+      '--max-total-size',
+      '--jfrog-api-token',
+      '--jfrog-access-token',
+      '--max-download-size',
+      '--cache-dir',
+      '--preview',
+      '--all-files',
+      '--selective',
+      '--stream',
+      '--skip-files',
+      '--no-skip-files',
+      '--strict-license',
+      '--no-large-model-support',
+      '--no-progress',
+      '--progress-log',
+      '--progress-format',
+      '--progress-interval',
+    ];
+
+    invalidOptions.forEach((option) => {
+      expect(optionNames).not.toContain(option);
+    });
+  });
+
+  it('should only pass valid arguments to modelaudit', async () => {
+    const versionCheckProcess = {
+      on: jest.fn().mockImplementation((event: string, callback: any) => {
+        if (event === 'close') {
+          callback(0);
+        }
+        return versionCheckProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    const mockScanProcess = {
+      stdout: { on: jest.fn() },
+      stderr: { on: jest.fn() },
+      on: jest.fn().mockImplementation((event: string, callback: any) => {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockScanProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as jest.Mock)
+      .mockReturnValueOnce(versionCheckProcess)
+      .mockReturnValueOnce(mockScanProcess);
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+
+    await command.parseAsync([
+      'node',
+      'scan-model',
+      'model.pkl',
+      '--blacklist',
+      'pattern1',
+      '--max-size',
+      '1GB',
+      '--strict',
+      '--dry-run',
+      '--no-cache',
+      '--no-write',
+    ]);
+
+    const spawnCalls = (spawn as jest.Mock).mock.calls;
+    const scanCall = spawnCalls.find((call) => call[1].includes('scan'));
+    expect(scanCall).toBeDefined();
+
+    const args = scanCall[1] as string[];
+
+    // Should contain valid arguments
+    expect(args).toContain('--blacklist');
+    expect(args).toContain('pattern1');
+    expect(args).toContain('--max-size');
+    expect(args).toContain('1GB');
+    expect(args).toContain('--strict');
+    expect(args).toContain('--dry-run');
+    expect(args).toContain('--no-cache');
+
+    // Should NOT contain invalid arguments
+    expect(args).not.toContain('--max-file-size');
+    expect(args).not.toContain('--preview');
+    expect(args).not.toContain('--registry-uri');
+    expect(args).not.toContain('--jfrog-api-token');
+  });
+
+  it('should handle multiple blacklist patterns correctly', async () => {
+    const versionCheckProcess = {
+      on: jest.fn().mockImplementation((event: string, callback: any) => {
+        if (event === 'close') {
+          callback(0);
+        }
+        return versionCheckProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    const mockScanProcess = {
+      stdout: { on: jest.fn() },
+      stderr: { on: jest.fn() },
+      on: jest.fn().mockImplementation((event: string, callback: any) => {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockScanProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as jest.Mock)
+      .mockReturnValueOnce(versionCheckProcess)
+      .mockReturnValueOnce(mockScanProcess);
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+
+    await command.parseAsync([
+      'node',
+      'scan-model',
+      'model.pkl',
+      '--blacklist',
+      'pattern1',
+      '--blacklist',
+      'pattern2',
+      '--blacklist',
+      'pattern3',
+      '--no-write',
+    ]);
+
+    const spawnCalls = (spawn as jest.Mock).mock.calls;
+    const scanCall = spawnCalls.find((call) => call[1].includes('scan'));
+    const args = scanCall[1] as string[];
+
+    // Should contain all blacklist patterns
+    expect(args).toContain('--blacklist');
+    expect(args).toContain('pattern1');
+    expect(args).toContain('pattern2');
+    expect(args).toContain('pattern3');
+
+    // Should have correct sequence
+    const blacklistIndices = [];
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--blacklist') {
+        blacklistIndices.push(i);
+      }
+    }
+    expect(blacklistIndices).toHaveLength(3);
+    expect(args[blacklistIndices[0] + 1]).toBe('pattern1');
+    expect(args[blacklistIndices[1] + 1]).toBe('pattern2');
+    expect(args[blacklistIndices[2] + 1]).toBe('pattern3');
   });
 });

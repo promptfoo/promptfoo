@@ -117,47 +117,155 @@ export default function AdvancedOptionsDialog({
             />
           </Box>
 
-          {/* Max File Size */}
+          {/* Max Size */}
           <Box>
             <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              Maximum File Size
+              Maximum Size Limit
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Override auto-detected size limits (e.g., 1GB, 500MB, 2TB)
             </Typography>
             <TextField
               fullWidth
-              type="number"
-              placeholder="Unlimited"
-              value={localOptions.maxFileSize || ''}
+              placeholder="Auto-detected"
+              value={localOptions.maxSize || ''}
               onChange={(e) =>
                 setLocalOptions({
                   ...localOptions,
-                  maxFileSize: e.target.value ? Number.parseInt(e.target.value) : undefined,
+                  maxSize: e.target.value || undefined,
                 })
               }
               InputProps={{
-                endAdornment: <InputAdornment position="end">bytes</InputAdornment>,
+                endAdornment: <InputAdornment position="end">size</InputAdornment>,
               }}
             />
           </Box>
 
-          {/* Verbose */}
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localOptions.verbose}
-                onChange={(e) => setLocalOptions({ ...localOptions, verbose: e.target.checked })}
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="subtitle1" fontWeight={600}>
-                  Verbose Output
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Show detailed scanning information
-                </Typography>
-              </Box>
-            }
-          />
+          {/* Output Format */}
+          <Box>
+            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+              Output Format
+            </Typography>
+            <TextField
+              fullWidth
+              select
+              value={localOptions.format || 'text'}
+              onChange={(e) =>
+                setLocalOptions({
+                  ...localOptions,
+                  format: e.target.value as 'text' | 'json' | 'sarif',
+                })
+              }
+              SelectProps={{ native: true }}
+            >
+              <option value="text">Text</option>
+              <option value="json">JSON</option>
+              <option value="sarif">SARIF</option>
+            </TextField>
+          </Box>
+
+          {/* Boolean Options */}
+          <Stack spacing={2}>
+            {/* Verbose */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={localOptions.verbose}
+                  onChange={(e) => setLocalOptions({ ...localOptions, verbose: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Verbose Output
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Show detailed scanning information
+                  </Typography>
+                </Box>
+              }
+            />
+
+            {/* Strict Mode */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={localOptions.strict || false}
+                  onChange={(e) => setLocalOptions({ ...localOptions, strict: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Strict Mode
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Fail on warnings, scan all file types, strict license validation
+                  </Typography>
+                </Box>
+              }
+            />
+
+            {/* Dry Run */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={localOptions.dryRun || false}
+                  onChange={(e) => setLocalOptions({ ...localOptions, dryRun: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Dry Run (Preview Mode)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Preview what would be scanned without actually doing it
+                  </Typography>
+                </Box>
+              }
+            />
+
+            {/* Quiet Mode */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={localOptions.quiet || false}
+                  onChange={(e) => setLocalOptions({ ...localOptions, quiet: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Quiet Mode
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Silence detection messages
+                  </Typography>
+                </Box>
+              }
+            />
+
+            {/* Progress Reporting */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={localOptions.progress || false}
+                  onChange={(e) => setLocalOptions({ ...localOptions, progress: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Force Progress Reporting
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Force enable progress reporting (auto-detected by default)
+                  </Typography>
+                </Box>
+              }
+            />
+          </Stack>
         </Stack>
       </DialogContent>
       <DialogActions sx={{ p: 3 }}>

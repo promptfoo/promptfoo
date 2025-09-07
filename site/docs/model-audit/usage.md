@@ -113,23 +113,28 @@ ModelAudit's behavior can be customized through command-line options. While conf
 
 ```bash
 # Set blacklist patterns
-modelaudit scan models/ \
+promptfoo scan-model models/ \
   --blacklist "deepseek" \
   --blacklist "qwen" \
   --blacklist "unsafe_model"
 
 # Set resource limits
-modelaudit scan models/ \
-  --max-file-size 1073741824 \
-  --max-total-size 5368709120 \
+promptfoo scan-model models/ \
+  --max-size 1GB \
   --timeout 600
 
 # Combine multiple options
-modelaudit scan models/ \
+promptfoo scan-model models/ \
   --blacklist "suspicious_pattern" \
-  --max-file-size 1073741824 \
+  --max-size 1GB \
   --timeout 600 \
   --verbose
+
+# Strict mode for security-critical scans
+promptfoo scan-model models/ \
+  --strict \
+  --format sarif \
+  --output security-scan.sarif
 ```
 
 Note: Advanced scanner-specific configurations (like pickle opcodes limits or weight distribution thresholds) are currently hardcoded and cannot be modified via CLI.
@@ -516,13 +521,13 @@ Automatic protection in archives:
 3. **File Size Limits**
 
    ```
-   Warning: File too large to scan: 2147483648 bytes (max: 1073741824)
+   Warning: File too large to scan
    ```
 
    Solution: Increase the maximum file size:
 
    ```bash
-   promptfoo scan-model model.pkl --max-file-size 3221225472
+   promptfoo scan-model model.pkl --max-size 3GB
    ```
 
 4. **Unknown Format**

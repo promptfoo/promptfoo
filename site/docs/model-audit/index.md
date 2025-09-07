@@ -141,10 +141,16 @@ promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious
 promptfoo scan-model model.pkl --verbose
 
 # Set file size limits
-promptfoo scan-model models/ --max-file-size 1073741824 --max-total-size 5368709120
+promptfoo scan-model models/ --max-size 1GB
 
 # Generate Software Bill of Materials
 promptfoo scan-model model.pkl --sbom sbom.json
+
+# Enable strict mode for security-critical scans
+promptfoo scan-model model.pkl --strict
+
+# Preview scan without actually processing
+promptfoo scan-model model.pkl --dry-run
 ```
 
 See the [Advanced Usage](./usage.md) guide for detailed authentication setup for cloud storage, JFrog, and other remote sources.

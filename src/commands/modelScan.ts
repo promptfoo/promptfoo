@@ -28,56 +28,27 @@ export function modelScanCommand(program: Command): void {
       '-b, --blacklist <patterns...>',
       'Additional blacklist patterns to check against model names',
     )
-    .option('--registry-uri <uri>', 'MLflow registry URI (only used for MLflow model URIs)')
 
     // Output configuration
     .option('-o, --output <path>', 'Output file path (prints to stdout if not specified)')
-    .option('-f, --format <format>', 'Output format (text, json)', 'text')
+    .option('-f, --format <format>', 'Output format (text, json, sarif)', 'text')
     .option('--sbom <path>', 'Write CycloneDX SBOM to the specified file')
     .option('--no-write', 'Do not write results to database')
     .option('--name <name>', 'Name for the audit (when saving to database)')
 
     // Execution control
     .option('-t, --timeout <seconds>', 'Scan timeout in seconds', '300')
-    .option('--max-file-size <bytes>', 'Maximum file size to scan in bytes (0 for unlimited)', '0')
-    .option(
-      '--max-total-size <bytes>',
-      'Maximum total bytes to scan before stopping (0 for unlimited)',
-      '0',
-    )
-
-    // Cloud storage options
-    .option(
-      '--jfrog-api-token <token>',
-      'JFrog API token for authentication (can also use JFROG_API_TOKEN env var)',
-    )
-    .option(
-      '--jfrog-access-token <token>',
-      'JFrog access token for authentication (can also use JFROG_ACCESS_TOKEN env var)',
-    )
-    .option(
-      '--max-download-size <size>',
-      'Maximum download size for cloud storage (e.g., 500MB, 2GB)',
-    )
-    .option('--no-cache', 'Do not use cache for downloaded cloud storage files')
-    .option(
-      '--cache-dir <path>',
-      'Directory for caching downloaded files (default: ~/.modelaudit/cache)',
-    )
-    .option('--preview', 'Preview what would be downloaded without actually downloading')
-    .option('--all-files', 'Download all files from directories (default: selective)')
-    .option('--stream', 'Use streaming analysis for large cloud files (experimental)')
+    .option('--max-size <size>', 'Override auto-detected size limits (e.g., 10GB, 500MB)')
 
     // Scanning behavior
-    .option('--skip-files', 'Skip non-model file types during directory scans')
-    .option('--strict-license', 'Fail scan when incompatible or deprecated licenses are detected')
-    .option('--no-large-model-support', 'Disable optimized scanning for large models (≈10GB+)')
-
-    // Progress reporting
-    .option('--no-progress', 'Disable progress reporting for large model scans')
-    .option('--progress-log <path>', 'Write progress information to log file')
-    .option('--progress-format <format>', 'Progress display format (tqdm, simple, json)', 'tqdm')
-    .option('--progress-interval <seconds>', 'Progress update interval in seconds', '2.0')
+    .option(
+      '--strict',
+      'Strict mode: fail on warnings, scan all file types, strict license validation',
+    )
+    .option('--dry-run', 'Preview what would be scanned/downloaded without actually doing it')
+    .option('--no-cache', 'Force disable caching (overrides smart detection)')
+    .option('--quiet', 'Silence detection messages')
+    .option('--progress', 'Force enable progress reporting (auto-detected by default)')
 
     // Miscellaneous
     .option('-v, --verbose', 'Enable verbose output')
@@ -132,83 +103,29 @@ export function modelScanCommand(program: Command): void {
         args.push('--verbose');
       }
 
-      if (options.maxFileSize && options.maxFileSize !== '0') {
-        args.push('--max-file-size', options.maxFileSize);
+      if (options.maxSize) {
+        args.push('--max-size', options.maxSize);
       }
 
-      if (options.maxTotalSize && options.maxTotalSize !== '0') {
-        args.push('--max-total-size', options.maxTotalSize);
+      // Scanning behavior options
+      if (options.strict) {
+        args.push('--strict');
       }
 
-      // Cloud storage options
-      if (options.registryUri) {
-        args.push('--registry-uri', options.registryUri);
-      }
-
-      if (options.jfrogApiToken) {
-        args.push('--jfrog-api-token', options.jfrogApiToken);
-      }
-
-      if (options.jfrogAccessToken) {
-        args.push('--jfrog-access-token', options.jfrogAccessToken);
-      }
-
-      if (options.maxDownloadSize) {
-        args.push('--max-download-size', options.maxDownloadSize);
+      if (options.dryRun) {
+        args.push('--dry-run');
       }
 
       if (options.cache === false) {
         args.push('--no-cache');
       }
 
-      if (options.cacheDir) {
-        args.push('--cache-dir', options.cacheDir);
+      if (options.quiet) {
+        args.push('--quiet');
       }
 
-      if (options.preview) {
-        args.push('--preview');
-      }
-
-      if (options.allFiles) {
-        args.push('--all-files');
-      } else {
-        args.push('--selective');
-      }
-
-      if (options.stream) {
-        args.push('--stream');
-      }
-
-      // Scanning behavior
-      if (options.skipFiles) {
-        args.push('--skip-files');
-      } else {
-        args.push('--no-skip-files');
-      }
-
-      if (options.strictLicense) {
-        args.push('--strict-license');
-      }
-
-      if (options.largeModelSupport === false) {
-        args.push('--no-large-model-support');
-      }
-
-      // Progress reporting
-      if (options.progress === false) {
-        args.push('--no-progress');
-      }
-
-      if (options.progressLog) {
-        args.push('--progress-log', options.progressLog);
-      }
-
-      if (options.progressFormat) {
-        args.push('--progress-format', options.progressFormat);
-      }
-
-      if (options.progressInterval) {
-        args.push('--progress-interval', options.progressInterval);
+      if (options.progress) {
+        args.push('--progress');
       }
 
       logger.info(`Running model scan on: ${paths.join(', ')}`);
@@ -287,26 +204,14 @@ export function modelScanCommand(program: Command): void {
                 options: {
                   blacklist: options.blacklist,
                   timeout: options.timeout,
-                  maxFileSize: options.maxFileSize,
-                  maxTotalSize: options.maxTotalSize,
+                  maxSize: options.maxSize,
                   verbose: options.verbose,
                   sbom: options.sbom,
-                  registryUri: options.registryUri,
-                  jfrogApiToken: options.jfrogApiToken ? '***' : undefined, // Mask sensitive data
-                  jfrogAccessToken: options.jfrogAccessToken ? '***' : undefined, // Mask sensitive data
-                  maxDownloadSize: options.maxDownloadSize,
+                  strict: options.strict,
+                  dryRun: options.dryRun,
                   cache: options.cache,
-                  cacheDir: options.cacheDir,
-                  preview: options.preview,
-                  allFiles: options.allFiles,
-                  stream: options.stream,
-                  skipFiles: options.skipFiles,
-                  strictLicense: options.strictLicense,
-                  largeModelSupport: options.largeModelSupport,
+                  quiet: options.quiet,
                   progress: options.progress,
-                  progressLog: options.progressLog,
-                  progressFormat: options.progressFormat,
-                  progressInterval: options.progressInterval,
                 },
               },
             });
