@@ -113,7 +113,7 @@ tests:
       - type: cost
         threshold: 0.05
 
-  # 🎯 Marketing Material Assessment  
+  # 🎯 Marketing Material Assessment
   - description: '🎯 Social Media Marketing Content Review'
     vars:
       style: 'vibrant social media post'
