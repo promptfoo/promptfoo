@@ -15,7 +15,7 @@ providers:
     label: Llama 4 Scout 17B
   - id: bedrock:amazon.nova-pro-v1:0
     label: Nova Pro
-  - id: bedrock:mistral.pixtral-large-25-02-2025-v1:0
+  - id: bedrock:mistral.pixtral-large-2502-v1:0
     label: Pixtral Large 25.02
     config:
       region: us-west-2
