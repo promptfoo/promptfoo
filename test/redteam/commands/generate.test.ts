@@ -1,14 +1,17 @@
 import fs from 'fs';
 
+import { Command } from 'commander';
 import * as yaml from 'js-yaml';
 import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
 import { synthesize } from '../../../src/redteam';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
-import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
+import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
+import { getConfigFromCloud } from '../../../src/util/cloud';
+import { checkCloudPermissions, ConfigPermissionError } from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/manage';
@@ -19,6 +22,18 @@ import type { ApiProvider } from '../../../src/types';
 jest.mock('fs');
 jest.mock('../../../src/redteam');
 jest.mock('../../../src/telemetry');
+jest.mock('uuid', () => ({
+  validate: jest.fn((str: string) => {
+    // Simple UUID validation for testing
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+}));
+jest.mock('../../../src/util', () => ({
+  setupEnv: jest.fn(),
+  isRunningUnderNpx: jest.fn().mockReturnValue(false),
+  printBorder: jest.fn(),
+}));
 jest.mock('../../../src/util/config/load', () => ({
   combineConfigs: jest.fn(),
   resolveConfigs: jest.fn(),
@@ -39,12 +54,27 @@ jest.mock('../../../src/envars', () => ({
   }),
 }));
 
+jest.mock('../../../src/util/cloud', () => ({
+  ...jest.requireActual('../../../src/util/cloud'),
+  getConfigFromCloud: jest.fn(),
+  getCloudDatabaseId: jest.fn(),
+  getPluginSeverityOverridesFromCloud: jest.fn(),
+  isCloudProvider: jest.fn(),
+  getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
+  checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../../../src/cliState', () => ({
+  remote: false,
+}));
+
 jest.mock('../../../src/globalConfig/cloud', () => ({
   CloudConfig: jest.fn().mockImplementation(() => ({
     isEnabled: jest.fn().mockReturnValue(false),
     getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
   })),
   cloudConfig: {
+    isEnabled: jest.fn().mockReturnValue(false),
     getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
   },
 }));
@@ -1020,6 +1050,118 @@ describe('doGenerateRedteam', () => {
       );
     });
   });
+
+  describe('checkCloudPermissions', () => {
+    it('should fail when checkCloudPermissions throws an error', async () => {
+      // Mock cloudConfig to be enabled
+      const mockCloudConfig = {
+        isEnabled: jest.fn().mockReturnValue(true),
+        getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+      };
+      jest.mocked(cloudConfig).isEnabled = mockCloudConfig.isEnabled;
+
+      // Mock checkCloudPermissions to throw an error
+      const permissionError = new ConfigPermissionError('Permission denied: insufficient access');
+      jest.mocked(checkCloudPermissions).mockRejectedValueOnce(permissionError);
+
+      // Setup the test configuration
+      jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          providers: ['openai:gpt-4'],
+          redteam: {},
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
+
+      await expect(doGenerateRedteam(options)).rejects.toThrow(
+        'Permission denied: insufficient access',
+      );
+
+      // Verify checkCloudPermissions was called with the correct arguments
+      expect(checkCloudPermissions).toHaveBeenCalledWith({
+        providers: ['openai:gpt-4'],
+        redteam: {},
+      });
+
+      // Verify that synthesize was not called
+      expect(synthesize).not.toHaveBeenCalled();
+    });
+
+    it('should call checkCloudPermissions and proceed when it succeeds', async () => {
+      // Mock cloudConfig to be enabled
+      const mockCloudConfig = {
+        isEnabled: jest.fn().mockReturnValue(true),
+        getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+      };
+      jest.mocked(cloudConfig).isEnabled = mockCloudConfig.isEnabled;
+
+      // Mock checkCloudPermissions to succeed (resolve without throwing)
+      jest.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
+
+      // Setup the test configuration
+      jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          providers: ['openai:gpt-4'],
+          redteam: {},
+        },
+      });
+
+      jest.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'redteam' },
+          },
+        ],
+        purpose: 'Test purpose',
+        entities: ['Test entity'],
+        injectVar: 'input',
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+        force: true,
+      };
+
+      const result = await doGenerateRedteam(options);
+
+      // Verify checkCloudPermissions was called
+      expect(checkCloudPermissions).toHaveBeenCalledWith({
+        providers: ['openai:gpt-4'],
+        redteam: {},
+      });
+
+      // Verify that the function proceeded normally
+      expect(result).not.toBeNull();
+
+      // Verify that synthesize was called
+      expect(synthesize).toHaveBeenCalled();
+    });
+  });
 });
 
 describe('doGenerateRedteam with external defaultTest', () => {
@@ -1183,5 +1325,311 @@ describe('doGenerateRedteam with external defaultTest', () => {
       'test-config.yaml',
       expect.any(Array),
     );
+  });
+});
+
+describe('redteam generate command with target option', () => {
+  let program: Command;
+  let originalExitCode: number | undefined;
+  let mockProvider: ApiProvider;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    program = new Command();
+    // Add both generate and init commands to test both
+    redteamGenerateCommand(program, 'generate', {}, undefined);
+    redteamGenerateCommand(program, 'init' as 'generate', {}, undefined);
+    originalExitCode = process.exitCode as number | undefined;
+    process.exitCode = 0;
+
+    mockProvider = {
+      id: () => 'test-provider',
+      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+      cleanup: jest.fn().mockResolvedValue(undefined),
+    };
+
+    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [],
+        tests: [],
+      },
+      config: {
+        redteam: {},
+      },
+    });
+  });
+
+  afterEach(() => {
+    process.exitCode = originalExitCode;
+    jest.restoreAllMocks();
+  });
+
+  it('should use target option to fetch cloud config when both config and target are UUIDs', async () => {
+    const mockConfig = {
+      prompts: ['Test prompt'],
+      vars: {},
+      providers: [{ id: 'test-provider' }],
+      targets: [
+        {
+          id: 'test-provider',
+        },
+      ],
+      redteam: {
+        plugins: ['harmful:hate'] as any,
+        strategies: [],
+      },
+    };
+    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+    // Mock fs to handle the temp file write
+    jest.mocked(fs.existsSync).mockReturnValue(false);
+    jest.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+    });
+
+    const configUUID = '12345678-1234-1234-1234-123456789012';
+    const targetUUID = '87654321-4321-4321-4321-210987654321';
+
+    // Find the generate command
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+    expect(generateCommand).toBeDefined();
+
+    // Execute the command with the target option
+    await generateCommand!.parseAsync([
+      'node',
+      'test',
+      '--config',
+      configUUID,
+      '--target',
+      targetUUID,
+      '--output',
+      'test-output.yaml',
+    ]);
+
+    // Allow async operations to complete
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Verify getConfigFromCloud was called with both config and target
+    expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
+  });
+
+  it('should handle backwards compatibility with empty targets', async () => {
+    const mockConfig = {
+      prompts: ['Test prompt'],
+      vars: {},
+      providers: [{ id: 'test-provider' }],
+      targets: [], // Empty targets array
+      redteam: {
+        plugins: ['harmful:hate'] as any,
+        strategies: [],
+      },
+    };
+    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+    // Mock fs to handle the temp file write
+    jest.mocked(fs.existsSync).mockReturnValue(false);
+    jest.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+    });
+
+    const configUUID = '12345678-1234-1234-1234-123456789012';
+    const targetUUID = '87654321-4321-4321-4321-210987654321';
+
+    // Find the generate command
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+
+    await generateCommand!.parseAsync([
+      'node',
+      'test',
+      '--config',
+      configUUID,
+      '--target',
+      targetUUID,
+      '--output',
+      'test-output.yaml',
+    ]);
+
+    // Verify that the target was added to the config for backwards compatibility
+    expect(mockConfig.targets).toEqual([
+      {
+        id: `promptfoo://provider/${targetUUID}`,
+        config: {},
+      },
+    ]);
+  });
+
+  it('should throw error when target is not a UUID but config is', async () => {
+    const configUUID = '12345678-1234-1234-1234-123456789012';
+    const invalidTarget = 'not-a-uuid';
+
+    // Find the generate command
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+
+    // Execute the command and expect it to throw
+    await expect(
+      generateCommand!.parseAsync([
+        'node',
+        'test',
+        '--config',
+        configUUID,
+        '--target',
+        invalidTarget,
+        '--output',
+        'test-output.yaml',
+      ]),
+    ).rejects.toThrow('Invalid target ID, it must be a valid UUID');
+
+    // Verify getConfigFromCloud was not called
+    expect(getConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should log error when target is provided with local config file', async () => {
+    const configPath = 'path/to/config.yaml';
+    const targetUUID = '87654321-4321-4321-4321-210987654321';
+
+    // Mock fs.existsSync to return true for the config file
+    jest.mocked(fs.existsSync).mockReturnValue(true);
+    jest.mocked(fs.readFileSync).mockReturnValue(
+      yaml.dump({
+        prompts: ['Test prompt'],
+        providers: [],
+        tests: [],
+      }),
+    );
+
+    // Find the generate command
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+
+    await generateCommand!.parseAsync([
+      'node',
+      'test',
+      '--config',
+      configPath,
+      '--target',
+      targetUUID,
+      '--output',
+      'test-output.yaml',
+    ]);
+
+    // Should log error message
+    expect(logger.error).toHaveBeenCalledWith(
+      `Target ID (-t) can only be used when -c is used with a cloud config UUID. To use a cloud target inside of a config set the id of the target to promptfoo://provider/${targetUUID}.`,
+    );
+
+    // Should set exit code to 1
+    expect(process.exitCode).toBe(1);
+
+    // getConfigFromCloud should not be called
+    expect(getConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should log error when target is provided without any config', async () => {
+    const targetUUID = '87654321-4321-4321-4321-210987654321';
+
+    // Find the generate command
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+
+    await generateCommand!.parseAsync([
+      'node',
+      'test',
+      '--target',
+      targetUUID,
+      '--output',
+      'test-output.yaml',
+    ]);
+
+    // Should log error message
+    expect(logger.error).toHaveBeenCalledWith(
+      `Target ID (-t) can only be used when -c is used with a cloud config UUID. To use a cloud target inside of a config set the id of the target to promptfoo://provider/${targetUUID}.`,
+    );
+
+    // Should set exit code to 1
+    expect(process.exitCode).toBe(1);
+
+    // getConfigFromCloud should not be called
+    expect(getConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should accept -t/--target option in generate command', async () => {
+    // Find the generate command
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+    expect(generateCommand).toBeDefined();
+
+    // Check that the -t/--target option is defined
+    const targetOption = generateCommand!.options.find(
+      (opt) => opt.short === '-t' || opt.long === '--target',
+    );
+    expect(targetOption).toBeDefined();
+    expect(targetOption?.description).toContain('Cloud provider target ID');
+  });
+
+  it('should also work with the init alias command', async () => {
+    const mockConfig = {
+      prompts: ['Test prompt'],
+      vars: {},
+      providers: [{ id: 'test-provider' }],
+      targets: [
+        {
+          id: 'test-provider',
+        },
+      ],
+      redteam: {
+        plugins: ['harmful:hate'] as any,
+        strategies: [],
+      },
+    };
+    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+    // Mock fs to handle the temp file write
+    jest.mocked(fs.existsSync).mockReturnValue(false);
+    jest.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+    jest.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+    });
+
+    const configUUID = '12345678-1234-1234-1234-123456789012';
+    const targetUUID = '87654321-4321-4321-4321-210987654321';
+
+    // Find the init command (alias for generate)
+    const initCommand = program.commands.find((cmd) => cmd.name() === 'init');
+    expect(initCommand).toBeDefined();
+
+    // Check that the -t/--target option is defined
+    const targetOption = initCommand!.options.find(
+      (opt) => opt.short === '-t' || opt.long === '--target',
+    );
+    expect(targetOption).toBeDefined();
+
+    // Execute the command with the target option
+    await initCommand!.parseAsync([
+      'node',
+      'test',
+      '--config',
+      configUUID,
+      '--target',
+      targetUUID,
+      '--output',
+      'test-output.yaml',
+    ]);
+
+    // Verify getConfigFromCloud was called with both config and target
+    expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
   });
 });

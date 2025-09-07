@@ -17,9 +17,9 @@ import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
+import { CIProgressReporter } from './progress/ciProgressReporter';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,
@@ -332,16 +332,6 @@ export async function runEval({
 
     if (test.providerOutput) {
       response.output = test.providerOutput;
-    } else if (
-      typeof test.provider === 'object' &&
-      typeof test.provider.id === 'function' &&
-      test.provider.id() === 'promptfoo:redteam:pandamonium'
-    ) {
-      if (!isPandamoniumProvider(test.provider)) {
-        throw new Error('Provider identified as pandamonium but does not have required methods');
-      }
-
-      return await test.provider.runPandamonium(provider, test, allTests || [], concurrency);
     } else {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       logger.debug(`Provider type: ${activeProvider.id()}`);
@@ -479,17 +469,25 @@ export async function runEval({
     } else {
       // Create a copy of response so we can potentially mutate it.
       const processedResponse = { ...response };
-      const transforms: string[] = [
-        provider.transform, // Apply provider transform first
-        // NOTE: postprocess is deprecated. Use the first defined transform.
-        [test.options?.transform, test.options?.postprocess].find((s) => s),
-      ]
-        .flat()
-        .filter((s): s is string => typeof s === 'string');
-      for (const t of transforms) {
-        processedResponse.output = await transform(t, processedResponse.output, {
+
+      // Apply provider transform first (if exists)
+      if (provider.transform) {
+        processedResponse.output = await transform(provider.transform, processedResponse.output, {
           vars,
           prompt,
+        });
+      }
+
+      // Store the provider-transformed output for assertions (contextTransform)
+      const providerTransformedOutput = processedResponse.output;
+
+      // Apply test transform (if exists)
+      const testTransform = test.options?.transform || test.options?.postprocess;
+      if (testTransform) {
+        processedResponse.output = await transform(testTransform, processedResponse.output, {
+          vars,
+          prompt,
+          ...(response && response.metadata && { metadata: response.metadata }),
         });
       }
 
@@ -505,10 +503,15 @@ export async function runEval({
         }
       }
 
+      // Pass providerTransformedOutput for contextTransform to use
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
-        providerResponse: processedResponse,
+        providerResponse: {
+          ...processedResponse,
+          // Add provider-transformed output for contextTransform
+          providerTransformedOutput,
+        },
         test,
         latencyMs: response.cached ? undefined : latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
@@ -686,6 +689,10 @@ class Evaluator {
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
+
+    // Progress reporters declared here for cleanup in finally block
+    let ciProgressReporter: CIProgressReporter | null = null;
+    let progressBarManager: ProgressBarManager | null = null;
 
     if (maxEvalTimeMs > 0) {
       globalAbortController = new AbortController();
@@ -1318,12 +1325,20 @@ class Evaluator {
     // Set up progress tracking
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
-    const progressBarManager = new ProgressBarManager(isWebUI);
 
-    // Initialize progress bar manager if needed
+    // Choose appropriate progress reporter
     logger.debug(
       `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
     );
+
+    if (isCI() && !isWebUI) {
+      // Use CI-friendly progress reporter
+      ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
+      ciProgressReporter.start();
+    } else if (this.options.showProgressBar && process.stdout.isTTY) {
+      // Use visual progress bars
+      progressBarManager = new ProgressBarManager(isWebUI);
+    }
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
@@ -1334,10 +1349,13 @@ class Evaluator {
         const provider = evalStep.provider.label || evalStep.provider.id();
         const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
-      } else if (this.options.showProgressBar) {
+      } else if (progressBarManager) {
         // Progress bar update is handled by the manager
         const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
         progressBarManager.updateProgress(index, evalStep, phase);
+      } else if (ciProgressReporter) {
+        // CI progress reporter update
+        ciProgressReporter.update(numComplete);
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
       }
@@ -1366,7 +1384,7 @@ class Evaluator {
     }
 
     // Now start the progress bar after info messages
-    if (this.options.showProgressBar) {
+    if (this.options.showProgressBar && progressBarManager) {
       await progressBarManager.initialize(runEvalOptions, concurrency, 0);
     }
 
@@ -1386,7 +1404,7 @@ class Evaluator {
           processedIndices.add(idx);
         }
 
-        // Serial phase complete - no specific action needed with single bar
+        // Serial phase complete - progress is tracked automatically by updateProgress
       }
 
       // Then run concurrent evaluations
@@ -1398,6 +1416,9 @@ class Evaluator {
         await this.evalRecord.addPrompts(prompts);
       });
     } catch (err) {
+      if (ciProgressReporter) {
+        ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
+      }
       if (options.abortSignal?.aborted) {
         evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
         logger.warn(`Evaluation aborted: ${String(err)}`);
@@ -1409,9 +1430,14 @@ class Evaluator {
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
 
-    // Update total count now that we know comparison count
-    if (this.options.showProgressBar && compareRowsCount > 0) {
-      progressBarManager.updateTotalCount(compareRowsCount);
+    // Update progress reporters based on comparison count
+    if (progressBarManager) {
+      if (compareRowsCount > 0) {
+        progressBarManager.updateTotalCount(compareRowsCount);
+      }
+    } else if (ciProgressReporter && compareRowsCount > 0) {
+      // Update total tests to include comparison tests for CI reporter
+      ciProgressReporter.updateTotalTests(runEvalOptions.length + compareRowsCount);
     }
 
     let compareCount = 0;
@@ -1498,8 +1524,10 @@ class Evaluator {
             await result.save();
           }
         }
-        if (this.options.showProgressBar) {
+        if (progressBarManager) {
           progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+        } else if (ciProgressReporter) {
+          ciProgressReporter.update(runEvalOptions.length + compareCount);
         } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
@@ -1536,8 +1564,12 @@ class Evaluator {
           );
 
           // Update progress bar
-          if (this.options.showProgressBar) {
+          if (progressBarManager) {
             progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+          } else if (ciProgressReporter) {
+            // For max-score assertions, we're still in the comparison phase
+            // so we add to the total completed count
+            ciProgressReporter.update(runEvalOptions.length + compareCount);
           } else if (!isWebUI) {
             logger.debug(`Max-score assertion for test #${testIdx} complete`);
           }
@@ -1580,10 +1612,16 @@ class Evaluator {
 
     await this.evalRecord.addPrompts(prompts);
 
-    // Finish up
-    if (this.options.showProgressBar) {
-      progressBarManager.complete();
-      progressBarManager.stop();
+    // Clean up progress reporters and timers
+    try {
+      if (progressBarManager) {
+        progressBarManager.complete();
+        progressBarManager.stop();
+      } else if (ciProgressReporter) {
+        ciProgressReporter.finish();
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during progress reporter cleanup: ${cleanupErr}`);
     }
 
     if (globalTimeout) {

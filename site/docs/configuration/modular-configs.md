@@ -1,5 +1,5 @@
 ---
-sidebar_position: 999
+displayed_sidebar: promptfoo
 sidebar_label: Managing Large Configs
 title: Managing Large Promptfoo Configurations
 description: Organize complex promptfoo configurations using modular YAML structures, file imports, and environment-specific settings

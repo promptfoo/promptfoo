@@ -7,6 +7,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 import type {
@@ -61,6 +62,7 @@ export default class BestOfNProvider implements ApiProvider {
     invariant(context?.vars, 'Expected vars to be set');
 
     const targetProvider: ApiProvider = context.originalProvider;
+    const targetTokenUsage = createEmptyTokenUsage();
 
     try {
       // Get candidate prompts from the server
@@ -114,6 +116,7 @@ export default class BestOfNProvider implements ApiProvider {
         try {
           const response = await targetProvider.callApi(renderedPrompt, context, options);
           lastResponse = response;
+          accumulateResponseTokenUsage(targetTokenUsage, response);
           currentStep++;
           if (!response.error) {
             successfulResponse = response;
@@ -131,9 +134,12 @@ export default class BestOfNProvider implements ApiProvider {
       });
 
       if (successfulResponse) {
+        (successfulResponse as ProviderResponse).tokenUsage = targetTokenUsage;
         return successfulResponse;
       }
-
+      if (lastResponse) {
+        (lastResponse as ProviderResponse).tokenUsage = targetTokenUsage;
+      }
       return (
         lastResponse || {
           error: 'All candidates failed',

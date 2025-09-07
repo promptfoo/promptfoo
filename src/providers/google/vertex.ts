@@ -5,6 +5,8 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import { renderVarsInObject } from '../../util';
+import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
@@ -296,6 +298,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       prompt,
       context?.vars,
       config.systemInstruction,
+      { useAssistantRole: config.useAssistantRole },
     );
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
@@ -319,6 +322,34 @@ export class VertexChatProvider extends VertexGenericProvider {
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
     };
+
+    if (config.responseSchema) {
+      if (body.generationConfig.response_schema) {
+        throw new Error(
+          '`responseSchema` provided but `generationConfig.response_schema` already set.',
+        );
+      }
+
+      let schema = maybeLoadFromExternalFile(
+        renderVarsInObject(config.responseSchema, context?.vars),
+      );
+
+      // Parse JSON string if it's a string (not loaded from file)
+      if (typeof schema === 'string') {
+        try {
+          schema = JSON.parse(schema);
+        } catch (error) {
+          throw new Error(`Invalid JSON in responseSchema: ${error}`);
+        }
+      }
+
+      // Apply variable substitution to the loaded schema
+      schema = renderVarsInObject(schema, context?.vars);
+
+      body.generationConfig.response_schema = schema;
+      body.generationConfig.response_mime_type = 'application/json';
+    }
+
     logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 
     const cache = await getCache();

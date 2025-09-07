@@ -90,6 +90,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--remote`                          | Force remote inference wherever possible (used for red teams)               |
 | `--repeat <number>`                 | Number of times to run each test                                            |
 | `--share`                           | Create a shareable URL                                                      |
+| `--no-share`                        | Do not create a shareable URL, this overrides the config file               |
 | `--suggest-prompts <number>`        | Generate N new prompts and append them to the prompt list                   |
 | `--table`                           | Output table in CLI                                                         |
 | `--table-cell-max-length <number>`  | Truncate console table cells to this length                                 |

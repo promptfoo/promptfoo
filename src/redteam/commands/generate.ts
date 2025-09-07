@@ -5,11 +5,12 @@ import path from 'path';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
+import { validate as uuidValidate } from 'uuid';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
-import { VERSION } from '../../constants';
+import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -18,12 +19,16 @@ import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import {
+  checkCloudPermissions,
   getCloudDatabaseId,
+  getConfigFromCloud,
+  getDefaultTeam,
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/manage';
+import { getCustomPolicyTexts } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
@@ -37,13 +42,16 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { isValidPolicyObject } from '../plugins/policy';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
 import type {
+  PolicyObject,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
+  RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
@@ -104,12 +112,30 @@ export async function doGenerateRedteam(
 
   let testSuite: TestSuite;
   let redteamConfig: RedteamFileConfig | undefined;
-  const configPath = options.config || options.defaultConfigPath;
+  let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
+  let resolvedConfigMetadata: Record<string, any> | undefined;
+
+  // Write a remote config to a temporary file
+  if (options.configFromCloud) {
+    // Write configFromCloud to a temporary file
+    const filename = `redteam-generate-${Date.now()}.yaml`;
+    const tmpFile = path.join('', filename);
+    fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
+    fs.writeFileSync(tmpFile, yaml.dump(options.configFromCloud));
+    configPath = tmpFile;
+    logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
+  }
 
   // Check for updates to the config file and decide whether to generate
-  let shouldGenerate = options.force;
-  if (!options.force && fs.existsSync(outputPath) && configPath && fs.existsSync(configPath)) {
+  let shouldGenerate = options.force || options.configFromCloud; // Always generate for live configs
+  if (
+    !options.force &&
+    !options.configFromCloud &&
+    fs.existsSync(outputPath) &&
+    configPath &&
+    fs.existsSync(configPath)
+  ) {
     // Skip hash check for .burp files since they're not YAML
     if (!outputPath.endsWith('.burp')) {
       const redteamContent = yaml.load(
@@ -142,6 +168,29 @@ export async function doGenerateRedteam(
     );
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
+    resolvedConfigMetadata = resolved.config.metadata;
+
+    await checkCloudPermissions(resolved.config);
+
+    // Warn if both tests section and redteam config are present
+    if (redteamConfig && resolved.testSuite.tests && resolved.testSuite.tests.length > 0) {
+      logger.warn(
+        chalk.yellow(
+          dedent`
+            ⚠️  Warning: Found both 'tests' section and 'redteam' configuration in your config file.
+
+            The 'tests' section is ignored when generating red team tests. Red team automatically
+            generates its own test cases based on the plugins and strategies you've configured.
+
+            If you want to use custom test variables with red team, consider:
+            1. Using the \`defaultTest\` key to set your vars
+            2. Using environment variables with {{env.VAR_NAME}} syntax
+            3. Using a transformRequest function in your target config
+            4. Using multiple target configurations
+          `,
+        ),
+      );
+    }
 
     try {
       // If the provider is a cloud provider, check for plugin severity overrides:
@@ -189,7 +238,7 @@ export async function doGenerateRedteam(
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
 
-  let plugins;
+  let plugins: RedteamPluginObject[] = [];
 
   // If plugins are defined in the config file
   if (redteamConfig?.plugins && redteamConfig.plugins.length > 0) {
@@ -258,6 +307,27 @@ export async function doGenerateRedteam(
     });
 
     logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
+  }
+
+  // Resolve policy references.
+  // Each reference is an id of the policy record stored in Promptfoo Cloud; load their respective texts.
+  const policyPluginsWithRefs = plugins.filter(
+    (plugin) => plugin.config?.policy && isValidPolicyObject(plugin.config?.policy),
+  );
+  if (policyPluginsWithRefs.length > 0) {
+    // Load the calling user's team id; all policies must belong to the same team.
+    const teamId =
+      resolvedConfigMetadata?.teamId ??
+      (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
+      (await getDefaultTeam()).id;
+
+    const texts = await getCustomPolicyTexts(policyPluginsWithRefs, teamId);
+
+    // Assign, in-place, the policy texts to the plugins
+    for (const policyPlugin of policyPluginsWithRefs) {
+      const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
+      policyPlugin.config!.policy = { id: policyId, text: texts[policyId] } as PolicyObject;
+    }
   }
 
   let strategies: (string | { id: string })[] =
@@ -538,9 +608,13 @@ export function redteamGenerateCommand(
   program
     .command(command) // generate or redteam depending on if called from redteam or generate
     .description('Generate adversarial test cases')
-    .option('-c, --config [path]', 'Path to configuration file. Defaults to promptfooconfig.yaml')
+    .option(
+      '-c, --config [path]',
+      'Path to configuration file or cloud config UUID. Defaults to promptfooconfig.yaml',
+    )
     .option('-o, --output [path]', 'Path to output file')
     .option('-w, --write', 'Write results to promptfoo configuration file', false)
+    .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .option(
       '--purpose <purpose>',
       'Set the system purpose. If not set, the system purpose will be inferred from the config file',
@@ -601,7 +675,34 @@ export function redteamGenerateCommand(
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
-    .action((opts: Partial<RedteamCliGenerateOptions>): void => {
+    .action(async (opts: Partial<RedteamCliGenerateOptions>): Promise<void> => {
+      // Handle cloud config with target
+      if (opts.config && uuidValidate(opts.config)) {
+        // If target is provided, it must be a valid UUID. This check is nested because the target flag is mutually inclusive with a config that's set to a
+        // Cloud-defined config UUID i.e. a cloud target cannot be used with a local config.
+        if (opts.target && !uuidValidate(opts.target)) {
+          throw new Error('Invalid target ID, it must be a valid UUID');
+        }
+        const configObj = await getConfigFromCloud(opts.config, opts.target);
+
+        // backwards compatible for old cloud servers
+        if (
+          opts.target &&
+          uuidValidate(opts.target) &&
+          (!configObj.targets || configObj.targets?.length === 0)
+        ) {
+          configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
+        }
+        opts.configFromCloud = configObj;
+        opts.config = undefined;
+      } else if (opts.target) {
+        logger.error(
+          `Target ID (-t) can only be used when -c is used with a cloud config UUID. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}.`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+
       if (opts.remote) {
         cliState.remote = true;
       }
@@ -638,7 +739,7 @@ export function redteamGenerateCommand(
           defaultConfig,
           defaultConfigPath,
         });
-        doGenerateRedteam(validatedOpts);
+        await doGenerateRedteam(validatedOpts);
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');

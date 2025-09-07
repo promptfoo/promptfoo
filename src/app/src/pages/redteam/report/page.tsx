@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import CrispChat from '@app/components/CrispChat';
+import PylonChat from '@app/components/PylonChat';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
@@ -56,7 +56,7 @@ export default function ReportPage() {
   return (
     <UserProvider>
       {evalId ? <Report /> : <ReportIndex />}
-      <CrispChat />
+      <PylonChat />
     </UserProvider>
   );
 }

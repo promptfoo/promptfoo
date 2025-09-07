@@ -1,6 +1,6 @@
 import { clearCache } from '../../src/cache';
-import * as fetchModule from '../../src/fetch';
 import { GroqProvider } from '../../src/providers/groq';
+import * as fetchModule from '../../src/util/fetch';
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
 
@@ -9,7 +9,7 @@ jest.mock('../../src/util', () => ({
   renderVarsInObject: jest.fn((x) => x),
 }));
 
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts');
 
 describe('Groq', () => {
   const mockedFetchWithRetries = jest.mocked(fetchModule.fetchWithRetries);

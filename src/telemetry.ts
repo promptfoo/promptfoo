@@ -3,11 +3,11 @@ import { randomUUID } from 'crypto';
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
 import { VERSION } from './constants';
-import { getEnvBool, isCI } from './envars';
-import { fetchWithTimeout } from './fetch';
 import { POSTHOG_KEY } from './constants/build';
+import { getEnvBool, getEnvString, isCI } from './envars';
 import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
 import logger from './logger';
+import { fetchWithTimeout } from './util/fetch';
 
 export const TelemetryEventSchema = z.object({
   event: z.enum([
@@ -43,10 +43,6 @@ function getPostHogClient(): PostHog | null {
     try {
       posthogClient = new PostHog(POSTHOG_KEY, {
         host: EVENTS_ENDPOINT,
-      });
-
-      posthogClient.on('error', (error) => {
-        logger.debug(`PostHog error: ${error}`);
       });
     } catch {
       posthogClient = null;
@@ -180,7 +176,7 @@ export class Telemetry {
       },
       body: JSON.stringify({
         event: eventName,
-        environment: process.env.NODE_ENV ?? 'development',
+        environment: getEnvString('NODE_ENV', 'development'),
         email: this.email,
         meta: {
           user_id: this.id,
