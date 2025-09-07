@@ -1,0 +1,145 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: '🎨 Comprehensive Fun Test Suite for Gemini 2.5 Flash Image'
+
+prompts:
+  # Basic creative prompts
+  - 'Generate an image of {{subject}}'
+  - 'Create a {{style}} artwork featuring {{subject}}'
+  - 'Design {{subject}} in the style of {{artist}}'
+  - 'Show {{character}} {{action}} in {{setting}}'
+
+providers:
+  # Test Google AI Studio
+  - id: google:gemini-2.5-flash-image-preview
+    label: 'AI Studio 🚀'
+    config:
+      generationConfig:
+        temperature: 0.8
+        maxOutputTokens: 1024
+        responseModalities:
+          - IMAGE
+          - TEXT
+
+tests:
+  # 🎭 Creative Character Tests
+  - description: '🦄 Magical unicorn in cyberpunk city'
+    vars:
+      subject: 'a rainbow unicorn with LED mane galloping through neon-lit streets'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.05
+      - type: javascript
+        value: |
+          const hasImage = output.includes('![Generated Image]');
+          const hasBase64 = output.includes('data:image') && output.includes('base64,');
+          return { 
+            pass: hasImage && hasBase64, 
+            score: hasImage && hasBase64 ? 1 : 0,
+            reason: hasImage && hasBase64 ? "Perfect image format!" : "Image format issue"
+          };
+
+  - description: '🚀 Space cat astronaut adventure'
+    vars:
+      subject: 'a fluffy orange cat in a space suit floating among colorful nebulae'
+    assert:
+      - type: contains
+        value: 'data:image'
+      - type: cost
+        threshold: 0.05
+
+  - description: '🎨 Van Gogh style robot'
+    vars:
+      style: 'Van Gogh swirly impressionist'
+      subject: 'a friendly robot gardening flowers'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.05
+
+  # 🏰 Fantasy Adventure Series
+  - description: '🐉 Dragon vs knight epic battle'
+    vars:
+      character: 'a brave knight in shining armor'
+      action: 'battling a majestic fire-breathing dragon'
+      setting: 'a medieval castle courtyard at sunset'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.05
+
+  - description: "🧙‍♂️ Wizard's magical library"
+    vars:
+      subject: "a wizard's enchanted library with floating books and glowing crystals"
+    assert:
+      - type: contains
+        value: 'data:image'
+      - type: cost
+        threshold: 0.05
+
+  # 🌮 Fun Food Adventures
+  - description: '🌮 Taco truck in space'
+    vars:
+      subject: 'a colorful taco truck floating in space serving aliens'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.05
+
+  - description: '🍕 Pizza surfing competition'
+    vars:
+      subject: 'anthropomorphic pizza slices surfing on cheese waves'
+    assert:
+      - type: contains
+        value: 'data:image'
+      - type: cost
+        threshold: 0.05
+
+  # 🎪 Whimsical Scenarios
+  - description: '🎈 Hot air balloon city'
+    vars:
+      artist: 'Studio Ghibli'
+      subject: 'a city made entirely of hot air balloons floating in cloudy skies'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.05
+
+  - description: '🦋 Butterfly mechanical garden'
+    vars:
+      style: 'steampunk mechanical'
+      subject: 'robot butterflies pollinating mechanical flowers in a brass garden'
+    assert:
+      - type: contains
+        value: 'data:image'
+      - type: cost
+        threshold: 0.05
+
+  # 🎯 Technical Quality Tests
+  - description: '🎪 Detailed circus scene test'
+    vars:
+      subject: 'a vibrant three-ring circus with acrobats, lions, and colorful tents under spotlight'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: javascript
+        value: |
+          // Validate image format and estimate token count
+          const imageMatch = output.match(/!\[Generated Image\]\(data:image\/([^;]+);base64,([^)]+)\)/);
+          if (!imageMatch) return { pass: false, score: 0, reason: "No valid image found" };
+
+          const [, mimeType, base64Data] = imageMatch;
+          const tokenEstimate = Math.round(base64Data.length * 0.75 / 4); // Rough token estimate
+
+          return { 
+            pass: tokenEstimate > 1000 && tokenEstimate < 2000, 
+            score: 1,
+            reason: `Image: ${mimeType}, Est. tokens: ${tokenEstimate} (expected ~1290)`
+          };
+      - type: cost
+        threshold: 0.05
