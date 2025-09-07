@@ -221,11 +221,18 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
             }),
           };
 
+      // Calculate cost based on token usage and model
+      let cost: number | undefined;
+      if (tokenUsage && tokenUsage.total) {
+        cost = this.calculateCost(tokenUsage.total);
+      }
+
       return {
         output,
         tokenUsage,
         raw: data,
         cached,
+        cost,
       };
     } catch (err) {
       return {
@@ -399,11 +406,18 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
             }),
           };
 
+      // Calculate cost based on token usage and model
+      let cost: number | undefined;
+      if (tokenUsage && tokenUsage.total) {
+        cost = this.calculateCost(tokenUsage.total);
+      }
+
       return {
         output,
         tokenUsage,
         raw: data,
         cached,
+        cost,
         ...(guardrails && { guardrails }),
         metadata: {
           ...(candidate.groundingChunks && { groundingChunks: candidate.groundingChunks }),
@@ -417,6 +431,32 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
+  }
+
+  private calculateCost(totalTokens: number): number {
+    // Cost calculation based on Google's pricing
+    // For image generation models like gemini-2.5-flash-image: $30 per 1M output tokens
+    // For regular text models: varies by model (e.g., gemini-2.5-flash: $0.30 input, $2.50 output)
+
+    if (this.modelName.includes('gemini-2.5-flash-image')) {
+      // Image generation: $30 per 1M tokens (all output tokens)
+      return (totalTokens / 1000000) * 30.0;
+    }
+
+    // For text models, we'd need more sophisticated calculation with input/output breakdown
+    // For now, use a conservative estimate for mixed models
+    if (this.modelName.includes('gemini-2.5-flash')) {
+      // Assume average of input ($0.30) and output ($2.50) pricing
+      return (totalTokens / 1000000) * 1.4; // Conservative estimate
+    }
+
+    if (this.modelName.includes('gemini-2.5-pro')) {
+      // Pro model pricing (varies by region, using standard pricing)
+      return (totalTokens / 1000000) * 3.5; // Conservative estimate
+    }
+
+    // Default fallback for unknown models
+    return (totalTokens / 1000000) * 2.0;
   }
 
   async cleanup(): Promise<void> {

@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Gemini 2.5 Flash Image Generation Example (Vertex AI)
+
+prompts:
+  # Basic image generation
+  - 'Generate an image of {{subject}}'
+
+  # Artistic style prompt
+  - 'Create a {{style}} image of {{subject}}'
+
+providers:
+  # Vertex AI Gemini 2.5 Flash Image model optimized for image generation
+  - id: vertex:gemini-2.5-flash-image-preview
+    config:
+      # Vertex AI configuration
+      # projectId: your-gcp-project-id  # Optional, can be inferred from credentials
+      # region: us-central1  # Optional, defaults to us-central1
+      # credentials: file://path/to/service-account.json  # Optional, uses default credentials
+
+      # Image generation specific configuration
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 1024
+        # Enable both image and text responses for multimodal output
+        responseModalities:
+          - IMAGE
+          - TEXT
+
+tests:
+  # Basic image generation test
+  - description: 'Simple landscape generation'
+    vars:
+      subject: 'a serene mountain lake at sunset'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.50
+
+  # Artistic style test
+  - description: 'Watercolor style artwork'
+    vars:
+      style: 'watercolor painting'
+      subject: 'cherry blossoms in spring'
+    assert:
+      - type: contains
+        value: 'data:image'
+      - type: cost
+        threshold: 0.50

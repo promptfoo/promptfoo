@@ -453,6 +453,14 @@ export class VertexChatProvider extends VertexGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
+    // Enable image generation for Gemini 2.5 Flash Image models
+    if (this.modelName.includes('gemini-2.5-flash-image')) {
+      // Allow both text and image responses for image generation models
+      body.generationConfig.responseModalities = ['IMAGE', 'TEXT'];
+    }
+
+    logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
+
     const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
 
@@ -666,10 +674,18 @@ export class VertexChatProvider extends VertexGenericProvider {
             },
           }),
         };
+
+        // Calculate cost based on token usage and model
+        let cost: number | undefined;
+        if (tokenUsage && tokenUsage.total) {
+          cost = this.calculateCost(tokenUsage.total);
+        }
+
         response = {
           cached: false,
           output,
           tokenUsage,
+          cost,
           metadata: {},
         };
 
@@ -1195,6 +1211,32 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       logger.error(`Error parsing Vertex embeddings API response: ${err}`);
       throw err;
     }
+  }
+
+  private calculateCost(totalTokens: number): number {
+    // Cost calculation based on Google's pricing
+    // For image generation models like gemini-2.5-flash-image: $30 per 1M output tokens
+    // For regular text models: varies by model (e.g., gemini-2.5-flash: $0.30 input, $2.50 output)
+
+    if (this.modelName.includes('gemini-2.5-flash-image')) {
+      // Image generation: $30 per 1M tokens (all output tokens)
+      return (totalTokens / 1000000) * 30.0;
+    }
+
+    // For text models, we'd need more sophisticated calculation with input/output breakdown
+    // For now, use a conservative estimate for mixed models
+    if (this.modelName.includes('gemini-2.5-flash')) {
+      // Assume average of input ($0.30) and output ($2.50) pricing
+      return (totalTokens / 1000000) * 1.4; // Conservative estimate
+    }
+
+    if (this.modelName.includes('gemini-2.5-pro')) {
+      // Pro model pricing (varies by region, using standard pricing)
+      return (totalTokens / 1000000) * 3.5; // Conservative estimate
+    }
+
+    // Default fallback for unknown models
+    return (totalTokens / 1000000) * 2.0;
   }
 }
 

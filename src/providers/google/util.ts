@@ -469,7 +469,7 @@ export function formatCandidateContents(candidate: Candidate) {
     let textOutput = '';
     const outputParts: string[] = [];
     let hasImages = false;
-    
+
     for (const part of candidate.content.parts) {
       if ('text' in part) {
         textOutput += part.text;
@@ -486,17 +486,17 @@ export function formatCandidateContents(candidate: Candidate) {
         return candidate.content.parts;
       }
     }
-    
+
     // If we have images, return the combined output with images
     if (hasImages) {
       return outputParts.join('\n\n');
     }
-    
+
     // If only text, return the text string
     if (textOutput) {
       return textOutput;
     }
-    
+
     // If no text and no images but other parts, return parts array
     return candidate.content.parts;
   } else {
