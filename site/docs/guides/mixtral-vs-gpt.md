@@ -167,9 +167,9 @@ Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai
 
 | Model                      | Arena rating | MT-bench score |
 | -------------------------- | ------------ | -------------- |
-| gpt-5                    | 1243         | 9.32           |
+| gpt-5                      | 1243         | 9.32           |
 | Mixtral-8x7b-Instruct-v0.1 | 1121         | 8.3            |
-| gpt-5-mini               | 1074         | 8.32           |
+| gpt-5-mini                 | 1074         | 8.32           |
 
 While public benchmarks tell you how these models perform on _generic_ tasks, they are no substitute for running a benchmark on your _own_ data and use cases.
 

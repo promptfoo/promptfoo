@@ -188,7 +188,7 @@ Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai
 
 | Model                | Arena rating |
 | -------------------- | ------------ |
-| gpt-5              | 1287         |
+| gpt-5                | 1287         |
 | Qwen-2-72B-instruct  | 1187         |
 | llama-3-70b-instruct | 1208         |
 
