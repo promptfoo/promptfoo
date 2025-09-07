@@ -180,7 +180,6 @@ promptfoo scan-model models/ \
   --output security-scan.sarif
 ```
 
-
 ## CI/CD Integration
 
 ### GitHub Actions
