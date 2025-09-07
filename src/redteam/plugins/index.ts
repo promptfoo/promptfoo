@@ -37,7 +37,7 @@ import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
-import { PolicyPlugin } from './policy';
+import { isValidPolicyObject, PolicyPlugin } from './policy';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
@@ -184,8 +184,12 @@ const pluginFactories: PluginFactory[] = [
   ),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
   createPluginFactory(PlinyPlugin, 'pliny'),
-  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
-    invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
+  createPluginFactory<{ policy: any }>(PolicyPlugin, 'policy', (config: { policy: any }) =>
+    // Validate the policy plugin config and provide a meaningful error message to the user.
+    invariant(
+      config.policy && (typeof config.policy === 'string' || isValidPolicyObject(config.policy)),
+      `One of the policy plugins is invalid. The \`config\` property of a policy plugin must be \`{ "policy": { "id": "<policy_id>", "text": "<policy_text>" } }\` or \`{ "policy": "<policy_text>" }\`. Received: ${JSON.stringify(config)}`,
+    ),
   ),
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
@@ -318,12 +322,18 @@ const remotePlugins: PluginFactory[] = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
+  'medical:off-label-use',
   'medical:prioritization-error',
   'medical:sycophancy',
   'financial:calculation-error',
   'financial:compliance-violation',
+  'financial:confidential-disclosure',
+  'financial:counterfactual',
   'financial:data-leakage',
+  'financial:defamation',
   'financial:hallucination',
+  'financial:impartiality',
+  'financial:misconduct',
   'financial:sycophancy',
   'off-topic',
   'rag-document-exfiltration',

@@ -258,6 +258,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       prompt,
       context?.vars,
       config.systemInstruction,
+      { useAssistantRole: config.useAssistantRole },
     );
 
     // Determine API version based on model

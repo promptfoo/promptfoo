@@ -588,11 +588,22 @@ For more details on extended thinking capabilities, see the [Anthropic provider 
 
 ## Transforming outputs
 
-Transforms can be applied at both the provider level and in test cases. The order of application is:
+Transforms can be applied at multiple levels in the evaluation pipeline:
 
-1. Provider transforms (always applied first)
-2. Default test transforms (if specified in `defaultTest`)
-3. Individual test case transforms (overrides `defaultTest` transform if present)
+### Transform execution order
+
+1. **Provider transforms** (`transformResponse`) - Always applied first
+2. **Test transforms** (`options.transform`) and **Context transforms** (`contextTransform`)
+   - Both receive the output from the provider transform
+   - Test transforms modify the output for assertions
+   - Context transforms extract context for context-based assertions (e.g., `context-faithfulness`)
+
+### Test transform hierarchy
+
+For test transforms specifically:
+
+1. Default test transforms (if specified in `defaultTest`)
+2. Individual test case transforms (overrides `defaultTest` transform if present)
 
 Note that only one transform is applied at the test case level - either from `defaultTest` or the individual test case, not both.
 
@@ -611,6 +622,8 @@ transformFn: (output: string, context: {
     display?: string;
   };
   vars?: Record<string, any>;
+  // Metadata returned in the provider response.
+  metadata?: Record<string, any>;
 }) => void;
 ```
 

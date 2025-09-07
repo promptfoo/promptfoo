@@ -6,7 +6,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -79,9 +79,7 @@ const RiskCard: React.FC<{
           }}
         >
           <Grid
-            item
-            xs={12}
-            md={6}
+            size={{ xs: 12, md: 6 }}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -138,7 +136,7 @@ const RiskCard: React.FC<{
               {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
             </Typography>
           </Grid>
-          <Grid item xs={6} md={4}>
+          <Grid size={{ xs: 6, md: 4 }}>
             <List dense>
               {filteredTestTypes.map((test, index) => {
                 const percentage = test.numPassed / (test.numPassed + test.numFailed);
@@ -206,8 +204,14 @@ const RiskCard: React.FC<{
             failures={failuresByPlugin[selectedCategory] || []}
             passes={passesByPlugin[selectedCategory] || []}
             evalId={evalId}
-            numPassed={testTypes.find((t) => t.name === selectedCategory)?.numPassed || 0}
-            numFailed={testTypes.find((t) => t.name === selectedCategory)?.numFailed || 0}
+            numPassed={(() => {
+              const testType = testTypes.find((t) => t.name === selectedCategory);
+              return testType?.numPassed ?? 0;
+            })()}
+            numFailed={(() => {
+              const testType = testTypes.find((t) => t.name === selectedCategory);
+              return testType?.numFailed ?? 0;
+            })()}
             strategyStats={strategyStats}
           />
         )}

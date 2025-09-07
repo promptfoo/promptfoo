@@ -16,6 +16,9 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 const mockEvals: ResultLightweightWithLabel[] = [
@@ -189,7 +192,7 @@ describe('ReportIndex', () => {
 
     fireEvent.click(tableRow as Element);
 
-    expect(mockNavigate).toHaveBeenCalledWith(`/report?evalId=${evalId}`);
+    expect(mockNavigate).toHaveBeenCalledWith(`/reports?evalId=${evalId}`);
   });
 
   it('should filter the displayed evaluations by description or evalId when a search query is entered', async () => {

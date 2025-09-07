@@ -5,8 +5,8 @@ import chalk from 'chalk';
 import { z } from 'zod';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString, isCI } from '../envars';
-import { fetchWithTimeout } from '../fetch';
 import logger from '../logger';
+import { fetchWithTimeout } from '../util/fetch';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';

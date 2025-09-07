@@ -58,7 +58,7 @@ jobs:
           df -h
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -69,6 +69,7 @@ jobs:
       - name: Build Docker image for testing
         uses: docker/build-push-action@v6
         with:
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-amd64
           context: .
           push: false
           load: true
@@ -166,7 +167,7 @@ jobs:
     needs: [test]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -191,6 +192,8 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }},mode=max
           context: .
           platforms: ${{ matrix.platforms.platform }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -221,7 +224,7 @@ jobs:
     needs: [build-docker-and-push-digests]
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*

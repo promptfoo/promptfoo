@@ -88,23 +88,30 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could cause harm',
+  'medical:off-label-use':
+    'Tests for inappropriate off-label medication recommendations without proper disclaimers',
   'medical:prioritization-error': 'Tests for poor medical prioritization and triage decisions',
   'medical:sycophancy': 'Tests for agreeing with incorrect medical assumptions to be helpful',
   'financial:calculation-error':
     'Tests for errors in financial calculations, risk assessments, or quantitative analysis',
   'financial:compliance-violation':
     'Tests for suggestions that violate securities laws, enable insider trading, or circumvent regulations',
+  'financial:confidential-disclosure':
+    'Tests for inappropriate disclosure of MNPI, proprietary strategies, or confidential financial data',
+  'financial:counterfactual':
+    'Tests for false financial narratives or misleading market information',
   'financial:data-leakage':
     'Tests for exposure of proprietary trading strategies or confidential financial data',
+  'financial:defamation': 'Tests for false statements damaging financial entity reputations',
   'financial:hallucination':
     'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
+  'financial:impartiality': 'Tests for unauthorized financial advice or transaction facilitation',
+  'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
   'financial:sycophancy':
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
   overreliance: 'Tests for overreliance on system assumptions',
-  pandamonium:
-    "[Experimental] Promptfoo's blackbox jailbreak. The latest and greatest jailbreak techniques, expertly tuned and crafted by Promptfoo's AI team.",
   pii: 'Tests handling of personal identifiable information',
   'pii:api-db': 'Tests for PII exposure via API/database access',
   'pii:direct': 'Tests for direct PII exposure vulnerabilities',
@@ -176,12 +183,18 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:anchoring-bias': 'Medical Anchoring Bias',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
+  'medical:off-label-use': 'Medical Off-Label Use',
   'medical:prioritization-error': 'Medical Prioritization Error',
   'medical:sycophancy': 'Medical Sycophancy',
   'financial:calculation-error': 'Financial Calculation Error',
   'financial:compliance-violation': 'Financial Compliance Violation',
+  'financial:confidential-disclosure': 'Financial Confidential Disclosure',
+  'financial:counterfactual': 'Financial Counterfactual Narrative',
   'financial:data-leakage': 'Financial Data Leakage',
+  'financial:defamation': 'Financial Defamation',
   'financial:hallucination': 'Financial Hallucination',
+  'financial:impartiality': 'Financial Services Impartiality',
+  'financial:misconduct': 'Financial Services Misconduct',
   'financial:sycophancy': 'Financial Sycophancy',
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
@@ -238,7 +251,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   multilingual: 'Cross-Language Attack',
   'other-encodings': 'Collection of Text Encodings',
   overreliance: 'Overreliance',
-  pandamonium: '[Experimental] Pandamonium',
   piglatin: 'Pig Latin Encoding',
   pii: 'PII Protection Suite',
   'pii:api-db': 'PII via API/Database',
@@ -297,8 +309,13 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   cca: Severity.High,
   'financial:calculation-error': Severity.Low,
   'financial:compliance-violation': Severity.Medium,
+  'financial:confidential-disclosure': Severity.High,
+  'financial:counterfactual': Severity.Medium,
   'financial:data-leakage': Severity.Medium,
+  'financial:defamation': Severity.Medium,
   'financial:hallucination': Severity.Low,
+  'financial:impartiality': Severity.Medium,
+  'financial:misconduct': Severity.High,
   'financial:sycophancy': Severity.Low,
   competitors: Severity.Low,
   contracts: Severity.Medium,
@@ -311,6 +328,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:anchoring-bias': Severity.High,
   'medical:hallucination': Severity.Critical,
   'medical:incorrect-knowledge': Severity.Critical,
+  'medical:off-label-use': Severity.High,
   'medical:prioritization-error': Severity.High,
   'medical:sycophancy': Severity.Medium,
   'off-topic': Severity.Medium,
@@ -465,12 +483,18 @@ export const riskCategories: Record<string, Plugin[]> = {
   'Domain-Specific Risks': [
     'financial:calculation-error',
     'financial:compliance-violation',
+    'financial:confidential-disclosure',
+    'financial:counterfactual',
     'financial:data-leakage',
+    'financial:defamation',
     'financial:hallucination',
+    'financial:impartiality',
+    'financial:misconduct',
     'financial:sycophancy',
     'medical:hallucination',
     'medical:anchoring-bias',
     'medical:incorrect-knowledge',
+    'medical:off-label-use',
     'medical:prioritization-error',
     'medical:sycophancy',
   ],
@@ -531,12 +555,18 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:anchoring-bias': 'MedicalAnchoringBias',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
+  'medical:off-label-use': 'MedicalOffLabelUse',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
   'financial:calculation-error': 'FinancialCalculationError',
   'financial:compliance-violation': 'FinancialComplianceViolation',
+  'financial:confidential-disclosure': 'FinancialConfidentialDisclosure',
+  'financial:counterfactual': 'FinancialCounterfactual',
   'financial:data-leakage': 'FinancialDataLeakage',
+  'financial:defamation': 'FinancialDefamation',
   'financial:hallucination': 'FinancialHallucination',
+  'financial:impartiality': 'FinancialImpartiality',
+  'financial:misconduct': 'FinancialMisconduct',
   'financial:sycophancy': 'FinancialSycophancy',
   'off-topic': 'OffTopic',
   'divergent-repetition': 'DivergentRepetition',
@@ -652,7 +682,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'bias:race': 'Tests handling of race bias in responses, stereotypes, and discrimination',
   bias: 'Unified bias detection across protected characteristics including age, disability, gender, and race',
   medical:
-    'Comprehensive medical AI safety testing for healthcare-specific vulnerabilities including hallucination, anchoring bias, incorrect knowledge, prioritization errors, and sycophancy',
+    'Comprehensive medical AI safety testing for healthcare-specific vulnerabilities including hallucination, anchoring bias, incorrect knowledge, off-label use, prioritization errors, and sycophancy',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -688,6 +718,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for fabricated medical facts, non-existent studies, made-up drug interactions, or other false medical information',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could be harmful if followed',
+  'medical:off-label-use':
+    'Tests for inappropriate off-label medication recommendations without proper disclaimers, warnings, or professional consultation requirements',
   'medical:prioritization-error':
     'Tests for poor medical prioritization and triage decisions that could delay critical care',
   'medical:sycophancy':
@@ -696,10 +728,20 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for errors in option pricing, risk calculations, portfolio optimization, or other quantitative financial analysis that could lead to significant losses',
   'financial:compliance-violation':
     'Tests for suggestions that enable insider trading, market manipulation, money laundering, or other violations of securities laws and financial regulations',
+  'financial:confidential-disclosure':
+    'Tests for inappropriate disclosure of material non-public information (MNPI), proprietary trading strategies, client portfolios, deal information, or other confidential financial data',
+  'financial:counterfactual':
+    'Tests for false financial narratives including fabricated market events, fictional corporate actions, misleading causation, or manipulated timelines that could mislead investors',
   'financial:data-leakage':
     'Tests for exposure of proprietary trading algorithms, customer account information, M&A details, or other confidential financial data',
+  'financial:defamation':
+    'Tests for false statements that damage the reputation of financial entities, including unfounded fraud accusations, fabricated scandals, or false insolvency claims',
   'financial:hallucination':
     'Tests for fabricated market data, non-existent financial instruments, fictional company financials, or invented market events',
+  'financial:impartiality':
+    'Tests for inappropriate provision of financial advice, investment recommendations, broker suggestions, or transaction facilitation without proper authorization or disclaimers',
+  'financial:misconduct':
+    'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
   'financial:sycophancy':
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
   'off-topic':
@@ -764,7 +806,6 @@ export const strategyDescriptions: Record<Strategy, string> = {
   multilingual: 'Evaluates cross-language attack vector handling',
   'other-encodings':
     'Collection of alternative text transformation strategies for testing evasion techniques',
-  pandamonium: "Promptfoo's exclusive dynamic jailbreak strategy currently in beta",
   piglatin: 'Tests detection and handling of text transformed into Pig Latin',
   'prompt-injection': 'Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
@@ -798,7 +839,6 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   morse: 'Morse Code',
   multilingual: 'Multilingual Translation',
   'other-encodings': 'Collection of Text Encodings',
-  pandamonium: 'Pandamonium',
   piglatin: 'Pig Latin',
   'prompt-injection': 'Prompt Injection',
   retry: 'Regression Testing',
