@@ -5,18 +5,20 @@ This file provides guidance for writing and maintaining documentation in the sit
 ## Core Writing Principles
 
 ### User-Centric Approach
+
 - Write for developers who want to quickly understand and implement
 - Lead with what the user needs to accomplish, not exhaustive feature lists
-- Use scannable formats (tables, bullet points, clear sections)
 - Prioritize practical examples over theoretical explanations
 
 ### Conciseness Over Verbosity
+
 - Eliminate LLM-generated fluff and redundant explanations
 - Remove substantially redundant criteria across pages
 - Keep examples focused and actionable
 - Use precise, technical language without unnecessary elaboration
 
 ### Content Organization
+
 - **Main overview pages**: High-level comparison tables linking to specific pages
 - **Individual plugin pages**: Focused content with specific examples
 - **Configuration**: Quick start first, then advanced options
@@ -24,12 +26,14 @@ This file provides guidance for writing and maintaining documentation in the sit
 ## SEO Best Practices
 
 ### Technical Depth with Keywords
+
 - "How It Works" sections include technical processes and terminology
 - Include brand terms naturally (e.g., "Promptfoo's evaluation framework")
 - Use domain-specific keywords that developers actually search for
 - Maintain clean prose while incorporating search-optimized language
 
 ### Content Format Guidelines
+
 - Convert bullet-heavy sections to prose where appropriate for better readability
 - Use tables for comparison and quick reference
 - Structure FAQ answers as complete, standalone explanations
