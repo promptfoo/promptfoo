@@ -159,7 +159,7 @@ providers:
 ```yaml
 providers:
   - openrouter:anthropic/claude-opus-4-1
-  - openrouter:google/gemini-pro
+  - openrouter:google/gemini-2.5-pro
     config:
       temperature: 0.1
 ```
