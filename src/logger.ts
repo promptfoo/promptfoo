@@ -6,6 +6,8 @@ import winston from 'winston';
 import { getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 
+const MAX_LOG_FILES = 50;
+
 type LogCallback = (message: string) => void;
 export let globalLogCallback: LogCallback | null = null;
 
@@ -185,7 +187,7 @@ function setupLogDirectory(): string {
     fs.mkdirSync(logDir, { recursive: true });
   }
 
-  // Clean up old log files, keep only the 9 most recent (so with new one we have 10)
+  // Clean up old log files
   try {
     const logFiles = fs
       .readdirSync(logDir)
@@ -197,18 +199,18 @@ function setupLogDirectory(): string {
       }))
       .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
 
-    // Remove old files (keep only 9, so with the new one we'll have 10)
-    if (logFiles.length >= 9) {
-      logFiles.slice(9).forEach((file) => {
+    // Remove old files
+    if (logFiles.length >= MAX_LOG_FILES) {
+      logFiles.slice(MAX_LOG_FILES).forEach((file) => {
         try {
           fs.unlinkSync(file.path);
-        } catch (_error) {
-          // Silently ignore errors when cleaning up old logs
+        } catch (error) {
+          logger.warn(`Error removing old log file: ${file.name} ${error}`);
         }
       });
     }
-  } catch (_error) {
-    // Silently ignore errors during cleanup
+  } catch (error) {
+    logger.warn(`Error cleaning up old log files: ${error}`);
   }
 
   return logDir;
@@ -232,7 +234,7 @@ let runLogTransport: winston.transports.FileTransportInstance | null = null;
  */
 export function initializeRunLogging(): void {
   if (runLogTransport) {
-    return; // Already initialized
+    return;
   }
 
   try {
@@ -244,8 +246,9 @@ export function initializeRunLogging(): void {
     });
 
     winstonLogger.add(runLogTransport);
-  } catch (_error) {
-    // Silently fail if we can't create the log file
+  } catch (error) {
+    logger.warn(`Error creating run log file: ${error}`);
+
     runLogTransport = null;
   }
 }

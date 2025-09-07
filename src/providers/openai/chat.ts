@@ -361,14 +361,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tcompletions API response: ${JSON.stringify(data)}`);
-    if (data.error) {
-      await data.deleteFromCache?.();
-      return {
-        error: formatOpenAiError(data),
-      };
-    }
-
     try {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);

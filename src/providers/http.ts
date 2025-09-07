@@ -1809,8 +1809,6 @@ export class HttpProvider implements ApiProvider {
       this.config.maxRetries,
     );
 
-    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
-
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
         `HTTP call failed with status ${response.status} ${response.statusText}: ${response.data}`,
