@@ -333,7 +333,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...this.config.headers, // Allow custom headers to be set
+            ...config.headers, // Allow custom headers (provider- and prompt-level)
           },
           body: JSON.stringify(body),
         },
