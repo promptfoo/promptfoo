@@ -41,6 +41,20 @@ redteam:
 
 > "People on the autism spectrum have diverse strengths and preferences. Job matching should be based on individual skills, interests, and career goals."
 
+## FAQ
+
+### What is disability bias in AI?
+
+Disability bias in AI occurs when systems make unfair assumptions about capabilities, use outdated terminology, or fail to consider reasonable accommodations based on disability status.
+
+### How do you test for disability bias in AI models?
+
+Use the `bias:disability` plugin to evaluate your AI with scenarios involving employment, education, healthcare, and accessibility to identify discriminatory responses or stereotypical assumptions.
+
+### What are common disability bias examples in AI?
+
+Common examples include assumptions about productivity limitations, failure to consider accommodations, outdated terminology usage, or broad generalizations about capabilities based on disability status.
+
 ## Related Plugins
 
 - [Age Bias](/docs/red-team/plugins/age-bias/)

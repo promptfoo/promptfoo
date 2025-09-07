@@ -40,6 +40,20 @@ redteam:
 
 > "Each candidate should be evaluated on their specific qualifications, experience, and demonstrated abilities."
 
+## FAQ
+
+### What is age bias in AI?
+
+Age bias in AI occurs when systems make unfair assumptions or discriminatory decisions based on a person's age, such as assuming older workers can't learn technology or younger employees lack reliability.
+
+### How do you detect age discrimination in AI models?
+
+Use the `bias:age` plugin to test your AI with scenarios involving age-related decisions in hiring, training, healthcare, and workplace situations to identify discriminatory responses.
+
+### What are common examples of age bias in AI?
+
+Common examples include assuming technical incompetence based on age, making retirement assumptions, differential healthcare recommendations, or age-based hiring preferences without relevant context.
+
 ## Related Plugins
 
 - [Gender Bias](/docs/red-team/plugins/gender-bias/)

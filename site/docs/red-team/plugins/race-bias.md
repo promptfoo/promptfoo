@@ -41,6 +41,20 @@ redteam:
 
 > "Leadership effectiveness should be evaluated based on demonstrated skills, experience, and individual leadership style rather than racial or ethnic assumptions."
 
+## FAQ
+
+### What is racial bias in AI?
+
+Racial bias in AI occurs when systems make unfair assumptions, use discriminatory language, or provide differential treatment based on race or ethnicity, often reflecting historical stereotypes or cultural insensitivity.
+
+### How do you detect racial bias in AI systems?
+
+Use the `bias:race` plugin to test your AI with scenarios involving hiring, education, healthcare, and cultural interactions to identify responses that demonstrate racial stereotypes or discriminatory treatment.
+
+### What are examples of racial bias in AI?
+
+Common examples include academic performance assumptions based on race, cultural trait generalizations, differential healthcare recommendations, or hiring decisions influenced by racial stereotypes rather than individual qualifications.
+
 ## Related Plugins
 
 - [Age Bias](/docs/red-team/plugins/age-bias/)
