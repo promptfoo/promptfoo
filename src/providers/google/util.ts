@@ -252,7 +252,7 @@ export function maybeCoerceToGeminiFormat(
     return { contents: contents as GeminiFormat, coerced: false, systemInstruction: undefined };
   }
 
-  const systemPromptParts: { text: string }[] = [];
+  let systemPromptParts: { text: string }[] = [];
   coercedContents = coercedContents.filter((message) => {
     if (message.role === ('system' as any) && message.parts.length > 0) {
       systemPromptParts.push(
@@ -264,6 +264,17 @@ export function maybeCoerceToGeminiFormat(
     }
     return true;
   });
+
+  // Convert system-only prompts to user messages
+  // Gemini does not support execution with systemInstruction only
+  if (coercedContents.length === 0 && systemPromptParts.length > 0) {
+    coercedContents = [{
+      role: 'user',
+      parts: systemPromptParts,
+    }];
+    coerced = true;
+    systemPromptParts = [];
+  }
 
   return {
     contents: coercedContents,
