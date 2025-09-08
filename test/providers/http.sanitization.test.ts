@@ -1,7 +1,7 @@
-import { HttpProvider } from '../../src/providers/http';
-import { sanitizeUrl } from '../../src/util/fetch';
 import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
+import { HttpProvider } from '../../src/providers/http';
+import { sanitizeUrl } from '../../src/util/sanitizer';
 
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),

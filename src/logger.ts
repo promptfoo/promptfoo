@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
+import { sanitizeBody, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
 
@@ -311,16 +312,22 @@ export async function logRequestResponse(options: {
   }
 
   const details = [
-    `URL: ${url}`,
+    `URL: ${sanitizeUrl(url)}`,
     `Request Method: ${requestMethod}`,
-    `Request Body: ${JSON.stringify(requestBody, null, 2)}`,
+    `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
     response ? `Status: ${response.status} ${response.statusText}` : '',
     responseText ? `Response: ${responseText}` : '',
   ]
     .filter(Boolean)
     .join('\n');
 
-  logMethod(`API request:\n${details}`);
+  const message = `API request:\n${details}`;
+  logMethod(message);
+
+  // When debug level is enabled, also output to console if not already logging as debug
+  if (isDebugEnabled() && logMethod !== logger.debug) {
+    console.log(message);
+  }
 }
 
 // Initialize source maps if debug is enabled at startup
