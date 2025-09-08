@@ -178,7 +178,6 @@ export default function AdvancedOptionsDialog({
                 </Box>
               }
             />
-
           </Stack>
         </Stack>
       </DialogContent>
