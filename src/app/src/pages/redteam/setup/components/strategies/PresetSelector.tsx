@@ -1,5 +1,5 @@
 import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import PresetCard from '../PresetCard';
 import { STRATEGY_PRESETS } from './types';
 
@@ -26,7 +26,10 @@ export function PresetSelector({ presets, selectedPreset, onSelect }: PresetSele
       >
         {presets.map((preset) => (
           <Grid
-            size={{ xs: 12, sm: 6, md: 3 }}
+            item
+            xs={12}
+            sm={6}
+            md={3}
             key={preset.name}
             sx={{
               minWidth: { xs: '280px', sm: '280px' },
@@ -47,7 +50,10 @@ export function PresetSelector({ presets, selectedPreset, onSelect }: PresetSele
           </Grid>
         ))}
         <Grid
-          size={{ xs: 12, sm: 6, md: 3 }}
+          item
+          xs={12}
+          sm={6}
+          md={3}
           sx={{
             minWidth: { xs: '280px', sm: '280px' },
             maxWidth: { xs: '100%', sm: '280px' },
