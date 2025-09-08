@@ -126,6 +126,8 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       ...options,
       // Force JSON format for API responses (required for parsing)
       format: 'json',
+      // Enable verbose mode by default for better debugging information
+      verbose: options.verbose !== false, // Allow explicit false to disable
       // Note: We handle persistence ourselves in this server route
     });
 
