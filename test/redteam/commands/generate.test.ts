@@ -17,7 +17,7 @@ import {
 } from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
-import { writePromptfooConfig } from '../../../src/util/config/manage';
+import { writePromptfooConfig } from '../../../src/util/config/writer';
 
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types';
@@ -65,6 +65,10 @@ jest.mock('../../../src/util/cloud', () => ({
   isCloudProvider: jest.fn(),
   getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
   checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../../../src/util/config/writer', () => ({
+  writePromptfooConfig: jest.fn(),
 }));
 
 jest.mock('../../../src/cliState', () => ({

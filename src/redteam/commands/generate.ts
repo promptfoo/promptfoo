@@ -27,7 +27,7 @@ import {
   isCloudProvider,
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
-import { writePromptfooConfig } from '../../util/config/manage';
+import { writePromptfooConfig } from '../../util/config/writer';
 import { getCustomPolicyTexts } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { checkProbeLimit } from '../../util/redteamProbeLimit';

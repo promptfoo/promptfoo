@@ -218,9 +218,6 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         ...(this.configWithHeaders.passthrough || {}),
       };
 
-      logger.debug(`Making Azure Content Safety API request to: ${url}`);
-      logger.debug(`Request body: ${JSON.stringify(body)}`);
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 

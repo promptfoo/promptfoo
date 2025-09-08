@@ -292,8 +292,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
     const body = prepareRequestBody(model, prompt, size as string, responseFormat, config);
 
-    logger.debug(`Calling OpenAI Image API: ${JSON.stringify(body)}`);
-
     const headers = {
       'Content-Type': 'application/json',
       ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
@@ -323,8 +321,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`\tOpenAI image API response: ${JSON.stringify(data)}`);
 
     return processApiResponse(
       data,

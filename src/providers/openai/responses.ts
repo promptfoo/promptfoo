@@ -254,8 +254,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    logger.debug(`Calling OpenAI Responses API: ${JSON.stringify(body)}`);
-
     // Calculate timeout for deep research models
     let timeout = REQUEST_TIMEOUT_MS;
     if (isDeepResearchModel) {
@@ -305,7 +303,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
       return {

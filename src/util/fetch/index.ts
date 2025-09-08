@@ -7,37 +7,15 @@ import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../../cliState';
 import { VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
-import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-
-const originalFetch = global.fetch;
+import { sanitizeUrl } from '../sanitizer';
+import { monkeyPatchFetch } from './monkeyPatchFetch';
 
 // Override global fetch
-global.fetch = async (...args) => {
-  const [url, options] = args;
-
-  const opts = {
-    ...options,
-  };
-
-  if (
-    (typeof url === 'string' && url.startsWith(CLOUD_API_HOST)) ||
-    (url instanceof URL && url.host === CLOUD_API_HOST.replace(/^https?:\/\//, ''))
-  ) {
-    const token = cloudConfig.getApiKey();
-    opts.headers = {
-      ...(options?.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-  }
-
-  // Call the original fetch
-  const response = await originalFetch(url, opts);
-  return response;
-};
+global.fetch = monkeyPatchFetch;
 
 /**
  * Options for configuring TLS in proxy connections
@@ -63,46 +41,6 @@ interface PromptfooRequestInit extends RequestInit {
 interface SystemError extends Error {
   code?: string;
   cause?: unknown;
-}
-
-export function sanitizeUrl(url: string): string {
-  try {
-    // Ensure url is a string and handle edge cases
-    if (typeof url !== 'string' || !url.trim()) {
-      return url;
-    }
-
-    const parsedUrl = new URL(url);
-
-    // Create a copy for sanitization to avoid modifying the original URL
-    // Use href instead of toString() for better cross-platform compatibility
-    const sanitizedUrl = new URL(parsedUrl.href);
-
-    if (sanitizedUrl.username || sanitizedUrl.password) {
-      sanitizedUrl.username = '***';
-      sanitizedUrl.password = '***';
-    }
-
-    // Sanitize query parameters that might contain sensitive data
-    const sensitiveParams =
-      /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
-
-    try {
-      for (const key of Array.from(sanitizedUrl.searchParams.keys())) {
-        if (sensitiveParams.test(key)) {
-          sanitizedUrl.searchParams.set(key, '[REDACTED]');
-        }
-      }
-    } catch (paramError) {
-      // If search params handling fails, continue without sanitizing them
-      logger.debug(`Failed to sanitize URL parameters: ${paramError}`);
-    }
-
-    return sanitizedUrl.toString();
-  } catch (error) {
-    logger.debug(`Failed to sanitize URL: ${error}`);
-    return url;
-  }
 }
 
 export async function fetchWithProxy(
@@ -193,7 +131,7 @@ export async function fetchWithProxy(
     setGlobalDispatcher(agent);
   }
 
-  return fetch(finalUrl, finalOptions);
+  return await fetch(finalUrl, finalOptions);
 }
 
 export function fetchWithTimeout(

@@ -40,7 +40,6 @@ async function fetchDataset(
       throw new Error(`[CyberSecEval] HTTP status: ${response.status} ${response.statusText}`);
     }
     const data = (await response.json()) as CyberSecEvalInput[];
-    logger.debug(`[CyberSecEval] Got response from ${DATASET_URL}: ${JSON.stringify(data)}`);
 
     if (!data || !Array.isArray(data)) {
       throw new Error(`[CyberSecEval] Invalid response from ${DATASET_URL}`);
