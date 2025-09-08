@@ -1,11 +1,11 @@
 # Claude Code Advanced
 
-Demonstrates Claude Code with file modifications and git-based cleanup using hooks.
+Demonstrates use of the Claude Code provider with file edits.
+
+The working directory (`./workspace` in this example) is a git repository that is reset after each test using an `afterEach` extension hook.
 
 ## Usage
 
 ```bash
 promptfoo eval
 ```
-
-Observe how Claude Code refactors code with write permissions and uses git reset in hooks to manage side effects.

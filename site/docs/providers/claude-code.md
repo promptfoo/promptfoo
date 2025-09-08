@@ -258,7 +258,7 @@ When using Claude Code with configurations that allow side effects, like writing
 
 This increases complexity, so first consider if you can achieve your goal with a read-only configuration. If you do need to test with side effects, here are some strategies that can help:
 
-- **Serial execution**: Set `maxConcurrency: 1` in your config
+- **Serial execution**: Set `evaluateOptions.maxConcurrency: 1` in your config or use `--max-concurrency 1` CLI flag
 - **Hooks**: Use promptfoo [extension hooks](/docs/configuration/reference/#extension-hooks) to reset the environment after each test run
 - **Wrapper scripts**: Handle setup/cleanup outside of promptfoo
 - **Use git**: If you're using a custom working directory, you can use git to reset the files after each test run
@@ -268,9 +268,9 @@ This increases complexity, so first consider if you can achieve your goal with a
 
 Here are a few complete example implementations:
 
-- [Simple usage](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code-simple) - Basic code analysis without file modification
-- [File reading](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code-files) - Analyzing project files with read-only access
-- [Advanced editing](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code-advanced) - File modification with permission controls
+- [Simple usage](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code-basic) - Basic usage with no tools
+- [Working directory](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code-working-dir) - Read-only access to a working directory
+- [Advanced editing](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code-advanced) - File edits and working directory reset in an extension hook
 
 ## See Also
 

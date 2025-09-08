@@ -1,7 +1,7 @@
 // Simple authentication module that needs refactoring
 const users = [];
 
-async function login(email, password) {
+function login(email, password) {
   const user = users.find(u => u.email === email);
   if (!user) {
     throw new Error('User not found');
@@ -12,7 +12,7 @@ async function login(email, password) {
   return user;
 }
 
-async function register(email, password) {
+function register(email, password) {
   if (users.find(u => u.email === email)) {
     throw new Error('User already exists');
   }
@@ -28,7 +28,7 @@ async function register(email, password) {
   return user;
 }
 
-async function getUserById(id) {
+function getUserById(id) {
   const user = users.find(u => u.id === id);
   if (!user) {
     throw new Error('User not found');

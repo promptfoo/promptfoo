@@ -1,23 +1,26 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Claude Code with file modifications and git-based cleanup'
+description: 'Claude Code with file edits and afterEach hook'
 
 prompts:
   - |
-    Refactor the auth.js file to use async/await patterns
+    Refactor the auth.js file to use async/await patterns with proper error handling
 
 providers:
   - id: claude-code
     config:
       working_dir: ./workspace
+      # Add file editing tools to the default set of read-only tools
       append_allowed_tools: ['Write', 'Edit', 'MultiEdit']
+      # Approve file edits
       permission_mode: 'acceptEdits'
 
-# Demonstrate git-based cleanup strategy from docs
-hooks:
-  afterEach: |
-    const { execSync } = require('child_process');
-    execSync('git reset --hard HEAD', { cwd: './workspace' });
-    console.log('Git reset completed');
+# Use an extension hook to reset the working directory after each test
+extensions:
+  - file://hooks.js:extensionHook
+
+# Prevent race conditions during concurrent evals
+evaluateOptions:
+  maxConcurrency: 1
 
 tests:
   - vars: {}

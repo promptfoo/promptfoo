@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Claude Code basic usage - temp directory with no file access'
+description: 'Claude Code basic usage - temp directory with no tools'
 
 prompts:
   - 'Output a Python function that prints the first 10 numbers in the Fibonacci sequence'
