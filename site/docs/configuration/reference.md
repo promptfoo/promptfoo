@@ -135,7 +135,7 @@ prompts:
   - prompt2.txt
 
 providers:
-  - gpt-5
+  - openai:gpt-5
 
 tests: tests.csv
 

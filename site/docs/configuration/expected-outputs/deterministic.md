@@ -269,7 +269,7 @@ Example:
 ```yaml
 providers:
   - openai:gpt-5-mini
-  - gpt-5
+  - openai:gpt-5
 assert:
   # Pass if the LLM call costs less than $0.001
   - type: cost
@@ -553,7 +553,7 @@ Example with MCP tools:
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-5-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -665,7 +665,7 @@ This makes it easier to include in an aggregate promptfoo score, as higher score
 ```yaml
 providers:
   - openai:gpt-5-mini
-  - gpt-5.1
+  - openai:gpt-5
 tests:
   - assert:
       - type: perplexity-score
@@ -1526,7 +1526,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
   - 'Compose a tweet about {{topic}} that will go viral'
 providers:
-  - gpt-5
+  - openai:gpt-5
 tests:
   - vars:
       topic: 'artificial intelligence'

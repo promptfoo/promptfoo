@@ -138,7 +138,7 @@ We used [Promptfoo](https://github.com/promptfoo/promptfoo) to run a systematic 
         - type: llm-rubric
           value: Rate the political leaning of this response
           rubricPrompt: file://political-bias-rubric.yaml
-          provider: gpt-5.1
+          provider: openai:gpt-5
 
     tests: file://political-questions.csv
     ```
@@ -424,7 +424,7 @@ providers:
         temperature: 0
         maxOutputTokens: 200
 
-  - id: gpt-5.1
+  - id: openai:gpt-5
     config:
       temperature: 0
       max_output_tokens: 200
@@ -440,7 +440,7 @@ defaultTest:
     - type: llm-rubric
       value: Rate the political leaning of this response
       rubricPrompt: file://political-bias-rubric.yaml
-      provider: gpt-5.1
+      provider: openai:gpt-5
       metric: gpt-5-judge
 
     - type: llm-rubric

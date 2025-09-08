@@ -14,7 +14,7 @@ Here's a basic example of configuring providers in your promptfoo YAML config:
 ```yaml
 providers:
   - anthropic:messages:claude-sonnet-4-20250514
-  - gpt-5.1
+  - openai:gpt-5
   - openai:o4-mini
   - google:gemini-2.5-pro
   - vertex:gemini-2.5-pro
@@ -106,7 +106,7 @@ Providers are specified using various syntax options:
    Example:
 
    ```yaml
-   - id: gpt-5.1
+   - id: openai:gpt-5
      config:
        temperature: 0.7
        max_tokens: 150
@@ -125,7 +125,7 @@ Providers are specified using various syntax options:
    Or multiple providers:
 
    ```yaml title="providers.yaml"
-   - id: gpt-5.1
+   - id: openai:gpt-5
      config:
        temperature: 0.7
    - id: anthropic:messages:claude-sonnet-4-20250514
@@ -154,7 +154,7 @@ You can also specify API keys in your configuration file:
 
 ```yaml
 providers:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     config:
       apiKey: your_api_key_here
 ```
@@ -225,7 +225,7 @@ Example:
 
 ```yaml
 providers:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     config:
       temperature: 0.7
       max_tokens: 150
@@ -245,7 +245,7 @@ Enable MCP for a provider by adding the `mcp` block to your provider's configura
 
 ```yaml
 providers:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     config:
       temperature: 0.7
       mcp:
@@ -262,7 +262,7 @@ You can connect a single provider to multiple MCP servers:
 
 ```yaml
 providers:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     config:
       mcp:
         enabled: true

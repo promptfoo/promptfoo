@@ -317,7 +317,7 @@ prompts:
   - 'Respond to the user: {{message}}'
 
 providers:
-  - gpt-5.1
+  - openai:gpt-5
 
 tests:
   - vars:

@@ -47,7 +47,7 @@ Define one or more language model providers to use. For example, here we compare
 ```yaml
 providers:
   - openai:gpt-5-mini
-  - gpt-5.1
+  - openai:gpt-5
 ```
 
 A wide variety of LLM APIs are supported, including local models. See [providers](/docs/providers) for more information.

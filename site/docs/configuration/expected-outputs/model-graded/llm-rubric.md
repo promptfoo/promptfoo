@@ -26,7 +26,7 @@ This assertion will use a language model to grade the output based on the specif
 
 Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available:
 
-- **OpenAI API key**: `gpt-5-2025-04-14`
+- **OpenAI API key**: `gpt-5`
 - **Anthropic API key**: `claude-sonnet-4-20250514`
 - **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
 - **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
@@ -66,7 +66,7 @@ You can incorporate test variables into your LLM rubric. This is particularly us
 
 ```yaml
 providers:
-  - gpt-5.1
+  - openai:gpt-5
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -83,7 +83,7 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, `llm-rubric` uses `gpt-5-2025-04-14` for grading. You can override this in several ways:
+By default, `llm-rubric` uses `gpt-5` for grading. You can override this in several ways:
 
 1. Using the `--grader` CLI option:
 

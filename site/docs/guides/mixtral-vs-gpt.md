@@ -32,7 +32,7 @@ Edit your `promptfooconfig.yaml` to include the models you want to compare. Here
 providers:
   - replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
   - openai:gpt-5-mini
-  - gpt-5.1
+  - openai:gpt-5
 ```
 
 Set your API keys as environment variables:
@@ -67,7 +67,7 @@ providers:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: gpt-5.1
+  - id: openai:gpt-5
     // highlight-start
     config:
       temperature: 0

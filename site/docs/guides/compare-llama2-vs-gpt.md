@@ -5,7 +5,7 @@ description: Compare Llama 3.1 405B vs GPT-4 performance on custom datasets usin
 
 # Llama 3.1 vs GPT: Benchmark on your own data
 
-This guide describes how to compare three models - Llama 3.1 405B, GPT 4o, and GPT gpt-5-mini - using the `promptfoo` CLI.
+This guide describes how to compare three models - Llama 3.1 405B, GPT 4o, and gpt-5-mini - using the `promptfoo` CLI.
 
 LLM use cases vary widely and there is no one-size-fits-all benchmark. We'll use some dummy test cases from the [Hacker News thread on Llama](https://news.ycombinator.com/item?id=36774627), but you can substitute your own.
 
@@ -31,7 +31,7 @@ Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of mod
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - gpt-5.1
+  - openai:gpt-5
   - openai:gpt-5-mini
   - replicate:meta/meta-llama-3.1-405b-instruct
 ```
@@ -64,7 +64,7 @@ prompts:
 // highlight-end
 
 providers:
-  - gpt-5.1
+  - openai:gpt-5
   - openai:gpt-5-mini
   - replicate:meta/meta-llama-3.1-405b-instruct
 ```
@@ -103,11 +103,11 @@ prompts:
   file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     label: GPT 4o
     prompts: chat_prompt
   - id: openai:gpt-5-mini
-    label: GPT gpt-5-mini
+    label: gpt-5-mini
     prompts: chat_prompt
   - id: replicate:meta/meta-llama-3.1-405b-instruct
     label: Llama 3.1 405B
@@ -200,7 +200,7 @@ Each model has a `config` field where you can specify additional parameters. Let
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     // highlight-start
     config:
       temperature: 0

@@ -33,7 +33,7 @@ Edit `promptfooconfig.yaml` to include both models:
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-5-mini
-  - gpt-5
+  - openai:gpt-5
 ```
 
 ## Step 2: Crafting the prompts
@@ -129,7 +129,7 @@ Finally, we'll use `defaultTest` to clean things up a bit and apply global `late
 ```yaml
 providers:
   - openai:gpt-5-mini
-  - gpt-5
+  - openai:gpt-5
 
 prompts:
   - 'Solve this riddle: {{riddle}}'

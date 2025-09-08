@@ -34,7 +34,7 @@ prompts:
   - 'Write a well-documented function to {{task}}'
 
 providers:
-  - gpt-5
+  - openai:gpt-5
 
 tests:
   - vars:

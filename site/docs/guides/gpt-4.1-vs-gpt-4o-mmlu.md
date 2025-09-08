@@ -100,7 +100,7 @@ prompts:
     Answer:
 
 providers:
-  - gpt-5.1
+  - openai:gpt-5
   - openai:gpt-4o
 
 defaultTest:
@@ -148,7 +148,7 @@ prompts:
     Think through this step by step, then provide your final answer as "Therefore, the answer is A/B/C/D."
 
 providers:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     config:
       temperature: 0.1
       max_tokens: 1000

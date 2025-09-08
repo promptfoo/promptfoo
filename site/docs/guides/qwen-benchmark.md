@@ -55,7 +55,7 @@ Customize the behavior of each model by setting parameters such as `temperature`
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     config:
       temperature: 0.9
       max_tokens: 512

@@ -264,7 +264,7 @@ Imagine we're exploring budget and want to compare the performance of GPT-4 vs L
 ```yaml
 providers:
   - openai:gpt-5-mini
-  - gpt-5.1
+  - openai:gpt-5
   - anthropic:messages:claude-3-5-sonnet-20241022
   - ollama:chat:llama3.3
 ```

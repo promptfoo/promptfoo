@@ -73,7 +73,7 @@ Edit your `promptfooconfig.yaml` to target GPT-4.1:
 description: Red Team Evaluation for GPT-4.1
 
 targets:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     label: gpt-5
     config:
       temperature: 0.7

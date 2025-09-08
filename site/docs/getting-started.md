@@ -84,7 +84,7 @@ To configure your evaluation:
 
    ```yaml
    providers:
-     - gpt-5.1
+     - openai:gpt-5
      - openai:o4-mini
      - anthropic:messages:claude-sonnet-4-20250514
      - vertex:gemini-2.5-pro
@@ -194,7 +194,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - gpt-5.1
+  - openai:gpt-5
 defaultTest:
   assert:
     - type: llm-rubric
@@ -273,7 +273,7 @@ prompts:
 
 # Set an LLM
 providers:
-  - gpt-5.1
+  - openai:gpt-5
 
 # These test properties are applied to every test
 defaultTest:
@@ -382,7 +382,7 @@ prompts:
 # Set the LLMs we want to test
 providers:
   - openai:o4-mini
-  - gpt-5.1
+  - openai:gpt-5
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:

@@ -35,7 +35,7 @@ The red team configuration uses the following YAML structure:
 
 ```yaml
 targets:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     label: customer-service-agent
 
 redteam:
@@ -808,7 +808,7 @@ Configuration values can be set in multiple ways, with the following precedence 
 
    ```yaml
    redteam:
-     provider: gpt-5.1
+     provider: openai:gpt-5
      numTests: 5
    env:
      OPENAI_API_KEY: your-key-here

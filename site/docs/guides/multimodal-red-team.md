@@ -430,7 +430,7 @@ prompts:
     label: audio-prompt
 
 targets:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     label: multimodal-model
 
 defaultTest:

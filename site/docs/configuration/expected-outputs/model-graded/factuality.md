@@ -40,7 +40,7 @@ Here's a complete example showing how to use factuality checks:
 prompts:
   - 'What is the capital of {{state}}?'
 providers:
-  - gpt-5.1
+  - openai:gpt-5
   - anthropic:claude-3-7-sonnet-20250219
 tests:
   - vars:

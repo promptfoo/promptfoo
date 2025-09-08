@@ -38,7 +38,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
   - 'Compose a tweet about {{topic}} that will go viral'
 providers:
-  - gpt-5
+  - openai:gpt-5
 tests:
   - vars:
       topic: 'artificial intelligence'

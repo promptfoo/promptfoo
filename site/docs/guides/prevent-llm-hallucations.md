@@ -157,7 +157,7 @@ Determining the perplexity threshold is a bit of trial and error. You can also r
 
 ```yaml
 providers:
-  - gpt-5
+  - openai:gpt-5
   - openai:gpt-5-mini
 
 tests:

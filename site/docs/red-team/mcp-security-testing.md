@@ -133,7 +133,7 @@ We've also open-sourced an example [rogue MCP server](https://github.com/promptf
 description: 'MCP security testing'
 
 targets:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     config:
       mcp:
         enabled: true

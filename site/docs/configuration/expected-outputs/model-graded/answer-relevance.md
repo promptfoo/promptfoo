@@ -35,7 +35,7 @@ Here's a complete example showing how to use answer relevance:
 prompts:
   - 'Tell me about {{topic}}'
 providers:
-  - gpt-5
+  - openai:gpt-5
 tests:
   - vars:
       topic: quantum computing

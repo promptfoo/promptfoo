@@ -81,7 +81,7 @@ prompts:
   - 'Explain {{topic}}'
 
 providers:
-  - gpt-5
+  - openai:gpt-5
 
 tests:
   - vars:

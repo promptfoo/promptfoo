@@ -219,7 +219,7 @@ Run side-by-side with GPT 4.1:
 ```yaml
 # Compare with GPT-4.1 and Claude
 targets:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     label: gpt-5
 
   # Or Claude

@@ -184,7 +184,7 @@ Specific snapshot versions are also available:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5-2025-04-14 # Standard
+  - id: openai:chat:gpt-5 # Standard
   - id: openai:chat:gpt-5-mini-2025-04-14 # Mini
   - id: openai:chat:gpt-5-nano-2025-04-14 # Nano
 ```
@@ -231,7 +231,7 @@ prompts:
   - file://prompt.json
 
 providers:
-  - gpt-5.1
+  - openai:gpt-5
 
 tests:
   - vars:
@@ -976,7 +976,7 @@ To use MCP tools with the Responses API, add them to the `tools` array:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-5-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1002,7 +1002,7 @@ Most MCP servers require authentication. Use the `headers` parameter to provide 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-5-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1019,7 +1019,7 @@ To limit which tools are available from an MCP server, use the `allowed_tools` p
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-5-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1036,7 +1036,7 @@ By default, OpenAI requires approval before sharing data with MCP servers. You c
 ```yaml title="promptfooconfig.yaml"
 # Never require approval for all tools
 providers:
-  - id: openai:responses:gpt-5-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1046,7 +1046,7 @@ providers:
 
 # Never require approval for specific tools only
 providers:
-  - id: openai:responses:gpt-5-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1065,7 +1065,7 @@ prompts:
   - 'What are the transport protocols supported in the MCP specification for {{repo}}?'
 
 providers:
-  - id: openai:responses:gpt-5-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp

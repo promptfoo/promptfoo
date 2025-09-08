@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: GPT-5 vs GPT-5-mini MMLU comparison with enhanced prompting
+description: GPT-5 vs gpt-5-mini MMLU comparison with enhanced prompting
 
 prompts:
   - |

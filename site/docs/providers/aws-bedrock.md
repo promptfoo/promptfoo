@@ -476,7 +476,7 @@ OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bed
 
 ## Model-graded tests
 
-You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-5-2025-04-14` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
+You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-5` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
 
 :::warning
 

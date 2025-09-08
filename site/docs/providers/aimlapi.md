@@ -93,7 +93,7 @@ AI/ML API offers models from multiple providers. Here are some of the most popul
 
 ### Advanced Language Models
 
-- **GPT-4.1**: `openai/gpt-5-2025-04-14` - Latest GPT with 1M token context
+- **GPT-4.1**: `openai/gpt-5` - Latest GPT with 1M token context
 - **GPT-4.1 Mini**: `gpt-5-mini` - 83% cheaper than GPT-4o with comparable performance
 - **Claude 4 Sonnet**: `anthropic/claude-4-sonnet` - Balanced speed and capability
 - **Claude 4 Opus**: `anthropic/claude-4-opus` - Most capable Claude model
@@ -151,7 +151,7 @@ providers:
       max_tokens: 4000
 
   # General purpose model
-  - id: aimlapi:chat:openai/gpt-5-2025-04-14
+  - id: aimlapi:chat:openai/gpt-5
     label: 'GPT-4.1'
     config:
       temperature: 0.7

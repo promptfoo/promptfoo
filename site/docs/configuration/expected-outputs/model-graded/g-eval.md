@@ -70,7 +70,7 @@ prompts:
     Write a technical explanation of {{topic}} 
     suitable for a beginner audience.
 providers:
-  - gpt-5
+  - openai:gpt-5
 tests:
   - vars:
       topic: 'quantum computing'

@@ -38,7 +38,7 @@ providers:
 
 # Optional: Configure model parameters
 providers:
-  - id: gpt-5.1
+  - id: openai:gpt-5
     config:
       temperature: 0.7
       max_tokens: 1000

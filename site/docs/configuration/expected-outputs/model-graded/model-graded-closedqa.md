@@ -37,7 +37,7 @@ Here's a complete example showing how to use model-graded-closedqa:
 prompts:
   - 'What is {{topic}}?'
 providers:
-  - gpt-5
+  - openai:gpt-5
 tests:
   - vars:
       topic: quantum computing

@@ -506,7 +506,7 @@ prompts:
 
 providers:
   - openai:gpt-5-mini
-  - gpt-5.1
+  - openai:gpt-5
 ```
 
 This command will generate adversarial test cases and write them to `redteam.yaml`.

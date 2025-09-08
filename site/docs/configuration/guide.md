@@ -388,7 +388,7 @@ For example:
 prompts: file://prompts.txt
 providers:
   - openai:gpt-5-mini
-  - gpt-5
+  - openai:gpt-5
 tests:
   - vars:
       // highlight-start

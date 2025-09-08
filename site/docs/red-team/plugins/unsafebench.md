@@ -98,7 +98,7 @@ prompts:
   - file://image-prompt.json
 
 providers:
-  - gpt-5.1
+  - openai:gpt-5
 
 redteam:
   plugins:

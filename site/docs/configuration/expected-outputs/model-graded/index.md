@@ -143,7 +143,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
 
 providers:
-  - gpt-5
+  - openai:gpt-5
 
 tests:
   - vars:
@@ -168,7 +168,7 @@ prompts:
   - 'Write a comprehensive summary of {{article}} with key points'
 
 providers:
-  - gpt-5
+  - openai:gpt-5
 
 tests:
   - vars:
@@ -188,7 +188,7 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts use `gpt-5-2025-04-14` for grading. If you do not have access to `gpt-5-2025-04-14` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
+By default, model-graded asserts use `gpt-5` for grading. If you do not have access to `gpt-5` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
@@ -300,7 +300,7 @@ See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples
 ```yaml
 defaultTest:
   options:
-    provider: gpt-5.1
+    provider: openai:gpt-5
     rubricPrompt: |
       [
         { "role": "system", "content": "Evaluate if the answer matches the image. Respond with JSON {reason:string, pass:boolean, score:number}" },
@@ -447,7 +447,7 @@ prompts:
     Respond to this query: {{query}}
     Here is some context that you can use to write your response: {{context}}
 providers:
-  - gpt-5
+  - openai:gpt-5
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -491,7 +491,7 @@ prompts:
     You are an internal corporate chatbot.
     Respond to this query: {{query}}
 providers:
-  - gpt-5
+  - openai:gpt-5
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
