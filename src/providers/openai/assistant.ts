@@ -259,15 +259,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       },
     };
 
-    logger.debug(`Calling OpenAI API, creating thread run: ${JSON.stringify(body)}`);
     let run: OpenAI.Beta.Threads.Run;
     try {
       run = await openai.beta.threads.createAndRun(body);
     } catch (err) {
       return failApiCall(err);
     }
-
-    logger.debug(`\tOpenAI thread run API response: ${JSON.stringify(run)}`);
 
     while (true) {
       const currentRun = await openai.beta.threads.runs.retrieve(run.id, {

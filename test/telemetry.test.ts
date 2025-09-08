@@ -17,6 +17,7 @@ jest.mock('../src/globalConfig/globalConfig', () => ({
 }));
 
 jest.mock('../src/constants', () => ({
+  ...jest.requireActual('../src/constants'),
   VERSION: '1.0.0',
 }));
 

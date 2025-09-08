@@ -110,8 +110,6 @@ export class HyperbolicAudioProvider implements ApiProvider {
       body.language = config.language;
     }
 
-    logger.debug(`Calling Hyperbolic Audio API: ${JSON.stringify(body)}`);
-
     const headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
@@ -141,8 +139,6 @@ export class HyperbolicAudioProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`\tHyperbolic audio API response: ${JSON.stringify(data)}`);
 
     if (data.error) {
       return {

@@ -189,8 +189,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       messages,
     };
 
-    logger.debug(`Preparing to call Claude API with body: ${JSON.stringify(body)}`);
-
     const cache = await getCache();
     const cacheKey = `vertex:claude:${this.modelName}:${JSON.stringify(body)}`;
 
@@ -225,7 +223,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       });
 
       data = res.data as ClaudeResponse;
-      logger.debug(`Claude API response: ${JSON.stringify(data)}`);
     } catch (err) {
       const error = err as GaxiosError;
       if (error.response && error.response.data) {
@@ -350,8 +347,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
-
     const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
 
@@ -384,7 +379,6 @@ export class VertexChatProvider extends VertexGenericProvider {
           timeout: REQUEST_TIMEOUT_MS,
         });
         data = res.data as GeminiApiResponse;
-        logger.debug(`Gemini API response: ${JSON.stringify(data)}`);
       } catch (err) {
         const geminiError = err as GaxiosError;
         if (
@@ -582,7 +576,6 @@ export class VertexChatProvider extends VertexGenericProvider {
         topK: this.config.topK,
       },
     };
-    logger.debug(`Calling Vertex Palm2 API: ${JSON.stringify(body)}`);
 
     const cache = await getCache();
     const cacheKey = `vertex:palm2:${JSON.stringify(body)}`;
@@ -624,7 +617,6 @@ export class VertexChatProvider extends VertexGenericProvider {
       };
     }
 
-    logger.debug(`Vertex Palm2 API response: ${JSON.stringify(data)}`);
     try {
       if (data.error) {
         return {
