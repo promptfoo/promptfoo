@@ -35,7 +35,19 @@ import type { EnvOverrides } from '../types/env';
  * MCP server connection details are passed through from config. strict_mcp_config is true by default to only allow MCP servers that are explicitly configured, but user can override.
  */
 
-export const DEFAULT_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'LS'].sort(); // sort and export for tests
+// When a working directory is provided, we allow read-only tools by default (when no working directory is provided, default to no tools)
+export const FS_READONLY_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'LS'].sort(); // sort and export for tests
+
+// Claude Code SDK supports these model aliases in addition to full model names
+// See: https://docs.anthropic.com/en/docs/claude-code/model-config
+export const CLAUDE_CODE_MODEL_ALIASES = [
+  'default',
+  'sonnet',
+  'opus',
+  'haiku',
+  'sonnet[1m]',
+  'opusplan',
+];
 
 /**
  * Helper to load the Claude Code SDK ESM module
@@ -88,9 +100,6 @@ export interface ClaudeCodeOptions {
    * 'disallowed_tools' is passed through as is; it always takes precedence over 'allowed_tools'
    */
   disallowed_tools?: string[];
-
-  env?: Record<string, string>;
-  inherit_env?: boolean | string[]; // true to pass through whole env, array to pass through specific keys
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -121,17 +130,19 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     if (
       this.config.model &&
-      !ClaudeCodeSDKProvider.ANTHROPIC_MODELS_NAMES.includes(this.config.model)
+      !ClaudeCodeSDKProvider.ANTHROPIC_MODELS_NAMES.includes(this.config.model) &&
+      !CLAUDE_CODE_MODEL_ALIASES.includes(this.config.model)
     ) {
-      logger.warn(`Using unknown Anthropic model for Claude Code SDK: ${this.config.model}`);
+      logger.warn(`Using unknown model for Claude Code SDK: ${this.config.model}`);
     }
 
     if (
       this.config.fallback_model &&
-      !ClaudeCodeSDKProvider.ANTHROPIC_MODELS_NAMES.includes(this.config.fallback_model)
+      !ClaudeCodeSDKProvider.ANTHROPIC_MODELS_NAMES.includes(this.config.fallback_model) &&
+      !CLAUDE_CODE_MODEL_ALIASES.includes(this.config.fallback_model)
     ) {
       logger.warn(
-        `Using unknown Anthropic model for Claude Code SDK fallback: ${this.config.fallback_model}`,
+        `Using unknown model for Claude Code SDK fallback: ${this.config.fallback_model}`,
       );
     }
   }
@@ -152,33 +163,26 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     };
 
     // Set up env for the Claude Code SDK call
-    // Ensure consistent ordering for stable cache key
+    // Pass through entire environment like claude-code CLI does, with EnvOverrides taking precedence
+    // Sort keys for stable cache key generation
     const env: Record<string, string> = {};
-
-    // Always include PATH so Claude Code SDK can find node executable
-    if (process.env.PATH) {
-      env.PATH = process.env.PATH;
+    for (const key of Object.keys(process.env).sort()) {
+      if (process.env[key] !== undefined) {
+        env[key] = process.env[key];
+      }
     }
 
-    if (typeof config.inherit_env === 'boolean' && config.inherit_env) {
-      for (const key of Object.keys(process.env).sort()) {
-        if (process.env[key] !== undefined) {
-          env[key] = process.env[key];
-        }
-      }
-    } else if (typeof config.inherit_env !== 'undefined' && Array.isArray(config.inherit_env)) {
-      const keys = [...config.inherit_env].sort();
-      for (const key of keys) {
-        if (process.env[key] !== undefined) {
-          env[key] = process.env[key];
+    // EnvOverrides take precedence over process.env
+    if (this.env) {
+      for (const key of Object.keys(this.env).sort()) {
+        const value = this.env[key as keyof typeof this.env];
+        if (value !== undefined) {
+          env[key] = value;
         }
       }
     }
-    if (config.env) {
-      for (const key of Object.keys(config.env).sort()) {
-        env[key] = config.env[key];
-      }
-    }
+
+    // Ensure API key is available to Claude Code SDK
     if (this.apiKey) {
       env.ANTHROPIC_API_KEY = this.apiKey;
     }
@@ -188,7 +192,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       throw new Error(
         dedent`Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add "apiKey" to the provider config.
 
-        Use CLAUDE_CODE_USE_BEDROCK or CLAUDE_CODE_USE_VERTEX environment variable to use Bedrock or Vertex instead.`,
+        Use CLAUDE_CODE_USE_BEDROCK or CLAUDE_CODE_USE_VERTEX environment variables to use Bedrock or Vertex instead.`,
       );
     }
 
@@ -207,12 +211,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // De-dupe and sort allowed/disallowed tools for cache key consistency
-    let allowedTools = config.allow_all_tools ? undefined : DEFAULT_ALLOWED_TOOLS;
+    const defaultAllowedTools = config.working_dir ? FS_READONLY_ALLOWED_TOOLS : [];
+
+    let allowedTools = config.allow_all_tools ? undefined : defaultAllowedTools;
     if ('custom_allowed_tools' in config) {
       allowedTools = Array.from(new Set(config.custom_allowed_tools ?? [])).sort();
     } else if (config.append_allowed_tools) {
       allowedTools = Array.from(
-        new Set([...DEFAULT_ALLOWED_TOOLS, ...config.append_allowed_tools]),
+        new Set([...defaultAllowedTools, ...config.append_allowed_tools]),
       ).sort();
     }
 
@@ -417,7 +423,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
   /**
    * For normal Claude Code support, just use the Anthropic API key
-   * Users could also potentially use Bedrock (with CLAUDE_CODE_USE_BEDROCK env var) or Vertex (with CLAUDE_CODE_USE_VERTEX env var) by using the 'env' or 'inherit_env' config options
+   * Users can also use Bedrock (with CLAUDE_CODE_USE_BEDROCK env var) or Vertex (with CLAUDE_CODE_USE_VERTEX env var)
    */
   getApiKey(): string | undefined {
     return this.config?.apiKey || this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');

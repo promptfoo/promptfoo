@@ -2,7 +2,11 @@ import fs from 'fs';
 
 import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
 import logger from '../../src/logger';
-import { ClaudeCodeSDKProvider, DEFAULT_ALLOWED_TOOLS } from '../../src/providers/claudeCode';
+import {
+  CLAUDE_CODE_MODEL_ALIASES,
+  ClaudeCodeSDKProvider,
+  FS_READONLY_ALLOWED_TOOLS,
+} from '../../src/providers/claudeCode';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-code';
 
@@ -155,7 +159,7 @@ describe('ClaudeCodeSDKProvider', () => {
       new ClaudeCodeSDKProvider({ config: { model: 'unknown-model' } });
 
       expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown Anthropic model for Claude Code SDK: unknown-model',
+        'Using unknown model for Claude Code SDK: unknown-model',
       );
 
       warnSpy.mockRestore();
@@ -167,8 +171,33 @@ describe('ClaudeCodeSDKProvider', () => {
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
 
       expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown Anthropic model for Claude Code SDK fallback: unknown-fallback',
+        'Using unknown model for Claude Code SDK fallback: unknown-fallback',
       );
+
+      warnSpy.mockRestore();
+    });
+
+    it('should not warn about Claude Code model aliases', () => {
+      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+
+      // Test all Claude Code aliases
+      CLAUDE_CODE_MODEL_ALIASES.forEach((alias) => {
+        new ClaudeCodeSDKProvider({ config: { model: alias } });
+        new ClaudeCodeSDKProvider({ config: { fallback_model: alias } });
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('should not warn about known Anthropic models', () => {
+      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
+
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-3-5-sonnet-20241022' } });
+      new ClaudeCodeSDKProvider({ config: { fallback_model: 'claude-3-5-haiku-20241022' } });
+
+      expect(warnSpy).not.toHaveBeenCalled();
 
       warnSpy.mockRestore();
     });
@@ -209,7 +238,7 @@ describe('ClaudeCodeSDKProvider', () => {
           prompt: 'Test prompt',
           options: expect.objectContaining({
             cwd: '/tmp/test-temp-dir',
-            allowedTools: DEFAULT_ALLOWED_TOOLS,
+            allowedTools: [], // no tools with no working directory
             strictMcpConfig: true,
           }),
         });
@@ -263,9 +292,7 @@ describe('ClaudeCodeSDKProvider', () => {
       it('should not throw when using Bedrock or Vertex env vars', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        const provider = new ClaudeCodeSDKProvider({
-          config: { inherit_env: ['CLAUDE_CODE_USE_BEDROCK'] },
-        });
+        const provider = new ClaudeCodeSDKProvider();
 
         // Set the env var in process.env for the test
         process.env.CLAUDE_CODE_USE_BEDROCK = 'true';
@@ -361,11 +388,45 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('tool configuration', () => {
+      it('should use no tools by default when no working directory is provided', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        expect(mockQuery).toHaveBeenCalledWith({
+          prompt: 'Test prompt',
+          options: expect.objectContaining({
+            allowedTools: [], // No tools when no working directory
+          }),
+        });
+      });
+
+      it('should use read-only tools by default when working directory is provided', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { working_dir: './test-dir' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        expect(mockQuery).toHaveBeenCalledWith({
+          prompt: 'Test prompt',
+          options: expect.objectContaining({
+            allowedTools: FS_READONLY_ALLOWED_TOOLS,
+          }),
+        });
+      });
+
       it('should handle allowed tools configuration', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        // Test default allowed tools
+        // Test default allowed tools with working directory
         const provider1 = new ClaudeCodeSDKProvider({
+          config: { working_dir: './test-dir' },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
         await provider1.callApi('Test prompt');
@@ -373,7 +434,7 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).toHaveBeenCalledWith({
           prompt: 'Test prompt',
           options: expect.objectContaining({
-            allowedTools: DEFAULT_ALLOWED_TOOLS,
+            allowedTools: FS_READONLY_ALLOWED_TOOLS,
           }),
         });
 
@@ -395,7 +456,10 @@ describe('ClaudeCodeSDKProvider', () => {
         // Test append_allowed_tools with deduplication
         mockQuery.mockClear();
         const provider3 = new ClaudeCodeSDKProvider({
-          config: { append_allowed_tools: ['Write', 'Read'] }, // Read is duplicate
+          config: { 
+            working_dir: './test-dir',
+            append_allowed_tools: ['Write', 'Read'] // Read is duplicate
+          },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
         await provider3.callApi('Test prompt');
@@ -403,7 +467,7 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).toHaveBeenCalledWith({
           prompt: 'Test prompt',
           options: expect.objectContaining({
-            allowedTools: [...DEFAULT_ALLOWED_TOOLS, 'Write'],
+            allowedTools: [...FS_READONLY_ALLOWED_TOOLS, 'Write'],
           }),
         });
       });
@@ -505,89 +569,6 @@ describe('ClaudeCodeSDKProvider', () => {
       });
     });
 
-    describe('environment variables', () => {
-      it('should inherit all env vars when inherit_env is true', async () => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
-
-        process.env.TEST_VAR_1 = 'value1';
-        process.env.TEST_VAR_2 = 'value2';
-
-        const provider = new ClaudeCodeSDKProvider({
-          config: { inherit_env: true },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        await provider.callApi('Test prompt');
-
-        expect(mockQuery).toHaveBeenCalledWith({
-          prompt: 'Test prompt',
-          options: expect.objectContaining({
-            env: expect.objectContaining({
-              TEST_VAR_1: 'value1',
-              TEST_VAR_2: 'value2',
-              ANTHROPIC_API_KEY: 'test-api-key',
-            }),
-          }),
-        });
-
-        delete process.env.TEST_VAR_1;
-        delete process.env.TEST_VAR_2;
-      });
-
-      it('should inherit specific env vars when inherit_env is array', async () => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
-
-        process.env.TEST_VAR_1 = 'value1';
-        process.env.TEST_VAR_2 = 'value2';
-        process.env.TEST_VAR_3 = 'value3';
-
-        const provider = new ClaudeCodeSDKProvider({
-          config: { inherit_env: ['TEST_VAR_1', 'TEST_VAR_3'] },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        await provider.callApi('Test prompt');
-
-        expect(mockQuery).toHaveBeenCalledWith({
-          prompt: 'Test prompt',
-          options: expect.objectContaining({
-            env: expect.objectContaining({
-              TEST_VAR_1: 'value1',
-              TEST_VAR_3: 'value3',
-              ANTHROPIC_API_KEY: 'test-api-key',
-              PATH: expect.any(String),
-            }),
-          }),
-        });
-
-        delete process.env.TEST_VAR_1;
-        delete process.env.TEST_VAR_2;
-        delete process.env.TEST_VAR_3;
-      });
-
-      it('should add custom env vars', async () => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
-
-        const provider = new ClaudeCodeSDKProvider({
-          config: {
-            env: {
-              CUSTOM_VAR: 'custom_value',
-            },
-          },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        await provider.callApi('Test prompt');
-
-        expect(mockQuery).toHaveBeenCalledWith({
-          prompt: 'Test prompt',
-          options: expect.objectContaining({
-            env: expect.objectContaining({
-              CUSTOM_VAR: 'custom_value',
-              ANTHROPIC_API_KEY: 'test-api-key',
-              PATH: expect.any(String),
-            }),
-          }),
-        });
-      });
-    });
 
     describe('MCP configuration', () => {
       it('should transform MCP config', async () => {
