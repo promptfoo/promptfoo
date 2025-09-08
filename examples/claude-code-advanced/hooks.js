@@ -17,25 +17,25 @@ function extensionHook(hookName, context) {
     hasTest: !!context?.test,
     hasResult: !!context?.result,
     resultSuccess: context?.result?.success,
-    resultError: context?.result?.error
+    resultError: context?.result?.error,
   });
-  
+
   try {
     // Check git status before reset
     const workspacePath = path.resolve('./workspace');
     console.log('Checking git status before reset...');
-    const gitStatus = execSync('git status --porcelain', { 
+    const gitStatus = execSync('git status --porcelain', {
       cwd: workspacePath,
-      encoding: 'utf8'
+      encoding: 'utf8',
     });
     console.log('Git status:', gitStatus.trim() || 'Clean');
-    
+
     // Only reset if there are actually changes to avoid unnecessary output
     if (gitStatus.trim()) {
       console.log('Resetting workspace at:', workspacePath);
-      execSync('git reset --hard HEAD', { 
+      execSync('git reset --hard HEAD', {
         cwd: workspacePath,
-        stdio: 'inherit'
+        stdio: 'inherit',
       });
       console.log('=== Git reset completed ===');
     } else {

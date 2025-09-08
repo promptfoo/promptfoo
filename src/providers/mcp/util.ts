@@ -1,4 +1,4 @@
-import { MCPServerConfig } from "./types";
+import { MCPServerConfig } from './types';
 
 export function getAuthHeaders(server: MCPServerConfig): Record<string, string> {
   if (!server.auth) {

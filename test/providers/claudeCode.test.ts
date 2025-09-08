@@ -131,7 +131,7 @@ describe('ClaudeCodeSDKProvider', () => {
       const provider = new ClaudeCodeSDKProvider();
 
       expect(provider.config).toEqual({});
-      expect(provider.id()).toBe('claude-code:sdk:anthropic');
+      expect(provider.id()).toBe('anthropic:claude-code');
     });
 
     it('should initialize with custom config', () => {

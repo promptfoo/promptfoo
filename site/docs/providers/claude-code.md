@@ -66,7 +66,7 @@ You can specify a specific working directory for Claude Code to run in:
 
 ```yaml
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       working_dir: ./src
 
@@ -86,7 +86,7 @@ Here's an example that will allow Claude Code to both read from and write to fil
 
 ```yaml
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       working_dir: ./my-project
       append_allowed_tools: ['Write', 'Edit', 'MultiEdit']
@@ -124,7 +124,7 @@ Model selection is optional, since Claude Code uses sensible defaults. When spec
 
 ```yaml
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       model: claude-opus-4-1-20250805
       fallback_model: claude-sonnet-4-20250514
@@ -134,7 +134,7 @@ Claude Code also supports a number of [model aliases](https://docs.anthropic.com
 
 ```yaml
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       model: sonnet
       fallback_model: haiku
@@ -173,25 +173,25 @@ Customize available tools for your use case:
 ```yaml
 # Add tools to defaults
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       append_allowed_tools: ['Write', 'Edit']
 
 # Replace default tools entirely
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       custom_allowed_tools: ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Bash', 'WebFetch', 'WebSearch']
 
 # Block specific tools
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       disallowed_tools: ['Delete', 'Run']
 
 # Allow all tools (use with caution)
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       allow_all_tools: true
 ```
@@ -206,7 +206,7 @@ Unlike the standard Anthropic provider, Claude Code handles MCP (Model Context P
 
 ```yaml
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       mcp:
         servers:

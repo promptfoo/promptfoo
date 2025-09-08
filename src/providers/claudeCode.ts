@@ -112,7 +112,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
   // Only SDK and Anthropic are supported for now
   // Could later potentially support Claude Code via external CLI calls, as well as Bedrock/Vertex providers
-  private providerId = 'claude-code:sdk:anthropic';
+  private providerId = 'anthropic:claude-code';
   private claudeCodeModule?: typeof import('@anthropic-ai/claude-code');
 
   constructor(
@@ -281,7 +281,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         });
         // Hash to avoid super long cache keys or including sensitive env vars in the key
         const hash = crypto.createHash('sha256').update(stringified).digest('hex');
-        cacheKey = `claude-code:${hash}`;
+        cacheKey = `anthropic:claude-code:${hash}`;
       }
     }
 

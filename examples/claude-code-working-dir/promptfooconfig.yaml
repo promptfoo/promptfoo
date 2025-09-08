@@ -5,7 +5,7 @@ prompts:
   - 'Review the files in this project and identify potential bugs'
 
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       working_dir: ./sample-project
 

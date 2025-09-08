@@ -7,7 +7,7 @@ prompts:
     (coordinates: 37.7749, -122.4194). Report what you found.
 
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       # Configure MCP server for weather data
       mcp:

@@ -6,7 +6,7 @@ prompts:
     Refactor the auth.js file to use async/await patterns with proper error handling
 
 providers:
-  - id: claude-code
+  - id: anthropic:claude-code
     config:
       working_dir: ./workspace
       # Add file editing tools to the default set of read-only tools

@@ -212,7 +212,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('claude-code'),
+    test: (providerPath: string) => providerPath.startsWith('anthropic:claude-code'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,

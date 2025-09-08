@@ -197,6 +197,11 @@ const defaultProviders: ProviderOptions[] = (
         temperature: 0.5,
       },
     },
+    {
+      id: 'anthropic:claude-code',
+      label: 'Anthropic: Claude Code SDK',
+      config: {},
+    },
   ])
   .concat([
     {
