@@ -27,6 +27,7 @@ This month we added support for **new models**, **model audit cloud sharing**, a
 ##### Provider Updates
 
 - **[Enhanced Vertex AI](/docs/providers/google/#vertex-ai)** - Improved credential management and authentication
+- **[Google AI Studio](/docs/providers/google/#google-ai-studio)** - Added default provider configurations for Google AI Studio models
 
 #### Model Audit Cloud Integration {#august-2025-model-audit}
 
@@ -37,6 +38,7 @@ Model audit results can now be shared to the cloud for team collaboration:
 - **Persistent audit history** - Track security scans over time
 - **Team sharing** - Share audit results across teams  
 - **Centralized storage** - Store audit reports in the cloud
+- **Path management** - Remove recent scan paths from history
 
 ##### Enhanced Authentication
 
@@ -73,6 +75,10 @@ Added **[Medical Off-Label Use Detection](/docs/red-team/plugins/medical/)** plu
 ##### Unverifiable Claims Plugin
 
 Added **[Unverifiable Claims Detection](/docs/red-team/plugins/)** plugin to test AI systems' susceptibility to generating fabricated but plausible-sounding claims.
+
+##### MCP Agent Testing
+
+Added **[MCP Agent example](/docs/red-team/mcp-security-testing/)** for red team testing with tool call results, demonstrating how to test AI systems that use Model Context Protocol.
 
 ### See Also {#august-2025-see-also}
 
