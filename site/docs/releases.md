@@ -36,7 +36,7 @@ This month we added support for **new models**, **model audit cloud sharing**, a
 Model audit results can now be shared to the cloud for team collaboration:
 
 - **Persistent audit history** - Track security scans over time
-- **Team sharing** - Share audit results across teams  
+- **Team sharing** - Share audit results across teams
 - **Centralized storage** - Store audit reports in the cloud
 - **Path management** - Remove recent scan paths from history
 
