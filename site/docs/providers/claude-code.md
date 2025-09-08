@@ -52,7 +52,7 @@ By default, Claude Code runs in a temporary directory with no tools enabled, usi
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - claude-code
+  - anthropic:claude-code
 
 prompts:
   - 'Output the a python function that prints the first 10 numbers in the Fibonacci sequence'
