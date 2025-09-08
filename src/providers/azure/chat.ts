@@ -144,7 +144,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    logger.debug(`Azure API request body: ${JSON.stringify(body)}`);
     return { body, config };
   }
 
@@ -167,7 +166,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     let data;
     let cached = false;
-    let httpStatus: number;
+
     try {
       const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
@@ -198,7 +197,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       );
 
       cached = isCached;
-      httpStatus = status;
 
       // Handle the response data
       if (typeof responseData === 'string') {
@@ -217,8 +215,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
-
-    logger.debug(`Azure API response (status ${httpStatus}): ${JSON.stringify(data)}`);
 
     // Inputs and outputs can be flagged by content filters.
     // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter

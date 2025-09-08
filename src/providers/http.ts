@@ -13,11 +13,11 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { renderVarsInObject } from '../util';
-import { sanitizeUrl } from '../util/fetch';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { REQUEST_TIMEOUT_MS } from './shared';
@@ -1808,8 +1808,6 @@ export class HttpProvider implements ApiProvider {
       context?.bustCache ?? context?.debug,
       this.config.maxRetries,
     );
-
-    logger.debug(`[HTTP Provider]: Response: ${safeJsonStringify(response.data)}`);
 
     if (!(await this.validateStatus)(response.status)) {
       throw new Error(
