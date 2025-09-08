@@ -313,7 +313,7 @@ export async function logRequestResponse(options: {
 
   const details = [
     `URL: ${sanitizeUrl(url)}`,
-    `Request Method: ${requestMethod}`,
+    `Method: ${requestMethod}`,
     `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
     response ? `Status: ${response.status} ${response.statusText}` : '',
     responseText ? `Response: ${responseText}` : '',
