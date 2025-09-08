@@ -142,7 +142,7 @@ describe('importCommand', () => {
         },
       };
 
-      const mockEvalRecord = { id: 'test-eval-123' };
+      const mockEvalRecord = { id: 'test-eval-123' } as any;
       mockFs.readFileSync.mockReturnValue(JSON.stringify(v3Data));
       mockEval.create.mockResolvedValue(mockEvalRecord);
       mockEvalResult.createManyFromEvaluateResult.mockReturnValue([]);
@@ -209,7 +209,7 @@ describe('importCommand', () => {
         }
       };
 
-      const mockEvalRecord = { id: 'legacy-eval-456' };
+      const mockEvalRecord = { id: 'legacy-eval-456' } as any;
       mockFs.readFileSync.mockReturnValue(JSON.stringify(v3DataLegacy));
       mockEval.create.mockResolvedValue(mockEvalRecord);
       mockEvalResult.createManyFromEvaluateResult.mockReturnValue([]);
@@ -240,7 +240,7 @@ describe('importCommand', () => {
         config: {},
       };
 
-      const mockEvalRecord = { id: 'minimal-eval-789' };
+      const mockEvalRecord = { id: 'minimal-eval-789' } as any;
       mockFs.readFileSync.mockReturnValue(JSON.stringify(v3DataMinimal));
       mockEval.create.mockResolvedValue(mockEvalRecord);
       mockEvalResult.createManyFromEvaluateResult.mockReturnValue([]);
@@ -339,7 +339,7 @@ describe('importCommand', () => {
         metadata: {},
       };
 
-      const mockEvalRecord = { id: 'telemetry-test' };
+      const mockEvalRecord = { id: 'telemetry-test' } as any;
       mockFs.readFileSync.mockReturnValue(JSON.stringify(v3Data));
       mockEval.create.mockResolvedValue(mockEvalRecord);
       mockEvalResult.createManyFromEvaluateResult.mockReturnValue([]);
@@ -362,7 +362,7 @@ describe('importCommand', () => {
         config: {},
       };
 
-      const mockEvalRecord = { id: 'legacy-telemetry' };
+      const mockEvalRecord = { id: 'legacy-telemetry' } as any;
       mockFs.readFileSync.mockReturnValue(JSON.stringify(legacyData));
       mockEval.create.mockResolvedValue(mockEvalRecord);
       mockEvalResult.createManyFromEvaluateResult.mockReturnValue([]);

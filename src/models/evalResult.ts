@@ -118,9 +118,50 @@ export default class EvalResult {
     const returnResults: EvalResult[] = [];
     db.transaction(() => {
       for (const result of results) {
+        const {
+          prompt,
+          error,
+          score,
+          latencyMs,
+          success,
+          provider,
+          gradingResult,
+          namedScores,
+          cost,
+          metadata,
+          failureReason,
+          testCase,
+        } = result;
+
+        const args = {
+          id: randomUUID(),
+          evalId,
+          testCase: {
+            ...testCase,
+            ...(testCase.provider && {
+              provider: sanitizeProvider(testCase.provider),
+            }),
+          },
+          promptIdx: result.promptIdx,
+          testIdx: result.testIdx,
+          prompt,
+          promptId: hashPrompt(prompt),
+          error: error?.toString(),
+          success,
+          score: score == null ? 0 : score,
+          response: result.response || null,
+          gradingResult: gradingResult || null,
+          namedScores,
+          provider: sanitizeProvider(provider),
+          latencyMs,
+          cost,
+          metadata,
+          failureReason,
+        };
+
         const dbResult = db
           .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
+          .values(args)
           .returning()
           .all();
         returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));

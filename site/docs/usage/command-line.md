@@ -234,7 +234,7 @@ Deletes a specific resource.
 
 ## `promptfoo import <filepath>`
 
-Import an eval file from JSON format. Supports both v2 and v3 format files for backup and restore workflows.
+Import an eval file from JSON format.
 
 ## `promptfoo export`
 
