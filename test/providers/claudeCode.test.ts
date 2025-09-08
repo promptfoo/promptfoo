@@ -456,9 +456,9 @@ describe('ClaudeCodeSDKProvider', () => {
         // Test append_allowed_tools with deduplication
         mockQuery.mockClear();
         const provider3 = new ClaudeCodeSDKProvider({
-          config: { 
+          config: {
             working_dir: './test-dir',
-            append_allowed_tools: ['Write', 'Read'] // Read is duplicate
+            append_allowed_tools: ['Write', 'Read'], // Read is duplicate
           },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
@@ -568,7 +568,6 @@ describe('ClaudeCodeSDKProvider', () => {
         });
       });
     });
-
 
     describe('MCP configuration', () => {
       it('should transform MCP config', async () => {
@@ -722,7 +721,7 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('caching behavior', () => {
-      it('should cache responses for read-only configurations', async () => {
+      it('should cache responses', async () => {
         mockQuery.mockImplementation(() =>
           createMockResponse('Cached response', { input_tokens: 10, output_tokens: 20 }),
         );
@@ -749,89 +748,6 @@ describe('ClaudeCodeSDKProvider', () => {
         const result3 = await provider.callApi('Different prompt');
         expect(result3.output).toBe('Cached response');
         expect(mockQuery).toHaveBeenCalledTimes(2);
-      });
-
-      it('should NOT cache when using non-default tools', async () => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
-
-        // Test with allow_all_tools
-        const provider1 = new ClaudeCodeSDKProvider({
-          config: { allow_all_tools: true },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        await provider1.callApi('Test prompt');
-        await provider1.callApi('Test prompt');
-        expect(mockQuery).toHaveBeenCalledTimes(2); // Called twice, no caching
-
-        mockQuery.mockClear();
-
-        // Test with custom_allowed_tools including write tools
-        const provider2 = new ClaudeCodeSDKProvider({
-          config: { custom_allowed_tools: ['Write', 'Edit'] },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        await provider2.callApi('Test prompt');
-        await provider2.callApi('Test prompt');
-        expect(mockQuery).toHaveBeenCalledTimes(2); // Called twice, no caching
-
-        mockQuery.mockClear();
-
-        // Test with append_allowed_tools
-        const provider3 = new ClaudeCodeSDKProvider({
-          config: { append_allowed_tools: ['Edit'] },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        await provider3.callApi('Test prompt');
-        await provider3.callApi('Test prompt');
-        expect(mockQuery).toHaveBeenCalledTimes(2); // Called twice, no caching
-      });
-
-      it('should NOT cache when using dangerous permission modes', async () => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
-
-        // Test with acceptEdits
-        const provider1 = new ClaudeCodeSDKProvider({
-          config: { permission_mode: 'acceptEdits' },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        await provider1.callApi('Test prompt');
-        await provider1.callApi('Test prompt');
-        expect(mockQuery).toHaveBeenCalledTimes(2);
-
-        mockQuery.mockClear();
-
-        // Test with bypassPermissions
-        const provider2 = new ClaudeCodeSDKProvider({
-          config: { permission_mode: 'bypassPermissions' },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        await provider2.callApi('Test prompt');
-        await provider2.callApi('Test prompt');
-        expect(mockQuery).toHaveBeenCalledTimes(2);
-      });
-
-      it('should NOT cache when MCP is configured', async () => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
-        mockTransformMCPConfigToClaudeCode.mockReturnValue({
-          'test-server': { command: 'test' },
-        });
-
-        const provider = new ClaudeCodeSDKProvider({
-          config: {
-            mcp: {
-              enabled: true,
-              server: {
-                name: 'test-server',
-                command: 'test',
-              },
-            },
-          },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-
-        await provider.callApi('Test prompt');
-        await provider.callApi('Test prompt');
-        expect(mockQuery).toHaveBeenCalledTimes(2); // No caching with MCP
       });
 
       it('should respect bustCache parameter', async () => {
@@ -947,37 +863,6 @@ describe('ClaudeCodeSDKProvider', () => {
         readdirSyncSpy.mockRestore();
       });
 
-      it('should NOT cache when working directory has too many files', async () => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
-
-        // Mock filesystem to return more than 100 files
-        const readdirSyncSpy = jest.spyOn(fs, 'readdirSync');
-        const files = Array.from({ length: 1000 }, (_, i) => ({
-          name: `file${i}.txt`,
-          isFile: () => true,
-          isDirectory: () => false,
-        }));
-        readdirSyncSpy.mockReturnValue(files as any);
-
-        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation();
-
-        const provider = new ClaudeCodeSDKProvider({
-          config: { working_dir: '/custom/dir' },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-
-        // Should warn about too many files
-        await provider.callApi('Test prompt');
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Caching disabled'));
-
-        // Should not cache
-        await provider.callApi('Test prompt');
-        expect(mockQuery).toHaveBeenCalledTimes(2);
-
-        warnSpy.mockRestore();
-        readdirSyncSpy.mockRestore();
-      });
-
       it('should handle cache disabled globally', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
@@ -994,20 +879,6 @@ describe('ClaudeCodeSDKProvider', () => {
 
         // Re-enable cache for other tests
         enableCache();
-      });
-
-      it('should cache with custom_allowed_tools if all tools are safe', async () => {
-        mockQuery.mockReturnValue(createMockResponse('Response'));
-
-        const provider = new ClaudeCodeSDKProvider({
-          config: { custom_allowed_tools: ['Read', 'Grep', 'Glob'] }, // All safe tools
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-
-        await provider.callApi('Test prompt');
-        await provider.callApi('Test prompt');
-        // Should cache since all tools are read-only
-        expect(mockQuery).toHaveBeenCalledTimes(2); // Actually won't cache per current logic
       });
 
       it('should handle cache errors gracefully', async () => {

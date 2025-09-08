@@ -228,26 +228,15 @@ For detailed MCP configuration, see [Claude Code MCP documentation](https://docs
 
 ## Caching Behavior
 
-Claude Code automatically caches responses when:
-
-- Using default read-only tools
-- Permission mode is `default` or `plan`
-- No MCP servers are configured
-- Working directory contents haven't changed
-
-Caching is disabled when:
-
-- Using custom tools or `allow_all_tools`
-- Permission mode is `acceptEdits` or `bypassPermissions`
-- MCP servers are configured
-- `strict_mcp_config` is false
-- Working directory has > 100 files
+This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.
 
 To disable caching globally:
 
 ```bash
 export PROMPTFOO_CACHE_ENABLED=false
 ```
+
+You can also include `bustCache: true` in the configuration to prevent reading from the cache.
 
 ## Managing Side Effects
 

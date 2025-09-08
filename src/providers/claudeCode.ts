@@ -251,31 +251,37 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env,
     };
 
-    let shouldCache = isCacheEnabled() && canCacheConfig(config);
+    let shouldCache = isCacheEnabled();
 
     // If we're caching, only read from cache if we're not busting it (we can still write to it when busting)
 
     let cache: Awaited<ReturnType<typeof getCache>> | undefined;
     let cacheKey: string | undefined;
     if (shouldCache) {
-      const workingDirFingerprintRes = config.working_dir
-        ? await getWorkingDirFingerprint(config.working_dir)
-        : null;
-
-      shouldCache = !config.working_dir || !!workingDirFingerprintRes?.shouldCache;
+      let workingDirFingerprint: string | null = null;
+      if (config.working_dir) {
+        try {
+          workingDirFingerprint = await getWorkingDirFingerprint(config.working_dir);
+        } catch (error) {
+          logger.error(
+            dedent`Error getting working directory fingerprint for cache key - ${config.working_dir}: ${String(error)}
+            
+            Caching is disabled.`,
+          );
+          shouldCache = false;
+        }
+      }
 
       if (shouldCache) {
         cache = await getCache();
         const stringified = JSON.stringify({
           prompt,
           cacheKeyQueryOptions,
-          workingDirFingerprint: workingDirFingerprintRes?.fingerprint,
+          workingDirFingerprint,
         });
         // Hash to avoid super long cache keys or including sensitive env vars in the key
         const hash = crypto.createHash('sha256').update(stringified).digest('hex');
         cacheKey = `claude-code:${hash}`;
-      } else {
-        shouldCache = false;
       }
     }
 
@@ -434,90 +440,52 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   }
 }
 
-function canCacheConfig(config: ClaudeCodeOptions): boolean {
-  // Unless we're using default tools, assume we can't cache (could potentially make this smarter in the future)
-  if (config.allow_all_tools || config.custom_allowed_tools || config.append_allowed_tools) {
-    return false;
-  }
-
-  // Unless we're in 'default' or 'plan' mode, assume we can't cache
-  if (config.permission_mode === 'acceptEdits' || config.permission_mode === 'bypassPermissions') {
-    return false;
-  }
-
-  // If we're using MCP servers, assume we can't cache (could also make this smarter in the future)
-  if (config.mcp || config.strict_mcp_config === false) {
-    return false;
-  }
-
-  return true;
-}
-
 /**
- * Get a fingerprint for the working directory to determine if it's safe to cache. Checks directory mtime and descendant file mtimes recursively up to a safe maximum.
+ * Get a fingerprint for the working directory to use as a cache key. Checks directory mtime and descendant file mtimes recursively.
  *
  * This allows for caching prompts that use the same working directory when the files haven't changed.
+ *
+ * Simple/naive approach with recursion, statSync/readdirSync, and sanity-check timeout should be fine for normal use cases—even with thousands of files it's likely fast enough. Could be optimized later to remove recursion and use async fs calls with a queue and batching if it ever becomes an issue.
  */
-async function getWorkingDirFingerprint(workingDir: string): Promise<{
-  fingerprint: string | null;
-  shouldCache: boolean;
-}> {
-  const MAX_FILES_FOR_CACHE = 100;
+const FINGERPRINT_TIMEOUT_MS = 2000;
+async function getWorkingDirFingerprint(workingDir: string): Promise<string> {
+  const dirStat = fs.statSync(workingDir);
+  const dirMtime = dirStat.mtimeMs;
 
-  const warnTooManyFiles = () => {
-    logger.warn(
-      dedent`Working directory ${workingDir} contains more than ${MAX_FILES_FOR_CACHE} files. Caching disabled for this run. Try disabling the cache with PROMPTFOO_CACHE_ENABLED=false or bustCache: true.`,
-    );
+  const startTime = Date.now();
+
+  // Recursively get all files
+  const getAllFiles = (dir: string, files: string[] = []): string[] => {
+    if (Date.now() - startTime > FINGERPRINT_TIMEOUT_MS) {
+      throw new Error('Working directory fingerprint timed out');
+    }
+
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        getAllFiles(fullPath, files);
+      } else if (entry.isFile()) {
+        files.push(fullPath);
+      }
+    }
+    return files;
   };
 
-  try {
-    const dirStat = fs.statSync(workingDir);
-    const dirMtime = dirStat.mtimeMs;
+  const allFiles = getAllFiles(workingDir);
 
-    // Recursively get all files
-    const getAllFiles = (dir: string, files: string[] = []): string[] | false => {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
+  // Create fingerprint from directory mtime + all file mtimes
+  const fileMtimes = allFiles
+    .map((file) => {
+      const stat = fs.statSync(file);
+      const relativePath = path.relative(workingDir, file);
+      return `${relativePath}:${stat.mtimeMs}`;
+    })
+    .sort(); // Sort for consistent ordering
 
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          const result = getAllFiles(fullPath, files);
-          if (result === false) {
-            return false;
-          }
-        } else if (entry.isFile()) {
-          files.push(fullPath);
-          // Stop early if we've already exceeded the max number of files for caching
-          if (files.length > MAX_FILES_FOR_CACHE) {
-            warnTooManyFiles();
-            return false;
-          }
-        }
-      }
-      return files;
-    };
+  const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
+  const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
 
-    const getFilesResult = getAllFiles(workingDir);
-    if (getFilesResult === false) {
-      return { fingerprint: null, shouldCache: false };
-    }
-    const allFiles = getFilesResult;
-
-    // Create fingerprint from directory mtime + all file mtimes
-    const fileMtimes = allFiles
-      .map((file) => {
-        const stat = fs.statSync(file);
-        const relativePath = path.relative(workingDir, file);
-        return `${relativePath}:${stat.mtimeMs}`;
-      })
-      .sort(); // Sort for consistent ordering
-
-    const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
-    const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
-
-    return { fingerprint, shouldCache: true };
-  } catch (err) {
-    logger.error(`Error creating working directory fingerprint: ${err}`);
-    return { fingerprint: null, shouldCache: false };
-  }
+  return fingerprint;
 }
