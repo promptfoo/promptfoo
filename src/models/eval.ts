@@ -797,7 +797,9 @@ export default class Eval {
     const promptMetrics: Record<string, any> = {};
     
     for (const prompt of this.prompts) {
-      if (!prompt.id) continue;
+      if (!prompt.id) {
+        continue;
+      }
       promptMetrics[prompt.id] = {
         score: 0,
         testPassCount: 0,
@@ -865,7 +867,9 @@ export default class Eval {
 
     // Update prompt metrics
     for (const prompt of this.prompts) {
-      if (!prompt.id) continue;
+      if (!prompt.id) {
+        continue;
+      }
       const metrics = promptMetrics[prompt.id];
       if (metrics) {
         // Calculate average score
