@@ -5,7 +5,7 @@ import { ProviderEnvOverridesSchema } from '../types/env';
 import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
-import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+import { ApiProviderSchema, ProviderOptionsSchema, ProviderResponseSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
 
@@ -1210,10 +1210,10 @@ export const EvaluateTableOutputSchema = z.object({
   pass: z.boolean(),
   prompt: z.string(),
   provider: z.string().optional(),
-  response: z.any().optional(),
+  response: ProviderResponseSchema.optional(),
   score: z.number(),
   success: z.boolean(),
-  testCase: z.any(),
+  testCase: z.any(), // AtomicTestCaseSchema may be too strict for import
   testIdx: z.number(),
   tokenUsage: BaseTokenUsageSchema.optional(),
   vars: z.record(z.any()),
@@ -1230,7 +1230,7 @@ export const EvaluateTableRowSchema = z.object({
   description: z.string().optional(),
   outputs: z.array(EvaluateTableOutputSchema),
   vars: z.array(z.string()),
-  test: z.any(),
+  test: z.any(), // AtomicTestCaseSchema may be too strict for import
   testIdx: z.number(),
 });
 
@@ -1249,7 +1249,8 @@ export const EvaluateStatsSchema = z.object({
   tokenUsage: BaseTokenUsageSchema,
 });
 
-// Simplified schema for provider options used in results
+// Minimal provider schema for results - subset of ProviderOptionsSchema
+// Matches the Pick<ProviderOptions, 'id' | 'label'> type used in EvaluateResult
 export const ProviderOptionsMinimalSchema = z.object({
   id: z.string(),
   label: z.string().optional(),
@@ -1260,12 +1261,12 @@ export const EvaluateResultSchema = z.object({
   description: z.string().optional(),
   promptIdx: z.number(),
   testIdx: z.number(),
-  testCase: z.any(),
+  testCase: z.any(), // AtomicTestCaseSchema may be too strict for import
   promptId: z.string(),
   provider: ProviderOptionsMinimalSchema,
-  prompt: z.any(),
+  prompt: z.any(), // PromptSchema may be too strict for import
   vars: z.record(z.any()),
-  response: z.any().optional(),
+  response: ProviderResponseSchema.optional(),
   error: z.string().nullable().optional(),
   failureReason: z.nativeEnum(ResultFailureReason),
   success: z.boolean(),
@@ -1322,13 +1323,4 @@ export const OutputFileSchema = z
     message: 'Must have either evalId or id field',
   });
 
-// Export the inferred types for consistency
-export type EvaluateTableOutputZod = z.infer<typeof EvaluateTableOutputSchema>;
-export type EvaluateTableRowZod = z.infer<typeof EvaluateTableRowSchema>;
-export type EvaluateTableZod = z.infer<typeof EvaluateTableSchema>;
-export type EvaluateStatsZod = z.infer<typeof EvaluateStatsSchema>;
-export type EvaluateResultZod = z.infer<typeof EvaluateResultSchema>;
-export type EvaluateSummaryV3Zod = z.infer<typeof EvaluateSummaryV3Schema>;
-export type EvaluateSummaryV2Zod = z.infer<typeof EvaluateSummaryV2Schema>;
-export type OutputMetadataZod = z.infer<typeof OutputMetadataSchema>;
-export type OutputFileZod = z.infer<typeof OutputFileSchema>;
+// Note: Inferred types are available via z.infer<typeof SchemaName> if needed
