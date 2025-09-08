@@ -91,6 +91,24 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
   }
 
+  // Build base WebSocket URL from configured API base URL
+  private getWebSocketBase(): string {
+    const apiUrl = this.getApiUrl();
+    return apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+  }
+
+  // Build WebSocket URL for realtime model endpoint
+  private getWebSocketUrl(modelName: string): string {
+    const wsBase = this.getWebSocketBase();
+    return `${wsBase}/realtime?model=${encodeURIComponent(modelName)}`;
+  }
+
+  // Build WebSocket URL for client-secret based socket initialization
+  private getClientSecretSocketUrl(clientSecret: string): string {
+    const wsBase = this.getWebSocketBase();
+    return `${wsBase}/realtime/socket?client_secret=${encodeURIComponent(clientSecret)}`;
+  }
+
   // Add method to reset audio state
   private resetAudioState(): void {
     this.lastAudioItemId = null;
@@ -159,7 +177,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       );
 
       // The WebSocket URL needs to include the client secret
-      const wsUrl = `wss://api.openai.com/v1/realtime/socket?client_secret=${encodeURIComponent(clientSecret)}`;
+      const wsUrl = this.getClientSecretSocketUrl(clientSecret);
       logger.debug(`Connecting to WebSocket URL: ${wsUrl.slice(0, 60)}...`);
 
       // Add WebSocket options to bypass potential network issues
@@ -767,7 +785,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       logger.debug(`Establishing direct WebSocket connection to OpenAI Realtime API`);
 
       // Construct URL with model parameter
-      const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.modelName)}`;
+      const wsUrl = this.getWebSocketUrl(this.modelName);
       logger.debug(`Connecting to WebSocket URL: ${wsUrl}`);
 
       // Add WebSocket options with required headers
@@ -1205,7 +1223,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         this.setupMessageHandlers(prompt, resolve, reject);
       } else {
         // Create new connection
-        const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.modelName)}`;
+        const wsUrl = this.getWebSocketUrl(this.modelName);
         logger.debug(`Connecting to WebSocket URL: ${wsUrl}`);
 
         // Add WebSocket options with required headers
