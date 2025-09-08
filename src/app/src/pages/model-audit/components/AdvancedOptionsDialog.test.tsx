@@ -196,8 +196,6 @@ describe('AdvancedOptionsDialog', () => {
     expect(input).toHaveValue(newValue);
   });
 
-
-
   it('should update localOptions.strict when the user toggles the Strict Mode switch', () => {
     const onOptionsChange = vi.fn();
     render(
@@ -224,6 +222,4 @@ describe('AdvancedOptionsDialog', () => {
       }),
     );
   });
-
-
 });
