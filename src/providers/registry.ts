@@ -176,6 +176,20 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('anthropic:claude-code'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { ClaudeCodeSDKProvider } = await import('./claudeCode');
+      return new ClaudeCodeSDKProvider({
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('anthropic:'),
     create: async (
       providerPath: string,
@@ -209,20 +223,6 @@ export const providerMap: ProviderFactory[] = [
         - anthropic:completion:<model name> - For Completion API
         - anthropic:<model name> - Shorthand for Messages API with a known model name`,
       );
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('anthropic:claude-code'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      const { ClaudeCodeSDKProvider } = await import('./claudeCode');
-      return new ClaudeCodeSDKProvider({
-        ...providerOptions,
-        env: context.env,
-      });
     },
   },
   {
