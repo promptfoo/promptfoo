@@ -1,5 +1,5 @@
-import { McpServerConfig as ClaudeCodeMcpServerConfig } from '@anthropic-ai/claude-code';
 import { getAuthHeaders } from './util';
+import type { McpServerConfig as ClaudeCodeMcpServerConfig } from '@anthropic-ai/claude-code';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type {
