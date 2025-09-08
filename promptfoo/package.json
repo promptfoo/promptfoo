@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "google-auth-library": "^10.3.0"
+  }
+}
