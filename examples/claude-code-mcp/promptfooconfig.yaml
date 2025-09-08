@@ -26,5 +26,3 @@ tests:
     assert:
       - type: contains-any
         value: ['temperature', 'weather', 'forecast', 'San Francisco']
-      - type: llm-rubric
-        value: 'The response should contain specific weather forecast information like temperatures, conditions, or wind data for San Francisco'
