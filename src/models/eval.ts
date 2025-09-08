@@ -19,6 +19,7 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -39,8 +40,8 @@ import { convertTestResultsToTableRow } from '../util/exportToFile';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import EvalResult from './evalResult';
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
+import EvalResult from './evalResult';
 
 interface FilteredCountRow {
   count: number | null;
@@ -107,6 +108,7 @@ export default class Eval {
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
   vars: string[];
+  isRedteam: boolean;
   _resultsLoaded: boolean = false;
 
   static async latest() {
@@ -156,6 +158,7 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
+      isRedteam: eval_.isRedteam,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -174,7 +177,16 @@ export default class Eval {
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
     const db = getDb();
     const evals = await db
-      .select()
+      .select({
+        id: evalsTable.id,
+        createdAt: evalsTable.createdAt,
+        author: evalsTable.author,
+        description: evalsTable.description,
+        config: evalsTable.config,
+        prompts: evalsTable.prompts,
+        vars: evalsTable.vars,
+        isRedteam: evalsTable.isRedteam,
+      })
       .from(evalsTable)
       .limit(limit)
       .orderBy(desc(evalsTable.createdAt))
@@ -188,6 +200,7 @@ export default class Eval {
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
+          isRedteam: e.isRedteam,
         }),
     );
   }
@@ -221,6 +234,7 @@ export default class Eval {
           config,
           results: {},
           vars: opts?.vars || [],
+          isRedteam: Boolean(config.redteam),
         })
         .run();
 
@@ -313,6 +327,7 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
+      isRedteam?: boolean;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -326,6 +341,7 @@ export default class Eval {
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
+    this.isRedteam = opts?.isRedteam ?? Boolean(config.redteam);
   }
 
   version() {
@@ -355,6 +371,7 @@ export default class Eval {
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
+      isRedteam: this.isRedteam,
     };
 
     if (this.useOldResults()) {
@@ -446,18 +463,21 @@ export default class Eval {
     // Add filters
     if (opts.filters && opts.filters.length > 0) {
       const filterConditions: string[] = [];
+      // Helper function to sanitize SQL string values
+      const sanitizeValue = (val: string) => val.replace(/'/g, "''");
+
       opts.filters.forEach((filter) => {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
         if (type === 'metric' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
           // in double quotes.
           condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
         } else if (type === 'metadata' && field) {
-          const sanitizedValue = value.replace(/'/g, "''");
-          const sanitizedField = field.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
+          const sanitizedField = sanitizeValue(field);
 
           if (operator === 'equals') {
             condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
@@ -467,18 +487,19 @@ export default class Eval {
             condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
           }
         } else if (type === 'plugin' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           // Is the value a category? e.g. `harmful` or `bias`
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
+          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
 
           // Plugin ID is stored in metadata.pluginId
           if (isCategory) {
-            condition = `json_extract(metadata, '$.pluginId') LIKE '${sanitizedValue}:%'`;
+            condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
           } else {
-            condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+            condition = `${pluginIdPath} = '${sanitizedValue}'`;
           }
         } else if (type === 'strategy' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           if (sanitizedValue === 'basic') {
             // Basic is represented by NULL in the metadata.strategyId field
             condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
@@ -486,12 +507,37 @@ export default class Eval {
             // Strategy ID is stored in metadata.strategyId
             condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
           }
+        } else if (type === 'severity' && operator === 'equals') {
+          const sanitizedValue = sanitizeValue(value);
+          // Get the severity map for all plugins
+          const severityMap = getRiskCategorySeverityMap(this.config?.redteam?.plugins);
+
+          // Find all plugin IDs that match the requested severity
+          const matchingPluginIds = Object.entries(severityMap)
+            .filter(([, severity]) => severity === sanitizedValue)
+            .map(([pluginId]) => pluginId);
+
+          if (matchingPluginIds.length > 0) {
+            const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+            // Build SQL condition to check if pluginId matches any of the plugins with this severity
+            const pluginConditions = matchingPluginIds.map((pluginId) => {
+              const sanitizedPluginId = sanitizeValue(pluginId);
+              // Check for exact match or category match (e.g., 'harmful:*')
+              if (pluginId.includes(':')) {
+                // It's a specific subcategory
+                return `${pluginIdPath} = '${sanitizedPluginId}'`;
+              } else {
+                // It's a category, match any plugin starting with this prefix
+                return `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
+              }
+            });
+            condition = `(${pluginConditions.join(' OR ')})`;
+          }
         }
 
         if (condition) {
-          // Logic operator can only be applied if there are already conditions
+          // Apply logic operator if there are already existing filter conditions
           filterConditions.push(
-            // Logic operator can only be applied if there are already conditions
             filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
           );
         }
@@ -786,7 +832,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
       datasetId: evalsToDatasetsTable.datasetId,
-      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
+      isRedteam: evalsTable.isRedteam,
       prompts: evalsTable.prompts,
     })
     .from(evalsTable)
@@ -828,9 +874,9 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       description: result.description,
       numTests: testCount,
       datasetId: result.datasetId,
-      isRedteam: result.isRedteam,
+      isRedteam: Boolean(result.isRedteam),
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
-    };
+    } as EvalSummary;
   });
 }

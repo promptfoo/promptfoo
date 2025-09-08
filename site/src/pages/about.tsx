@@ -143,6 +143,12 @@ const AboutPageContent = () => {
                 image: '/img/team/tabs.jpeg',
                 bio: 'Tabs fronts developer education, community management, and technical writing backed by a wealth of experience in design and software development. Learn more at your <a href="https://ladyofcode.com" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">own peril</a>.',
               },
+              {
+                name: 'Alan DeLong',
+                title: 'Software Engineer',
+                image: '/img/team/alan.jpeg',
+                bio: 'Alan brings almost two decades of experience building and shipping software at scale. He has led and contributed on teams at companies like Ceros, Thoughtworks, and Parature.',
+              },
             ].map((leader) => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={leader.name}>
                 <Box textAlign="center">

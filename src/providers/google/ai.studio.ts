@@ -161,8 +161,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       maxOutputTokens: this.config.maxOutputTokens,
     };
 
-    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
-
     let data,
       cached = false;
     try {
@@ -187,8 +185,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {
@@ -304,8 +300,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
-
     let data;
     let cached = false;
     try {
@@ -334,7 +328,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       };
     }
 
-    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
     let output, candidate;
     try {
       candidate = getCandidate(data);

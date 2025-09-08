@@ -61,7 +61,7 @@ describe('ReportPage', () => {
   });
 
   it("should set page metadata to 'Red team report' when evalId is present", () => {
-    const url = 'http://localhost/report?evalId=test-eval-123';
+    const url = 'http://localhost/reports?evalId=test-eval-123';
     Object.defineProperty(window, 'location', {
       writable: true,
       value: new URL(url),
@@ -84,7 +84,7 @@ describe('ReportPage', () => {
   });
 
   it('should render the Report component when evalId is present in the URL search parameters', () => {
-    const url = 'http://localhost/report?evalId=test-eval-123';
+    const url = 'http://localhost/reports?evalId=test-eval-123';
     Object.defineProperty(window, 'location', {
       writable: true,
       value: new URL(url),
@@ -101,7 +101,7 @@ describe('ReportPage', () => {
   });
 
   it('should render ReportIndex component when evalId is not present in URL search parameters', () => {
-    const url = 'http://localhost/report';
+    const url = 'http://localhost/reports';
     Object.defineProperty(window, 'location', {
       writable: true,
       value: new URL(url),
@@ -127,7 +127,7 @@ describe('ReportPage', () => {
       fetchEmail: vi.fn(),
     });
 
-    const url = 'http://localhost/report?evalId=test-eval-123';
+    const url = 'http://localhost/reports?evalId=test-eval-123';
     Object.defineProperty(window, 'location', {
       writable: true,
       value: new URL(url),
@@ -189,7 +189,7 @@ describe('ReportPage', () => {
       fetchEmail: vi.fn(),
     });
 
-    const pathname = '/report/path with spaces';
+    const pathname = '/reports/path with spaces';
     const search = '?evalId=test with spaces&param2=value with spaces';
     const url = `http://localhost${pathname}${search}`;
 
@@ -206,12 +206,12 @@ describe('ReportPage', () => {
 
     expect(navigate).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith(
-      `/login?type=report&redirect=/report/path%20with%20spaces?evalId=test%20with%20spaces&param2=value%20with%20spaces`,
+      `/login?type=report&redirect=/reports/path%20with%20spaces?evalId=test%20with%20spaces&param2=value%20with%20spaces`,
     );
   });
 
   it('should handle malformed evalId values gracefully', () => {
-    const url = 'http://localhost/report?evalId=malformed-eval-id!';
+    const url = 'http://localhost/reports?evalId=malformed-eval-id!';
     Object.defineProperty(window, 'location', {
       writable: true,
       value: new URL(url),

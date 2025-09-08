@@ -463,7 +463,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
 
       const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
-      return sharingConfig ? sharingConfig.sharing : true;
+      return sharingConfig ? sharingConfig.sharing : false;
     })(),
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
@@ -479,7 +479,12 @@ export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
-): Promise<{ testSuite: TestSuite; config: Partial<UnifiedConfig>; basePath: string }> {
+): Promise<{
+  testSuite: TestSuite;
+  config: Partial<UnifiedConfig>;
+  basePath: string;
+  commandLineOptions?: Partial<CommandLineOptions>;
+}> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
@@ -543,7 +548,7 @@ export async function resolveConfigs(
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
   }
 
-  const config: Omit<UnifiedConfig, 'evaluateOptions' | 'commandLineOptions'> = {
+  const config: Omit<UnifiedConfig, 'commandLineOptions'> = {
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
@@ -553,7 +558,7 @@ export async function resolveConfigs(
     env: fileConfig.env || defaultConfig.env,
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
-      : (fileConfig.sharing ?? defaultConfig.sharing ?? true),
+      : (fileConfig.sharing ?? defaultConfig.sharing ?? false),
     defaultTest: processedDefaultTest
       ? await readTest(processedDefaultTest, basePath, true)
       : undefined,
@@ -563,6 +568,7 @@ export async function resolveConfigs(
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
     tracing: fileConfig.tracing || defaultConfig.tracing,
+    evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
@@ -696,5 +702,22 @@ export async function resolveConfigs(
   }
 
   cliState.config = config;
-  return { config, testSuite, basePath };
+
+  // Extract commandLineOptions from either explicit config files or default config
+  let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
+
+  // Resolve relative envPath against the config file directory
+  if (commandLineOptions?.envPath && !path.isAbsolute(commandLineOptions.envPath) && basePath) {
+    commandLineOptions = {
+      ...commandLineOptions,
+      envPath: path.resolve(basePath, commandLineOptions.envPath),
+    };
+  }
+
+  return {
+    config,
+    testSuite,
+    basePath,
+    commandLineOptions,
+  };
 }

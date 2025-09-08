@@ -43,7 +43,7 @@ tests:
 
 :::tip
 
-For more information on setting up a prompt file, see [input and output files](/docs/configuration/parameters).
+For more information on setting up a prompt file, see [input and output files](/docs/configuration/prompts).
 
 :::
 
@@ -622,6 +622,8 @@ transformFn: (output: string, context: {
     display?: string;
   };
   vars?: Record<string, any>;
+  // Metadata returned in the provider response.
+  metadata?: Record<string, any>;
 }) => void;
 ```
 
