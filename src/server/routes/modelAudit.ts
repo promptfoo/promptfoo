@@ -128,6 +128,8 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       format: 'json',
       // Enable verbose mode by default for better debugging information
       verbose: options.verbose !== false, // Allow explicit false to disable
+      // Set default timeout to 1 hour for large model scans
+      timeout: options.timeout || 3600,
       // Note: We handle persistence ourselves in this server route
     });
 

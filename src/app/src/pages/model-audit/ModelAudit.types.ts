@@ -9,7 +9,7 @@ export interface ScanOptions {
   blacklist: string[];
   timeout: number;
   maxSize?: string; // Replaced maxFileSize/maxTotalSize with single maxSize option
-  verbose: boolean;
+  verbose?: boolean; // Optional since we handle this automatically in the server
   format?: 'text' | 'json' | 'sarif';
   strict?: boolean;
   dryRun?: boolean;
