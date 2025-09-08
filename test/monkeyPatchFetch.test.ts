@@ -39,7 +39,7 @@ describe('monkeyPatchFetch', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.mocked(cloudConfig.getApiKey).mockReturnValue(null);
+    jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
     jest.mocked(logRequestResponse).mockClear();
     mockOriginalFetch.mockClear();
   });
@@ -104,7 +104,7 @@ describe('monkeyPatchFetch', () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);
 
-    jest.mocked(cloudConfig.getApiKey).mockReturnValue(null);
+    jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
 
     const url = CLOUD_API_HOST + '/api/test';
     await monkeyPatchFetch(url);

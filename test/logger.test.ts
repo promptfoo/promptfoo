@@ -563,8 +563,11 @@ describe('logger', () => {
     });
 
     it('should log failed responses as error', async () => {
+      // @ts-expect-error
       mockResponse.ok = false;
+      // @ts-expect-error
       mockResponse.status = 500;
+      // @ts-expect-error
       mockResponse.statusText = 'Internal Server Error';
 
       await logger.logRequestResponse({
@@ -728,8 +731,11 @@ describe('logger', () => {
         mockLogger.debug.mockClear();
         mockLogger.error.mockClear();
 
+        // @ts-expect-error
         mockResponse.ok = code >= 200 && code < 300;
+        // @ts-expect-error
         mockResponse.status = code;
+        // @ts-expect-error
         mockResponse.statusText = text;
 
         await logger.logRequestResponse({
@@ -866,11 +872,11 @@ describe('logger', () => {
 
       // Check that all sections are properly separated
       const lines = loggedMessage.split('\n');
-      expect(lines.some((line) => /^URL: /.test(line))).toBe(true);
-      expect(lines.some((line) => /^Method: /.test(line))).toBe(true);
-      expect(lines.some((line) => /^Request Body: /.test(line))).toBe(true);
-      expect(lines.some((line) => /^Status: /.test(line))).toBe(true);
-      expect(lines.some((line) => /^Response: /.test(line))).toBe(true);
+      expect(lines.some((line: string) => /^URL: /.test(line))).toBe(true);
+      expect(lines.some((line: string) => /^Method: /.test(line))).toBe(true);
+      expect(lines.some((line: string) => /^Request Body: /.test(line))).toBe(true);
+      expect(lines.some((line: string) => /^Status: /.test(line))).toBe(true);
+      expect(lines.some((line: string) => /^Response: /.test(line))).toBe(true);
     });
   });
 });
