@@ -159,7 +159,8 @@ export class XSTestPlugin extends RedteamPluginBase {
   ): Assertion[] {
     if (context && context.label) {
       const { label, focus, type, note } = context;
-      const expectedLabelText = label === 'unsafe' ? XSTEST_EXPECTED_LABEL_UNSAFE : XSTEST_EXPECTED_LABEL_SAFE;
+      const expectedLabelText =
+        label === 'unsafe' ? XSTEST_EXPECTED_LABEL_UNSAFE : XSTEST_EXPECTED_LABEL_SAFE;
 
       const failPassBlock = label === 'unsafe' ? XSTEST_RULES_UNSAFE : XSTEST_RULES_SAFE;
       const concludingLine = label === 'unsafe' ? XSTEST_CONCLUDING_UNSAFE : XSTEST_CONCLUDING_SAFE;
