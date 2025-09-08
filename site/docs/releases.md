@@ -12,117 +12,68 @@ Full release history for Promptfoo open source can be found on [GitHub](https://
 
 ## August 2025 Release Highlights {#august-2025}
 
-This month we focused on **next-generation model support**, **enterprise security infrastructure**, and **performance optimizations** to help you evaluate the latest AI innovations while maintaining the highest security standards.
+This month we added support for **new models**, **model audit cloud sharing**, and **performance improvements**.
 
 ### Evals
 
 #### New Models / Providers {#august-2025-providers}
 
-##### Early Access to Next-Generation Models
+##### New Model Support
 
-The AI landscape moves fast, and staying ahead means getting access to the latest models as soon as they're available. This month we delivered first-platform support for the most advanced models from leading AI labs:
+- **[GPT-5](/docs/providers/openai/#gpt-5-models)** - Added support for OpenAI's GPT-5 model with advanced reasoning capabilities
+- **[Claude Opus 4.1](/docs/providers/anthropic/)** - Support for Anthropic's latest Claude model
+- **[xAI Grok Code Fast](/docs/providers/xai/)** - Added xAI's Grok Code Fast model for coding tasks
 
-- **[GPT-5](/docs/providers/openai/#gpt-5-models)** - OpenAI's flagship model with advanced reasoning capabilities and enhanced response format handling. This is critical for organizations wanting to evaluate the latest capabilities before competitors.
+##### Provider Updates
 
-- **[Claude Opus 4.1](/docs/providers/anthropic/)** - Anthropic's most capable model with improved performance across reasoning, math, and coding tasks. Essential for comprehensive model comparison and selection.
-
-- **[xAI Grok Code Fast](/docs/providers/xai/)** - High-performance coding model from xAI with specialized capabilities for software development tasks.
-
-##### Enhanced Provider Support
-
-Enterprise customers often have complex cloud infrastructure requirements. This month we enhanced our provider ecosystem with new capabilities and improved integrations:
-
-- **[Enhanced Vertex AI](/docs/providers/google/#vertex-ai)** - Improved credential management and authentication for enterprise Google Cloud deployments
-- **[Pylon Chat](/docs/providers/pylon/)** - New chat capabilities for Pylon provider integration
+- **[Enhanced Vertex AI](/docs/providers/google/#vertex-ai)** - Improved credential management and authentication
+- **[Pylon Chat](/docs/providers/pylon/)** - Added chat capabilities for Pylon provider
 
 #### Model Audit Cloud Integration {#august-2025-model-audit}
 
-##### Collaborative Security Scanning for Teams
+##### Model Audit Cloud Sharing
 
-Model security is increasingly critical as AI systems handle sensitive data and make important decisions. We've transformed ModelAudit from a CLI tool into a collaborative cloud platform:
+Model audit results can now be shared to the cloud for team collaboration:
 
-**Cloud-Based Audit Management**: Teams can now create, manage, and share model security audits directly within the platform. This includes:
+- **Persistent audit history** - Track security scans over time
+- **Team sharing** - Share audit results across teams  
+- **Centralized storage** - Store audit reports in the cloud
 
-- **Persistent audit history** - Track security scans over time to monitor model safety evolution
-- **Team collaboration** - Share audit results and findings across security and ML teams  
-- **Centralized reporting** - Generate compliance reports for enterprise security requirements
+##### Enhanced Authentication
 
-**Advanced Authentication Infrastructure**: Enterprise deployments require sophisticated authentication. New capabilities include:
+Added support for advanced authentication methods:
 
-- **Certificate storage** - Store and manage client certificates for mTLS authentication
-- **Signature authentication** - Support for uploaded signature-based authentication flows
-- **Credential security** - Enhanced sanitization prevents accidental exposure in logs and debug output
-
-**Use it when:**
-
-- Conducting security reviews before model deployment
-- Meeting compliance requirements for regulated industries  
-- Collaborating across security and ML teams on model safety
-- Tracking security posture changes across model versions
+- **Certificate storage** - Store client certificates for mTLS authentication
+- **Signature authentication** - Support for uploaded signature-based authentication
+- **Credential sanitization** - Prevent credential exposure in debug logs
 
 #### Enhanced Configuration and Usability {#august-2025-usability}
 
-##### Streamlined Provider Setup
+##### AI-Powered HTTP Configuration
 
-Complex provider configurations can be time-consuming and error-prone. This month we introduced intelligent automation to speed up setup workflows:
-
-**AI-Powered HTTP Configuration**: Intelligent auto-fill capabilities for HTTP provider setup reduce configuration time from hours to minutes. The system can automatically detect common authentication patterns and suggest appropriate settings for custom API integrations.
-
-**Enhanced Security Infrastructure**: Enterprise deployments require sophisticated authentication handling:
-
-- **Database-stored certificates** - Store and manage client certificates directly in the platform for mTLS authentication
-- **Uploaded signature authentication** - Support for advanced authentication flows using uploaded signature files
-- **Credential sanitization** - Enhanced protection prevents accidental exposure of sensitive credentials in debug logs
-
-**Use it when:**
-
-- Setting up complex HTTP providers with custom authentication
-- Deploying in enterprise environments with strict certificate requirements
-- Configuring providers that require advanced security protocols
+Added auto-fill capabilities for HTTP provider setup to reduce configuration time and errors.
 
 #### Performance and Reliability Improvements {#august-2025-performance}
 
-##### Scale and Speed Optimizations
+##### Performance Improvements
 
-Large-scale AI evaluation requires exceptional performance. This month's optimizations significantly improve evaluation speed and reliability:
-
-**HuggingFace Performance Improvements**: Dataset fetching is now substantially faster with improved reliability for large datasets. This is especially important for comprehensive evaluations that process extensive datasets.
-
-**Enhanced Error Handling**: Better diagnostic messages and automatic retry suggestions help resolve common configuration issues more quickly.
-
-**UI/UX Improvements**: Streamlined interfaces and better progress indicators make it easier to manage long-running evaluations and navigate results.
+- **HuggingFace dataset fetching** - Improved speed and reliability for large datasets
+- **Error handling** - Better diagnostic messages and retry suggestions
+- **UI improvements** - Streamlined interfaces and progress indicators
 
 ### Red Teaming
 
 #### Healthcare AI Safety {#august-2025-healthcare}
 
-##### Medical Off-Label Use Detection
+##### Medical Off-Label Use Plugin
 
-Healthcare AI carries significant responsibility for patient safety. New healthcare-specific testing ensures your medical AI applications meet clinical standards:
-
-**[Medical Off-Label Use Detection](/docs/red-team/plugins/medical/)** - Identifies inappropriate pharmaceutical recommendations and off-label use suggestions that could endanger patients. This plugin is essential for healthcare applications that provide medical guidance, drug information, or treatment recommendations.
-
-**Use it when:**
-
-- Deploying AI in clinical decision support systems
-- Testing healthcare chatbots or virtual medical assistants  
-- Evaluating pharmaceutical information systems
-- Meeting healthcare compliance requirements (FDA, HIPAA)
+Added **[Medical Off-Label Use Detection](/docs/red-team/plugins/medical/)** plugin to identify inappropriate pharmaceutical recommendations that could endanger patients.
 
 #### Enhanced Attack Detection {#august-2025-strategies}
 
-##### Unverifiable Claims Testing
+##### Unverifiable Claims Plugin
 
-AI systems that generate factual claims pose risks when those claims can't be verified. We've added testing capabilities specifically for this vulnerability:
-
-**[Unverifiable Claims Detection](/docs/red-team/plugins/)** - Tests AI systems' susceptibility to generating fabricated but plausible-sounding claims. This is particularly important for knowledge-based applications where users rely on AI-generated information for decision-making.
-
-**Use it when:**
-
-- Testing AI systems that provide factual information
-- Evaluating knowledge bases or research assistants
-- Ensuring AI systems appropriately indicate uncertainty
-- Meeting requirements for information accuracy in regulated domains
+Added **[Unverifiable Claims Detection](/docs/red-team/plugins/)** plugin to test AI systems' susceptibility to generating fabricated but plausible-sounding claims.
 
 ### See Also {#august-2025-see-also}
 
