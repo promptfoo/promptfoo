@@ -27,7 +27,6 @@ This month we added support for **new models**, **model audit cloud sharing**, a
 ##### Provider Updates
 
 - **[Enhanced Vertex AI](/docs/providers/google/#vertex-ai)** - Improved credential management and authentication
-- **[Pylon Chat](/docs/providers/pylon/)** - Added chat capabilities for Pylon provider
 
 #### Model Audit Cloud Integration {#august-2025-model-audit}
 
