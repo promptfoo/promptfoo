@@ -354,7 +354,13 @@ function EvalOutputCell({
                 src={src}
                 alt={alt}
                 onClick={() => toggleLightbox(src)}
-                style={{ cursor: 'pointer' }}
+                style={{
+                  cursor: 'pointer',
+                  maxWidth: `${maxImageWidth}px`,
+                  maxHeight: `${maxImageHeight}px`,
+                  width: 'auto',
+                  height: 'auto',
+                }}
               />
             ),
           }}
