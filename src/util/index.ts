@@ -23,6 +23,7 @@ import {
   type NunjucksFilterMap,
   type OutputFile,
   OutputFileExtension,
+  OutputFileSchema,
   ResultFailureReason,
   type TestCase,
 } from '../types';
@@ -104,6 +105,14 @@ async function writeJsonOutputSafely(
       shareableUrl,
       metadata,
     };
+
+    // Validate the output against the schema before writing
+    const parseResult = OutputFileSchema.safeParse(outputData);
+    if (!parseResult.success) {
+      logger.warn(`Export data does not match schema: ${parseResult.error.errors.map(err => 
+        `${err.path.join('.')}: ${err.message}`
+      ).join(', ')}`);
+    }
 
     // Use standard JSON.stringify with proper formatting
     const jsonString = JSON.stringify(outputData, null, 2);
@@ -198,16 +207,23 @@ export async function writeOutput(
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
-    fs.writeFileSync(
-      outputPath,
-      yaml.dump({
-        evalId: evalRecord.id,
-        results: summary,
-        config: evalRecord.config,
-        shareableUrl,
-        metadata,
-      } as OutputFile),
-    );
+    const outputFile: OutputFile = {
+      evalId: evalRecord.id,
+      results: summary,
+      config: evalRecord.config,
+      shareableUrl,
+      metadata,
+    };
+    
+    // Validate the output against the schema before writing
+    const parseResult = OutputFileSchema.safeParse(outputFile);
+    if (!parseResult.success) {
+      logger.warn(`Export data does not match schema: ${parseResult.error.errors.map(err => 
+        `${err.path.join('.')}: ${err.message}`
+      ).join(', ')}`);
+    }
+    
+    fs.writeFileSync(outputPath, yaml.dump(outputFile));
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');

@@ -1193,3 +1193,127 @@ export interface LoadApiProviderContext {
   basePath?: string;
   env?: EnvOverrides;
 }
+
+// Zod schemas for import/export validation
+
+export const EvaluateTableOutputSchema = z.object({
+  cost: z.number(),
+  failureReason: z.nativeEnum(ResultFailureReason),
+  gradingResult: z.any().nullable().optional(), // GradingResult is complex
+  id: z.string(),
+  latencyMs: z.number(),
+  metadata: z.record(z.any()).optional(),
+  namedScores: z.record(z.number()),
+  pass: z.boolean(),
+  prompt: z.string(),
+  provider: z.string().optional(),
+  response: z.any().optional(), // ProviderResponse is complex
+  score: z.number(),
+  success: z.boolean(),
+  testCase: z.any(), // AtomicTestCase is complex
+  testIdx: z.number(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
+  vars: z.record(z.any()),
+});
+
+export const EvaluateTableRowSchema = z.object({
+  description: z.string().optional(),
+  outputs: z.array(EvaluateTableOutputSchema),
+  vars: z.array(z.string()),
+  test: z.any(), // AtomicTestCase is complex
+  testIdx: z.number(),
+});
+
+export const EvaluateTableSchema = z.object({
+  head: z.object({
+    prompts: z.array(CompletedPromptSchema),
+    vars: z.array(z.string()),
+  }),
+  body: z.array(EvaluateTableRowSchema),
+});
+
+export const EvaluateStatsSchema = z.object({
+  successes: z.number(),
+  failures: z.number(),
+  errors: z.number(),
+  tokenUsage: BaseTokenUsageSchema,
+});
+
+export const ProviderOptionsMinimalSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+});
+
+export const EvaluateResultSchema = z.object({
+  id: z.string().optional(),
+  description: z.string().optional(),
+  promptIdx: z.number(),
+  testIdx: z.number(),
+  testCase: z.any(), // AtomicTestCase is complex, using any for now
+  promptId: z.string(),
+  provider: ProviderOptionsMinimalSchema,
+  prompt: z.any(), // Prompt is complex, using any for now
+  vars: z.record(z.any()),
+  response: z.any().optional(), // ProviderResponse is complex
+  error: z.string().nullable().optional(),
+  failureReason: z.nativeEnum(ResultFailureReason),
+  success: z.boolean(),
+  score: z.number(),
+  latencyMs: z.number(),
+  gradingResult: z.any().nullable().optional(), // GradingResult is complex
+  namedScores: z.record(z.number()),
+  cost: z.number().optional(),
+  metadata: z.record(z.any()).optional(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
+});
+
+export const EvaluateSummaryV3Schema = z.object({
+  version: z.literal(3),
+  timestamp: z.string().optional(),
+  results: z.array(EvaluateResultSchema),
+  prompts: z.array(CompletedPromptSchema),
+  stats: EvaluateStatsSchema.optional(),
+});
+
+export const EvaluateSummaryV2Schema = z.object({
+  version: z.number(),
+  timestamp: z.string().optional(),
+  results: z.array(EvaluateResultSchema),
+  table: EvaluateTableSchema.optional(),
+  stats: EvaluateStatsSchema.optional(),
+});
+
+export const OutputMetadataSchema = z.object({
+  promptfooVersion: z.string().optional(),
+  nodeVersion: z.string().optional(),
+  platform: z.string().optional(),
+  arch: z.string().optional(),
+  exportedAt: z.string().optional(),
+  evaluationCreatedAt: z.string().optional(),
+  author: z.string().optional(),
+});
+
+export const OutputFileSchema = z.object({
+  evalId: z.string().nullable().optional(),
+  id: z.string().optional(), // Legacy V2 format uses 'id' instead of 'evalId'
+  results: z.union([EvaluateSummaryV3Schema, EvaluateSummaryV2Schema]),
+  config: z.any(), // UnifiedConfig is very complex, using any for now
+  shareableUrl: z.string().nullable().optional(),
+  metadata: OutputMetadataSchema.optional(),
+  // V2 legacy fields
+  version: z.number().optional(),
+  createdAt: z.string().optional(),
+}).refine(data => data.evalId || data.id, {
+  message: "Must have either evalId or id field"
+});
+
+// Export the inferred types for consistency
+export type EvaluateTableOutputZod = z.infer<typeof EvaluateTableOutputSchema>;
+export type EvaluateTableRowZod = z.infer<typeof EvaluateTableRowSchema>;
+export type EvaluateTableZod = z.infer<typeof EvaluateTableSchema>;
+export type EvaluateStatsZod = z.infer<typeof EvaluateStatsSchema>;
+export type EvaluateResultZod = z.infer<typeof EvaluateResultSchema>;
+export type EvaluateSummaryV3Zod = z.infer<typeof EvaluateSummaryV3Schema>;
+export type EvaluateSummaryV2Zod = z.infer<typeof EvaluateSummaryV2Schema>;
+export type OutputMetadataZod = z.infer<typeof OutputMetadataSchema>;
+export type OutputFileZod = z.infer<typeof OutputFileSchema>;
