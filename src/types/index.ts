@@ -1293,19 +1293,21 @@ export const OutputMetadataSchema = z.object({
   author: z.string().optional(),
 });
 
-export const OutputFileSchema = z.object({
-  evalId: z.string().nullable().optional(),
-  id: z.string().optional(), // Legacy V2 format uses 'id' instead of 'evalId'
-  results: z.union([EvaluateSummaryV3Schema, EvaluateSummaryV2Schema]),
-  config: z.any(), // UnifiedConfig is very complex, using any for now
-  shareableUrl: z.string().nullable().optional(),
-  metadata: OutputMetadataSchema.optional(),
-  // V2 legacy fields
-  version: z.number().optional(),
-  createdAt: z.string().optional(),
-}).refine(data => data.evalId || data.id, {
-  message: "Must have either evalId or id field"
-});
+export const OutputFileSchema = z
+  .object({
+    evalId: z.string().nullable().optional(),
+    id: z.string().optional(), // Legacy V2 format uses 'id' instead of 'evalId'
+    results: z.union([EvaluateSummaryV3Schema, EvaluateSummaryV2Schema]),
+    config: z.any(), // UnifiedConfig is very complex, using any for now
+    shareableUrl: z.string().nullable().optional(),
+    metadata: OutputMetadataSchema.optional(),
+    // V2 legacy fields
+    version: z.number().optional(),
+    createdAt: z.string().optional(),
+  })
+  .refine((data) => data.evalId || data.id, {
+    message: 'Must have either evalId or id field',
+  });
 
 // Export the inferred types for consistency
 export type EvaluateTableOutputZod = z.infer<typeof EvaluateTableOutputSchema>;

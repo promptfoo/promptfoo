@@ -19,35 +19,35 @@ export function importCommand(program: Command) {
       try {
         const fileContent = fs.readFileSync(file, 'utf-8');
         const rawData = JSON.parse(fileContent);
-        
+
         // Validate the data against the schema
         const parseResult = OutputFileSchema.safeParse(rawData);
         if (!parseResult.success) {
-          const errorMessages = parseResult.error.errors.map(err => 
-            `${err.path.join('.')}: ${err.message}`
-          ).join(', ');
+          const errorMessages = parseResult.error.errors
+            .map((err) => `${err.path.join('.')}: ${err.message}`)
+            .join(', ');
           throw new Error(`Invalid import file format: ${errorMessages}`);
         }
-        
-        const evalData = parseResult.data as OutputFile & {id?: string};
-        
+
+        const evalData = parseResult.data as OutputFile & { id?: string };
+
         // Ensure evalId or id is not null (legacy V2 format uses 'id')
         const importId = evalData.evalId || evalData.id;
         if (!importId) {
           throw new Error('Import file must contain a valid evalId or id');
         }
-        
+
         if (evalData.results.version === 3) {
           logger.debug('Importing v3 eval');
           const v3Results = evalData.results as EvaluateSummaryV3;
-          
+
           // Extract just the prompt information from CompletedPrompt objects
           const prompts = v3Results.prompts.map((completedPrompt) => ({
             raw: completedPrompt.raw,
             label: completedPrompt.label,
             id: completedPrompt.id,
           }));
-          
+
           const evalRecord = await Eval.create(evalData.config, prompts, {
             id: importId,
             createdAt: new Date(evalData.metadata?.evaluationCreatedAt || new Date()),

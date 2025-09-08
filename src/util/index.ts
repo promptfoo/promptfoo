@@ -109,9 +109,11 @@ async function writeJsonOutputSafely(
     // Validate the output against the schema before writing
     const parseResult = OutputFileSchema.safeParse(outputData);
     if (!parseResult.success) {
-      logger.warn(`Export data does not match schema: ${parseResult.error.errors.map(err => 
-        `${err.path.join('.')}: ${err.message}`
-      ).join(', ')}`);
+      logger.warn(
+        `Export data does not match schema: ${parseResult.error.errors
+          .map((err) => `${err.path.join('.')}: ${err.message}`)
+          .join(', ')}`,
+      );
     }
 
     // Use standard JSON.stringify with proper formatting
@@ -214,15 +216,17 @@ export async function writeOutput(
       shareableUrl,
       metadata,
     };
-    
+
     // Validate the output against the schema before writing
     const parseResult = OutputFileSchema.safeParse(outputFile);
     if (!parseResult.success) {
-      logger.warn(`Export data does not match schema: ${parseResult.error.errors.map(err => 
-        `${err.path.join('.')}: ${err.message}`
-      ).join(', ')}`);
+      logger.warn(
+        `Export data does not match schema: ${parseResult.error.errors
+          .map((err) => `${err.path.join('.')}: ${err.message}`)
+          .join(', ')}`,
+      );
     }
-    
+
     fs.writeFileSync(outputPath, yaml.dump(outputFile));
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();

@@ -160,7 +160,7 @@ export default class Eval {
       .where(eq(evalsToPromptsTable.evalId, id))
       .all();
 
-    const prompts: CompletedPrompt[] = promptResults.map(p => ({
+    const prompts: CompletedPrompt[] = promptResults.map((p) => ({
       raw: p.prompt,
       label: p.prompt,
       id: p.promptId,
@@ -186,13 +186,13 @@ export default class Eval {
             completion: 0,
             cached: 0,
             numRequests: 0,
-            completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 }
-          }
+            completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          },
         },
         namedScores: {},
         namedScoresCount: {},
-        cost: 0
-      }
+        cost: 0,
+      },
     }));
 
     const evalInstance = new Eval(eval_.config, {
@@ -219,7 +219,7 @@ export default class Eval {
 
     // Recalculate prompt metrics from results
     await evalInstance.recalculatePromptMetrics();
-    
+
     return evalInstance;
   }
 
@@ -795,7 +795,7 @@ export default class Eval {
 
     // Initialize metrics for each prompt
     const promptMetrics: Record<string, any> = {};
-    
+
     for (const prompt of this.prompts) {
       if (!prompt.id) {
         continue;
@@ -821,12 +821,12 @@ export default class Eval {
             completion: 0,
             cached: 0,
             numRequests: 0,
-            completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 }
-          }
+            completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          },
         },
         namedScores: {},
         namedScoresCount: {},
-        cost: 0
+        cost: 0,
       };
     }
 
@@ -835,7 +835,7 @@ export default class Eval {
       const promptId = result.promptId;
       if (promptMetrics[promptId]) {
         const metrics = promptMetrics[promptId];
-        
+
         metrics.testPassCount += result.success ? 1 : 0;
         if (!result.success) {
           if (result.failureReason === ResultFailureReason.ERROR) {
@@ -844,11 +844,11 @@ export default class Eval {
             metrics.testFailCount += 1;
           }
         }
-        
+
         metrics.totalLatencyMs += result.latencyMs || 0;
         metrics.cost += result.cost || 0;
         metrics.score += result.score || 0;
-        
+
         if (result.response?.tokenUsage) {
           const tokenUsage = metrics.tokenUsage;
           tokenUsage.prompt += result.response.tokenUsage.prompt || 0;
@@ -856,7 +856,7 @@ export default class Eval {
           tokenUsage.total += result.response.tokenUsage.total || 0;
           tokenUsage.numRequests += 1;
         }
-        
+
         if (result.gradingResult?.pass) {
           metrics.assertPassCount += 1;
         } else if (result.gradingResult?.pass === false) {
@@ -877,7 +877,7 @@ export default class Eval {
         if (resultCount > 0) {
           metrics.score = metrics.score / resultCount;
         }
-        
+
         prompt.metrics = metrics;
       }
     }

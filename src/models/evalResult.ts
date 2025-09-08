@@ -159,11 +159,7 @@ export default class EvalResult {
           failureReason,
         };
 
-        const dbResult = db
-          .insert(evalResultsTable)
-          .values(args)
-          .returning()
-          .all();
+        const dbResult = db.insert(evalResultsTable).values(args).returning().all();
         returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
       }
     });

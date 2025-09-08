@@ -64,54 +64,62 @@ describe('importCommand', () => {
         results: {
           version: 3,
           timestamp: '2024-01-01T12:00:00.000Z',
-          prompts: [{ 
-            raw: 'test prompt',
-            label: 'test prompt',
-            id: 'prompt-id',
-            provider: '',
-            metrics: {
-              score: 0,
-              testPassCount: 0,
-              testFailCount: 0,
-              testErrorCount: 0,
-              assertPassCount: 0,
-              assertFailCount: 0,
-              totalLatencyMs: 0,
-              tokenUsage: {
-                prompt: 0,
-                completion: 0,
-                cached: 0,
-                total: 0,
-                numRequests: 0,
-                completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-                assertions: {
-                  total: 0,
+          prompts: [
+            {
+              raw: 'test prompt',
+              label: 'test prompt',
+              id: 'prompt-id',
+              provider: '',
+              metrics: {
+                score: 0,
+                testPassCount: 0,
+                testFailCount: 0,
+                testErrorCount: 0,
+                assertPassCount: 0,
+                assertFailCount: 0,
+                totalLatencyMs: 0,
+                tokenUsage: {
                   prompt: 0,
                   completion: 0,
                   cached: 0,
+                  total: 0,
                   numRequests: 0,
-                  completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 }
-                }
+                  completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+                  assertions: {
+                    total: 0,
+                    prompt: 0,
+                    completion: 0,
+                    cached: 0,
+                    numRequests: 0,
+                    completionDetails: {
+                      reasoning: 0,
+                      acceptedPrediction: 0,
+                      rejectedPrediction: 0,
+                    },
+                  },
+                },
+                namedScores: {},
+                namedScoresCount: {},
+                cost: 0,
               },
+            },
+          ],
+          results: [
+            {
+              promptIdx: 0,
+              testIdx: 0,
+              testCase: {},
+              promptId: 'prompt-id',
+              provider: { id: 'test', label: 'test' },
+              prompt: { raw: 'test prompt' },
+              vars: {},
+              success: true,
+              score: 1,
+              latencyMs: 100,
               namedScores: {},
-              namedScoresCount: {},
-              cost: 0
-            }
-          }],
-          results: [{
-            promptIdx: 0,
-            testIdx: 0,
-            testCase: {},
-            promptId: 'prompt-id',
-            provider: { id: 'test', label: 'test' },
-            prompt: { raw: 'test prompt' },
-            vars: {},
-            success: true,
-            score: 1,
-            latencyMs: 100,
-            namedScores: {},
-            failureReason: 0
-          }],
+              failureReason: 0,
+            },
+          ],
           stats: {
             successes: 1,
             failures: 0,
@@ -129,10 +137,10 @@ describe('importCommand', () => {
                 completion: 0,
                 cached: 0,
                 numRequests: 0,
-                completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 }
-              }
-            }
-          }
+                completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              },
+            },
+          },
         },
         config: { description: 'Test config' },
         shareableUrl: null,
@@ -153,11 +161,13 @@ describe('importCommand', () => {
 
       expect(mockEval.create).toHaveBeenCalledWith(
         v3Data.config,
-        [{
-          raw: 'test prompt',
-          label: 'test prompt',
-          id: 'prompt-id',
-        }],
+        [
+          {
+            raw: 'test prompt',
+            label: 'test prompt',
+            id: 'prompt-id',
+          },
+        ],
         {
           id: 'test-eval-123',
           createdAt: new Date('2024-01-01T12:00:00.000Z'),
@@ -168,7 +178,9 @@ describe('importCommand', () => {
         v3Data.results.results,
         'test-eval-123',
       );
-      expect(logger.info).toHaveBeenCalledWith('Eval with ID test-eval-123 has been successfully imported.');
+      expect(logger.info).toHaveBeenCalledWith(
+        'Eval with ID test-eval-123 has been successfully imported.',
+      );
     });
 
     it('should handle v3 format with fallback to legacy fields', async () => {
@@ -196,17 +208,17 @@ describe('importCommand', () => {
                 completion: 0,
                 cached: 0,
                 numRequests: 0,
-                completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 }
-              }
-            }
-          }
+                completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              },
+            },
+          },
         },
         config: { description: 'Legacy config' },
         shareableUrl: null,
         metadata: {
           evaluationCreatedAt: '2024-01-02T10:00:00.000Z',
-          author: 'legacy-author'
-        }
+          author: 'legacy-author',
+        },
       };
 
       const mockEvalRecord = { id: 'legacy-eval-456' } as any;
@@ -218,15 +230,11 @@ describe('importCommand', () => {
 
       await program.parseAsync(['node', 'test', 'import', 'legacy.json']);
 
-      expect(mockEval.create).toHaveBeenCalledWith(
-        v3DataLegacy.config,
-        [],
-        {
-          id: 'legacy-eval-456',
-          createdAt: new Date('2024-01-02T10:00:00.000Z'),
-          author: 'legacy-author',
-        },
-      );
+      expect(mockEval.create).toHaveBeenCalledWith(v3DataLegacy.config, [], {
+        id: 'legacy-eval-456',
+        createdAt: new Date('2024-01-02T10:00:00.000Z'),
+        author: 'legacy-author',
+      });
     });
 
     it('should handle v3 format with missing metadata gracefully', async () => {
@@ -280,7 +288,9 @@ describe('importCommand', () => {
       await program.parseAsync(['node', 'test', 'import', 'v2test.json']);
 
       expect(mockDb.insert).toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith('Eval with ID v2-eval-123 has been successfully imported.');
+      expect(logger.info).toHaveBeenCalledWith(
+        'Eval with ID v2-eval-123 has been successfully imported.',
+      );
     });
   });
 
