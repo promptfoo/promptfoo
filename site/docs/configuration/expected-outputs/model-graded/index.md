@@ -76,24 +76,31 @@ defaultTest:
       [
         {
           "role": "system",
+          // German: "You evaluate outputs based on criteria. Respond with JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALL responses in German."
           "content": "Du bewertest Ausgaben nach Kriterien. Antworte mit JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALLE Antworten auf Deutsch."
         },
         {
           "role": "user", 
+          // German: "Output: {{ output }}\nCriterion: {{ rubric }}"
           "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}"
         }
       ]
 
 assert:
   - type: llm-rubric
+    # German: "Responds helpfully"
     value: 'Antwortet hilfreich'
   - type: g-eval
+    # German: "Clear and precise"
     value: 'Klar und präzise'
   - type: model-graded-closedqa
+    # German: "Gives direct answer"
     value: 'Gibt direkte Antwort'
 ```
 
 This produces German reasoning: `{"reason": "Die Antwort ist hilfreich und klar.", "pass": true, "score": 1.0}`
+
+<!-- German reasoning: "The answer is helpful and clear." -->
 
 **Note:** This approach works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. Other assertions like `factuality` and `context-recall` require specific output formats and need assertion-specific prompts.
 

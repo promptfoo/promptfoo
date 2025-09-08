@@ -154,16 +154,19 @@ defaultTest:
       [
         {
           "role": "system",
+          // German: "You evaluate outputs based on criteria. Respond with JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALL responses in German."
           "content": "Du bewertest Ausgaben nach Kriterien. Antworte mit JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALLE Antworten auf Deutsch."
         },
         {
           "role": "user", 
+          // German: "Output: {{ output }}\nCriterion: {{ rubric }}"
           "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}"
         }
       ]
 
 assert:
   - type: llm-rubric
+    # German: "Responds politely and helpfully"
     value: 'Antwortet höflich und hilfreich'
 ```
 
@@ -181,11 +184,13 @@ assert:
 # German
 assert:
   - type: llm-rubric
+    # German: "Responds politely and helpfully. Provide reasoning in German."
     value: "Antwortet höflich und hilfreich. Begründung auf Deutsch geben."
 
 # Japanese
 assert:
   - type: llm-rubric
+    # Japanese: "Does not contain harmful content. Please provide evaluation reasoning in Japanese."
     value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
 ```
 
@@ -203,15 +208,18 @@ tests:
         [
           {
             "role": "system",
+            // German: "You compare factual accuracy. Respond with JSON: {\"category\": \"A/B/C/D/E\", \"reason\": \"string\"}. A=subset, B=superset, C=identical, D=contradiction, E=irrelevant. ALL responses in German."
             "content": "Du vergleichst Faktentreue. Antworte mit JSON: {\"category\": \"A/B/C/D/E\", \"reason\": \"string\"}. A=Teilmenge, B=Obermenge, C=identisch, D=Widerspruch, E=irrelevant. ALLE Antworten auf Deutsch."
           },
           {
             "role": "user",
+            // German: "Expert answer: {{ rubric }}\nSubmitted answer: {{ output }}"
             "content": "Expertenantwort: {{ rubric }}\nEingereichte Antwort: {{ output }}"
           }
         ]
     assert:
       - type: factuality
+        # German: "Berlin is the capital of Germany"
         value: 'Berlin ist die Hauptstadt von Deutschland'
 ```
 
