@@ -2,8 +2,7 @@
 description: 'Claude Code with file modifications and git-based cleanup'
 
 prompts:
-  - |
-    Refactor the auth.js file to use async/await patterns
+  - 'Refactor the auth.js file to use async/await patterns'
 
 providers:
   - id: claude-code
@@ -17,7 +16,6 @@ hooks:
   afterEach: |
     const { execSync } = require('child_process');
     execSync('git reset --hard HEAD', { cwd: './workspace' });
-    console.log('Git reset completed');
 
 tests:
   - vars: {}

@@ -1,47 +1,16 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Claude Code simple example - no file access'
+description: 'Claude Code basic usage - temp directory with no file access'
 
 prompts:
-  - |
-    Analyze this {{language}} code and explain what it does:
-    
-    {{code}}
-    
-    Be concise but thorough.
+  - 'Output a Python function that prints the first 10 numbers in the Fibonacci sequence'
 
 providers:
-  # Claude Code with defaults (no working directory, read-only tools)
   - claude-code
-  
-  # Compare with regular Claude
-  - anthropic:messages:claude-3-5-sonnet-20241022
 
 tests:
-  - vars:
-      language: Python
-      code: |
-        def fibonacci(n):
-            if n <= 1:
-                return n
-            return fibonacci(n-1) + fibonacci(n-2)
+  - vars: {}
     assert:
-      - type: contains-any
-        value:
-          - fibonacci
-          - recursive
-          - sequence
+      - type: contains
+        value: 'fibonacci'
       - type: llm-rubric
-        value: Must explain that this calculates Fibonacci numbers recursively
-
-  - vars:
-      language: JavaScript
-      code: |
-        const pipe = (...fns) => x => fns.reduce((v, f) => f(v), x);
-    assert:
-      - type: contains-any
-        value:
-          - pipe
-          - function composition
-          - compose
-      - type: llm-rubric
-        value: Must explain that this creates a pipeline of functions
+        value: 'Should generate working Python code that prints first 10 Fibonacci numbers'
