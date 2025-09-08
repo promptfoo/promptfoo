@@ -64,7 +64,6 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     }
     const body = await response.json();
     logger.debug(`Provider fetched from cloud: ${id}`);
-    logger.debug(`Provider from cloud: ${JSON.stringify(body, null, 2)}`);
 
     const provider = ProviderOptionsSchema.parse(body.config);
     // The provider options schema has ID field as optional but we know it's required for cloud providers
@@ -105,7 +104,6 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
     }
     const body = await response.json();
     logger.info(`Config fetched from cloud: ${id}`);
-    logger.debug(`Config from cloud: ${JSON.stringify(body, null, 2)}`);
     return body;
   } catch (e) {
     logger.error(`Failed to fetch config from cloud: ${id}.`);
@@ -179,10 +177,6 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
       }
 
       const pluginSeverityOverride = await overrideRes.json();
-
-      logger.debug(
-        `Plugin severity overrides ${pluginSeverityOverride.id} fetched from cloud: ${JSON.stringify(pluginSeverityOverride.members, null, 2)}`,
-      );
 
       return {
         id: pluginSeverityOverride.id,
@@ -362,14 +356,6 @@ export async function canCreateTargets(teamId: string | undefined): Promise<bool
     throw new Error(`Failed to check provider permissions: ${response.statusText}`);
   }
   const body = await response.json();
-
-  logger.debug(
-    `[canCreateTargets] Checking provider permissions for team ${teamId}: ${JSON.stringify(
-      body.filter((ability: { action: string; subject: string }) => ability.subject === 'Provider'),
-      null,
-      2,
-    )}`,
-  );
 
   return body.some(
     (ability: { action: string; subject: string }) =>

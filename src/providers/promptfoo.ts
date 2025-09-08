@@ -83,7 +83,6 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       }
 
       const data = await response.json();
-      logger.debug(`[HarmfulCompletionProvider] API call response: ${JSON.stringify(data)}`);
 
       const validOutputs: string[] = (
         Array.isArray(data.output) ? data.output : [data.output]
@@ -221,7 +220,6 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       version: VERSION,
     };
 
-    logger.debug(`Calling promptfoo agent API with body: ${JSON.stringify(body)}`);
     try {
       const response = await fetchWithRetries(
         getRemoteGenerationUrl(),
