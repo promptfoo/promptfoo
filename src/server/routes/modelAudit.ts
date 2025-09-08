@@ -126,8 +126,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       ...options,
       // Force JSON format for API responses (required for parsing)
       format: 'json',
-      // Don't write to database at this point (we handle persistence ourselves)
-      write: false,
+      // Note: We handle persistence ourselves in this server route
     });
 
     logger.info(`Running model scan on: ${resolvedPaths.join(', ')}`);
@@ -256,6 +255,23 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
             errorDetails = {
               type: 'python_version_error',
               suggestion: 'Check that you have a supported Python version installed',
+            };
+          } else if (
+            stderrLower.includes('no such option') ||
+            stderrLower.includes('unrecognized option')
+          ) {
+            errorMessage = 'Invalid command line option provided to modelaudit';
+            errorDetails = {
+              type: 'invalid_option_error',
+              suggestion:
+                'Check that all command line options are supported by the current modelaudit version',
+            };
+          } else if (stderrLower.includes('usage:') && stderrLower.includes('try')) {
+            errorMessage = 'Invalid command syntax or arguments';
+            errorDetails = {
+              type: 'usage_error',
+              suggestion:
+                'Review the command arguments. The modelaudit usage help is shown in stderr.',
             };
           }
         }
