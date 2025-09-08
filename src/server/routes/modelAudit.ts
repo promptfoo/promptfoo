@@ -160,8 +160,28 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
 
     modelAudit.on('error', (error) => {
       logger.error(`Failed to start modelaudit: ${error.message}`);
+
+      let errorMessage = 'Failed to start model scan';
+      let suggestion = 'Make sure Python and modelaudit are installed and available in your PATH.';
+
+      if (error.message.includes('ENOENT') || error.message.includes('not found')) {
+        errorMessage = 'ModelAudit command not found';
+        suggestion = 'Install modelaudit using: pip install modelaudit';
+      } else if (error.message.includes('EACCES')) {
+        errorMessage = 'Permission denied when trying to execute modelaudit';
+        suggestion = 'Check that modelaudit is executable and you have the necessary permissions';
+      }
+
       res.status(500).json({
-        error: 'Failed to start model scan. Make sure Python and modelaudit are installed.',
+        error: errorMessage,
+        originalError: error.message,
+        suggestion: suggestion,
+        debug: {
+          command: 'modelaudit',
+          args: args,
+          paths: resolvedPaths,
+          cwd: process.cwd(),
+        },
       });
     });
 
@@ -169,9 +189,89 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       // ModelAudit returns exit code 1 when it finds issues, which is expected
       if (code !== null && code !== 0 && code !== 1) {
         logger.error(`Model scan process exited with code ${code}`);
+
+        // Provide more detailed error information to the frontend
+        let errorMessage = `Model scan failed with exit code ${code}`;
+        let errorDetails = {};
+
+        // Parse stderr for common error patterns and provide helpful messages
+        if (stderr) {
+          const stderrLower = stderr.toLowerCase();
+
+          if (stderrLower.includes('permission denied') || stderrLower.includes('access denied')) {
+            errorMessage = 'Permission denied: Unable to access the specified files or directories';
+            errorDetails = {
+              type: 'permission_error',
+              suggestion: 'Check that the files exist and you have read permissions',
+            };
+          } else if (
+            stderrLower.includes('file not found') ||
+            stderrLower.includes('no such file')
+          ) {
+            errorMessage = 'Files or directories not found';
+            errorDetails = {
+              type: 'file_not_found',
+              suggestion: 'Verify the file paths are correct and the files exist',
+            };
+          } else if (stderrLower.includes('out of memory') || stderrLower.includes('memory')) {
+            errorMessage = 'Insufficient memory to complete the scan';
+            errorDetails = {
+              type: 'memory_error',
+              suggestion:
+                'Try scanning smaller files or reducing the number of files scanned at once',
+            };
+          } else if (stderrLower.includes('timeout') || stderrLower.includes('timed out')) {
+            errorMessage = 'Scan operation timed out';
+            errorDetails = {
+              type: 'timeout_error',
+              suggestion: 'Try increasing the timeout value or scanning fewer files',
+            };
+          } else if (stderrLower.includes('invalid') || stderrLower.includes('malformed')) {
+            errorMessage = 'Invalid or malformed model files detected';
+            errorDetails = {
+              type: 'invalid_model',
+              suggestion: 'Ensure the files are valid model files and not corrupted',
+            };
+          } else if (stderrLower.includes('unsupported')) {
+            errorMessage = 'Unsupported model format or file type';
+            errorDetails = {
+              type: 'unsupported_format',
+              suggestion: 'Check the modelaudit documentation for supported file formats',
+            };
+          } else if (stderrLower.includes('connection') || stderrLower.includes('network')) {
+            errorMessage = 'Network or connection error during scan';
+            errorDetails = {
+              type: 'network_error',
+              suggestion:
+                'Check your internet connection if the scan requires downloading external resources',
+            };
+          } else if (stderrLower.includes('disk space') || stderrLower.includes('no space')) {
+            errorMessage = 'Insufficient disk space';
+            errorDetails = {
+              type: 'disk_space_error',
+              suggestion: 'Free up disk space and try again',
+            };
+          } else if (stderrLower.includes('python') && stderrLower.includes('version')) {
+            errorMessage = 'Python version compatibility issue';
+            errorDetails = {
+              type: 'python_version_error',
+              suggestion: 'Check that you have a supported Python version installed',
+            };
+          }
+        }
+
         res.status(500).json({
-          error: `Model scan failed with exit code ${code}`,
+          error: errorMessage,
+          exitCode: code,
           stderr: stderr || undefined,
+          stdout: stdout || undefined,
+          ...errorDetails,
+          debug: {
+            command: 'modelaudit',
+            args: args,
+            paths: resolvedPaths,
+            cwd: process.cwd(),
+          },
         });
         return;
       }
@@ -182,6 +282,15 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           res.status(500).json({
             error: 'No output received from model scan',
             stderr: stderr || undefined,
+            suggestion:
+              'The scan may have failed silently. Check that the model files are valid and accessible.',
+            debug: {
+              command: 'modelaudit',
+              args: args,
+              paths: resolvedPaths,
+              cwd: process.cwd(),
+              exitCode: code,
+            },
           });
           return;
         }
@@ -192,8 +301,19 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         } catch (parseError) {
           logger.error(`Failed to parse model scan output: ${parseError}`);
           res.status(500).json({
-            error: 'Failed to parse scan results',
-            output: jsonOutput.substring(0, 500), // Include first 500 chars for debugging
+            error: 'Failed to parse scan results - invalid JSON output',
+            parseError: String(parseError),
+            output: jsonOutput.substring(0, 1000), // Include first 1000 chars for debugging
+            stderr: stderr || undefined,
+            suggestion:
+              'The model scan may have produced invalid output. Check the raw output for error messages.',
+            debug: {
+              command: 'modelaudit',
+              args: args,
+              paths: resolvedPaths,
+              cwd: process.cwd(),
+              exitCode: code,
+            },
           });
           return;
         }
