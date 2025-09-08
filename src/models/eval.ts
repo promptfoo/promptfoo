@@ -149,58 +149,12 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
-    // Load prompts from the join table
-    const promptResults = db
-      .select({
-        promptId: evalsToPromptsTable.promptId,
-        prompt: promptsTable.prompt,
-      })
-      .from(evalsToPromptsTable)
-      .innerJoin(promptsTable, eq(evalsToPromptsTable.promptId, promptsTable.id))
-      .where(eq(evalsToPromptsTable.evalId, id))
-      .all();
-
-    const prompts: CompletedPrompt[] = promptResults.map((p) => ({
-      raw: p.prompt,
-      label: p.prompt,
-      id: p.promptId,
-      provider: '',
-      metrics: {
-        score: 0,
-        testPassCount: 0,
-        testFailCount: 0,
-        testErrorCount: 0,
-        assertPassCount: 0,
-        assertFailCount: 0,
-        totalLatencyMs: 0,
-        tokenUsage: {
-          prompt: 0,
-          completion: 0,
-          cached: 0,
-          total: 0,
-          numRequests: 0,
-          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-          assertions: {
-            total: 0,
-            prompt: 0,
-            completion: 0,
-            cached: 0,
-            numRequests: 0,
-            completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-          },
-        },
-        namedScores: {},
-        namedScoresCount: {},
-        cost: 0,
-      },
-    }));
-
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
       author: eval_.author || undefined,
       description: eval_.description || undefined,
-      prompts,
+      prompts: eval_.prompts || [],
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
@@ -216,9 +170,6 @@ export default class Eval {
       evalInstance.setVars(vars);
       await EvalQueries.setVars(id, vars);
     }
-
-    // Recalculate prompt metrics from results
-    await evalInstance.recalculatePromptMetrics();
 
     return evalInstance;
   }
@@ -785,102 +736,6 @@ export default class Eval {
   clearResults() {
     this.results = [];
     this._resultsLoaded = false;
-  }
-
-  async recalculatePromptMetrics(): Promise<void> {
-    // Load results if not already loaded
-    if (this.results.length === 0) {
-      await this.loadResults();
-    }
-
-    // Initialize metrics for each prompt
-    const promptMetrics: Record<string, any> = {};
-
-    for (const prompt of this.prompts) {
-      if (!prompt.id) {
-        continue;
-      }
-      promptMetrics[prompt.id] = {
-        score: 0,
-        testPassCount: 0,
-        testFailCount: 0,
-        testErrorCount: 0,
-        assertPassCount: 0,
-        assertFailCount: 0,
-        totalLatencyMs: 0,
-        tokenUsage: {
-          prompt: 0,
-          completion: 0,
-          cached: 0,
-          total: 0,
-          numRequests: 0,
-          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-          assertions: {
-            total: 0,
-            prompt: 0,
-            completion: 0,
-            cached: 0,
-            numRequests: 0,
-            completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-          },
-        },
-        namedScores: {},
-        namedScoresCount: {},
-        cost: 0,
-      };
-    }
-
-    // Aggregate metrics from results
-    for (const result of this.results) {
-      const promptId = result.promptId;
-      if (promptMetrics[promptId]) {
-        const metrics = promptMetrics[promptId];
-
-        metrics.testPassCount += result.success ? 1 : 0;
-        if (!result.success) {
-          if (result.failureReason === ResultFailureReason.ERROR) {
-            metrics.testErrorCount += 1;
-          } else {
-            metrics.testFailCount += 1;
-          }
-        }
-
-        metrics.totalLatencyMs += result.latencyMs || 0;
-        metrics.cost += result.cost || 0;
-        metrics.score += result.score || 0;
-
-        if (result.response?.tokenUsage) {
-          const tokenUsage = metrics.tokenUsage;
-          tokenUsage.prompt += result.response.tokenUsage.prompt || 0;
-          tokenUsage.completion += result.response.tokenUsage.completion || 0;
-          tokenUsage.total += result.response.tokenUsage.total || 0;
-          tokenUsage.numRequests += 1;
-        }
-
-        if (result.gradingResult?.pass) {
-          metrics.assertPassCount += 1;
-        } else if (result.gradingResult?.pass === false) {
-          metrics.assertFailCount += 1;
-        }
-      }
-    }
-
-    // Update prompt metrics
-    for (const prompt of this.prompts) {
-      if (!prompt.id) {
-        continue;
-      }
-      const metrics = promptMetrics[prompt.id];
-      if (metrics) {
-        // Calculate average score
-        const resultCount = metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount;
-        if (resultCount > 0) {
-          metrics.score = metrics.score / resultCount;
-        }
-
-        prompt.metrics = metrics;
-      }
-    }
   }
 
   getStats(): EvaluateStats {
