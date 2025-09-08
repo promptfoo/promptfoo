@@ -1,33 +1,41 @@
 import * as path from 'path';
 
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { migrate } from 'drizzle-orm/libsql/migrator';
 import { getDb } from './database';
 import logger from './logger';
 
 /**
  * Run migrations on the database, skipping the ones already applied. Also creates the sqlite db if it doesn't exist.
- *
- * Note: While the underlying drizzle-orm migrate() function is synchronous, we wrap it in a Promise
- * with setImmediate to avoid blocking the event loop during startup. This allows other async
- * operations to proceed while migrations run.
  */
 export async function runDbMigrations(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Run the synchronous migration in the next tick to avoid blocking
-    setImmediate(() => {
-      try {
-        const db = getDb();
-        const migrationsFolder = path.join(__dirname, '..', 'drizzle');
-        logger.debug(`Running database migrations...`);
-        migrate(db, { migrationsFolder });
-        logger.debug('Database migrations completed');
-        resolve();
-      } catch (error) {
-        logger.error(`Database migration failed: ${error}`);
-        reject(error);
-      }
-    });
-  });
+  try {
+    const db = getDb();
+    // In compiled code, __dirname will be dist/src, so we need to go up two levels
+    // In tests, we need to handle the path differently
+    let migrationsFolder: string;
+
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+      // In tests, use process.cwd() to find the drizzle folder
+      migrationsFolder = path.join(process.cwd(), 'drizzle');
+    } else {
+      migrationsFolder = path.join(__dirname, '..', 'drizzle');
+    }
+
+    logger.debug(`Running database migrations from: ${migrationsFolder}`);
+
+    // Check if migrations folder exists
+    const fs = await import('fs');
+    if (!fs.existsSync(migrationsFolder)) {
+      logger.error(`Migrations folder not found: ${migrationsFolder}`);
+      throw new Error(`Migrations folder not found: ${migrationsFolder}`);
+    }
+
+    await migrate(db, { migrationsFolder });
+    logger.debug('Database migrations completed');
+  } catch (error) {
+    logger.error(`Database migration failed: ${error}`);
+    throw error;
+  }
 }
 
 if (require.main === module) {

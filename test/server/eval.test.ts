@@ -1,5 +1,5 @@
+import { setupTestDatabase, cleanupTestDatabase } from '../testHelpers/database';
 import request from 'supertest';
-import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
@@ -11,7 +11,11 @@ describe('eval routes', () => {
   const testEvalIds = new Set<string>();
 
   beforeAll(async () => {
-    await runDbMigrations();
+    await setupTestDatabase('test-server-eval');
+  });
+
+  afterAll(async () => {
+    await cleanupTestDatabase();
   });
 
   beforeEach(() => {

@@ -9,14 +9,12 @@ import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Mock database
-jest.mock('better-sqlite3', () => {
-  return jest.fn().mockReturnValue({
-    prepare: jest.fn(),
-    transaction: jest.fn(),
-    exec: jest.fn(),
+jest.mock('@libsql/client', () => ({
+  createClient: jest.fn().mockReturnValue({
+    execute: jest.fn(),
     close: jest.fn(),
-  });
-});
+  }),
+}));
 
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn().mockReturnValue({

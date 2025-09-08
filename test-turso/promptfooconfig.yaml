@@ -1,0 +1,16 @@
+description: "Turso database migration test"
+
+providers:
+  - id: echo
+    config:
+      output: "Hello from Turso test"
+
+prompts:
+  - "Test prompt: {{name}}"
+
+tests:
+  - vars:
+      name: "Database Migration"
+    assert:
+      - type: contains
+        value: "Hello from Turso test"

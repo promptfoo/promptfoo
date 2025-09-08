@@ -1,4 +1,13 @@
+import { sql } from 'drizzle-orm';
+import { setupTestDatabase, cleanupTestDatabase } from '../testHelpers/database';
 import { getDb } from '../../src/database';
+import {
+  evalResultsTable,
+  evalsTable,
+  evalsToDatasetsTable,
+  evalsToPromptsTable,
+  evalsToTagsTable,
+} from '../../src/database/tables';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, { getEvalSummaries } from '../../src/models/eval';
@@ -13,19 +22,39 @@ jest.mock('../../src/globalConfig/accounts', () => ({
 
 describe('evaluator', () => {
   beforeAll(async () => {
-    await runDbMigrations();
+    try {
+      await setupTestDatabase('test-models-eval');
+      // Ensure database is ready
+      const db = getDb();
+      await db.select({ count: sql<number>`count(*)` }).from(evalsTable);
+    } catch (error) {
+      console.error('Failed to setup test database:', error);
+      // Try running migrations directly
+      await runDbMigrations();
+    }
+  });
+
+  afterAll(async () => {
+    await cleanupTestDatabase();
   });
 
   beforeEach(async () => {
     // Clear all tables before each test
     const db = getDb();
-    // Delete related tables first
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    // Then delete from main table
-    await db.run('DELETE FROM evals');
+
+    try {
+      // Clear the tables
+      await db.delete(evalResultsTable);
+      await db.delete(evalsToDatasetsTable);
+      await db.delete(evalsToPromptsTable);
+      await db.delete(evalsToTagsTable);
+      await db.delete(evalsTable);
+    } catch (error) {
+      // If tables don't exist, skip the cleanup
+      if (!(error instanceof Error) || !error.message?.includes('no such table')) {
+        throw error;
+      }
+    }
   });
 
   describe('summaryResults', () => {
