@@ -56,10 +56,12 @@ export class Telemetry {
   constructor() {
     this.id = getUserId();
     this.email = getUserEmail();
-    this.identify();
+    this.identify().then(() => {
+      // pass
+    });
   }
 
-  identify() {
+  async identify() {
     if (this.disabled || getEnvBool('IS_TESTING')) {
       return;
     }

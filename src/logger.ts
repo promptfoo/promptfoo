@@ -323,11 +323,6 @@ export async function logRequestResponse(options: {
 
   const message = `API request:\n${details}`;
   logMethod(message);
-
-  // When debug level is enabled, also output to console if not already logging as debug
-  if (isDebugEnabled() && logMethod !== logger.debug) {
-    console.log(message);
-  }
 }
 
 // Initialize source maps if debug is enabled at startup
