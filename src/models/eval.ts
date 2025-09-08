@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { desc, eq, inArray, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb, withDbErrorHandling } from '../database';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
@@ -249,91 +249,97 @@ export default class Eval {
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
-    await db.transaction(async (tx) => {
-      await tx.insert(evalsTable).values({
-        id: evalId,
-        createdAt: createdAt.getTime(),
-        author,
-        description: config.description,
-        config,
-        results: {},
-        vars: opts?.vars || [],
-        isRedteam: Boolean(config.redteam),
-      });
+    await withDbErrorHandling(
+      async () => {
+        await db.transaction(async (tx) => {
+          await tx.insert(evalsTable).values({
+            id: evalId,
+            createdAt: createdAt.getTime(),
+            author,
+            description: config.description,
+            config,
+            results: {},
+            vars: opts?.vars || [],
+            isRedteam: Boolean(config.redteam),
+          });
 
-      for (const prompt of renderedPrompts) {
-        const label = prompt.label || prompt.display || prompt.raw;
-        const promptId = hashPrompt(prompt);
+          for (const prompt of renderedPrompts) {
+            const label = prompt.label || prompt.display || prompt.raw;
+            const promptId = hashPrompt(prompt);
 
-        await tx
-          .insert(promptsTable)
-          .values({
-            id: promptId,
-            prompt: label,
-          })
-          .onConflictDoNothing();
+            await tx
+              .insert(promptsTable)
+              .values({
+                id: promptId,
+                prompt: label,
+              })
+              .onConflictDoNothing();
 
-        await tx
-          .insert(evalsToPromptsTable)
-          .values({
-            evalId,
-            promptId,
-          })
-          .onConflictDoNothing();
+            await tx
+              .insert(evalsToPromptsTable)
+              .values({
+                evalId,
+                promptId,
+              })
+              .onConflictDoNothing();
 
-        logger.debug(`Inserting prompt ${promptId}`);
-      }
+            logger.debug(`Inserting prompt ${promptId}`);
+          }
 
-      if (opts?.results && opts.results.length > 0) {
-        await tx
-          .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })));
-        logger.debug(`Inserted eval results`);
-      }
-
-      await tx
-        .insert(datasetsTable)
-        .values({
-          id: datasetId,
-          tests: config.tests,
-        })
-        .onConflictDoNothing();
-
-      await tx
-        .insert(evalsToDatasetsTable)
-        .values({
-          evalId,
-          datasetId,
-        })
-        .onConflictDoNothing();
-
-      logger.debug(`Inserting dataset ${datasetId}`);
-
-      if (config.tags) {
-        for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-          const tagId = sha256(`${tagKey}:${tagValue}`);
+          if (opts?.results && opts.results.length > 0) {
+            await tx
+              .insert(evalResultsTable)
+              .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })));
+            logger.debug(`Inserted eval results`);
+          }
 
           await tx
-            .insert(tagsTable)
+            .insert(datasetsTable)
             .values({
-              id: tagId,
-              name: tagKey,
-              value: tagValue,
+              id: datasetId,
+              tests: config.tests,
             })
             .onConflictDoNothing();
 
           await tx
-            .insert(evalsToTagsTable)
+            .insert(evalsToDatasetsTable)
             .values({
               evalId,
-              tagId,
+              datasetId,
             })
             .onConflictDoNothing();
 
-          logger.debug(`Inserting tag ${tagId}`);
-        }
-      }
-    });
+          logger.debug(`Inserting dataset ${datasetId}`);
+
+          if (config.tags) {
+            for (const [tagKey, tagValue] of Object.entries(config.tags)) {
+              const tagId = sha256(`${tagKey}:${tagValue}`);
+
+              await tx
+                .insert(tagsTable)
+                .values({
+                  id: tagId,
+                  name: tagKey,
+                  value: tagValue,
+                })
+                .onConflictDoNothing();
+
+              await tx
+                .insert(evalsToTagsTable)
+                .values({
+                  evalId,
+                  tagId,
+                })
+                .onConflictDoNothing();
+
+              logger.debug(`Inserting tag ${tagId}`);
+            }
+          }
+        });
+      },
+      `creating eval ${evalId}`,
+      { useQueue: true } // Use queue for concurrent write operations
+    );
 
     return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
   }

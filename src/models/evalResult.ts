@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 
 import { and, eq, gte, inArray, lt } from 'drizzle-orm';
-import { getDb } from '../database';
+import { getDb, withDbErrorHandling } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
@@ -30,7 +30,7 @@ export function sanitizeProvider(
         id: provider.id(),
         label: provider.label,
         ...(provider.config && {
-          config: JSON.parse(safeJsonStringify(provider.config) as string),
+          config: JSON.parse(safeJsonStringify(provider.config) || '{}'),
         }),
       };
     }
@@ -39,7 +39,7 @@ export function sanitizeProvider(
         id: provider.id,
         label: provider.label,
         ...(provider.config && {
-          config: JSON.parse(safeJsonStringify(provider.config) as string),
+          config: JSON.parse(safeJsonStringify(provider.config) || '{}'),
         }),
       };
     }
@@ -49,12 +49,12 @@ export function sanitizeProvider(
         id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
         label: providerObj.label,
         ...(providerObj.config && {
-          config: JSON.parse(safeJsonStringify(providerObj.config) as string),
+          config: JSON.parse(safeJsonStringify(providerObj.config) || '{}'),
         }),
       };
     }
   } catch {}
-  return JSON.parse(safeJsonStringify(provider) as string);
+  return JSON.parse(safeJsonStringify(provider) || '{}');
 }
 
 export default class EvalResult {
@@ -97,17 +97,21 @@ export default class EvalResult {
       score: score == null ? 0 : score,
       response: result.response || null,
       gradingResult: gradingResult || null,
-      namedScores,
+      namedScores: namedScores || null,
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata,
+      metadata: metadata || null,
       failureReason,
     };
     if (persist) {
       const db = getDb();
 
-      const dbResult = await db.insert(evalResultsTable).values(args).returning();
+      const dbResult = await withDbErrorHandling(
+        async () => db.insert(evalResultsTable).values(args).returning(),
+        `creating eval result for eval ${evalId}`,
+        { useQueue: true }
+      );
       return new EvalResult({ ...dbResult[0], persisted: true });
     }
     return new EvalResult(args);
@@ -116,15 +120,21 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    await db.transaction(async (tx) => {
-      for (const result of results) {
-        const dbResult = await tx
-          .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
-          .returning();
-        returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
-      }
-    });
+    await withDbErrorHandling(
+      async () => {
+        await db.transaction(async (tx) => {
+          for (const result of results) {
+            const dbResult = await tx
+              .insert(evalResultsTable)
+              .values({ ...result, evalId, id: randomUUID() })
+              .returning();
+            returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
+          }
+        });
+      },
+      `creating ${results.length} eval results for eval ${evalId}`,
+      { useQueue: true }
+    );
     return returnResults;
   }
 
@@ -272,12 +282,20 @@ export default class EvalResult {
     const db = getDb();
     //check if this exists in the db
     if (this.persisted) {
-      await db
-        .update(evalResultsTable)
-        .set({ ...this, updatedAt: getCurrentTimestamp() })
-        .where(eq(evalResultsTable.id, this.id));
+      await withDbErrorHandling(
+        async () => db
+          .update(evalResultsTable)
+          .set({ ...this, updatedAt: getCurrentTimestamp() })
+          .where(eq(evalResultsTable.id, this.id)),
+        `updating eval result ${this.id}`,
+        { useQueue: true }
+      );
     } else {
-      const result = await db.insert(evalResultsTable).values(this).returning();
+      const result = await withDbErrorHandling(
+        async () => db.insert(evalResultsTable).values(this).returning(),
+        `saving eval result for eval ${this.evalId}`,
+        { useQueue: true }
+      );
       this.id = result[0].id;
       this.persisted = true;
     }
