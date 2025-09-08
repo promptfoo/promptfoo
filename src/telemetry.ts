@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
-import { VERSION } from './constants';
+import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, KA_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
 import { POSTHOG_KEY } from './constants/build';
 import { getEnvBool, getEnvString, isCI } from './envars';
 import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
@@ -26,11 +26,6 @@ export const TelemetryEventSchema = z.object({
 type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
 export type EventProperties = TelemetryEvent['properties'];
-
-const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
-const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
-const KA_ENDPOINT = 'https://ka.promptfoo.app/';
-const R_ENDPOINT = 'https://r.promptfoo.app/';
 
 let posthogClient: PostHog | null = null;
 
@@ -61,10 +56,12 @@ export class Telemetry {
   constructor() {
     this.id = getUserId();
     this.email = getUserEmail();
-    this.identify();
+    this.identify().then(() => {
+      // pass
+    });
   }
 
-  identify() {
+  async identify() {
     if (this.disabled || getEnvBool('IS_TESTING')) {
       return;
     }

@@ -580,6 +580,34 @@ describe('util', () => {
       });
     });
 
+    it('should convert system-only prompts to user messages', () => {
+      const input = [{ role: 'system', content: 'You are a helpful assistant.' }];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [{ role: 'user', parts: [{ text: 'You are a helpful assistant.' }] }],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should convert multiple system-only messages to single user message', () => {
+      const input = [
+        { role: 'system', content: 'First instruction.' },
+        { role: 'system', content: 'Second instruction.' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'First instruction.' }, { text: 'Second instruction.' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
     it('should log a warning and return the input for unknown formats', () => {
       const loggerSpy = jest.spyOn(logger, 'warn');
       const input = { unknownFormat: 'test' };

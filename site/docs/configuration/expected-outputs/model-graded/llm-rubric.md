@@ -139,6 +139,90 @@ defaultTest:
     ]
 ```
 
+## Non-English Evaluation
+
+To get evaluation output in languages other than English, you can use different approaches:
+
+### Option 1: rubricPrompt Override (Recommended)
+
+For reliable multilingual output with compatible assertion types:
+
+```yaml
+defaultTest:
+  options:
+    rubricPrompt: |
+      [
+        {
+          "role": "system",
+          // German: "You evaluate outputs based on criteria. Respond with JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALL responses in German."
+          "content": "Du bewertest Ausgaben nach Kriterien. Antworte mit JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALLE Antworten auf Deutsch."
+        },
+        {
+          "role": "user", 
+          // German: "Output: {{ output }}\nCriterion: {{ rubric }}"
+          "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}"
+        }
+      ]
+
+assert:
+  - type: llm-rubric
+    # German: "Responds politely and helpfully"
+    value: 'Antwortet höflich und hilfreich'
+```
+
+### Option 2: Language Instructions in Rubric
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: 'Responds politely and helpfully. Provide your evaluation reason in German.'
+```
+
+### Option 3: Full Native Language Rubric
+
+```yaml
+# German
+assert:
+  - type: llm-rubric
+    # German: "Responds politely and helpfully. Provide reasoning in German."
+    value: "Antwortet höflich und hilfreich. Begründung auf Deutsch geben."
+
+# Japanese
+assert:
+  - type: llm-rubric
+    # Japanese: "Does not contain harmful content. Please provide evaluation reasoning in Japanese."
+    value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
+```
+
+**Note:** Option 1 works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. For other assertion types like `factuality` or `context-recall`, create assertion-specific prompts that match their expected formats.
+
+### Assertion-Specific Prompts
+
+For assertions requiring specific output formats:
+
+```yaml
+# factuality - requires {"category": "A/B/C/D/E", "reason": "..."}
+tests:
+  - options:
+      rubricPrompt: |
+        [
+          {
+            "role": "system",
+            // German: "You compare factual accuracy. Respond with JSON: {\"category\": \"A/B/C/D/E\", \"reason\": \"string\"}. A=subset, B=superset, C=identical, D=contradiction, E=irrelevant. ALL responses in German."
+            "content": "Du vergleichst Faktentreue. Antworte mit JSON: {\"category\": \"A/B/C/D/E\", \"reason\": \"string\"}. A=Teilmenge, B=Obermenge, C=identisch, D=Widerspruch, E=irrelevant. ALLE Antworten auf Deutsch."
+          },
+          {
+            "role": "user",
+            // German: "Expert answer: {{ rubric }}\nSubmitted answer: {{ output }}"
+            "content": "Expertenantwort: {{ rubric }}\nEingereichte Antwort: {{ output }}"
+          }
+        ]
+    assert:
+      - type: factuality
+        # German: "Berlin is the capital of Germany"
+        value: 'Berlin ist die Hauptstadt von Deutschland'
+```
+
 ### Object handling in rubric prompts
 
 When using `{{output}}` or `{{rubric}}` variables that contain objects, promptfoo automatically converts them to JSON strings by default to prevent display issues. If you need to access specific properties of objects in your rubric prompts, you can enable object property access:

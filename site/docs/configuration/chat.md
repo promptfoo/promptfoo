@@ -359,7 +359,7 @@ Transforms can be Javascript snippets or they can be entire separate Python or J
 
 ## See Also
 
-- [Prompt Parameters](/docs/configuration/parameters) - Learn about different ways to define prompts
+- [Prompt Parameters](/docs/configuration/prompts) - Learn about different ways to define prompts
 - [Test Configuration](/docs/configuration/guide) - Complete guide to setting up test configurations
 - [Transformer Functions](/docs/configuration/guide/#transforming-outputs) - How to transform outputs between test cases
 - [Nunjucks Templates](https://mozilla.github.io/nunjucks/templating.html) - Documentation for the template language used in prompt files

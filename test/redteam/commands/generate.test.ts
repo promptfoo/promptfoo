@@ -10,11 +10,14 @@ import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover
 import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
-import { getConfigFromCloud } from '../../../src/util/cloud';
-import { checkCloudPermissions, ConfigPermissionError } from '../../../src/util/cloud';
+import {
+  ConfigPermissionError,
+  checkCloudPermissions,
+  getConfigFromCloud,
+} from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
-import { writePromptfooConfig } from '../../../src/util/config/manage';
+import { writePromptfooConfig } from '../../../src/util/config/writer';
 
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types';
@@ -64,6 +67,10 @@ jest.mock('../../../src/util/cloud', () => ({
   checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('../../../src/util/config/writer', () => ({
+  writePromptfooConfig: jest.fn(),
+}));
+
 jest.mock('../../../src/cliState', () => ({
   remote: false,
 }));
@@ -89,7 +96,29 @@ jest.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
 }));
 
-jest.mock('../../../src/util/config/manage');
+jest.mock('../../../src/util/config/manage', () => ({
+  ...jest.requireActual('../../../src/util/config/manage'),
+  getConfigDirectoryPath: jest.fn().mockReturnValue('/mock/config/path'),
+  writePromptfooConfig: jest.fn(),
+}));
+
+jest.mock('../../../src/util/redteamProbeLimit', () => ({
+  getMonthlyRedteamProbeUsage: jest.fn().mockResolvedValue(0),
+  incrementRedteamProbeUsage: jest.fn(),
+  checkMonthlyProbeLimit: jest.fn().mockResolvedValue({ allowed: true, usage: 0, limit: 1000 }),
+  formatProbeUsageMessage: jest.fn(),
+  checkProbeLimit: jest.fn().mockResolvedValue({
+    canProceed: true,
+    probeStatus: {
+      hasExceeded: false,
+      usedProbes: 0,
+      remainingProbes: 1000,
+      limit: 1000,
+      enabled: true,
+    },
+  }),
+}));
+
 jest.mock('../../../src/globalConfig/accounts', () => ({
   getAuthor: jest.fn(),
   getUserEmail: jest.fn(),

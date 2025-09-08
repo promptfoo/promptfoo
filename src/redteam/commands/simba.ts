@@ -66,9 +66,6 @@ async function callSimbaApi(endpoint: string, data: any): Promise<any> {
   const host = cloudConfig.getApiHost() ?? API_HOST;
   const url = `${host}/api/v1/simba${endpoint}`;
 
-  logger.debug(`Calling Simba API: ${url}`);
-  logger.debug(`Request data: ${JSON.stringify(data)}`);
-
   const response = await fetchWithProxy(url, {
     method: 'POST',
     headers: {
@@ -158,8 +155,6 @@ async function runSimbaSession(options: SimbaCommandOptions, testSuite: TestSuit
         `/sessions/${sessionId}/next`,
         nextRequest,
       );
-
-      logger.debug(`Next response: ${JSON.stringify(batchResponse)}`);
 
       if (batchResponse.completed) {
         logger.info(chalk.green('\nWe are DONE!'));
