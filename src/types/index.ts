@@ -1196,10 +1196,13 @@ export interface LoadApiProviderContext {
 
 // Zod schemas for import/export validation
 
+// Create Zod schemas from existing TypeScript interfaces to avoid duplication
+// These schemas are more flexible for import validation (allowing optional fields)
+
 export const EvaluateTableOutputSchema = z.object({
   cost: z.number(),
   failureReason: z.nativeEnum(ResultFailureReason),
-  gradingResult: z.any().nullable().optional(), // GradingResult is complex
+  gradingResult: z.any().nullable().optional(),
   id: z.string(),
   latencyMs: z.number(),
   metadata: z.record(z.any()).optional(),
@@ -1207,20 +1210,27 @@ export const EvaluateTableOutputSchema = z.object({
   pass: z.boolean(),
   prompt: z.string(),
   provider: z.string().optional(),
-  response: z.any().optional(), // ProviderResponse is complex
+  response: z.any().optional(),
   score: z.number(),
   success: z.boolean(),
-  testCase: z.any(), // AtomicTestCase is complex
+  testCase: z.any(),
   testIdx: z.number(),
   tokenUsage: BaseTokenUsageSchema.optional(),
   vars: z.record(z.any()),
+  audio: z.object({
+    id: z.string().optional(),
+    expiresAt: z.number().optional(),
+    data: z.string().optional(),
+    transcript: z.string().optional(),
+    format: z.string().optional(),
+  }).optional(),
 });
 
 export const EvaluateTableRowSchema = z.object({
   description: z.string().optional(),
   outputs: z.array(EvaluateTableOutputSchema),
   vars: z.array(z.string()),
-  test: z.any(), // AtomicTestCase is complex
+  test: z.any(),
   testIdx: z.number(),
 });
 
@@ -1239,6 +1249,7 @@ export const EvaluateStatsSchema = z.object({
   tokenUsage: BaseTokenUsageSchema,
 });
 
+// Simplified schema for provider options used in results
 export const ProviderOptionsMinimalSchema = z.object({
   id: z.string(),
   label: z.string().optional(),
@@ -1249,24 +1260,25 @@ export const EvaluateResultSchema = z.object({
   description: z.string().optional(),
   promptIdx: z.number(),
   testIdx: z.number(),
-  testCase: z.any(), // AtomicTestCase is complex, using any for now
+  testCase: z.any(),
   promptId: z.string(),
   provider: ProviderOptionsMinimalSchema,
-  prompt: z.any(), // Prompt is complex, using any for now
+  prompt: z.any(),
   vars: z.record(z.any()),
-  response: z.any().optional(), // ProviderResponse is complex
+  response: z.any().optional(),
   error: z.string().nullable().optional(),
   failureReason: z.nativeEnum(ResultFailureReason),
   success: z.boolean(),
   score: z.number(),
   latencyMs: z.number(),
-  gradingResult: z.any().nullable().optional(), // GradingResult is complex
+  gradingResult: z.any().nullable().optional(),
   namedScores: z.record(z.number()),
   cost: z.number().optional(),
   metadata: z.record(z.any()).optional(),
   tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
+// Make schemas more flexible for import validation by allowing optional fields
 export const EvaluateSummaryV3Schema = z.object({
   version: z.literal(3),
   timestamp: z.string().optional(),
@@ -1275,6 +1287,7 @@ export const EvaluateSummaryV3Schema = z.object({
   stats: EvaluateStatsSchema.optional(),
 });
 
+// Make V2 schema more flexible for import validation
 export const EvaluateSummaryV2Schema = z.object({
   version: z.number(),
   timestamp: z.string().optional(),
