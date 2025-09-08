@@ -18,7 +18,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import Grid from '@mui/material/Grid2';
+import { Grid2 } from '@mui/material';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -484,8 +484,8 @@ export default function Review({
           Configuration Summary
         </Typography>
 
-        <Grid container spacing={3}>
-          <Grid size={6}>
+        <Grid2 container spacing={3}>
+          <Grid2 size={6}>
             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Plugins ({pluginSummary.length})
@@ -524,9 +524,9 @@ export default function Review({
                 </>
               )}
             </Paper>
-          </Grid>
+          </Grid2>
 
-          <Grid size={6}>
+          <Grid2 size={6}>
             <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Strategies ({strategySummary.length})
@@ -566,10 +566,10 @@ export default function Review({
                 </>
               )}
             </Paper>
-          </Grid>
+          </Grid2>
 
           {customPolicies.length > 0 && (
-            <Grid size={6}>
+            <Grid2 size={6}>
               <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
                   Custom Policies ({customPolicies.length})
@@ -624,11 +624,11 @@ export default function Review({
                   ))}
                 </Stack>
               </Paper>
-            </Grid>
+            </Grid2>
           )}
 
           {intents.length > 0 && (
-            <Grid size={6}>
+            <Grid2 size={6}>
               <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
                 <Typography variant="h6" gutterBottom>
                   Intents ({intents.length})
@@ -701,10 +701,10 @@ export default function Review({
                   )}
                 </Stack>
               </Paper>
-            </Grid>
+            </Grid2>
           )}
 
-          <Grid size={12}>
+          <Grid2 size={12}>
             <Accordion
               expanded={isPurposeExpanded}
               onChange={(e, expanded) => {
@@ -739,7 +739,7 @@ export default function Review({
                 </Box>
               </AccordionSummary>
               <AccordionDetails sx={{ pt: 0 }}>
-                <Grid size={12}>
+                <Grid2 size={12}>
                   <Box
                     sx={{
                       display: 'flex',
@@ -889,7 +889,7 @@ export default function Review({
                     )}
 
                   {config.testGenerationInstructions && (
-                    <Grid size={12}>
+                    <Grid2 size={12}>
                       <Typography variant="subtitle2">Test Generation Instructions</Typography>
                       <Typography
                         variant="body2"
@@ -928,13 +928,13 @@ export default function Review({
                             {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
                           </Typography>
                         )}
-                    </Grid>
+                    </Grid2>
                   )}
-                </Grid>
+                </Grid2>
               </AccordionDetails>
             </Accordion>
-          </Grid>
-        </Grid>
+          </Grid2>
+        </Grid2>
 
         <Divider sx={{ my: 4 }} />
 
