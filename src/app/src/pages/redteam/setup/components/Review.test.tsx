@@ -23,6 +23,9 @@ vi.mock('@app/hooks/useToast', () => ({
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 vi.mock('@app/pages/eval-creator/components/YamlEditor', () => ({
@@ -37,6 +40,7 @@ vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
     plugins: [],
     strategies: [],
   }),
+  getEstimatedProbes: vi.fn().mockReturnValue(10),
 }));
 
 vi.mock('../utils/yamlHelpers', () => ({
@@ -102,7 +106,7 @@ describe('Review Component', () => {
         />,
       );
 
-      const descriptionField = screen.getByLabelText('Configuration Description');
+      const descriptionField = screen.getByLabelText('Description');
       expect(descriptionField).toBeInTheDocument();
       expect(descriptionField).toHaveValue('Test Configuration');
     });

@@ -37,10 +37,15 @@ vi.mock('./hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: vi.fn(),
   DEFAULT_HTTP_TARGET: { id: 'http' },
 }));
-vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
 
 // Mock child components to isolate the page component
-vi.mock('@app/components/CrispChat', () => ({ default: () => <div>CrispChat</div> }));
+vi.mock('@app/components/PylonChat', () => ({ default: () => <div>PylonChat</div> }));
 vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
 vi.mock('./components/Purpose', () => ({ default: () => <div>Purpose</div> }));
 vi.mock('./components/Plugins', () => ({ default: () => <div>Plugins</div> }));

@@ -44,7 +44,7 @@ describe('evaluator', () => {
           createdAt: eval1.createdAt,
           description: null,
           numTests: 2,
-          isRedteam: 0,
+          isRedteam: false,
           passRate: 50,
           label: eval1.id,
         }),
@@ -56,7 +56,7 @@ describe('evaluator', () => {
           createdAt: eval2.createdAt,
           description: null,
           numTests: 2,
-          isRedteam: 0,
+          isRedteam: false,
           passRate: 50,
           label: eval2.id,
         }),
@@ -76,6 +76,41 @@ describe('evaluator', () => {
       expect(evaluations[0].evalId).toBe(eval3.id);
       expect(evaluations[1].evalId).toBe(eval2.id);
       expect(evaluations[2].evalId).toBe(eval1.id);
+    });
+
+    it('should correctly identify red team evaluations', async () => {
+      const redTeamEval = await EvalFactory.create({ isRedteam: true });
+      const regularEval = await EvalFactory.create({ isRedteam: false });
+
+      const evaluations = await getEvalSummaries();
+
+      expect(evaluations).toHaveLength(2);
+
+      const redTeamSummary = evaluations.find((summary) => summary.evalId === redTeamEval.id);
+      const regularSummary = evaluations.find((summary) => summary.evalId === regularEval.id);
+
+      expect(redTeamSummary?.isRedteam).toBe(true);
+      expect(regularSummary?.isRedteam).toBe(false);
+    });
+
+    it('should handle mixed red team and regular evaluations', async () => {
+      const eval1 = await EvalFactory.create({ isRedteam: true });
+      const eval2 = await EvalFactory.create({ isRedteam: false });
+      const eval3 = await EvalFactory.create({ isRedteam: true });
+
+      const evaluations = await getEvalSummaries();
+
+      expect(evaluations).toHaveLength(3);
+
+      const redTeamEvals = evaluations.filter((summary) => summary.isRedteam);
+      const regularEvals = evaluations.filter((summary) => !summary.isRedteam);
+
+      expect(redTeamEvals).toHaveLength(2);
+      expect(regularEvals).toHaveLength(1);
+
+      expect(redTeamEvals.map((e) => e.evalId)).toContain(eval1.id);
+      expect(redTeamEvals.map((e) => e.evalId)).toContain(eval3.id);
+      expect(regularEvals[0].evalId).toBe(eval2.id);
     });
   });
 
@@ -116,6 +151,28 @@ describe('evaluator', () => {
       const evaluation = await Eval.create(config, renderedPrompts);
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(mockEmail);
+    });
+
+    it('should create red team evaluation when redteam config exists', async () => {
+      const config = { description: 'Red team eval', redteam: {} };
+      const renderedPrompts: Prompt[] = [
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
+      ];
+      const evaluation = await Eval.create(config, renderedPrompts);
+      expect(evaluation.isRedteam).toBe(true);
+      const persistedEval = await Eval.findById(evaluation.id);
+      expect(persistedEval?.isRedteam).toBe(true);
+    });
+
+    it('should create regular evaluation when no redteam config', async () => {
+      const config = { description: 'Regular eval' };
+      const renderedPrompts: Prompt[] = [
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
+      ];
+      const evaluation = await Eval.create(config, renderedPrompts);
+      expect(evaluation.isRedteam).toBe(false);
+      const persistedEval = await Eval.findById(evaluation.id);
+      expect(persistedEval?.isRedteam).toBe(false);
     });
   });
 
@@ -161,6 +218,37 @@ describe('evaluator', () => {
       // Now, after backfilling, the next load should get the same vars from db
       const persistedEval2 = await Eval.findById(eval1.id);
       expect(persistedEval2?.vars).toEqual(vars);
+    });
+
+    it('should properly load red team evaluations', async () => {
+      const redTeamEval = await EvalFactory.create({ isRedteam: true });
+      const persistedEval = await Eval.findById(redTeamEval.id);
+
+      expect(persistedEval).toBeDefined();
+      expect(persistedEval?.isRedteam).toBe(true);
+      expect(persistedEval?.id).toBe(redTeamEval.id);
+    });
+
+    it('should properly load regular evaluations', async () => {
+      const regularEval = await EvalFactory.create({ isRedteam: false });
+      const persistedEval = await Eval.findById(regularEval.id);
+
+      expect(persistedEval).toBeDefined();
+      expect(persistedEval?.isRedteam).toBe(false);
+      expect(persistedEval?.id).toBe(regularEval.id);
+    });
+
+    it('should preserve isRedteam property through database round trip', async () => {
+      // Create both types and verify they persist correctly
+      const redTeamEval = await EvalFactory.create({ isRedteam: true });
+      const regularEval = await EvalFactory.create({ isRedteam: false });
+
+      // Fetch from database
+      const persistedRedTeam = await Eval.findById(redTeamEval.id);
+      const persistedRegular = await Eval.findById(regularEval.id);
+
+      expect(persistedRedTeam?.isRedteam).toBe(true);
+      expect(persistedRegular?.isRedteam).toBe(false);
     });
   });
 
@@ -339,6 +427,38 @@ describe('evaluator', () => {
       const results = await eval1.toResultsFile();
 
       expect(results.results).toEqual(await eval1.toEvaluateSummary());
+    });
+
+    it('should include isRedteam property for red team evaluations', async () => {
+      const redTeamEval = await EvalFactory.create({ isRedteam: true });
+      const results = await redTeamEval.toResultsFile();
+
+      expect(results).toEqual({
+        version: redTeamEval.version(),
+        createdAt: new Date(redTeamEval.createdAt).toISOString(),
+        config: redTeamEval.config,
+        author: null,
+        prompts: redTeamEval.getPrompts(),
+        datasetId: null,
+        results: await redTeamEval.toEvaluateSummary(),
+      });
+      expect(redTeamEval.isRedteam).toBe(true);
+    });
+
+    it('should include isRedteam property for regular evaluations', async () => {
+      const regularEval = await EvalFactory.create({ isRedteam: false });
+      const results = await regularEval.toResultsFile();
+
+      expect(results).toEqual({
+        version: regularEval.version(),
+        createdAt: new Date(regularEval.createdAt).toISOString(),
+        config: regularEval.config,
+        author: null,
+        prompts: regularEval.getPrompts(),
+        datasetId: null,
+        results: await regularEval.toEvaluateSummary(),
+      });
+      expect(regularEval.isRedteam).toBe(false);
     });
   });
 
@@ -569,6 +689,28 @@ describe('evaluator', () => {
       expect(result.body).toEqual([]);
       expect(result.totalCount).toBe(0);
       expect(result.filteredCount).toBe(0);
+    });
+  });
+
+  describe('isRedteam property', () => {
+    it('should default isRedteam to false when no redteam config', () => {
+      const eval1 = new Eval({ description: 'Test eval' });
+      expect(eval1.isRedteam).toBe(false);
+    });
+
+    it('should set isRedteam to true when redteam config exists', () => {
+      const eval1 = new Eval({ description: 'Test eval', redteam: {} });
+      expect(eval1.isRedteam).toBe(true);
+    });
+
+    it('should use explicit isRedteam option when provided', () => {
+      const eval1 = new Eval({ description: 'Test eval' }, { isRedteam: true });
+      expect(eval1.isRedteam).toBe(true);
+    });
+
+    it('should prioritize explicit isRedteam option over config inference', () => {
+      const eval1 = new Eval({ description: 'Test eval', redteam: {} }, { isRedteam: false });
+      expect(eval1.isRedteam).toBe(false);
     });
   });
 });

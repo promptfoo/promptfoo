@@ -5,11 +5,11 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
-import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { makeRequest as makeCloudRequest } from './util/cloud';
+import { checkCloudPermissions, makeRequest as makeCloudRequest } from './util/cloud';
+import { fetchWithProxy } from './util/fetch';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -114,9 +114,10 @@ async function sendEvalRecord(
 
   if (!response.ok) {
     const responseBody = await response.text();
-    throw new Error(
-      `Failed to send initial eval data to ${url}: ${response.statusText}, body: ${responseBody}`,
-    );
+    // Ensure full error is visible by formatting it properly
+    const errorMessage = `Failed to send initial eval data to ${url}: ${response.statusText}`;
+    const bodyMessage = responseBody ? `\nResponse body: ${responseBody}` : '';
+    throw new Error(`${errorMessage}${bodyMessage}`);
   }
 
   const responseJson = await response.json();
@@ -198,6 +199,8 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
   const isVerbose = isDebugEnabled();
   logger.debug(`Starting chunked results upload to ${url}`);
+
+  await checkCloudPermissions(evalRecord.config);
 
   const sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
@@ -297,6 +300,10 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
     return evalId;
   } catch (e) {
+    if (progressBar) {
+      progressBar.stop();
+    }
+
     logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
 
     if (evalId) {
@@ -408,6 +415,12 @@ export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
+  // If sharing is explicitly disabled, return null
+  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
+    logger.debug('Sharing is explicitly disabled, returning null');
+    return null;
+  }
+
   // 1. Handle email collection
   await handleEmailCollection(evalRecord);
 

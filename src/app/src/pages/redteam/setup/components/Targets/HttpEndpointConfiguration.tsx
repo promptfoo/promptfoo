@@ -2,10 +2,9 @@ import './syntax-highlighting.css';
 
 import React, { useCallback, useState } from 'react';
 
-import yaml from 'js-yaml';
-import Editor from 'react-simple-code-editor';
-
+import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -17,19 +16,21 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
+import Grid from '@mui/material/Grid2';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
-import { useTheme } from '@mui/material/styles';
 import Switch from '@mui/material/Switch';
+import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import yaml from 'js-yaml';
+import Editor from 'react-simple-code-editor';
+import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 
 import type { ProviderOptions } from '../../types';
-import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -259,7 +260,7 @@ ${exampleRequest}`;
     setGenerating(true);
     setError('');
     try {
-      const res = await fetch('https://api.promptfoo.app/api/http-provider-generator', {
+      const res = await callApi('/providers/http-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -269,7 +270,8 @@ ${exampleRequest}`;
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
       }
 
       const data = await res.json();
@@ -332,21 +334,37 @@ ${exampleRequest}`;
 
   return (
     <Box>
-      <FormControlLabel
-        control={
-          <Switch
-            checked={Boolean(selectedTarget.config.request)}
-            onChange={(e) => {
-              resetState(e.target.checked);
-              if (e.target.checked) {
-                updateCustomTarget('request', exampleRequest);
-              }
-            }}
-          />
-        }
-        label="Use Raw HTTP Request"
-        sx={{ mb: 2, display: 'block' }}
-      />
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={Boolean(selectedTarget.config.request)}
+              onChange={(e) => {
+                resetState(e.target.checked);
+                if (e.target.checked) {
+                  updateCustomTarget('request', exampleRequest);
+                }
+              }}
+            />
+          }
+          label="Use Raw HTTP Request"
+        />
+        <Button
+          variant="outlined"
+          startIcon={<AutoFixHighIcon />}
+          onClick={() => setConfigDialogOpen(true)}
+          sx={{
+            borderColor: 'primary.main',
+            color: 'primary.main',
+            '&:hover': {
+              borderColor: 'primary.dark',
+              backgroundColor: 'action.hover',
+            },
+          }}
+        >
+          AI Auto-fill from Example
+        </Button>
+      </Box>
       {selectedTarget.config.request ? (
         <Box
           mt={2}
@@ -502,12 +520,16 @@ ${exampleRequest}`;
         maxWidth="lg"
         fullWidth
       >
-        <DialogTitle>Generate HTTP Configuration</DialogTitle>
+        <DialogTitle>AI Auto-fill HTTP Configuration</DialogTitle>
         <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Paste an example HTTP request and optionally a response. AI will automatically generate
+            the configuration for you.
+          </Typography>
           <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" gutterBottom>
-                Example Request
+                Example Request (paste your HTTP request here)
               </Typography>
               <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
                 <Editor
@@ -524,9 +546,9 @@ ${exampleRequest}`;
                 />
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" gutterBottom>
-                Example Response
+                Example Response (optional, improves accuracy)
               </Typography>
               <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
                 <Editor
@@ -544,12 +566,12 @@ ${exampleRequest}`;
               </Paper>
             </Grid>
             {error && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Typography color="error">Error: {error}</Typography>
               </Grid>
             )}
             {generatedConfig && (
-              <Grid item xs={12}>
+              <Grid size={12}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
                   <Typography variant="h6" sx={{ flexGrow: 1 }}>
                     Generated Configuration
