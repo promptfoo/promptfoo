@@ -34,6 +34,8 @@ const originalFetch = global.fetch;
 // Override global fetch
 global.fetch = async (...args) => {
   const [url, options] = args;
+  const NO_LOG_URLS = [KA_ENDPOINT, R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
+  const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl));
 
   const opts = {
     ...options,
@@ -52,8 +54,7 @@ global.fetch = async (...args) => {
   try {
     const response = await originalFetch(url, opts);
 
-    const NO_LOG_URLS = [KA_ENDPOINT, R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
-    if (!NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl))) {
+    if (logEnabled) {
       logRequestResponse({
         url: url.toString(),
         requestBody: opts.body,
@@ -64,22 +65,24 @@ global.fetch = async (...args) => {
 
     return response;
   } catch (e) {
-    logRequestResponse({
-      url: url.toString(),
-      requestBody: opts.body,
-      requestMethod: opts.method || 'GET',
-      response: null,
-      error: true,
-    });
-    if (isConnectionError(e as Error)) {
+    if (logEnabled) {
+      logRequestResponse({
+        url: url.toString(),
+        requestBody: opts.body,
+        requestMethod: opts.method || 'GET',
+        response: null,
+        error: true,
+      });
+      if (isConnectionError(e as Error)) {
+        logger.error(
+          `Connection error, please check your network connectivity to the host: ${url} ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY ? `or Proxy: ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY}` : ''}`,
+        );
+        throw e;
+      }
       logger.error(
-        `Connection error, please check your network connectivity to the host: ${url} ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY ? `or Proxy: ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY}` : ''}`,
+        `Error in fetch: ${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`,
       );
-      throw e;
     }
-    logger.error(
-      `Error in fetch: ${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`,
-    );
     throw e;
   }
 };

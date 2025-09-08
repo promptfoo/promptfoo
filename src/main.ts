@@ -16,7 +16,6 @@ import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
-import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
 import { shareCommand } from './commands/share';
@@ -111,7 +110,6 @@ async function main() {
   feedbackCommand(program);
   importCommand(program);
   listCommand(program);
-  logsCommand(program);
   modelScanCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
