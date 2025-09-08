@@ -389,7 +389,6 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tOllama embeddings API response: ${JSON.stringify(response.data)}`);
 
     try {
       const embedding = response.data.embedding as number[];
