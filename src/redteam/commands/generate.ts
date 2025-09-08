@@ -30,6 +30,7 @@ import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { getCustomPolicyTexts } from '../../util/generation';
 import invariant from '../../util/invariant';
+import { checkProbeLimit } from '../../util/redteamProbeLimit';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
 import {
@@ -44,6 +45,7 @@ import {
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { isValidPolicyObject } from '../plugins/policy';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { getEstimatedProbes } from '../sharedFrontend';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
@@ -365,6 +367,23 @@ export async function doGenerateRedteam(
       ? { testGenerationInstructions: redteamConfig.testGenerationInstructions }
       : {}),
   };
+
+  // Check probe limit before generating tests
+  const estimatedProbes = getEstimatedProbes(config);
+  try {
+    const probeCheckResult = await checkProbeLimit(estimatedProbes);
+
+    if (!probeCheckResult.canProceed) {
+      process.exitCode = probeCheckResult.exitCode;
+      return null;
+    }
+  } catch (error) {
+    logger.warning(
+      `Error checking probe limit: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    logger.debug(`${error instanceof Error ? error.stack : ''}`);
+  }
+
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
     logger.error('Invalid redteam configuration:');

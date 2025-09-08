@@ -363,6 +363,23 @@ export async function canCreateTargets(teamId: string | undefined): Promise<bool
   );
 }
 
+export async function isEnterpriseCustomer(): Promise<boolean> {
+  try {
+    if (!cloudConfig.isEnabled()) {
+      return false;
+    }
+    const response = await makeRequest(`/users/me`, 'GET');
+    if (!response.ok) {
+      logger.warn(`[Cloud] /users/me returned ${response.status} ${response.statusText}`);
+      return false;
+    }
+    const body = await response.json().catch(() => ({}));
+    return Boolean(body?.organization?.canUseRedteam);
+  } catch (e) {
+    logger.error(`Failed to check if user is enterprise customer: ${e}`);
+    return false;
+  }
+}
 /**
  * Given a list of policy IDs, fetches custom policies from Promptfoo Cloud.
  * @param ids - The IDs of the policies to fetch.
