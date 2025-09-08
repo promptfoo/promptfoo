@@ -201,9 +201,7 @@ export async function fetchWithProxy(
     setGlobalDispatcher(agent);
   }
 
-  const response = await fetch(finalUrl, finalOptions);
-
-  return response;
+  return await fetch(finalUrl, finalOptions);
 }
 
 export function fetchWithTimeout(
