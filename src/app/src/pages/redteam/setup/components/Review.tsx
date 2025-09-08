@@ -40,6 +40,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   isFoundationModelProvider,
+  LIMITS_DOCS_PAGE,
   PROBE_LIMIT_EMAIL,
   PROBE_LIMIT_URL,
 } from '@promptfoo/constants';
@@ -1109,7 +1110,13 @@ export default function Review({
               <Box>
                 <Typography variant="body2" sx={{ mb: 2 }}>
                   Red teaming uses an LLM to generate probes and grade responses. Our community plan
-                  includes 10,000 probes per month.
+                  includes 10,000 probes per month.{' '}
+                  <Link
+                    to={LIMITS_DOCS_PAGE}
+                    style={{ color: 'inherit', textDecoration: 'underline' }}
+                  >
+                    Learn more
+                  </Link>
                 </Typography>
 
                 <Box
