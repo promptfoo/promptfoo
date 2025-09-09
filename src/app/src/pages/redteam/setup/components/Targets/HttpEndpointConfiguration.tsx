@@ -362,7 +362,7 @@ ${exampleRequest}`;
             },
           }}
         >
-          AI Auto-fill from Example
+          Auto-fill from Example
         </Button>
       </Box>
       {selectedTarget.config.request ? (
