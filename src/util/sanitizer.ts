@@ -43,14 +43,15 @@ export function sanitizeUrl(url: string): string {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         }
       }
-    } catch {
+    } catch (paramError) {
       // If search params handling fails, continue without sanitizing them
-      // Silent failure to avoid console noise in tests
+      // using console since logger would create a circular dependency
+      console.warn(`Failed to sanitize URL parameters ${url}: ${paramError}`);
     }
 
     return sanitizedUrl.toString();
-  } catch {
-    // Silent failure to avoid console noise in tests
+  } catch (error) {
+    console.warn(`Failed to sanitize URL ${url}: ${error}`);
     return url;
   }
 }
