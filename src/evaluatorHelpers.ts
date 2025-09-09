@@ -10,7 +10,7 @@ import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
 import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
 import logger from './logger';
 import { isPackagePath, loadFromPackage } from './providers/packageParser';
-import { runPython } from './python/pythonUtils';
+import { runPython } from './python/pythonRunner';
 import telemetry from './telemetry';
 import {
   type ApiProvider,

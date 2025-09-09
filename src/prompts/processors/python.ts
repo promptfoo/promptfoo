@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import { PythonShell } from 'python-shell';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { runPython } from '../../python/pythonUtils';
+import { runPython } from '../../python/pythonRunner';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import type { Options as PythonShellOptions } from 'python-shell';

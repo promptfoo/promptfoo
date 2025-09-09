@@ -3,7 +3,7 @@ import path from 'path';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { runPython } from '../../python/pythonUtils';
+import { runPython } from '../../python/pythonRunner';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};

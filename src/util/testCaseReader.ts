@@ -14,7 +14,7 @@ import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
 import logger from '../logger';
 import { loadApiProvider } from '../providers';
-import { runPython } from '../python/pythonUtils';
+import { runPython } from '../python/pythonRunner';
 import telemetry from '../telemetry';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';

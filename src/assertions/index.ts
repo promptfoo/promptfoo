@@ -22,7 +22,7 @@ import {
   matchesSimilarity,
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
-import { runPython } from '../python/pythonUtils';
+import { runPython } from '../python/pythonRunner';
 import {
   type ApiProvider,
   type Assertion,

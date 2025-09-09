@@ -1,7 +1,7 @@
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { runPython } from '../python/pythonUtils';
+import { runPython } from '../python/pythonRunner';
 import { safeJoin } from './file.node';
 import { isJavascriptFile } from './fileExtensions';
 

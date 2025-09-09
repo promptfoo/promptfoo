@@ -3,7 +3,7 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import { runPython } from '../python/pythonUtils';
+import { runPython } from '../python/pythonRunner';
 import { parsePathOrGlob } from '../util';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';

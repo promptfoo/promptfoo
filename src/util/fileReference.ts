@@ -4,7 +4,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { runPython } from '../python/pythonUtils';
+import { runPython } from '../python/pythonRunner';
 import { isJavascriptFile } from './fileExtensions';
 
 /**

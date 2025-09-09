@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 
 import logger from '../logger';
-import { runPython } from './pythonUtils';
+import { runPython } from './pythonUtils.legacy';
 
 /**
  * Executes Python code by writing it to a temporary file

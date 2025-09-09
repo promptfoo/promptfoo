@@ -1,8 +1,36 @@
-import { runPythonCode } from '../python/wrapper';
+import { runPython } from '../python/pythonRunner';
+import { hasPythonPatterns } from '../python/pythonUtils.shared';
 import { type GradingResult, isGradingResult } from '../types';
 import invariant from '../util/invariant';
 
 import type { AssertionParams } from '../types';
+
+/**
+ * Creates a Python wrapper for assertion expressions that aren't already functions.
+ * This handles raw expressions like "return {...}" that need to be wrapped in a main function.
+ */
+function createAssertionWrapper(renderedValue: string): string {
+  // If it already has function definitions, let the smart runner handle it
+  if (/def\s+\w+\s*\(/m.test(renderedValue)) {
+    return renderedValue;
+  }
+  
+  // Otherwise, wrap raw expressions in a main function
+  const isMultiline = renderedValue.includes('\n');
+  const indentStyle = '    ';
+  
+  return `import json
+
+def main(output, context):
+${
+  isMultiline
+    ? renderedValue
+        .split('\n')
+        .map((line) => `${indentStyle}${line}`)
+        .join('\n')
+    : `    ${renderedValue}`
+}`;
+}
 
 // Recursively map snake_case keys to camelCase for Python dataclass compatibility
 function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string, any> {
@@ -50,29 +78,13 @@ export const handlePython = async ({
   try {
     let result: string | number | boolean | object | GradingResult | undefined;
     if (typeof valueFromScript === 'undefined') {
-      const isMultiline = renderedValue.includes('\n');
-      let indentStyle = '    ';
-      if (isMultiline) {
-        // Detect the indentation style of the first indented line
-        const match = renderedValue.match(/^(?!\s*$)\s+/m);
-        if (match) {
-          indentStyle = match[0];
-        }
+      // For file references, let the smart runner handle it directly
+      if (renderedValue.startsWith('file://')) {
+        result = await runPython(renderedValue, 'main', [output, context]);
+      } else {
+        // For raw Python code, wrap it in a main function for assertions
+        result = await runPython(createAssertionWrapper(renderedValue), 'main', [output, context]);
       }
-
-      const pythonScript = `import json
-
-def main(output, context):
-${
-  isMultiline
-    ? renderedValue
-        .split('\n')
-        .map((line) => `${indentStyle}${line}`)
-        .join('\n')
-    : `    return ${renderedValue}`
-}
-`;
-      result = await runPythonCode(pythonScript, 'main', [output, context]);
     } else {
       result = valueFromScript;
     }
