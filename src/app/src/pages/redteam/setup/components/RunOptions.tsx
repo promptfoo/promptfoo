@@ -10,6 +10,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import InputAdornment from '@mui/material/InputAdornment';
 import type { RedteamRunOptions } from '@promptfoo/types';
 import { Config } from '../types';
 
@@ -99,7 +100,11 @@ export const RunOptions: React.FC<RunOptionsProps> = ({
               }}
               slotProps={{ input: { inputProps: { inputMode: 'numeric', pattern: '[0-9]*' } } }}
               helperText="Number of test cases to generate for each plugin"
-              error={Boolean(Number.isNaN(numTests) || (numTests && numTests < 1))}
+              error={(() => {
+                if (numTestsInput === '') return false;
+                const n = Number(numTestsInput);
+                return Number.isNaN(n) || n < 1;
+              })()}
             />
 
             <TextField
@@ -136,15 +141,15 @@ export const RunOptions: React.FC<RunOptionsProps> = ({
                   e.preventDefault();
                 }
               }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Typography variant="caption">ms</Typography>
+                  </InputAdornment>
+                ),
+              }}
               slotProps={{
-                input: {
-                  endAdornment: (
-                    <Box sx={{ pl: 1 }}>
-                      <Typography variant="caption">ms</Typography>
-                    </Box>
-                  ),
-                  inputProps: { inputMode: 'numeric', pattern: '[0-9]*', step: 1, min: 0 },
-                },
+                input: { inputProps: { inputMode: 'numeric', pattern: '[0-9]*', step: 1, min: 0 } },
               }}
               helperText="Add a delay between API calls to avoid rate limits. This will not override a delay set on the target."
             />
@@ -182,15 +187,15 @@ export const RunOptions: React.FC<RunOptionsProps> = ({
                   e.preventDefault();
                 }
               }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Typography variant="caption">requests</Typography>
+                  </InputAdornment>
+                ),
+              }}
               slotProps={{
-                input: {
-                  endAdornment: (
-                    <Box sx={{ pl: 1 }}>
-                      <Typography variant="caption">requests</Typography>
-                    </Box>
-                  ),
-                  inputProps: { inputMode: 'numeric', pattern: '[0-9]*', step: 1, min: 1 },
-                },
+                input: { inputProps: { inputMode: 'numeric', pattern: '[0-9]*', step: 1, min: 1 } },
               }}
               helperText="The maximum number of concurrent requests to make to the target."
             />
@@ -217,3 +222,5 @@ export const RunOptions: React.FC<RunOptionsProps> = ({
     </Box>
   );
 };
+
+export { RunOptions as RunOptionsContent };
