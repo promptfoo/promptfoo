@@ -102,6 +102,8 @@ vi.mock('@promptfoo/redteam/constants', () => ({
     MAX_CONCURRENCY: 4,
     NUM_TESTS: 10,
   },
+  DEFAULT_STRATEGIES: [],
+  ALL_STRATEGIES: [],
 }));
 
 const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
@@ -158,6 +160,27 @@ describe('Plugins', () => {
     expect(screen.getByText('Presets')).toBeInTheDocument();
     expect(screen.getByText('Recommended')).toBeInTheDocument();
     expect(screen.getByText('Minimal Test')).toBeInTheDocument();
+  });
+
+  it('should render presets section using Grid2 and display all preset cards', async () => {
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    expect(
+      screen.getByText('Presets').closest('div')?.querySelector('.MuiGrid2-container'),
+    ).toBeInTheDocument();
+
+    expect(screen.getByText('Recommended')).toBeInTheDocument();
+    expect(screen.getByText('Minimal Test')).toBeInTheDocument();
+    expect(screen.getByText('RAG')).toBeInTheDocument();
+    expect(screen.getByText('Foundation')).toBeInTheDocument();
+    expect(screen.getByText('Guardrails Evaluation')).toBeInTheDocument();
+    expect(screen.getByText('Harmful')).toBeInTheDocument();
+    expect(screen.getByText('NIST')).toBeInTheDocument();
+    expect(screen.getByText('OWASP LLM Top 10')).toBeInTheDocument();
+    expect(screen.getByText('OWASP Gen AI Red Team')).toBeInTheDocument();
+    expect(screen.getByText('OWASP API Top 10')).toBeInTheDocument();
+    expect(screen.getByText('MITRE')).toBeInTheDocument();
+    expect(screen.getByText('EU AI Act')).toBeInTheDocument();
   });
 
   it('should render custom configuration sections', async () => {

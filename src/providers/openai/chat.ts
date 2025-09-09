@@ -13,7 +13,7 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
@@ -195,12 +195,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const isReasoningModel = this.isReasoningModel();
+    const isGPT5Model = this.modelName.startsWith('gpt-5');
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
-    const maxTokens = isReasoningModel
-      ? undefined
-      : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+    const maxTokens =
+      isReasoningModel || isGPT5Model
+        ? undefined
+        : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
 
     const temperature = this.supportsTemperature()
       ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
@@ -324,7 +326,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
-    logger.debug(`Calling ${this.getApiUrl()} API: ${JSON.stringify(body)}`);
 
     let data, status, statusText;
     let cached = false;
@@ -356,14 +357,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       await data?.deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
-      };
-    }
-
-    logger.debug(`\tcompletions API response: ${JSON.stringify(data)}`);
-    if (data.error) {
-      await data.deleteFromCache?.();
-      return {
-        error: formatOpenAiError(data),
       };
     }
 

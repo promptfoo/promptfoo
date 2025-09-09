@@ -19,7 +19,7 @@ import {
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-jest.mock('../../src/fetch', () => ({
+jest.mock('../../src/util/fetch', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
@@ -32,6 +32,7 @@ jest.mock('glob', () => ({
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),
 }));
+jest.mock('../../src/util/fetch/index.ts');
 
 jest.mock('fs', () => ({
   readFileSync: jest.fn(),
@@ -88,7 +89,17 @@ jest.mock('../../src/esm', () => ({
 jest.mock('../../src/util/file', () => ({
   maybeLoadConfigFromExternalFile: jest.fn((config) => {
     // Mock implementation that handles file:// references
-    if (config && typeof config === 'object') {
+
+    // Handle arrays first to preserve their type
+    if (Array.isArray(config)) {
+      return config.map((item) => {
+        const mockFn = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+        return mockFn(item);
+      });
+    }
+
+    // Handle objects (but not arrays)
+    if (config && typeof config === 'object' && config !== null) {
       const result = { ...config };
       for (const [key, value] of Object.entries(config)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
@@ -108,6 +119,7 @@ jest.mock('../../src/util/file', () => ({
       }
       return result;
     }
+
     return config;
   }),
 }));
@@ -1359,6 +1371,86 @@ describe('loadTestsFromGlob', () => {
       'huggingface://datasets/example/dataset',
     );
     expect(result).toEqual(mockDataset);
+  });
+
+  it('should recursively resolve file:// references in YAML test files', async () => {
+    const yamlContentWithRefs = [
+      {
+        description: 'Test with file refs',
+        vars: {
+          input: 'file://input.txt',
+          expected: 'file://expected.json',
+        },
+        assert: ['file://assertions.yaml'],
+      },
+    ];
+
+    const resolvedContent = [
+      {
+        description: 'Test with file refs',
+        vars: {
+          input: 'What is 2 + 2?',
+          expected: { answer: '4' },
+        },
+        assert: [{ type: 'equals', value: '4' }],
+      },
+    ];
+
+    jest.mocked(globSync).mockReturnValue(['tests.yaml']);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlContentWithRefs));
+
+    // Mock maybeLoadConfigFromExternalFile to resolve file:// references
+    const mockMaybeLoadConfig =
+      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+    mockMaybeLoadConfig.mockReturnValue(resolvedContent);
+
+    const result = await loadTestsFromGlob('tests.yaml');
+
+    expect(mockMaybeLoadConfig).toHaveBeenCalledWith(yamlContentWithRefs);
+    expect(result).toEqual(resolvedContent);
+  });
+
+  it('should handle nested file:// references in complex test structures', async () => {
+    const complexYamlWithRefs = [
+      {
+        description: 'Complex test',
+        vars: {
+          config: 'file://config.yaml',
+          prompts: ['file://prompt1.txt', 'file://prompt2.txt'],
+        },
+        assert: ['file://assert1.yaml', 'file://assert2.yaml'],
+      },
+    ];
+
+    const resolvedContent = [
+      {
+        description: 'Complex test',
+        vars: {
+          config: { temperature: 0.7, maxTokens: 100 },
+          prompts: ['First prompt', 'Second prompt'],
+        },
+        assert: [
+          { type: 'equals', value: 'expected1' },
+          { type: 'contains', value: 'expected2' },
+        ],
+      },
+    ];
+
+    jest.mocked(globSync).mockReturnValue(['complex-tests.yaml']);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(complexYamlWithRefs));
+
+    // Mock maybeLoadConfigFromExternalFile to resolve file:// references
+    const mockMaybeLoadConfig =
+      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+    mockMaybeLoadConfig.mockReturnValue(resolvedContent);
+
+    const result = await loadTestsFromGlob('complex-tests.yaml');
+
+    expect(mockMaybeLoadConfig).toHaveBeenCalledWith(complexYamlWithRefs);
+    // Note: provider field is not included in the resolved content from our test file structure
+    expect(result[0].description).toEqual(resolvedContent[0].description);
+    expect(result[0].vars).toEqual(resolvedContent[0].vars);
+    expect(result[0].assert).toEqual(resolvedContent[0].assert);
   });
 });
 

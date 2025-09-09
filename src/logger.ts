@@ -1,8 +1,13 @@
+import fs from 'fs';
 import path from 'path';
 
 import chalk from 'chalk';
 import winston from 'winston';
 import { getEnvString } from './envars';
+import { getConfigDirectoryPath } from './util/config/manage';
+import { sanitizeBody, sanitizeUrl } from './util/sanitizer';
+
+const MAX_LOG_FILES = 50;
 
 type LogCallback = (message: string) => void;
 export let globalLogCallback: LogCallback | null = null;
@@ -173,6 +178,83 @@ export function isDebugEnabled(): boolean {
 }
 
 /**
+ * Creates log directory and cleans up old log files
+ */
+function setupLogDirectory(): string {
+  const configDir = getConfigDirectoryPath(true);
+  const logDir = path.join(configDir, 'logs');
+
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+
+  // Clean up old log files
+  try {
+    const logFiles = fs
+      .readdirSync(logDir)
+      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
+      .map((file) => ({
+        name: file,
+        path: path.join(logDir, file),
+        mtime: fs.statSync(path.join(logDir, file)).mtime,
+      }))
+      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
+
+    // Remove old files
+    if (logFiles.length >= MAX_LOG_FILES) {
+      logFiles.slice(MAX_LOG_FILES).forEach((file) => {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (error) {
+          logger.warn(`Error removing old log file: ${file.name} ${error}`);
+        }
+      });
+    }
+  } catch (error) {
+    logger.warn(`Error cleaning up old log files: ${error}`);
+  }
+
+  return logDir;
+}
+
+/**
+ * Creates a new log file for the current CLI run
+ */
+function createRunLogFile(): string {
+  const logDir = setupLogDirectory();
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
+  const logFile = path.join(logDir, `promptfoo-${timestamp}.log`);
+  return logFile;
+}
+
+// Create a file transport for the current run
+let runLogTransport: winston.transports.FileTransportInstance | null = null;
+
+/**
+ * Initialize per-run logging
+ */
+export function initializeRunLogging(): void {
+  if (runLogTransport) {
+    return;
+  }
+
+  try {
+    const logFile = createRunLogFile();
+    runLogTransport = new winston.transports.File({
+      filename: logFile,
+      level: 'debug', // Capture all levels in the file
+      format: winston.format.combine(winston.format.simple(), fileFormatter),
+    });
+
+    winstonLogger.add(runLogTransport);
+  } catch (error) {
+    logger.warn(`Error creating run log file: ${error}`);
+
+    runLogTransport = null;
+  }
+}
+
+/**
  * Creates a logger method for the specified log level
  */
 function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
@@ -202,6 +284,46 @@ const logger: StrictLogger = Object.assign({}, winstonLogger, {
   remove: typeof winstonLogger.remove;
   transports: typeof winstonLogger.transports;
 };
+
+/**
+ * Logs request/response details in a formatted way
+ * @param url - Request URL
+ * @param requestBody - Request body object
+ * @param response - Response object (optional)
+ * @param error - Whether to log as error (true) or debug (false)
+ */
+export async function logRequestResponse(options: {
+  url: string;
+  requestBody: any;
+  requestMethod: string;
+  response?: Response | null;
+  error?: boolean;
+}): Promise<void> {
+  const { url, requestBody, requestMethod, response, error } = options;
+  const logMethod = error || (response && !response.ok) ? logger.error : logger.debug;
+
+  let responseText = '';
+  if (response) {
+    try {
+      responseText = await response.clone().text();
+    } catch {
+      responseText = 'Unable to read response';
+    }
+  }
+
+  const details = [
+    `URL: ${sanitizeUrl(url)}`,
+    `Method: ${requestMethod}`,
+    `Request Body: ${JSON.stringify(sanitizeBody(requestBody), null, 2)}`,
+    response ? `Status: ${response.status} ${response.statusText}` : '',
+    responseText ? `Response: ${responseText}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const message = `API request:\n${details}`;
+  logMethod(message);
+}
 
 // Initialize source maps if debug is enabled at startup
 if (getEnvString('LOG_LEVEL', 'info') === 'debug') {

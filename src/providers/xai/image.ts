@@ -95,8 +95,6 @@ export class XAIImageProvider extends OpenAiImageProvider {
       body.user = config.user;
     }
 
-    logger.debug(`Calling xAI Image API: ${JSON.stringify(body)}`);
-
     const headers = {
       'Content-Type': 'application/json',
       ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
@@ -124,8 +122,6 @@ export class XAIImageProvider extends OpenAiImageProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`\txAI image API response: ${JSON.stringify(data)}`);
 
     if (data.error) {
       await data?.deleteFromCache?.();

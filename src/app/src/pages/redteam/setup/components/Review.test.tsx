@@ -23,6 +23,9 @@ vi.mock('@app/hooks/useToast', () => ({
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 vi.mock('@app/pages/eval-creator/components/YamlEditor', () => ({
@@ -37,6 +40,7 @@ vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
     plugins: [],
     strategies: [],
   }),
+  getEstimatedProbes: vi.fn().mockReturnValue(10),
 }));
 
 vi.mock('../utils/yamlHelpers', () => ({
@@ -90,7 +94,7 @@ describe('Review Component', () => {
       expect(screen.getByText('Review & Run')).toBeInTheDocument();
       expect(screen.getByText('Configuration Summary')).toBeInTheDocument();
       expect(screen.getByTestId('default-test-variables')).toBeInTheDocument();
-      expect(screen.getByText('Running Your Configuration')).toBeInTheDocument();
+      expect(screen.getByText('Run Options')).toBeInTheDocument();
     });
 
     it('renders configuration description field', () => {
@@ -102,7 +106,7 @@ describe('Review Component', () => {
         />,
       );
 
-      const descriptionField = screen.getByLabelText('Configuration Description');
+      const descriptionField = screen.getByLabelText('Description');
       expect(descriptionField).toBeInTheDocument();
       expect(descriptionField).toHaveValue('Test Configuration');
     });
@@ -208,5 +212,62 @@ describe('Review Component', () => {
     expect(defaultTestVariables).toBeInTheDocument();
 
     expect(defaultTestVariables.closest('paper')).toBeNull();
+  });
+
+  it('should not treat indented lines ending with colons as section headers', () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: `
+Application Details:
+  This is a test application.
+  It has some indented lines:
+    - line 1:
+    - line 2:
+`,
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    const sectionTitles = screen.getAllByRole('heading', { name: 'Application Details' });
+    expect(sectionTitles.length).toBe(1);
+  });
+
+  it('handles extremely long section headers and content without breaking layout', () => {
+    const longHeader = 'This is an extremely long section header that should wrap appropriately:';
+    const longContent =
+      'This is an extremely long section content that should wrap appropriately. '.repeat(50);
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: `${longHeader}\n${longContent}`,
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    const sectionHeaderElement = screen.getByText(longHeader.slice(0, -1));
+    fireEvent.click(sectionHeaderElement);
+
+    expect(
+      screen.getByText((content) => {
+        return content.includes(longContent.substring(0, 50));
+      }),
+    ).toBeInTheDocument();
   });
 });

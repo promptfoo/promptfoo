@@ -35,6 +35,7 @@ export interface EvalOutputCellProps {
   evaluationId?: string;
   testCaseId?: string;
   onMetricFilter?: (metric: string | null) => void;
+  isRedteam?: boolean;
 }
 
 function EvalOutputCell({
@@ -50,6 +51,7 @@ function EvalOutputCell({
   evaluationId,
   testCaseId,
   onMetricFilter,
+  isRedteam,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
@@ -516,6 +518,11 @@ function EvalOutputCell({
 
   const detail = showStats ? (
     <div className="cell-detail">
+      {tokenUsage?.numRequests !== undefined && isRedteam && (
+        <div className="stat-item">
+          <strong>Probes:</strong> {tokenUsage.numRequests}
+        </div>
+      )}
       {tokenUsageDisplay && (
         <div className="stat-item">
           <strong>Tokens:</strong> {tokenUsageDisplay}
@@ -587,6 +594,8 @@ function EvalOutputCell({
               metadata={output.metadata}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
+              testIndex={rowIndex}
+              variables={output.testCase?.vars}
             />
           )}
         </>

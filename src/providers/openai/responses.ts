@@ -3,6 +3,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
@@ -12,6 +13,8 @@ import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
+  private functionCallbackHandler = new FunctionCallbackHandler();
+
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
     'gpt-4o-2024-08-06',
@@ -251,8 +254,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    logger.debug(`Calling OpenAI Responses API: ${JSON.stringify(body)}`);
-
     // Calculate timeout for deep research models
     let timeout = REQUEST_TIMEOUT_MS;
     if (isDeepResearchModel) {
@@ -302,7 +303,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
       return {
@@ -337,7 +337,33 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         }
 
         if (item.type === 'function_call') {
-          result = JSON.stringify(item);
+          // Handle OpenAI Responses API function calls
+          let functionResult;
+
+          // Check if this is a meaningful function call or just a status update
+          if (item.arguments === '{}' && item.status === 'completed') {
+            // This appears to be a status update with no meaningful arguments
+            // This often happens when using Chat API tool format with Responses API
+            // In this case, return the function call info instead of trying to execute with empty args
+            functionResult = JSON.stringify({
+              type: 'function_call',
+              name: item.name,
+              status: 'no_arguments_provided',
+              note: 'Function called but no arguments were extracted. Consider using the correct Responses API tool format.',
+            });
+          } else {
+            // Normal function call with arguments - execute the callback
+            functionResult = await this.functionCallbackHandler.processCalls(
+              item,
+              config.functionToolCallbacks,
+            );
+          }
+
+          if (result) {
+            result += '\n' + functionResult;
+          } else {
+            result = functionResult;
+          }
         } else if (item.type === 'message' && item.role === 'assistant') {
           if (item.content) {
             for (const contentItem of item.content) {
@@ -356,7 +382,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                   data.annotations.push(...contentItem.annotations);
                 }
               } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-                result = JSON.stringify(contentItem);
+                result = await this.functionCallbackHandler.processCalls(
+                  contentItem,
+                  config.functionToolCallbacks,
+                );
               } else if (contentItem.type === 'refusal') {
                 refusal = contentItem.refusal;
                 isRefusal = true;
@@ -368,12 +397,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           }
         } else if (item.type === 'tool_result') {
           result = JSON.stringify(item);
-        } else if (item.type === 'reasoning') {
+        } else if (item.type === 'reasoning' && item.summary && item.summary.length > 0) {
           // Handle reasoning output from deep research models
           if (result) {
             result += '\n';
           }
-          result += `Reasoning: ${JSON.stringify(item.summary)}`;
+          result += `Reasoning: ${item.summary.map((s: { text: string }) => s.text).join('\n')}\n`;
         } else if (item.type === 'web_search_call') {
           // Handle web search calls from deep research models
           if (result) {

@@ -45,7 +45,7 @@ jest.mock('../src/telemetry', () => ({
   record: jest.fn(),
 }));
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetch: jest.fn(),
 }));
 
@@ -160,8 +160,8 @@ describe('createDummyFiles', () => {
     const config = validationResult.data!;
     expect(config.prompts).toHaveLength(2);
     expect(config.providers).toHaveLength(2);
-    expect(config.providers).toContain('openai:gpt-4o-mini');
-    expect(config.providers).toContain('openai:gpt-4o');
+    expect(config.providers).toContain('openai:gpt-5-mini');
+    expect(config.providers).toContain('openai:gpt-5');
   });
 
   it('should generate valid YAML configuration for RAG setup', async () => {

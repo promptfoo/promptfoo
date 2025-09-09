@@ -28,12 +28,21 @@ export default function TargetTypeSelection({
   setupModalOpen,
 }: TargetTypeSelectionProps) {
   const { config, updateConfig, providerType, setProviderType } = useRedTeamConfig();
-  const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
-    config.target || DEFAULT_HTTP_TARGET,
-  );
-  const [showTargetTypeSection, setShowTargetTypeSection] = useState(
-    Boolean(config.target?.label && config.target?.id),
-  );
+
+  // Check if we have a complete saved configuration
+  const hasCompleteSavedConfig = Boolean(config.target?.label?.trim() && config.target?.id);
+
+  const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(() => {
+    // If we have a complete saved config, use it. Otherwise start fresh without a label
+    if (hasCompleteSavedConfig) {
+      return config.target!;
+    }
+    // Clear the label if we don't have a complete config to ensure consistent state
+    return { ...(config.target || DEFAULT_HTTP_TARGET), label: '' };
+  });
+
+  // Only show target type section if we have a complete saved configuration
+  const [showTargetTypeSection, setShowTargetTypeSection] = useState(hasCompleteSavedConfig);
 
   const { recordEvent } = useTelemetry();
 
@@ -67,6 +76,13 @@ export default function TargetTypeSelection({
 
     // If target type section is shown and selection is valid, proceed to next step
     if (showTargetTypeSection && isValidSelection()) {
+      // Track provider type selection when moving to next step
+      recordEvent('feature_used', {
+        feature: 'redteam_config_provider_selected',
+        provider_type: providerType,
+        provider_id: selectedTarget.id,
+        provider_label: selectedTarget.label,
+      });
       onNext();
     }
   };
@@ -79,19 +95,38 @@ export default function TargetTypeSelection({
     return selectedTarget.id && selectedTarget.id.trim() !== '';
   };
 
-  // Check if user has entered a target name
-  const hasTargetName = selectedTarget?.label?.trim() !== '';
+  // Check if user has entered a target name - must have actual content
+  const hasTargetName = Boolean(selectedTarget?.label?.trim());
 
   const getNextButtonText = () => {
     return 'Next: Configure Target';
   };
 
   const isNextButtonDisabled = () => {
-    return !isValidSelection();
+    return !hasTargetName || !isValidSelection();
   };
 
   const shouldShowFooterButton = () => {
     return showTargetTypeSection;
+  };
+
+  const getNextButtonTooltip = () => {
+    if (!showTargetTypeSection) {
+      return 'Please select a target type first';
+    }
+    if (!hasTargetName) {
+      return 'Please enter a target name';
+    }
+    if (!isValidSelection()) {
+      if (!selectedTarget.id && !selectedTarget.label?.trim()) {
+        return 'Please select a target provider';
+      }
+      if (selectedTarget.id === '' && !selectedTarget.label?.trim()) {
+        return 'Please enter a label for your custom provider';
+      }
+      return 'Please complete the target selection';
+    }
+    return undefined;
   };
 
   return (
@@ -111,17 +146,17 @@ export default function TargetTypeSelection({
       onBack={onBack}
       nextLabel={shouldShowFooterButton() ? getNextButtonText() : undefined}
       nextDisabled={shouldShowFooterButton() ? isNextButtonDisabled() : true}
+      warningMessage={
+        shouldShowFooterButton() && isNextButtonDisabled() ? getNextButtonTooltip() : undefined
+      }
     >
       <Stack direction="column" spacing={4}>
         {/* Quick Start Section */}
         <Alert
           severity="info"
           sx={{
-            backgroundColor: 'primary.50',
-            borderColor: 'primary.200',
             alignItems: 'center',
             '& .MuiAlert-icon': {
-              color: 'primary.main',
               mt: 0.25,
             },
             '& .MuiAlert-message': {
@@ -152,9 +187,9 @@ export default function TargetTypeSelection({
           label="Target Name"
           placeholder="e.g. 'customer-service-agent'"
           onChange={(e) => {
-            if (selectedTarget) {
-              setSelectedTarget({ ...selectedTarget, label: e.target.value });
-            }
+            const newTarget = { ...selectedTarget, label: e.target.value };
+            setSelectedTarget(newTarget);
+            updateConfig('target', newTarget);
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && hasTargetName && !showTargetTypeSection) {

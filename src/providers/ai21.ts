@@ -142,7 +142,6 @@ export class AI21ChatCompletionProvider implements ApiProvider {
     };
 
     const url = `${this.getApiUrl()}/chat/completions`;
-    logger.debug(`AI21 API request: ${url} ${JSON.stringify(body)}`);
 
     let data,
       cached = false;
@@ -165,8 +164,6 @@ export class AI21ChatCompletionProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`AI21 API response: ${JSON.stringify(data)}`);
 
     if (data.error) {
       return {

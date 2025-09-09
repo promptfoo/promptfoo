@@ -47,3 +47,12 @@ export const TERMINAL_MAX_WIDTH =
 export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
 
 export const FILE_METADATA_KEY = '_promptfooFileMetadata';
+
+export const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
+export const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
+export const KA_ENDPOINT = 'https://ka.promptfoo.app/';
+export const R_ENDPOINT = 'https://r.promptfoo.app/';
+
+export const PROBE_LIMIT_EMAIL = 'sales@promptfoo.dev';
+export const PROBE_LIMIT_URL = 'https://promptfoo.dev/pricing/';
+export const LIMITS_DOCS_PAGE = 'https://promptfoo.dev/docs/red-team/open-source-limits/';

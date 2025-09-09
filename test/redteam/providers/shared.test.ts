@@ -11,6 +11,7 @@ import {
   type Message,
   messagesToRedteamHistory,
   redteamProviderManager,
+  tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { sleep } from '../../../src/util/time';
 
@@ -528,6 +529,33 @@ describe('shared redteam provider utilities', () => {
       const result = messagesToRedteamHistory(messages);
 
       expect(result).toEqual([{ prompt: 'user message 2', output: 'assistant response 2' }]);
+    });
+  });
+
+  // New tests for tryUnblocking env flag
+  describe('tryUnblocking environment flag', () => {
+    const originalEnv = process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        delete process.env.PROMPTFOO_DISABLE_UNBLOCKING;
+      } else {
+        process.env.PROMPTFOO_DISABLE_UNBLOCKING = originalEnv;
+      }
+    });
+
+    it('short-circuits when PROMPTFOO_DISABLE_UNBLOCKING=true', async () => {
+      process.env.PROMPTFOO_DISABLE_UNBLOCKING = 'true';
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'irrelevant',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.unblockingPrompt).toBeUndefined();
     });
   });
 });

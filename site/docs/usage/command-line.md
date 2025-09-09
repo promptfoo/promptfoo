@@ -1,6 +1,7 @@
 ---
 sidebar_position: 10
 sidebar_label: Command line
+description: Explore promptfoo CLI commands for LLM testing - run evaluations, generate datasets, scan models for vulnerabilities, and automate testing workflows via command line
 ---
 
 # Command line
@@ -34,7 +35,9 @@ The `promptfoo` command line utility supports the following subcommands:
 - `validate` - Validate a promptfoo configuration file.
 - `feedback <message>` - Send feedback to the Promptfoo developers.
 - `import <filepath>` - Import an eval file from JSON format.
-- `export <evalId>` - Export an eval record to JSON format.
+- `export` - Export eval records or logs.
+  - `export eval <evalId>`
+  - `export logs`
 - `redteam` - Red team LLM applications.
   - `redteam init`
   - `redteam setup`
@@ -45,6 +48,7 @@ The `promptfoo` command line utility supports the following subcommands:
   - `redteam eval`
   - `redteam report`
   - `redteam plugins`
+  - `redteam usage`
 
 ## Common Options
 
@@ -89,6 +93,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--remote`                          | Force remote inference wherever possible (used for red teams)               |
 | `--repeat <number>`                 | Number of times to run each test                                            |
 | `--share`                           | Create a shareable URL                                                      |
+| `--no-share`                        | Do not create a shareable URL, this overrides the config file               |
 | `--suggest-prompts <number>`        | Generate N new prompts and append them to the prompt list                   |
 | `--table`                           | Output table in CLI                                                         |
 | `--table-cell-max-length <number>`  | Truncate console table cells to this length                                 |
@@ -232,13 +237,28 @@ Deletes a specific resource.
 
 Import an eval file from JSON format.
 
-## `promptfoo export <evalId>`
+## `promptfoo export`
+
+Export eval records or logs.
+
+### `promptfoo export eval <evalId>`
 
 Export an eval record to JSON format. To export the most recent, use evalId `latest`.
 
 | Option                    | Description                                 |
 | ------------------------- | ------------------------------------------- |
 | `-o, --output <filepath>` | File to write. Writes to stdout by default. |
+
+### `promptfoo export logs`
+
+Collect and zip log files for debugging purposes.
+
+| Option                    | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| `-n, --count <number>`    | Number of recent log files to include (default: all) |
+| `-o, --output <filepath>` | Output path for the compressed log file              |
+
+This command creates a compressed tar.gz archive containing your promptfoo log files, making it easy to share them for debugging purposes. If no output path is specified, it will generate a timestamped filename automatically.
 
 ## `promptfoo validate`
 
@@ -540,6 +560,12 @@ List all available red team plugins.
 | ------------ | ----------------------------------------- |
 | `--ids-only` | Show only plugin IDs without descriptions |
 | `--default`  | Show only the default plugins             |
+
+## `promptfoo redteam usage`
+
+Show current redteam probe usage and limits.
+
+This command displays your current redteam probe usage against your monthly limits. Not applicable for enterprise customers.
 
 ## Specifying Command Line Options in Config
 

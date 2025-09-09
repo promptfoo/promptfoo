@@ -4,7 +4,6 @@ import fs from 'fs';
 import glob from 'glob';
 import { FILE_METADATA_KEY } from '../src/constants';
 import {
-  calculateThreadsPerBar,
   evaluate,
   formatVarsForDisplay,
   generateVarCombinations,
@@ -112,6 +111,34 @@ jest.mock('../src/util/transform', () => ({
       // Handle transformVars with test2UpperCase
       if (code.includes('test2UpperCase: vars.test2.toUpperCase()')) {
         return { ...input, test2UpperCase: input.test2.toUpperCase() };
+      }
+      // Handle metadata transforms
+      if (code.includes('context?.metadata')) {
+        if (code.includes('Output:') && context?.metadata) {
+          return `Output: ${input}, Metadata: ${JSON.stringify(context.metadata)}`;
+        }
+        if (code.includes('Has metadata') && context?.metadata) {
+          return `Has metadata: ${input}`;
+        }
+        if (code.includes('No metadata') && !context?.metadata) {
+          return `No metadata: ${input}`;
+        }
+        if (
+          code.includes('Empty metadata') &&
+          context?.metadata &&
+          Object.keys(context.metadata).length === 0
+        ) {
+          return `Empty metadata: ${input}`;
+        }
+        if (code.includes('All context') && context?.vars && context?.prompt && context?.metadata) {
+          return `All context: ${input}`;
+        }
+        if (
+          code.includes('Missing context') &&
+          !(context?.vars && context?.prompt && context?.metadata)
+        ) {
+          return `Missing context: ${input}`;
+        }
       }
     }
     return input;
@@ -1075,6 +1102,159 @@ describe('evaluator', () => {
     );
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('evaluate with metadata passed to test transform', async () => {
+    const mockApiProviderWithMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { responseTime: 123, modelVersion: 'v1.0' },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Output: Test output, Metadata: {"responseTime":123,"modelVersion":"v1.0"}',
+            },
+          ],
+          options: {
+            transform:
+              'context?.metadata ? `Output: ${output}, Metadata: ${JSON.stringify(context.metadata)}` : output',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderWithMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe(
+      'Output: Test output, Metadata: {"responseTime":123,"modelVersion":"v1.0"}',
+    );
+  });
+
+  it('evaluate with metadata passed to test transform - no metadata case', async () => {
+    const mockApiProviderNoMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-no-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderNoMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'No metadata: Test output',
+            },
+          ],
+          options: {
+            transform: 'context?.metadata ? `Has metadata: ${output}` : `No metadata: ${output}`',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderNoMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('No metadata: Test output');
+  });
+
+  it('evaluate with metadata passed to test transform - empty metadata', async () => {
+    const mockApiProviderEmptyMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-empty-metadata'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: {},
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderEmptyMetadata],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Empty metadata: Test output',
+            },
+          ],
+          options: {
+            transform:
+              '(context?.metadata && Object.keys(context.metadata).length === 0) ? `Empty metadata: ${output}` : output',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderEmptyMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('Empty metadata: Test output');
+  });
+
+  it('evaluate with metadata preserved alongside other context properties', async () => {
+    const mockApiProviderWithMetadata: ApiProvider = {
+      id: jest.fn().mockReturnValue('test-provider-metadata-context'),
+      callApi: jest.fn().mockResolvedValue({
+        output: 'Test output',
+        metadata: { modelInfo: 'gpt-4' },
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProviderWithMetadata],
+      prompts: [toPrompt('Test {{ var }}')],
+      tests: [
+        {
+          vars: { var: 'value' },
+          assert: [
+            {
+              type: 'equals',
+              value: 'All context: Test output',
+            },
+          ],
+          options: {
+            transform:
+              '(Boolean(context?.vars) && Boolean(context?.prompt) && Boolean(context?.metadata)) ? `All context: ${output}` : `Missing context: ${output}`',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProviderWithMetadata.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(0);
+    expect(summary.results[0].response?.output).toBe('All context: Test output');
   });
 
   it('evaluate with context in vars transform in defaultTest', async () => {
@@ -3247,49 +3427,6 @@ describe('runEval', () => {
   });
 });
 
-describe('calculateThreadsPerBar', () => {
-  it('should evenly distribute threads when concurrency is a multiple of numProgressBars', () => {
-    // 10 threads, 5 progress bars = 2 threads per bar
-    expect(calculateThreadsPerBar(10, 5, 0)).toBe(2);
-    expect(calculateThreadsPerBar(10, 5, 1)).toBe(2);
-    expect(calculateThreadsPerBar(10, 5, 4)).toBe(2);
-
-    // 12 threads, 6 progress bars = 2 threads per bar
-    expect(calculateThreadsPerBar(12, 6, 0)).toBe(2);
-    expect(calculateThreadsPerBar(12, 6, 5)).toBe(2);
-  });
-
-  it('should correctly distribute extra threads for the first N bars', () => {
-    // 11 threads, 5 progress bars = 2 threads for first bar, 2 for the rest
-    // floor(11/5) = 2 with 1 extra thread
-    expect(calculateThreadsPerBar(11, 5, 0)).toBe(3); // First bar gets 2+1
-    expect(calculateThreadsPerBar(11, 5, 1)).toBe(2);
-    expect(calculateThreadsPerBar(11, 5, 4)).toBe(2);
-
-    // 17 threads, 6 progress bars = 2 threads for first 5 bars, 2 for the last
-    // floor(17/6) = 2 with 5 extra threads
-    expect(calculateThreadsPerBar(17, 6, 0)).toBe(3); // First bar gets 2+1
-    expect(calculateThreadsPerBar(17, 6, 4)).toBe(3); // Fifth bar gets 2+1
-    expect(calculateThreadsPerBar(17, 6, 5)).toBe(2); // Last bar gets just 2
-  });
-
-  it('should handle edge cases', () => {
-    // 1 thread, 1 progress bar
-    expect(calculateThreadsPerBar(1, 1, 0)).toBe(1);
-
-    // More progress bars than threads (1 thread per bar until we run out)
-    expect(calculateThreadsPerBar(3, 5, 0)).toBe(1);
-    expect(calculateThreadsPerBar(3, 5, 1)).toBe(1);
-    expect(calculateThreadsPerBar(3, 5, 2)).toBe(1);
-    expect(calculateThreadsPerBar(3, 5, 3)).toBe(0);
-    expect(calculateThreadsPerBar(3, 5, 4)).toBe(0);
-
-    // Large numbers
-    expect(calculateThreadsPerBar(101, 20, 0)).toBe(6); // 5 with 1 extra
-    expect(calculateThreadsPerBar(101, 20, 19)).toBe(5); // Last bar gets no extra
-  });
-});
-
 describe('formatVarsForDisplay', () => {
   it('should return empty string for empty or undefined vars', () => {
     expect(formatVarsForDisplay({}, 50)).toBe('');
@@ -3339,7 +3476,7 @@ describe('formatVarsForDisplay', () => {
 
   it('should handle extremely large vars without crashing', () => {
     // This would have caused RangeError before the fix
-    const megaString = 'x'.repeat(5 * 1024 * 1024); // 5MB string
+    const megaString = 'x'.repeat(500 * 1024); // 500KB string (reduced from 5MB to prevent SIGSEGV on macOS/Node24)
     const vars = {
       mega1: megaString,
       mega2: megaString,
@@ -3522,6 +3659,10 @@ describe('evaluator defaultTest merging', () => {
 });
 
 describe('Evaluator with external defaultTest', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
