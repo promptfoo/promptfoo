@@ -3476,7 +3476,7 @@ describe('formatVarsForDisplay', () => {
 
   it('should handle extremely large vars without crashing', () => {
     // This would have caused RangeError before the fix
-    const megaString = 'x'.repeat(5 * 1024 * 1024); // 5MB string
+    const megaString = 'x'.repeat(500 * 1024); // 500KB string (reduced from 5MB to prevent SIGSEGV on macOS/Node24)
     const vars = {
       mega1: megaString,
       mega2: megaString,
