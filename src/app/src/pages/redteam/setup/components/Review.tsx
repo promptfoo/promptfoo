@@ -1214,7 +1214,7 @@ export default function Review({
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
             </Typography>
-            {probeLimit && probeLimit.hasExceeded && (
+            {probeLimit && probeLimit.enabled && probeLimit.hasExceeded && (
               <Alert severity="error" sx={{ mb: 2 }}>
                 You have exceeded your monthly probe limit ({probeLimit.limit.toLocaleString()}{' '}
                 probes). Please contact {PROBE_LIMIT_EMAIL} to upgrade your account.
@@ -1228,6 +1228,7 @@ export default function Review({
               </Alert>
             )}
             {probeLimit &&
+              probeLimit.enabled &&
               !probeLimit.hasExceeded &&
               !exceedsProbeLimit &&
               probeLimit.remainingProbes < 5000 && (
@@ -1241,7 +1242,7 @@ export default function Review({
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                 <Tooltip
                   title={
-                    probeLimit?.hasExceeded
+                    probeLimit?.enabled && probeLimit?.hasExceeded
                       ? 'Monthly probe limit exceeded. Please contact inquiries@promptfoo.dev to upgrade.'
                       : exceedsProbeLimit
                         ? `This scan requires ${estimatedProbes.toLocaleString()} probes but you only have ${probeLimit?.remainingProbes.toLocaleString()} remaining. Please reduce the number of tests.`
@@ -1254,7 +1255,11 @@ export default function Review({
                       variant="contained"
                       color="primary"
                       onClick={handleRunWithSettings}
-                      disabled={isRunning || probeLimit?.hasExceeded || exceedsProbeLimit}
+                      disabled={
+                        isRunning ||
+                        (probeLimit?.enabled && probeLimit?.hasExceeded) ||
+                        exceedsProbeLimit
+                      }
                       startIcon={
                         isRunning ? (
                           <CircularProgress size={20} color="inherit" />
@@ -1265,7 +1270,7 @@ export default function Review({
                     >
                       {isRunning
                         ? 'Running...'
-                        : probeLimit?.hasExceeded
+                        : probeLimit?.enabled && probeLimit?.hasExceeded
                           ? 'Limit Exceeded'
                           : exceedsProbeLimit
                             ? 'Exceeds Limit'
