@@ -9,9 +9,7 @@ function transformAdkResponse(json) {
 
   // Find the last model response with text
   const modelEvents = json.filter(
-    (event) =>
-      event?.content?.role === 'model' &&
-      event?.content?.parts?.[0]?.text
+    (event) => event?.content?.role === 'model' && event?.content?.parts?.[0]?.text,
   );
 
   if (modelEvents.length > 0) {
