@@ -43,7 +43,9 @@ export const RunOptions: React.FC<RunOptionsProps> = ({
 
   const canSetMaxConcurrency = Boolean(!runOptions?.delay || runOptions?.delay === 0);
   const [expanded, setExpanded] = useState(true);
-  const [numTestsInput, setNumTestsInput] = useState<string>(numTests !== undefined ? String(numTests) : '');
+  const [numTestsInput, setNumTestsInput] = useState<string>(
+    numTests !== undefined ? String(numTests) : '',
+  );
   const [delayInput, setDelayInput] = useState<string>(
     runOptions?.delay !== undefined ? String(runOptions.delay) : '0',
   );
