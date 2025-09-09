@@ -20,7 +20,7 @@ export function viewCommand(program: Command) {
       async (
         directory: string | undefined,
         cmdObj: {
-          port: number;
+          port: string;
           yes: boolean;
           no: boolean;
           apiBaseUrl?: string;
