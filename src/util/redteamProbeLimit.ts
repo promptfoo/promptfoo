@@ -71,6 +71,22 @@ export async function getMonthlyRedteamProbeUsage(): Promise<number> {
 export async function checkMonthlyProbeLimit(): Promise<ProbeStatus> {
   const isEnterprise = await isEnterpriseCustomer();
   if (isEnterprise) {
+    // Still collect telemetry for enterprise customers for analytics
+    const usedProbes = await getMonthlyRedteamProbeUsage();
+    const remainingProbes = Math.max(0, MONTHLY_PROBE_LIMIT - usedProbes);
+    const hasExceeded = usedProbes >= MONTHLY_PROBE_LIMIT;
+
+    telemetry.record('feature_used', {
+      feature: 'redteam_probe_limits_check',
+      usedProbes,
+      remainingProbes,
+      limit: MONTHLY_PROBE_LIMIT,
+      hasExceeded,
+      enforcementEnabled: false, // Enterprise always has enforcement disabled
+      utilizationPercentage: Math.round((usedProbes / MONTHLY_PROBE_LIMIT) * 100),
+      isEnterprise: true,
+    });
+
     return {
       hasExceeded: false,
       usedProbes: 0,
@@ -93,6 +109,7 @@ export async function checkMonthlyProbeLimit(): Promise<ProbeStatus> {
     hasExceeded,
     enforcementEnabled: PROBE_LIMITS_ENFORCEMENT_ENABLED,
     utilizationPercentage: Math.round((usedProbes / MONTHLY_PROBE_LIMIT) * 100),
+    isEnterprise: false,
   });
 
   return {
