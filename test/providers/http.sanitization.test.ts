@@ -3,6 +3,9 @@ import logger from '../../src/logger';
 import { HttpProvider } from '../../src/providers/http';
 import { sanitizeUrl } from '../../src/util/sanitizer';
 
+// Mock console.warn to prevent test noise
+const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),
   fetchWithCache: jest.fn(),
@@ -18,6 +21,11 @@ describe('HTTP Provider - Sanitization Integration Tests', () => {
 
   afterEach(() => {
     loggerDebugSpy.mockRestore();
+    consoleSpy.mockClear();
+  });
+
+  afterAll(() => {
+    consoleSpy.mockRestore();
   });
 
   describe('Header sanitization in logs', () => {

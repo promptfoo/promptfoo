@@ -115,10 +115,7 @@ describe('Strategy IDs', () => {
       // Check if there's an expected file for this strategy
       const expectedFileName = expectedFileNameMap[strategy];
       if (!expectedFileName) {
-        console.error(
-          `No expected file mapping for strategy: ${strategy}. Please update the test.`,
-        );
-        // Rather than failing, just skip this strategy in the test
+        // Skip this strategy in the test since it's not mapped
         return;
       }
 

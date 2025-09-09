@@ -1,5 +1,16 @@
 import { sanitizeBody, sanitizeUrl } from '../../src/util/sanitizer';
 
+// Mock console.warn to prevent test noise
+const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+afterEach(() => {
+  consoleSpy.mockClear();
+});
+
+afterAll(() => {
+  consoleSpy.mockRestore();
+});
+
 describe('sanitizeBody', () => {
   describe('should return input unchanged for non-objects', () => {
     it('should handle null', () => {
