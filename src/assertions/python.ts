@@ -1,5 +1,4 @@
-import { runPython } from '../python/pythonRunner';
-import { hasPythonPatterns } from '../python/pythonUtils.shared';
+import { runPython, PythonAST } from '../python/pythonRunner';
 import { type GradingResult, isGradingResult } from '../types';
 import invariant from '../util/invariant';
 
@@ -11,14 +10,14 @@ import type { AssertionParams } from '../types';
  */
 function createAssertionWrapper(renderedValue: string): string {
   // If it already has function definitions, let the smart runner handle it
-  if (/def\s+\w+\s*\(/m.test(renderedValue)) {
+  if (PythonAST.hasFunctions(renderedValue)) {
     return renderedValue;
   }
-  
+
   // Otherwise, wrap raw expressions in a main function
   const isMultiline = renderedValue.includes('\n');
   const indentStyle = '    ';
-  
+
   return `import json
 
 def main(output, context):

@@ -7,12 +7,16 @@
  */
 export function extractFunctionNames(content: string): string[] {
   const functionMatches = content.match(/def\s+(\w+)\s*\(/g);
-  if (!functionMatches) return [];
-  
-  return functionMatches.map(match => {
-    const nameMatch = match.match(/def\s+(\w+)/);
-    return nameMatch ? nameMatch[1] : '';
-  }).filter(Boolean);
+  if (!functionMatches) {
+    return [];
+  }
+
+  return functionMatches
+    .map((match) => {
+      const nameMatch = match.match(/def\s+(\w+)/);
+      return nameMatch ? nameMatch[1] : '';
+    })
+    .filter(Boolean);
 }
 
 /**
@@ -27,7 +31,9 @@ export function extractFunctionName(content: string): string | null {
  * Detects if a string contains Python code patterns.
  */
 export function hasPythonPatterns(text: string): boolean {
-  if (!text || typeof text !== 'string') return false;
-  
+  if (!text || typeof text !== 'string') {
+    return false;
+  }
+
   return /def\s+\w+\s*\(|^(?:from\s+\w+\s+)?import\s+|#.*$|^\s{2,}/m.test(text);
 }
