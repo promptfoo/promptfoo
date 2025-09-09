@@ -48,6 +48,7 @@ The `promptfoo` command line utility supports the following subcommands:
   - `redteam eval`
   - `redteam report`
   - `redteam plugins`
+  - `redteam usage`
 
 ## Common Options
 
@@ -559,6 +560,12 @@ List all available red team plugins.
 | ------------ | ----------------------------------------- |
 | `--ids-only` | Show only plugin IDs without descriptions |
 | `--default`  | Show only the default plugins             |
+
+## `promptfoo redteam usage`
+
+Show current redteam probe usage and limits.
+
+This command displays your current redteam probe usage against your monthly limits. Not applicable for enterprise customers.
 
 ## Specifying Command Line Options in Config
 
