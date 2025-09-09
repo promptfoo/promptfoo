@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import logger from '../../src/logger';
-import { runPython } from '../../src/python/pythonUtils';
+import { runPython } from '../../src/python/pythonRunner';
 import { TransformInputType, transform } from '../../src/util/transform';
 
 jest.mock('../../src/esm');
@@ -15,7 +15,7 @@ jest.mock('../../src/logger', () => ({
   },
 }));
 
-jest.mock('../../src/python/pythonUtils', () => ({
+jest.mock('../../src/python/pythonRunner', () => ({
   runPython: jest.fn().mockImplementation(async (filePath, functionName, args) => {
     const [output] = args;
     return output.toUpperCase() + ' FROM PYTHON';

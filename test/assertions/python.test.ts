@@ -4,6 +4,7 @@ import { runAssertion } from '../../src/assertions';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { runPython } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
+import { runPython as runPythonSmart } from '../../src/python/pythonRunner';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types';
 
@@ -15,8 +16,8 @@ jest.mock('../../src/python/wrapper', () => {
   };
 });
 
-jest.mock('../../src/python/pythonUtils', () => {
-  const actual = jest.requireActual('../../src/python/pythonUtils');
+jest.mock('../../src/python/pythonRunner', () => {
+  const actual = jest.requireActual('../../src/python/pythonRunner');
   return {
     ...actual,
     runPython: jest.fn(actual.runPython),
@@ -43,7 +44,7 @@ describe('Python file references', () => {
     const mockOutput = true;
     jest.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
     jest.mocked(path.extname).mockReturnValue('.py');
-    jest.mocked(runPython).mockResolvedValue(mockOutput);
+    jest.mocked(runPythonSmart).mockResolvedValue(mockOutput);
 
     const output = 'Expected output';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -57,7 +58,7 @@ describe('Python file references', () => {
       providerResponse,
     });
 
-    expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'custom_function', [
+    expect(runPythonSmart).toHaveBeenCalledWith('/path/to/assert.py', 'custom_function', [
       output,
       expect.any(Object),
     ]);
@@ -79,7 +80,7 @@ describe('Python file references', () => {
     const mockOutput = true;
     jest.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
     jest.mocked(path.extname).mockReturnValue('.py');
-    jest.mocked(runPython).mockResolvedValue(mockOutput);
+    jest.mocked(runPythonSmart).mockResolvedValue(mockOutput);
 
     const output = 'Expected output';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -93,7 +94,7 @@ describe('Python file references', () => {
       providerResponse,
     });
 
-    expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
+    expect(runPythonSmart).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
       output,
       expect.objectContaining({
         config: {
@@ -116,7 +117,7 @@ describe('Python file references', () => {
     const mockOutput = true;
     jest.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
     jest.mocked(path.extname).mockReturnValue('.py');
-    jest.mocked(runPython).mockResolvedValue(mockOutput);
+    jest.mocked(runPythonSmart).mockResolvedValue(mockOutput);
 
     const output = 'Expected output';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -130,7 +131,7 @@ describe('Python file references', () => {
       providerResponse,
     });
 
-    expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
+    expect(runPythonSmart).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
       output,
       expect.any(Object),
     ]);
@@ -148,7 +149,7 @@ describe('Python file references', () => {
 
     jest.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
     jest.mocked(path.extname).mockReturnValue('.py');
-    jest.mocked(runPython).mockRejectedValue(new Error('Python error'));
+    jest.mocked(runPythonSmart).mockRejectedValue(new Error('Python error'));
 
     const output = 'Expected output';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -165,7 +166,7 @@ describe('Python file references', () => {
     expect(result).toMatchObject({
       pass: false,
       score: 0,
-      reason: 'Python error',
+      reason: expect.stringContaining('Python error'),
     });
   });
 
@@ -201,7 +202,7 @@ describe('Python file references', () => {
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
     const expectedPythonValue = '0.5';
 
-    jest.mocked(runPythonCode).mockResolvedValueOnce(expectedPythonValue);
+    jest.mocked(runPythonSmart).mockResolvedValueOnce(expectedPythonValue);
 
     const output =
       'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
@@ -221,8 +222,8 @@ describe('Python file references', () => {
       providerResponse,
     });
 
-    expect(runPythonCode).toHaveBeenCalledTimes(1);
-    expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
+    expect(runPythonSmart).toHaveBeenCalledTimes(1);
+    expect(runPythonSmart).toHaveBeenCalledWith(expect.stringContaining('def main(output, context)'), 'main', [
       output,
       { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse },
     ]);
@@ -275,7 +276,7 @@ describe('Python file references', () => {
         threshold,
       };
 
-      jest.mocked(runPythonCode).mockResolvedValueOnce(resolvedValue);
+      jest.mocked(runPythonSmart).mockResolvedValueOnce(resolvedValue);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
       const providerResponse = { output };
@@ -287,8 +288,8 @@ describe('Python file references', () => {
         providerResponse,
       });
 
-      expect(runPythonCode).toHaveBeenCalledTimes(1);
-      expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
+      expect(runPythonSmart).toHaveBeenCalledTimes(1);
+      expect(runPythonSmart).toHaveBeenCalledWith(expect.stringContaining('def main(output, context)'), 'main', [
         output,
         { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse },
       ]);
@@ -324,7 +325,7 @@ describe('Python file references', () => {
     'should handle when the file:// assertion with .py file returns a %s',
     async (type, pythonOutput, expectedPass, expectedReason) => {
       const output = 'Expected output';
-      jest.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
+      jest.mocked(runPythonSmart).mockResolvedValueOnce(pythonOutput as string | object);
 
       const fileAssertion: Assertion = {
         type: 'python',
@@ -341,7 +342,7 @@ describe('Python file references', () => {
         providerResponse,
       });
 
-      expect(runPython).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
+      expect(runPythonSmart).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
         output,
         {
           prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
@@ -356,14 +357,14 @@ describe('Python file references', () => {
         pass: expectedPass,
         reason: expect.stringContaining(expectedReason),
       });
-      expect(runPython).toHaveBeenCalledTimes(1);
+      expect(runPythonSmart).toHaveBeenCalledTimes(1);
     },
   );
 
   it('should handle when python file assertions throw an error', async () => {
     const output = 'Expected output';
     jest
-      .mocked(runPython)
+      .mocked(runPythonSmart)
       .mockRejectedValue(
         new Error('The Python script `call_api` function must return a dict with an `output`'),
       );
@@ -380,7 +381,7 @@ describe('Python file references', () => {
       test: {} as AtomicTestCase,
       providerResponse,
     });
-    expect(runPython).toHaveBeenCalledTimes(1);
+    expect(runPythonSmart).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       assertion: {
         type: 'python',
@@ -423,7 +424,7 @@ describe('Python file references', () => {
       ],
     };
 
-    jest.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
+    jest.mocked(runPythonSmart).mockResolvedValueOnce(pythonResult as any);
 
     const fileAssertion: Assertion = {
       type: 'python',

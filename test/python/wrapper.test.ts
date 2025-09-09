@@ -1,6 +1,7 @@
 import fs from 'fs';
 
-import { runPython, state, validatePythonPath } from '../../src/python/pythonUtils';
+import { state, validatePythonPath } from '../../src/python/pythonUtils';
+import { runPython as runPythonLegacy } from '../../src/python/pythonCore';
 import { runPythonCode } from '../../src/python/wrapper';
 
 jest.mock('../../src/esm');
@@ -10,12 +11,19 @@ jest.mock('fs', () => ({
   readFileSync: jest.fn(),
   unlinkSync: jest.fn(),
 }));
+jest.mock('../../src/python/pythonCore', () => {
+  const originalModule = jest.requireActual('../../src/python/pythonCore');
+  return {
+    ...originalModule,
+    runPython: jest.fn(originalModule.runPython),
+  };
+});
+
 jest.mock('../../src/python/pythonUtils', () => {
   const originalModule = jest.requireActual('../../src/python/pythonUtils');
   return {
     ...originalModule,
     validatePythonPath: jest.fn(),
-    runPython: jest.fn(originalModule.runPython),
     state: {
       cachedPythonPath: '/usr/bin/python3',
     },
@@ -50,7 +58,7 @@ describe('wrapper', () => {
       const mockRunPython = jest.fn().mockResolvedValue('cleanup test');
       jest.spyOn(fs, 'writeFileSync').mockImplementation(mockWriteFileSync);
       jest.spyOn(fs, 'unlinkSync').mockImplementation(mockUnlinkSync);
-      jest.mocked(runPython).mockImplementation(mockRunPython);
+      jest.mocked(runPythonLegacy).mockImplementation(mockRunPython);
       await runPythonCode('print("cleanup test")', 'main', []);
       expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
       expect(mockWriteFileSync).toHaveBeenCalledWith(
@@ -70,7 +78,7 @@ describe('wrapper', () => {
       const mockOutput = { type: 'final_result', data: 'execution result' };
       jest.spyOn(fs, 'writeFileSync').mockReturnValue();
       jest.spyOn(fs, 'unlinkSync').mockReturnValue();
-      const mockRunPython = jest.mocked(runPython);
+      const mockRunPython = jest.mocked(runPythonLegacy);
       mockRunPython.mockResolvedValue(mockOutput.data);
       const code = 'print("Hello, world!")';
       const result = await runPythonCode(code, 'main', []);

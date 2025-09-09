@@ -4,13 +4,13 @@ import {
   pythonPromptFunction,
   pythonPromptFunctionLegacy,
 } from '../../../src/prompts/processors/python';
-import { runPython } from '../../../src/python/pythonUtils';
+import { runPython } from '../../../src/python/pythonRunner';
 
 import type { ApiProvider } from '../../../src/types';
 
 jest.mock('fs');
 jest.mock('python-shell');
-jest.mock('../../../src/python/pythonUtils');
+jest.mock('../../../src/python/pythonRunner');
 
 describe('pythonPromptFunction', () => {
   interface PythonContext {

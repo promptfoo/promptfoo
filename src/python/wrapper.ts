@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 
 import logger from '../logger';
-import { runPython } from './pythonUtils.legacy';
+import { runPython as runPythonLegacy } from './pythonCore';
 
 /**
  * Executes Python code by writing it to a temporary file
@@ -24,7 +24,7 @@ export async function runPythonCode(
   try {
     fs.writeFileSync(tempFilePath, code);
     // Necessary to await so temp file doesn't get deleted.
-    const result = await runPython(tempFilePath, method, args);
+    const result = await runPythonLegacy(tempFilePath, method, args);
     return result;
   } catch (error) {
     logger.error(`Error executing Python code: ${error}`);
