@@ -81,7 +81,7 @@ export async function checkMonthlyProbeLimit(): Promise<ProbeStatus> {
     remainingProbes,
     limit: MONTHLY_PROBE_LIMIT,
     hasExceeded,
-    enforcementEnabled: isEnterprise ? false : PROBE_LIMITS_ENFORCEMENT_ENABLED,
+    enforcementEnabled: PROBE_LIMITS_ENFORCEMENT_ENABLED,
     utilizationPercentage: Math.round((usedProbes / MONTHLY_PROBE_LIMIT) * 100),
     isEnterprise,
   });
