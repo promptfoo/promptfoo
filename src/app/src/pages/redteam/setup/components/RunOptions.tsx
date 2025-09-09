@@ -105,7 +105,9 @@ export const RunOptions: React.FC<RunOptionsProps> = ({
               slotProps={{ input: { inputProps: { inputMode: 'numeric', pattern: '[0-9]*' } } }}
               helperText="Number of test cases to generate for each plugin"
               error={(() => {
-                if (numTestsInput === '') { return false; }
+                if (numTestsInput === '') {
+                  return false;
+                }
                 const n = Number(numTestsInput);
                 return Number.isNaN(n) || n < 1;
               })()}
