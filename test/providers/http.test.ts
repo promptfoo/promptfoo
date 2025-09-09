@@ -3,6 +3,9 @@ import fs from 'fs';
 import path from 'path';
 
 import dedent from 'dedent';
+
+// Mock console.warn to prevent test noise
+const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -4538,4 +4541,9 @@ describe('HttpProvider - Sanitization', () => {
     // Note: timeout and maxRetries are not included in the rendered config that gets logged
     expect(logMessage).not.toContain('[REDACTED]');
   });
+});
+
+// Cleanup console mock
+afterAll(() => {
+  consoleSpy.mockRestore();
 });
