@@ -1,0 +1,565 @@
+{
+  "evalId": "eval-YYz-2025-09-08T19:35:35",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-09-08T19:35:35.644Z",
+    "prompts": [
+      {
+        "raw": "{{prompt}}",
+        "label": "{{prompt}}",
+        "id": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "provider": "http://localhost:8000/run",
+        "metrics": {
+          "score": 3,
+          "testPassCount": 3,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 4,
+          "assertFailCount": 0,
+          "totalLatencyMs": 60,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 745,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 745,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 259,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 259,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "weather"
+              }
+            },
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "Provides weather information"
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "The output includes the current weather (sunny), temperature (72°F/22°C), and wind details (light breeze from the west), which constitutes weather information.",
+              "tokensUsed": {
+                "total": 259,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 259,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "657d30e0-0223-4f16-ae7d-eba511ae8ef5",
+        "latencyMs": 25,
+        "namedScores": {},
+        "prompt": {
+          "raw": "What's the weather in New York?",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "http://localhost:8000/run",
+          "label": ""
+        },
+        "response": {
+          "raw": "[{\"content\":{\"parts\":[{\"functionCall\":{\"id\":\"adk-d839a953-5a71-4eb6-a707-f5151629d3c7\",\"args\":{\"city\":\"New York\"},\"name\":\"get_weather\"}}],\"role\":\"model\"},\"usageMetadata\":{\"candidatesTokenCount\":6,\"candidatesTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":6}],\"promptTokenCount\":90,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":90}],\"totalTokenCount\":96},\"invocationId\":\"e-5cbbbfd4-3147-43f7-b151-9ed40ee8c792\",\"author\":\"mock_weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"longRunningToolIds\":[],\"id\":\"f26effcd-7fa8-47a1-b091-7c316a8d584b\",\"timestamp\":1757357826.639247},{\"content\":{\"parts\":[{\"functionResponse\":{\"id\":\"adk-d839a953-5a71-4eb6-a707-f5151629d3c7\",\"name\":\"get_weather\",\"response\":{\"status\":\"success\",\"report\":\"The weather in New York is sunny with a temperature of 72°F (22°C). Light breeze from the west.\"}}}],\"role\":\"user\"},\"invocationId\":\"e-5cbbbfd4-3147-43f7-b151-9ed40ee8c792\",\"author\":\"mock_weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"id\":\"39cb75a7-6b5e-496a-bd0e-601233f5785d\",\"timestamp\":1757357827.217061},{\"content\":{\"parts\":[{\"text\":\"The weather in New York is sunny with a temperature of 72°F (22°C). There's a light breeze from the west.\\n\"}],\"role\":\"model\"},\"usageMetadata\":{\"candidatesTokenCount\":33,\"candidatesTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":33}],\"promptTokenCount\":130,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":130}],\"totalTokenCount\":163},\"invocationId\":\"e-5cbbbfd4-3147-43f7-b151-9ed40ee8c792\",\"author\":\"mock_weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"id\":\"8da6df00-5a4e-4f06-a000-94b326041ac0\",\"timestamp\":1757357827.219408}]",
+          "metadata": {
+            "http": {
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-length": "1732",
+                "content-type": "application/json",
+                "date": "Mon, 08 Sep 2025 18:57:05 GMT",
+                "server": "uvicorn"
+              }
+            }
+          },
+          "output": "The weather in New York is sunny with a temperature of 72°F (22°C). There's a light breeze from the west.",
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Test weather query",
+          "vars": {
+            "prompt": "What's the weather in New York?"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "weather"
+            },
+            {
+              "type": "llm-rubric",
+              "value": "Provides weather information"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "prompt": "What's the weather in New York?"
+        },
+        "metadata": {
+          "http": {
+            "status": 200,
+            "statusText": "OK",
+            "headers": {
+              "content-length": "1732",
+              "content-type": "application/json",
+              "date": "Mon, 08 Sep 2025 18:57:05 GMT",
+              "server": "uvicorn"
+            }
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 232,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 232,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "Responds to greeting politely"
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "The output responds to a potential greeting with 'Hi there!' and offers assistance politely.",
+              "tokensUsed": {
+                "total": 232,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 232,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "096b5996-ef48-4a01-9dc3-8c70072d8529",
+        "latencyMs": 21,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Hello",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "http://localhost:8000/run",
+          "label": ""
+        },
+        "response": {
+          "raw": "[{\"content\":{\"parts\":[{\"text\":\"Hi there! How can I help you with the weather today?\\n\"}],\"role\":\"model\"},\"usageMetadata\":{\"candidatesTokenCount\":14,\"candidatesTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":14}],\"promptTokenCount\":81,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":81}],\"totalTokenCount\":95},\"invocationId\":\"e-3c259c4e-1851-4e76-b746-690523e1ae6a\",\"author\":\"mock_weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"id\":\"48f67985-1d91-43af-a836-e5b058343df0\",\"timestamp\":1757357826.612252}]",
+          "metadata": {
+            "http": {
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-length": "550",
+                "content-type": "application/json",
+                "date": "Mon, 08 Sep 2025 18:57:05 GMT",
+                "server": "uvicorn"
+              }
+            }
+          },
+          "output": "Hi there! How can I help you with the weather today?",
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Test greeting",
+          "vars": {
+            "prompt": "Hello"
+          },
+          "assert": [
+            {
+              "type": "llm-rubric",
+              "value": "Responds to greeting politely"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "prompt": "Hello"
+        },
+        "metadata": {
+          "http": {
+            "status": 200,
+            "statusText": "OK",
+            "headers": {
+              "content-length": "550",
+              "content-type": "application/json",
+              "date": "Mon, 08 Sep 2025 18:57:05 GMT",
+              "server": "uvicorn"
+            }
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 254,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 254,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "Handles off-topic question gracefully"
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "The response politely redirects the user to an appropriate tool for their math question and clarifies the assistant's intended function.",
+              "tokensUsed": {
+                "total": 254,
+                "prompt": 0,
+                "completion": 0,
+                "cached": 254,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "295d918f-3109-48d9-9fa6-f7d96aaa33e3",
+        "latencyMs": 14,
+        "namedScores": {},
+        "prompt": {
+          "raw": "What's 2 + 2?",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "http://localhost:8000/run",
+          "label": ""
+        },
+        "response": {
+          "raw": "[{\"errorCode\":\"MALFORMED_FUNCTION_CALL\",\"usageMetadata\":{\"promptTokenCount\":99,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":99}],\"totalTokenCount\":99},\"invocationId\":\"e-fdbf83d1-9ec4-46ca-88f5-282ff4004c36\",\"author\":\"mock_weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"id\":\"7d839227-3714-4de2-b8b1-e1b4e8a2be68\",\"timestamp\":1757357826.671123}]",
+          "metadata": {
+            "http": {
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-length": "395",
+                "content-type": "application/json",
+                "date": "Mon, 08 Sep 2025 18:57:05 GMT",
+                "server": "uvicorn"
+              }
+            }
+          },
+          "output": "I'm a weather assistant. I can help you with weather information for cities. For math questions like that, you might want to use a calculator!",
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Test math question (off-topic)",
+          "vars": {
+            "prompt": "What's 2 + 2?"
+          },
+          "assert": [
+            {
+              "type": "llm-rubric",
+              "value": "Handles off-topic question gracefully"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {
+          "prompt": "What's 2 + 2?"
+        },
+        "metadata": {
+          "http": {
+            "status": 200,
+            "statusText": "OK",
+            "headers": {
+              "content-length": "395",
+              "content-type": "application/json",
+              "date": "Mon, 08 Sep 2025 18:57:05 GMT",
+              "server": "uvicorn"
+            }
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 3,
+      "failures": 0,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 3,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 745,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 745,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "Testing Mock Weather Agent (No Authentication Required)",
+    "prompts": ["{{prompt}}"],
+    "providers": [
+      {
+        "id": "https",
+        "config": {
+          "url": "http://localhost:8000/run",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "app_name": "mock_weather_agent",
+            "user_id": "test_user",
+            "session_id": "session_shared",
+            "new_message": {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "{{prompt}}"
+                }
+              ]
+            }
+          },
+          "transformResponse": "file://adk-response-transform.js"
+        }
+      }
+    ],
+    "tests": [
+      {
+        "description": "Test weather query",
+        "vars": {
+          "prompt": "What's the weather in New York?"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "weather"
+          },
+          {
+            "type": "llm-rubric",
+            "value": "Provides weather information"
+          }
+        ]
+      },
+      {
+        "description": "Test greeting",
+        "vars": {
+          "prompt": "Hello"
+        },
+        "assert": [
+          {
+            "type": "llm-rubric",
+            "value": "Responds to greeting politely"
+          }
+        ]
+      },
+      {
+        "description": "Test math question (off-topic)",
+        "vars": {
+          "prompt": "What's 2 + 2?"
+        },
+        "assert": [
+          {
+            "type": "llm-rubric",
+            "value": "Handles off-topic question gracefully"
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "outputPath": ["file://adk-mock-results.json"],
+    "extensions": ["file://adk-session-hook.js:adkSessionHook"],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": "https://www.promptfoo.app/eval/eval-YYz-2025-09-08T19:35:35",
+  "metadata": {
+    "promptfooVersion": "0.118.3",
+    "nodeVersion": "v22.14.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-09-08T19:35:36.671Z",
+    "evaluationCreatedAt": "2025-09-08T19:35:35.644Z"
+  }
+}

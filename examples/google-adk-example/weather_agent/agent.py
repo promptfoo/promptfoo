@@ -4,12 +4,10 @@ Weather agent built with Google Agent Development Kit (ADK).
 Mirrors the structure from official ADK samples and quickstart examples.
 """
 
-import os
-
 from google.adk.agents import Agent
 
 
-def get_weather(city: str) -> dict:
+def get_weather(city: str) -> dict[str, str]:
     """
     Mock weather function that returns sample weather data.
 
@@ -41,10 +39,7 @@ def get_weather(city: str) -> dict:
     # Check for partial matches
     for known_city, response in weather_responses.items():
         if known_city in city_lower or city_lower in known_city:
-            return {
-                "status": "success",
-                "report": response.replace(known_city.title(), city.title()),
-            }
+            return {"status": "success", "report": response}
 
     # Default response for unknown cities
     return {

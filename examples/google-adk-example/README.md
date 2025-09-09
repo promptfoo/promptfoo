@@ -57,7 +57,7 @@ adk api_server
 
 You should see output like:
 
-```
+```text
 INFO:     Started server process [12345]
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://localhost:8000
@@ -78,7 +78,7 @@ promptfoo eval -c promptfooconfig-single-turn.yaml
 **Multi-turn testing** (shared conversation):
 
 ```bash
-promptfoo eval -c promptfooconfig-multi-turn.yaml
+promptfoo eval -c promptfooconfig-multi-turn.yaml --max-concurrency 1
 ```
 
 Both configurations will:
@@ -91,7 +91,7 @@ Both configurations will:
 
 **Single-turn** - Each test uses a separate session:
 
-```
+```text
 ✅ Weather query for New York
 ✅ Weather query for London (independent session)
 ❌ Context isolation test: "I don't have memory of previous conversations"
@@ -101,12 +101,12 @@ Pass Rate: 66.67% (demonstrates session isolation)
 
 **Multi-turn** - All tests share one session:
 
-```
+```text
 ✅ Initial weather query
 ✅ Follow-up weather query
-✅ Memory test: "We've discussed New York and London"
+❌ Memory test: Agent doesn't recall previous conversations by default
 
-Pass Rate: 100% (demonstrates conversation memory)
+Pass Rate: 66.67% (same session, but agent needs explicit memory handling)
 ```
 
 ## Understanding the Configuration
@@ -145,7 +145,7 @@ ADK sessions are **stateful conversation contexts** that maintain memory between
 
 Sessions follow this hierarchy:
 
-```
+```text
 /apps/{app_name}/users/{user_id}/sessions/{session_id}
 ```
 

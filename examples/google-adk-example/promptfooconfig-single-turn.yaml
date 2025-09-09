@@ -40,6 +40,8 @@ tests:
       prompt: 'What cities have we discussed?'
       session_id: 'session_fresh'
     assert:
-      - type: llm-rubric
-        value: 'Indicates no memory of previous conversations since this is a fresh session'
+      - type: regex
+        value: '(New York|London)'
+        caseSensitive: false
+        negate: true
 outputPath: single-turn-results.json

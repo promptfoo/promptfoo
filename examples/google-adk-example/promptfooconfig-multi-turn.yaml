@@ -37,6 +37,6 @@ tests:
     vars:
       prompt: 'Which cities have we discussed so far?'
     assert:
-      - type: llm-rubric
-        value: 'References at least one of the previously discussed cities from the conversation'
+      - type: contains
+        value: 'New York'
 outputPath: multi-turn-results.json

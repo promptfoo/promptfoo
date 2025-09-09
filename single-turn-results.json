@@ -1,0 +1,534 @@
+{
+  "evalId": "eval-dxe-2025-09-09T03:33:14",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-09-09T03:33:14.946Z",
+    "prompts": [
+      {
+        "raw": "{{prompt}}",
+        "label": "{{prompt}}",
+        "id": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "provider": "http://localhost:8000/run",
+        "metrics": {
+          "score": 2,
+          "testPassCount": 2,
+          "testFailCount": 1,
+          "testErrorCount": 0,
+          "assertPassCount": 2,
+          "assertFailCount": 1,
+          "totalLatencyMs": 4404,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 3,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "New York"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "e9f6a329-724d-4c13-8f6e-411afd53d24f",
+        "latencyMs": 1889,
+        "namedScores": {},
+        "prompt": {
+          "raw": "What's the weather in New York?",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "http://localhost:8000/run",
+          "label": ""
+        },
+        "response": {
+          "raw": "[{\"content\":{\"parts\":[{\"thoughtSignature\":\"CrgCAdHtim8GqJ950S5kIzyr3nVzeXXjzL4wgsTNidndMDAlAsbXRDZeIywV1y7pWs_eWW_4qTG0UGxYA2_oLbJP-E5LrlijtcYYEbGlMT01i5BQDZWA_rBlDbqv8q4EQ26pQiwdtZgNU0HHnb7wFP2ivXRqzCBY4tlbmjdbFjJqmeQcsl7NyP_5wD6zv5hEp66CGoRr3aWpLV0ph8sh5nVWgxGHYNrZ4EyWXbGj_RHEUagjKQL6chovkxBvkMdJqupdKKXeV4WSZ87VIfuJtnZIfiR9fmhi_ddhqiwN0ie3RBFxz8ZRXpglBc_KnA_sSr4dIMEVK3CxV2S-rpmYo7W1OZoKF73_rQuUrO1aSIGZ6b7kZDysAetF384ER8L4CXj1k6HoR8stt89I7y5y7VZ88KqPb8ldaq2c\",\"functionCall\":{\"id\":\"adk-c27e2ded-7333-4b93-a6e7-d87e9ae19b24\",\"args\":{\"city\":\"New York\"},\"name\":\"get_weather\"}}],\"role\":\"model\"},\"usageMetadata\":{\"candidatesTokenCount\":16,\"promptTokenCount\":340,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":340}],\"thoughtsTokenCount\":74,\"totalTokenCount\":430},\"invocationId\":\"e-fbf7f0d9-67e3-4627-83e4-5999932516bb\",\"author\":\"weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"longRunningToolIds\":[],\"id\":\"9addc78d-d64b-47ee-8ff2-d1ce9e0c730e\",\"timestamp\":1757388795.014501},{\"content\":{\"parts\":[{\"functionResponse\":{\"id\":\"adk-c27e2ded-7333-4b93-a6e7-d87e9ae19b24\",\"name\":\"get_weather\",\"response\":{\"status\":\"success\",\"report\":\"The weather in New York is sunny with a temperature of 72°F (22°C). Light breeze from the west.\"}}}],\"role\":\"user\"},\"invocationId\":\"e-fbf7f0d9-67e3-4627-83e4-5999932516bb\",\"author\":\"weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"id\":\"0cc2048b-09c3-4ad8-a712-5168b548835f\",\"timestamp\":1757388796.102314},{\"content\":{\"parts\":[{\"text\":\"The weather in New York is sunny with a temperature of 72°F (22°C). There's a light breeze from the west. Is there anything else I can help you with today?\"}],\"role\":\"model\"},\"usageMetadata\":{\"candidatesTokenCount\":43,\"promptTokenCount\":403,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":403}],\"totalTokenCount\":446},\"invocationId\":\"e-fbf7f0d9-67e3-4627-83e4-5999932516bb\",\"author\":\"weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"id\":\"b289c4d9-b318-4de9-acba-e548fa553a3f\",\"timestamp\":1757388796.104305}]",
+          "metadata": {
+            "http": {
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-length": "2108",
+                "content-type": "application/json",
+                "date": "Tue, 09 Sep 2025 03:33:14 GMT",
+                "server": "uvicorn"
+              }
+            }
+          },
+          "output": "The weather in New York is sunny with a temperature of 72°F (22°C). There's a light breeze from the west. Is there anything else I can help you with today?",
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Weather query for New York",
+          "vars": {
+            "prompt": "What's the weather in New York?",
+            "session_id": "session_ny"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "New York"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "prompt": "What's the weather in New York?",
+          "session_id": "session_ny"
+        },
+        "metadata": {
+          "http": {
+            "status": 200,
+            "statusText": "OK",
+            "headers": {
+              "content-length": "2108",
+              "content-type": "application/json",
+              "date": "Tue, 09 Sep 2025 03:33:14 GMT",
+              "server": "uvicorn"
+            }
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "London"
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "ec99bc9f-2107-4022-8f99-d7ad00dcd8b3",
+        "latencyMs": 1353,
+        "namedScores": {},
+        "prompt": {
+          "raw": "How about London?",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "http://localhost:8000/run",
+          "label": ""
+        },
+        "response": {
+          "raw": "[{\"content\":{\"parts\":[{\"thoughtSignature\":\"CvEBAdHtim_XduaPbc7PcXNvXiwBBubi_nfbYhdJTIV99DDrq2uxX1SN-FiXTwuchustkwSjRsWgr5r4hWBEblmgiX-IAuxj4JnBz7x-Y8eQmQ8ONi7S_s3YK-rWLz55hpAmiQVuCMa5kyEixb_h0PZUNLZ2KtqV9vZ5NPy4zLvqR2Puvyhe7Fd3iNMWelXXNRnT5ndpWKFMuPdz3uSuZ7NXdlHzznCve3BEzU2w2mhJId9BL9r3JkXqojFn8f-uIawatWxqhxQwi6Dh764x6q8gauuFgGrnECiS4denTVy6a6U9L7nIpz4u0hofwH5wYvYmLw==\",\"functionCall\":{\"id\":\"adk-c87b995f-c1e7-4628-adb8-8b3ad70f072f\",\"args\":{\"city\":\"London\"},\"name\":\"get_weather\"}}],\"role\":\"model\"},\"usageMetadata\":{\"candidatesTokenCount\":15,\"promptTokenCount\":231,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":231}],\"thoughtsTokenCount\":50,\"totalTokenCount\":296},\"invocationId\":\"e-951e195a-6ac7-4c07-8da6-eff7ad1eca35\",\"author\":\"weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"longRunningToolIds\":[],\"id\":\"c56b55c2-0d1d-4084-8592-caa797135371\",\"timestamp\":1757388799.928381},{\"content\":{\"parts\":[{\"functionResponse\":{\"id\":\"adk-c87b995f-c1e7-4628-adb8-8b3ad70f072f\",\"name\":\"get_weather\",\"response\":{\"status\":\"success\",\"report\":\"The weather in London is cloudy with occasional drizzle. Temperature is 58°F (14°C).\"}}}],\"role\":\"user\"},\"invocationId\":\"e-951e195a-6ac7-4c07-8da6-eff7ad1eca35\",\"author\":\"weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"id\":\"5087779c-e13f-4ee7-9aad-e37f6fbc9e65\",\"timestamp\":1757388800.675961},{\"content\":{\"parts\":[{\"text\":\"The weather in London is cloudy with occasional drizzle. The temperature is 58°F (14°C).\\n\"}],\"role\":\"model\"},\"usageMetadata\":{\"candidatesTokenCount\":24,\"promptTokenCount\":289,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":289}],\"totalTokenCount\":313},\"invocationId\":\"e-951e195a-6ac7-4c07-8da6-eff7ad1eca35\",\"author\":\"weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"id\":\"71db3cad-cbfa-422c-bebb-5481e8172611\",\"timestamp\":1757388800.678085}]",
+          "metadata": {
+            "http": {
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-length": "1938",
+                "content-type": "application/json",
+                "date": "Tue, 09 Sep 2025 03:33:19 GMT",
+                "server": "uvicorn"
+              }
+            }
+          },
+          "output": "The weather in London is cloudy with occasional drizzle. The temperature is 58°F (14°C).",
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Weather query for London (independent session)",
+          "vars": {
+            "prompt": "How about London?",
+            "session_id": "session_london"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "London"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "prompt": "How about London?",
+          "session_id": "session_london"
+        },
+        "metadata": {
+          "http": {
+            "status": 200,
+            "statusText": "OK",
+            "headers": {
+              "content-length": "1938",
+              "content-type": "application/json",
+              "date": "Tue, 09 Sep 2025 03:33:19 GMT",
+              "server": "uvicorn"
+            }
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "error": "Expected output to match regex \"(New York|London)\"",
+        "gradingResult": {
+          "pass": false,
+          "score": 0,
+          "reason": "Expected output to match regex \"(New York|London)\"",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to match regex \"(New York|London)\"",
+              "assertion": {
+                "type": "regex",
+                "value": "(New York|London)",
+                "caseSensitive": false,
+                "negate": true
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "6f530aa2-961c-432f-a3bd-d0acd7568122",
+        "latencyMs": 1162,
+        "namedScores": {},
+        "prompt": {
+          "raw": "What cities have we discussed?",
+          "label": "{{prompt}}"
+        },
+        "promptId": "effa18501e44aafd9bc42a2f64ffc9b6350f94025520ca2ed382f9bdc4b6e982",
+        "promptIdx": 0,
+        "provider": {
+          "id": "http://localhost:8000/run",
+          "label": ""
+        },
+        "response": {
+          "raw": "[{\"content\":{\"parts\":[{\"thoughtSignature\":\"Cp8DAdHtim-AjOCqGEJG70crTcXBrPb8DR8p0ju_cLnANLeqT7akRAdSwED-HBlPAjk5iIfpclB3EaBCqh21jiWgPlC8VMTErj1Fp7NwQFicGkupOxcD93y3MAKjIaAD3C95sHBtxLPyjaEf169wIJdw1GDDwrE68cTT1Z8p5qycvqRoma7oQLKyugTvkQO4IYcuhq6t60JqSqAr3gyAEZLzupl2Gbi9cUXpUAyN6Q5gXJXQi9-b3jGzfaGcpRHtltItHoB-Etsg5rqC8-vtokNadyLVX-lOuQtz9yqejr4usDs1jnJGQLb850lC_xd7aEM9PFpjOCqcnt9c7WQdwDlDPx3_I0fzFUGRPxlGZiP774dSscM7xQLyu5w8qj32GdZJ9IThbcYbWQ_Lc_Ak7W57-inrgwW7uXgpE2XaLN4RcOzEA-Zl4lFAjJlr8xGW1sMSbqxVI0Cgv8UQ_EAQtgBbVWI5frD-l-ElCN6rNy5Tzn8dt1SjV5Kl3o6PICZQg0x5QQWLRz6zv90hNKZC45ci-5biBcXR7L-CEm7Zj6cJvA==\",\"text\":\"As a weather assistant, I don't keep a record of our past conversations. I can only provide current weather information. Is there a city you'd like to know the weather for right now?\"}],\"role\":\"model\"},\"usageMetadata\":{\"candidatesTokenCount\":41,\"promptTokenCount\":228,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":228}],\"thoughtsTokenCount\":76,\"totalTokenCount\":345},\"invocationId\":\"e-e2cccdc9-0c71-4cf7-914f-8d6de72c1570\",\"author\":\"weather_agent\",\"actions\":{\"stateDelta\":{},\"artifactDelta\":{},\"requestedAuthConfigs\":{}},\"id\":\"1fb2a99e-7cc0-4313-9258-1d89db46e8cd\",\"timestamp\":1757388804.300042}]",
+          "metadata": {
+            "http": {
+              "status": 200,
+              "statusText": "OK",
+              "headers": {
+                "content-length": "1218",
+                "content-type": "application/json",
+                "date": "Tue, 09 Sep 2025 03:33:23 GMT",
+                "server": "uvicorn"
+              }
+            }
+          },
+          "output": "As a weather assistant, I don't keep a record of our past conversations. I can only provide current weather information. Is there a city you'd like to know the weather for right now?",
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          }
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Context isolation test (fresh session)",
+          "vars": {
+            "prompt": "What cities have we discussed?",
+            "session_id": "session_fresh"
+          },
+          "assert": [
+            {
+              "type": "regex",
+              "value": "(New York|London)",
+              "caseSensitive": false,
+              "negate": true
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {
+          "prompt": "What cities have we discussed?",
+          "session_id": "session_fresh"
+        },
+        "metadata": {
+          "http": {
+            "status": 200,
+            "statusText": "OK",
+            "headers": {
+              "content-length": "1218",
+              "content-type": "application/json",
+              "date": "Tue, 09 Sep 2025 03:33:23 GMT",
+              "server": "uvicorn"
+            }
+          },
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      }
+    ],
+    "stats": {
+      "successes": 2,
+      "failures": 1,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 3,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "ADK single-turn testing with session isolation",
+    "prompts": [
+      "{{prompt}}"
+    ],
+    "providers": [
+      {
+        "id": "https",
+        "config": {
+          "url": "http://localhost:8000/run",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "app_name": "weather_agent",
+            "user_id": "test_user",
+            "session_id": "{{session_id}}",
+            "new_message": {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "{{prompt}}"
+                }
+              ]
+            }
+          },
+          "transformResponse": "file://adk-response-transform.js"
+        }
+      }
+    ],
+    "tests": [
+      {
+        "description": "Weather query for New York",
+        "vars": {
+          "prompt": "What's the weather in New York?",
+          "session_id": "session_ny"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "New York"
+          }
+        ]
+      },
+      {
+        "description": "Weather query for London (independent session)",
+        "vars": {
+          "prompt": "How about London?",
+          "session_id": "session_london"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "London"
+          }
+        ]
+      },
+      {
+        "description": "Context isolation test (fresh session)",
+        "vars": {
+          "prompt": "What cities have we discussed?",
+          "session_id": "session_fresh"
+        },
+        "assert": [
+          {
+            "type": "regex",
+            "value": "(New York|London)",
+            "caseSensitive": false,
+            "negate": true
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "outputPath": [
+      "single-turn-results.json"
+    ],
+    "extensions": [
+      "file://adk-session-hook.js:adkSessionHook"
+    ],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": "https://www.promptfoo.app/eval/eval-dxe-2025-09-09T03:33:14",
+  "metadata": {
+    "promptfooVersion": "0.118.3",
+    "nodeVersion": "v22.14.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-09-09T03:33:29.386Z",
+    "evaluationCreatedAt": "2025-09-09T03:33:14.946Z"
+  }
+}

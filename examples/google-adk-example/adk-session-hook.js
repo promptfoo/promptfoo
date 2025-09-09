@@ -18,10 +18,14 @@ function makeRequest(options, data) {
           status: res.statusCode,
           ok: res.statusCode >= 200 && res.statusCode < 300,
           text: () => Promise.resolve(body),
-          json: () => Promise.resolve(JSON.parse(body)),
+          json: () =>
+            Promise.resolve(
+              body && body.trim().length ? JSON.parse(body) : {}
+            ),
         });
       });
     });
+    req.setTimeout(5000, () => req.destroy(new Error('Request timed out')));
 
     req.on('error', reject);
 
@@ -33,17 +37,18 @@ function makeRequest(options, data) {
 }
 
 async function adkSessionHook(hookName, context) {
-  const ADK_HOST = 'localhost';
-  const ADK_PORT = 8000;
-  const APP_NAME = 'weather_agent';
-  const USER_ID = 'test_user';
+  const ADK_HOST = process.env.ADK_HOST || 'localhost';
+  const ADK_PORT = Number(process.env.ADK_PORT || 8000);
+  const APP_NAME = process.env.ADK_APP_NAME || 'weather_agent';
+  const USER_ID = process.env.ADK_USER_ID || 'test_user';
 
   if (hookName === 'beforeAll') {
     // Collect all unique session IDs from tests
     const sessionIds = new Set();
 
     // Check if this is single-turn (multiple session IDs) or multi-turn (one session ID)
-    context.suite.tests.forEach((test) => {
+    const tests = Array.isArray(context?.suite?.tests) ? context.suite.tests : [];
+    tests.forEach((test) => {
       if (test.vars && test.vars.session_id) {
         sessionIds.add(test.vars.session_id);
       }
