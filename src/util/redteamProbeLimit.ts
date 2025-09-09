@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { and, eq, gte } from 'drizzle-orm';
-import { LIMITS_DOCS_PAGE, PROBE_LIMIT_EMAIL, PROBE_LIMIT_URL } from '../constants';
+import { PROBE_LIMIT_EMAIL, PROBE_LIMIT_URL } from '../constants';
 import { getDb } from '../database';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';
@@ -118,12 +118,9 @@ function createFormattedBox(
 
     lines.push(
       color(`│ ${''.padEnd(contentWidth)} │`),
-      color(`│ ${'To upgrade, contact:'.padEnd(contentWidth)} │`),
+      color(`│ ${'To upgrade to unlimited probes, contact:'.padEnd(contentWidth)} │`),
       color(`│ ${emailLine.padEnd(contentWidth)} │`),
       color(`│ ${urlLine.padEnd(contentWidth)} │`),
-      color(`│ ${''.padEnd(contentWidth)} │`),
-      color(`│ ${'Learn more:'.padEnd(contentWidth)} │`),
-      color(`│ ${LIMITS_DOCS_PAGE.padEnd(contentWidth)} │`),
     );
   }
 
@@ -214,7 +211,7 @@ export async function checkProbeLimit(estimatedProbes?: number): Promise<ProbeCh
     );
     const emailLine = `📧 Contact: ${PROBE_LIMIT_EMAIL}`;
     const urlLine = `🌐 Visit: ${PROBE_LIMIT_URL}`;
-    logger.error(`\nTo upgrade, contact:\n${emailLine}\n${urlLine}`);
+    logger.error(`\nTo upgrade to unlimited probes, contact:\n${emailLine}\n${urlLine}`);
     return { canProceed: false, probeStatus, exitCode: 1 };
   }
 
