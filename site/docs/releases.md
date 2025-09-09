@@ -20,14 +20,14 @@ This month we added support for **new models**, **model audit cloud sharing**, a
 
 ##### New Model Support
 
-- **[GPT-5](/docs/providers/openai/#gpt-5-models)** - Added support for OpenAI's GPT-5 model with advanced reasoning capabilities
+- **[GPT-5](/docs/providers/openai/)** - Added support for OpenAI's GPT-5 model with advanced reasoning capabilities
 - **[Claude Opus 4.1](/docs/providers/anthropic/)** - Support for Anthropic's latest Claude model
 - **[xAI Grok Code Fast](/docs/providers/xai/)** - Added xAI's Grok Code Fast model for coding tasks
 
 ##### Provider Updates
 
-- **[Enhanced Vertex AI](/docs/providers/google/#vertex-ai)** - Improved credential management and authentication
-- **[Google AI Studio](/docs/providers/google/#google-ai-studio)** - Added default provider configurations for Google AI Studio models
+- **[Enhanced Vertex AI](/docs/providers/vertex/)** - Improved credential management and authentication
+- **[Google AI Studio](/docs/providers/google/)** - Added default provider configurations for Google AI Studio models
 
 #### Model Audit Cloud Integration {#august-2025-model-audit}
 
