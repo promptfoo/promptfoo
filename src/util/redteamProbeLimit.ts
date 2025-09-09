@@ -4,7 +4,7 @@ import {
   LIMITS_DOCS_PAGE,
   PROBE_LIMIT_EMAIL,
   PROBE_LIMIT_URL,
-  PROBE_LIMITS_ENFORCEMENT_ENABLED,
+  getProbeLimitsEnforcementEnabled,
 } from '../constants';
 import { getDb } from '../database';
 import { evalsTable } from '../database/tables';
@@ -81,7 +81,7 @@ export async function checkMonthlyProbeLimit(): Promise<ProbeStatus> {
     remainingProbes,
     limit: MONTHLY_PROBE_LIMIT,
     hasExceeded,
-    enforcementEnabled: PROBE_LIMITS_ENFORCEMENT_ENABLED,
+    enforcementEnabled: getProbeLimitsEnforcementEnabled(),
     utilizationPercentage: Math.round((usedProbes / MONTHLY_PROBE_LIMIT) * 100),
     isEnterprise,
   });
@@ -101,7 +101,7 @@ export async function checkMonthlyProbeLimit(): Promise<ProbeStatus> {
     usedProbes,
     remainingProbes,
     limit: MONTHLY_PROBE_LIMIT,
-    enabled: PROBE_LIMITS_ENFORCEMENT_ENABLED,
+    enabled: getProbeLimitsEnforcementEnabled(),
   };
 }
 

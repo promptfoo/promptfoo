@@ -58,4 +58,7 @@ export const PROBE_LIMIT_URL = 'https://promptfoo.dev/pricing/';
 export const LIMITS_DOCS_PAGE = 'https://promptfoo.dev/docs/red-team/open-source-limits/';
 
 // Feature flag to control probe limits enforcement (disabled by default to keep feature hidden)
-export const PROBE_LIMITS_ENFORCEMENT_ENABLED = !getEnvBool('PROMPTFOO_DISABLE_PROBE_LIMITS', true);
+// Lazy evaluation to allow runtime env configuration from --env-file or config
+export function getProbeLimitsEnforcementEnabled(): boolean {
+  return !getEnvBool('PROMPTFOO_DISABLE_PROBE_LIMITS', true);
+}

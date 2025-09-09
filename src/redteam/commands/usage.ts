@@ -1,3 +1,4 @@
+import { getProbeLimitsEnforcementEnabled } from '../../constants';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util';
@@ -16,6 +17,15 @@ export function redteamUsageCommand(program: Command) {
         } & Command,
       ) => {
         setupEnv(cmdObj.envPath);
+
+        // Check if probe limits are enabled after env is loaded
+        if (!getProbeLimitsEnforcementEnabled()) {
+          logger.error(
+            'Probe limits are not enabled. This command is only available when limits are active.',
+          );
+          process.exit(1);
+        }
+
         telemetry.record('command_used', {
           name: 'redteam usage',
         });
