@@ -55,3 +55,4 @@ export const R_ENDPOINT = 'https://r.promptfoo.app/';
 
 export const PROBE_LIMIT_EMAIL = 'sales@promptfoo.dev';
 export const PROBE_LIMIT_URL = 'https://promptfoo.dev/pricing/';
+export const LIMITS_DOCS_PAGE = 'https://promptfoo.dev/docs/red-team/open-source-limits/';
