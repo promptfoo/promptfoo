@@ -64,12 +64,10 @@ export const evalsTable = sqliteTable(
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
     vars: text('vars', { mode: 'json' }).$type<string[]>(),
-    isRedteam: integer('is_redteam', { mode: 'boolean' }).default(false).notNull(),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
     authorIdx: index('evals_author_idx').on(table.author),
-    isRedteamIdx: index('evals_is_redteam_idx').on(table.isRedteam),
   }),
 );
 

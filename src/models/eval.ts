@@ -40,8 +40,8 @@ import { convertTestResultsToTableRow } from '../util/exportToFile';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
+import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 
 interface FilteredCountRow {
   count: number | null;
@@ -108,7 +108,6 @@ export default class Eval {
   oldResults?: EvaluateSummaryV2;
   persisted: boolean;
   vars: string[];
-  isRedteam: boolean;
   _resultsLoaded: boolean = false;
 
   static async latest() {
@@ -158,7 +157,6 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
-      isRedteam: eval_.isRedteam,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -177,16 +175,7 @@ export default class Eval {
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
     const db = getDb();
     const evals = await db
-      .select({
-        id: evalsTable.id,
-        createdAt: evalsTable.createdAt,
-        author: evalsTable.author,
-        description: evalsTable.description,
-        config: evalsTable.config,
-        prompts: evalsTable.prompts,
-        vars: evalsTable.vars,
-        isRedteam: evalsTable.isRedteam,
-      })
+      .select()
       .from(evalsTable)
       .limit(limit)
       .orderBy(desc(evalsTable.createdAt))
@@ -200,7 +189,6 @@ export default class Eval {
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
-          isRedteam: e.isRedteam,
         }),
     );
   }
@@ -234,7 +222,6 @@ export default class Eval {
           config,
           results: {},
           vars: opts?.vars || [],
-          isRedteam: Boolean(config.redteam),
         })
         .run();
 
@@ -327,7 +314,6 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
-      isRedteam?: boolean;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -341,7 +327,6 @@ export default class Eval {
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
-    this.isRedteam = opts?.isRedteam ?? Boolean(config.redteam);
   }
 
   version() {
@@ -371,7 +356,6 @@ export default class Eval {
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
-      isRedteam: this.isRedteam,
     };
 
     if (this.useOldResults()) {
@@ -832,7 +816,7 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       createdAt: evalsTable.createdAt,
       description: evalsTable.description,
       datasetId: evalsToDatasetsTable.datasetId,
-      isRedteam: evalsTable.isRedteam,
+      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
       prompts: evalsTable.prompts,
     })
     .from(evalsTable)
@@ -874,9 +858,9 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       description: result.description,
       numTests: testCount,
       datasetId: result.datasetId,
-      isRedteam: Boolean(result.isRedteam),
+      isRedteam: result.isRedteam,
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
-    } as EvalSummary;
+    };
   });
 }
