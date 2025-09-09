@@ -10,7 +10,6 @@ import {
 } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { checkMonthlyProbeLimit } from '../../util/redteamProbeLimit';
 import { ApiSchemas } from '../apiSchemas';
 import type { Request, Response } from 'express';
 
@@ -94,29 +93,6 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
       res.status(400).json({ error: fromError(error).toString() });
     } else {
       res.status(500).json({ error: 'Failed to check email status' });
-    }
-  }
-});
-
-userRouter.get('/probe-limit', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const result = await checkMonthlyProbeLimit();
-
-    res.json(
-      ApiSchemas.User.ProbeLimit.Response.parse({
-        hasExceeded: result.hasExceeded,
-        usedProbes: result.usedProbes,
-        remainingProbes: result.remainingProbes,
-        limit: result.limit,
-        enabled: result.enabled,
-      }),
-    );
-  } catch (error) {
-    logger.error(`Error checking probe limit: ${error}`);
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: fromError(error).toString() });
-    } else {
-      res.status(500).json({ error: 'Failed to check probe limit' });
     }
   }
 });
