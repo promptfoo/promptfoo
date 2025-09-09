@@ -732,11 +732,21 @@ export default function Review({
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <InfoOutlinedIcon fontSize="small" color="action" />
                     <Typography variant="h6">Application Details</Typography>
-                    {parsedPurposeSections.length > 0 && (
+                    {config.purpose && (
                       <Chip
-                        label={`${parsedPurposeSections.length} section${parsedPurposeSections.length !== 1 ? 's' : ''}`}
+                        label={config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
                         size="small"
                         variant="outlined"
+                        color={config.purpose.length < 100 ? 'warning' : 'success'}
+                        sx={{ height: 20, fontSize: '0.75rem' }}
+                      />
+                    )}
+                    {!config.purpose && (
+                      <Chip
+                        label="Not configured"
+                        size="small"
+                        variant="outlined"
+                        color="error"
                         sx={{ height: 20, fontSize: '0.75rem' }}
                       />
                     )}
