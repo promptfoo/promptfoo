@@ -613,7 +613,9 @@ describe('OpenAI Realtime Provider', () => {
       );
 
       // Simulate response created and text events to resolve promises
-      lastHandler(Buffer.from(JSON.stringify({ type: 'response.created', response: { id: 'r1' } })));
+      lastHandler(
+        Buffer.from(JSON.stringify({ type: 'response.created', response: { id: 'r1' } })),
+      );
       lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.delta', delta: 'ok' })));
       lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.done', text: 'ok' })));
       lastHandler(
@@ -655,7 +657,8 @@ describe('OpenAI Realtime Provider', () => {
 
       const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
       expect(constructedUrl).toBe(
-        'wss://my-custom-api.com/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+        'wss://my-custom-api.com/v1/realtime?model=' +
+          encodeURIComponent('gpt-4o-realtime-preview'),
       );
     });
 
