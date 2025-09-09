@@ -53,9 +53,11 @@ root_agent = Agent(
     name="weather_agent",
     model="gemini-2.5-flash",  # Using Gemini 2.5 Flash - Google's latest model
     description="Agent to answer questions about weather in various cities",
-    instruction="""You are a helpful weather assistant. You can provide weather information for cities around the world.
+    instruction="""You are a helpful weather assistant with memory of our conversation. You can provide weather information for cities around the world.
 
-When users ask about weather, use the get_weather function to get current conditions. If users ask about other topics, you can try to help but let them know you specialize in weather information.
+When users ask about weather, use the get_weather function to get current conditions. Remember the cities you've discussed in our conversation so you can reference them later.
+
+If users ask about what cities we've discussed, recall and mention the specific cities from our conversation history.
 
 Always be friendly and helpful in your responses. If the weather data isn't available for a specific city, suggest alternative ways for users to get current weather information.""",
     tools=[get_weather],

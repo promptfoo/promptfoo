@@ -5,54 +5,48 @@
  * and provides cleanup after all tests complete.
  */
 
-const http = require('http');
+async function makeRequest(method, url, data = null) {
+  try {
+    const options = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(5000),
+    };
 
-// Simple HTTP request helper
-function makeRequest(options, data) {
-  return new Promise((resolve, reject) => {
-    const req = http.request(options, (res) => {
-      let body = '';
-      res.on('data', (chunk) => (body += chunk));
-      res.on('end', () => {
-        resolve({
-          status: res.statusCode,
-          ok: res.statusCode >= 200 && res.statusCode < 300,
-          text: () => Promise.resolve(body),
-          json: () =>
-            Promise.resolve(
-              body && body.trim().length ? JSON.parse(body) : {}
-            ),
-        });
-      });
-    });
-    req.setTimeout(5000, () => req.destroy(new Error('Request timed out')));
-
-    req.on('error', reject);
-
-    if (data) {
-      req.write(data);
+    if (data && method === 'POST') {
+      options.body = JSON.stringify(data);
     }
-    req.end();
-  });
+
+    const response = await fetch(url, options);
+    return response;
+  } catch (error) {
+    throw new Error(`Request failed: ${error.message}`);
+  }
 }
 
 async function adkSessionHook(hookName, context) {
   const ADK_HOST = process.env.ADK_HOST || 'localhost';
-  const ADK_PORT = Number(process.env.ADK_PORT || 8000);
+  const ADK_PORT = parseInt(process.env.ADK_PORT || '8000');
   const APP_NAME = process.env.ADK_APP_NAME || 'weather_agent';
   const USER_ID = process.env.ADK_USER_ID || 'test_user';
+
+  const baseUrl = `http://${ADK_HOST}:${ADK_PORT}`;
 
   if (hookName === 'beforeAll') {
     // Collect all unique session IDs from tests
     const sessionIds = new Set();
 
     // Check if this is single-turn (multiple session IDs) or multi-turn (one session ID)
-    const tests = Array.isArray(context?.suite?.tests) ? context.suite.tests : [];
-    tests.forEach((test) => {
-      if (test.vars && test.vars.session_id) {
-        sessionIds.add(test.vars.session_id);
+    const tests = context.suite?.tests || [];
+    if (Array.isArray(tests)) {
+      for (const test of tests) {
+        if (test && typeof test === 'object' && test.vars && test.vars.session_id) {
+          sessionIds.add(test.vars.session_id);
+        }
       }
-    });
+    }
 
     // Default to shared session if no session_id variables found
     if (sessionIds.size === 0) {
@@ -63,17 +57,9 @@ async function adkSessionHook(hookName, context) {
 
     try {
       for (const sessionId of sessionIds) {
-        const options = {
-          hostname: ADK_HOST,
-          port: ADK_PORT,
-          path: `/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        };
+        const url = `${baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`;
 
-        const response = await makeRequest(options, JSON.stringify({ state: {} }));
+        const response = await makeRequest('POST', url, { state: {} });
 
         if (response.ok) {
           const sessionData = await response.json();
@@ -81,31 +67,25 @@ async function adkSessionHook(hookName, context) {
         } else if (response.status === 422) {
           console.log(`ℹ️  Session ${sessionId} already exists`);
         } else {
-          console.warn(`⚠️  Failed to create session ${sessionId}: ${response.status}`);
+          console.log(`⚠️  Failed to create session ${sessionId}: ${response.status}`);
         }
       }
     } catch (error) {
-      console.warn(`⚠️  Error connecting to ADK server: ${error.message}`);
-      console.warn('Make sure ADK server is running on http://localhost:8000');
+      console.log(`⚠️  Error connecting to ADK server: ${error.message}`);
+      console.log('Make sure ADK server is running on http://localhost:8000');
     }
 
     // Store session IDs for cleanup
     context._adkSessionIds = Array.from(sessionIds);
   } else if (hookName === 'afterAll') {
-    console.log(`\n🧹 Cleaning up ADK sessions...`);
+    console.log('\n🧹 Cleaning up ADK sessions...');
 
     const sessionIds = context._adkSessionIds || ['conversation'];
 
     try {
       for (const sessionId of sessionIds) {
-        const options = {
-          hostname: ADK_HOST,
-          port: ADK_PORT,
-          path: `/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`,
-          method: 'DELETE',
-        };
-
-        await makeRequest(options);
+        const url = `${baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`;
+        await makeRequest('DELETE', url);
       }
       console.log('✅ All sessions cleaned up');
     } catch (error) {

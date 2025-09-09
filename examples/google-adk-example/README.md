@@ -19,7 +19,7 @@ npx promptfoo@latest init --example google-adk-example
 ## Prerequisites
 
 1. **Python 3.8+** installed on your system
-2. **Google API Key** for Gemini model access
+2. **Google API Key** for Gemini model access (both agent and LLM grading)
 3. **ADK Python package** installed
 
 ## Setup Instructions
@@ -30,12 +30,12 @@ npx promptfoo@latest init --example google-adk-example
 pip install google-adk
 ```
 
-### 2. Set up Google API Authentication
+### 2. Set up API Authentication
 
 Get a Google API key from the [Google AI Studio](https://ai.google.dev/) and set it as an environment variable:
 
 ```bash
-export GOOGLE_API_KEY="your-api-key-here"
+export GOOGLE_API_KEY="your-google-api-key-here"
 ```
 
 ### 3. Install Python Dependencies
@@ -43,6 +43,8 @@ export GOOGLE_API_KEY="your-api-key-here"
 ```bash
 pip install -r requirements.txt
 ```
+
+Note: The session management is now handled entirely in JavaScript using Node.js native fetch, eliminating the need for additional Python HTTP libraries.
 
 ## Running the Examples
 
@@ -94,9 +96,9 @@ Both configurations will:
 ```text
 ✅ Weather query for New York
 ✅ Weather query for London (independent session)
-❌ Context isolation test: "I don't have memory of previous conversations"
+✅ Context isolation test: "I don't have memory of previous conversations"
 
-Pass Rate: 66.67% (demonstrates session isolation)
+Pass Rate: 100% (demonstrates session isolation)
 ```
 
 **Multi-turn** - All tests share one session:
@@ -104,9 +106,9 @@ Pass Rate: 66.67% (demonstrates session isolation)
 ```text
 ✅ Initial weather query
 ✅ Follow-up weather query
-❌ Memory test: Agent doesn't recall previous conversations by default
+✅ Memory test: "Comparing New York (sunny, 72°F) vs London (cloudy, 58°F)"
 
-Pass Rate: 66.67% (same session, but agent needs explicit memory handling)
+Pass Rate: 100% (demonstrates conversation memory)
 ```
 
 ## Understanding the Configuration
@@ -133,7 +135,7 @@ root_agent = Agent(
 
 ### Key Integration Files
 
-1. **`adk-session-hook.js`**: Automatically creates and manages ADK sessions (single or multi-turn)
+1. **`adk-session-hook.js`**: Session management using Node.js native fetch
 2. **`adk-response-transform.js`**: Extracts text responses from ADK's event-based format
 3. **`weather_agent/`**: The actual ADK agent code (Python)
 

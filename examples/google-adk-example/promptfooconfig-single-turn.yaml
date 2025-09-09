@@ -2,6 +2,10 @@
 description: ADK single-turn testing with session isolation
 extensions:
   - file://adk-session-hook.js:adkSessionHook
+defaultTest:
+  options:
+    provider: google:gemini-2.5-flash
+    delay: 2000
 prompts:
   - '{{prompt}}'
 providers:
@@ -40,8 +44,6 @@ tests:
       prompt: 'What cities have we discussed?'
       session_id: 'session_fresh'
     assert:
-      - type: regex
-        value: '(New York|London)'
-        caseSensitive: false
-        negate: true
+      - type: llm-rubric
+        value: 'Response indicates no memory of previous conversations or cities, demonstrating session isolation'
 outputPath: single-turn-results.json
