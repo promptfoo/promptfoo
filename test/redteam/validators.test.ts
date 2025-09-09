@@ -325,7 +325,7 @@ describe('redteamConfigSchema', () => {
     const sampleStrategies = REDTEAM_ALL_STRATEGIES.filter(
       (id) => id !== 'default' && id !== 'basic',
     ).slice(0, 10);
-    
+
     const input = {
       plugins: samplePlugins,
       strategies: sampleStrategies,
@@ -335,12 +335,11 @@ describe('redteamConfigSchema', () => {
     expect(result.success).toBe(true);
     expect(result.data?.plugins).toBeDefined();
     expect(result.data?.strategies).toBeDefined();
-    
+
     // Verify the structure is correct
     const filteredPlugins = samplePlugins.filter((id) => !COLLECTIONS.includes(id as any));
     expect(result.data?.plugins).toHaveLength(filteredPlugins.length);
-    
-    const uniqueStrategies = [...new Set(sampleStrategies)];
+
     expect(result.data?.strategies?.length).toBeGreaterThan(0);
   });
 
@@ -754,9 +753,9 @@ describe('redteamConfigSchema', () => {
       };
       const result = RedteamConfigSchema.safeParse(input);
       expect(result.success).toBe(true);
-      
+
       const actualPlugins = result.data?.plugins || [];
-      
+
       // Test key plugins exist to avoid memory issues with full list
       const keyPluginsToCheck = [
         'harmful:violent-crime',
@@ -765,17 +764,17 @@ describe('redteamConfigSchema', () => {
         'ascii-smuggling',
         'bias:age',
       ];
-      
+
       for (const pluginId of keyPluginsToCheck) {
         const found = actualPlugins.find((p) => p.id === pluginId && p.numTests === 3);
         expect(found).toBeDefined();
       }
-      
+
       // Verify we have a reasonable number of plugins (should be 40+)
       expect(actualPlugins.length).toBeGreaterThan(35);
-      
+
       // Verify no duplicates
-      const pluginIds = actualPlugins.map(p => p.id);
+      const pluginIds = actualPlugins.map((p) => p.id);
       const uniqueIds = new Set(pluginIds);
       expect(pluginIds.length).toBe(uniqueIds.size);
     });

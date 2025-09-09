@@ -43,13 +43,13 @@ export function sanitizeUrl(url: string): string {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         }
       }
-    } catch (paramError) {
+    } catch {
       // If search params handling fails, continue without sanitizing them
       // Silent failure to avoid console noise in tests
     }
 
     return sanitizedUrl.toString();
-  } catch (error) {
+  } catch {
     // Silent failure to avoid console noise in tests
     return url;
   }
