@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import Review from './Review';
+import { MemoryRouter } from 'react-router-dom';
 
 // Mock the dependencies
 vi.mock('@app/hooks/useEmailVerification', () => ({
@@ -59,6 +60,14 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: () => mockUseRedTeamConfig(),
 }));
 
+const mockUseProbeLimit = vi.fn();
+
+vi.mock('@app/hooks/useProbeLimit', () => ({
+  useProbeLimit: () => mockUseProbeLimit(),
+}));
+
+const originalEnv = process.env;
+
 describe('Review Component', () => {
   const defaultConfig = {
     description: 'Test Configuration',
@@ -79,6 +88,20 @@ describe('Review Component', () => {
       config: defaultConfig,
       updateConfig: mockUpdateConfig,
     });
+
+    mockUseProbeLimit.mockReturnValue({
+      probeLimit: {
+        enabled: false,
+        limit: 10000,
+        usedProbes: 0,
+        remainingProbes: 10000,
+        hasExceeded: false,
+      },
+    });
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
   });
 
   describe('Component Integration', () => {
@@ -212,6 +235,120 @@ describe('Review Component', () => {
     expect(defaultTestVariables).toBeInTheDocument();
 
     expect(defaultTestVariables.closest('paper')).toBeNull();
+  });
+
+  describe('Probe Limit UI', () => {
+    it('should render the Red Team Usage panel when probeLimit.enabled is true', () => {
+      mockUseProbeLimit.mockReturnValue({
+        probeLimit: {
+          enabled: true,
+          limit: 10000,
+          usedProbes: 2500,
+          remainingProbes: 7500,
+          hasExceeded: false,
+        },
+      });
+
+      render(
+        <MemoryRouter>
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText(/Red Team Usage/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Probe Limit Enforcement', () => {
+    beforeEach(() => {
+      process.env = {
+        ...originalEnv,
+        PROMPTFOO_DISABLE_PROBE_LIMITS: 'false',
+      };
+    });
+
+    it("should render an error alert and disable the Run button with the label 'Limit Exceeded' when probeLimit.enabled is true and probeLimit.hasExceeded is true", () => {
+      mockUseProbeLimit.mockReturnValue({
+        probeLimit: {
+          enabled: true,
+          hasExceeded: true,
+          limit: 10000,
+          usedProbes: 9000,
+          remainingProbes: 1000,
+        },
+      });
+
+      render(
+        <MemoryRouter>
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      const runButton = screen.getByRole('button', { name: /Limit Exceeded/i });
+      expect(runButton).toBeDisabled();
+      expect(runButton).toHaveTextContent('Limit Exceeded');
+
+      const errorAlert = screen.getByText(/You have exceeded your monthly probe limit/i);
+      expect(errorAlert).toBeInTheDocument();
+    });
+
+    it("renders a warning alert about low remaining probes and enables the Run button with the label 'Run Now' when probeLimit.enabled is true, probeLimit.hasExceeded is false, exceedsProbeLimit is false, and probeLimit.remainingProbes is less than 5000", () => {
+      mockUseProbeLimit.mockReturnValue({
+        probeLimit: {
+          enabled: true,
+          hasExceeded: false,
+          limit: 10000,
+          remainingProbes: 4000,
+          usedProbes: 6000,
+        },
+      });
+
+      render(
+        <MemoryRouter>
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText(/4,000 probes remaining/i)).toBeInTheDocument();
+      const runButton = screen.getByRole('button', { name: /Run Now/i });
+      expect(runButton).toBeEnabled();
+    });
+
+    it('Run button is not disabled when probeLimit.enabled is false, even if probeLimit.hasExceeded is true', () => {
+      mockUseProbeLimit.mockReturnValue({
+        probeLimit: {
+          enabled: false,
+          hasExceeded: true,
+          remainingProbes: 0,
+          limit: 10000,
+          usedProbes: 10000,
+        },
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const runButton = screen.getByRole('button', { name: /Run Now/i });
+      expect(runButton).toBeInTheDocument();
+      expect(runButton).not.toBeDisabled();
+    });
   });
 
   it('should not treat indented lines ending with colons as section headers', () => {
