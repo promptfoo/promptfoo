@@ -134,9 +134,11 @@ export const RunOptions: React.FC<RunOptionsProps> = ({
                 const safe = Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
                 updateRunOption('delay', safe);
                 setDelayInput(String(safe));
-                // Enforce mutual exclusivity
-                updateRunOption('maxConcurrency', 1);
-                setMaxConcurrencyInput('1');
+                // Enforce mutual exclusivity only when delay > 0
+                if (safe > 0) {
+                  updateRunOption('maxConcurrency', 1);
+                  setMaxConcurrencyInput('1');
+                }
               }}
               onKeyDown={(e) => {
                 if (['e', 'E', '+', '-', '.'].includes(e.key)) {
