@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
 import CheckIcon from '@mui/icons-material/Check';
 import Layout from '@theme/Layout';
@@ -23,7 +24,8 @@ function PricingTable() {
       features: [
         'All LLM evaluation features',
         'All model providers and integrations',
-        'No usage limits',
+        'No usage limits on Evals',
+        '10,000 probes per month for red teaming',
         'Custom integration with your own app',
         //'Data visualizations',
         //'Dataset generation',
