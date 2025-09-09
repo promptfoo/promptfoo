@@ -1,10 +1,6 @@
 import logger from '../logger';
 import { runPythonCode } from './wrapper';
-import {
-  runPythonLegacy,
-  PythonExecutionError,
-  PythonAST,
-} from './pythonCore';
+import { runPythonLegacy, PythonExecutionError, PythonAST } from './pythonCore';
 
 // Re-export for external use
 export { PythonAST, PythonExecutionError } from './pythonCore';

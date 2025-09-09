@@ -1,0 +1,13 @@
+providers:
+  - id: "python:./provider.py"
+tests:
+  - vars:
+      name: Syntax error test
+    assert:
+      - type: python  
+        value: "def bad_function(: return True"
+  - vars:
+      name: Missing function test
+    assert:
+      - type: python
+        value: "def some_function(): return True"

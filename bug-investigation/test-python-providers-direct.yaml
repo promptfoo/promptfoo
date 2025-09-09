@@ -1,0 +1,5 @@
+providers:
+  - id: python:file://simple-provider.py  # Direct file reference
+tests:
+  - vars:
+      topic: test

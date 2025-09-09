@@ -1,0 +1,5 @@
+providers:
+  - file://providers.yaml
+tests:
+  - vars:
+      topic: test

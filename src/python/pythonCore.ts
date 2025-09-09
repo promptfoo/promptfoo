@@ -1,13 +1,3 @@
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
-
-import { PythonShell } from 'python-shell';
-import { getEnvBool, getEnvString } from '../envars';
-import logger from '../logger';
-import { safeJsonStringify } from '../util/json';
-import { execAsync } from './execAsync';
-import type { Options as PythonShellOptions } from 'python-shell';
 
 // Re-export everything from legacy for now, then we can optimize internally
 export {
@@ -27,7 +17,7 @@ export class PythonExecutionError extends Error {
     public readonly pythonPath?: string,
     public readonly functionName?: string,
     public readonly cause?: Error,
-    public readonly suggestions?: string[]
+    public readonly suggestions?: string[],
   ) {
     super(message);
     this.name = 'PythonExecutionError';
@@ -39,10 +29,10 @@ export class PythonExecutionError extends Error {
       pythonPath?: string;
       functionName?: string;
       content?: string;
-    }
+    },
   ): PythonExecutionError {
     const suggestions: string[] = [];
-    
+
     if (originalError.message.includes('is not defined')) {
       suggestions.push('Check function name spelling and availability');
       if (context.content) {
@@ -52,12 +42,12 @@ export class PythonExecutionError extends Error {
         }
       }
     }
-    
+
     if (originalError.message.includes('SyntaxError')) {
       suggestions.push('Check Python syntax and indentation');
       suggestions.push('Ensure code is properly formatted');
     }
-    
+
     if (originalError.message.includes('ModuleNotFoundError')) {
       suggestions.push('Install missing Python package or check import statement');
     }
@@ -67,21 +57,21 @@ export class PythonExecutionError extends Error {
       context.pythonPath,
       context.functionName,
       originalError,
-      suggestions
+      suggestions,
     );
   }
 
   toString(): string {
     let errorMsg = `${this.name}: ${this.message}`;
-    
+
     if (this.functionName) {
       errorMsg += `\nFunction: ${this.functionName}`;
     }
-    
+
     if (this.suggestions && this.suggestions.length > 0) {
       errorMsg += `\nSuggestions:\n  - ${this.suggestions.join('\n  - ')}`;
     }
-    
+
     return errorMsg;
   }
 }
@@ -104,19 +94,19 @@ export class PythonAST {
   static parse(content: string): PythonASTNode[] {
     const lines = content.split('\n');
     const nodes: PythonASTNode[] = [];
-    
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmedLine = line.trim();
-      
+
       // Function definitions
       const funcMatch = trimmedLine.match(/^def\s+(\w+)\s*\(([^)]*)\)\s*:/);
       if (funcMatch) {
         const args = funcMatch[2]
           .split(',')
-          .map(arg => arg.trim().split('=')[0].split(':')[0].trim())
+          .map((arg) => arg.trim().split('=')[0].split(':')[0].trim())
           .filter(Boolean);
-          
+
         nodes.push({
           type: 'function',
           name: funcMatch[1],
@@ -124,7 +114,7 @@ export class PythonAST {
           args,
         });
       }
-      
+
       // Class definitions
       const classMatch = trimmedLine.match(/^class\s+(\w+)(?:\([^)]*\))?\s*:/);
       if (classMatch) {
@@ -134,12 +124,12 @@ export class PythonAST {
           line: i + 1,
         });
       }
-      
+
       // Import statements
       const importMatch = trimmedLine.match(/^(?:from\s+\w+\s+)?import\s+(.+)/);
       if (importMatch) {
-        const imports = importMatch[1].split(',').map(imp => imp.trim());
-        imports.forEach(imp => {
+        const imports = importMatch[1].split(',').map((imp) => imp.trim());
+        imports.forEach((imp) => {
           nodes.push({
             type: 'import',
             name: imp.split(' as ')[0].trim(),
@@ -148,35 +138,33 @@ export class PythonAST {
         });
       }
     }
-    
+
     return nodes;
   }
-  
+
   /**
    * Extract all function names from Python content
    */
   static getFunctionNames(content: string): string[] {
     return this.parse(content)
-      .filter(node => node.type === 'function')
-      .map(node => node.name);
+      .filter((node) => node.type === 'function')
+      .map((node) => node.name);
   }
-  
+
   /**
    * Check if content has complete function definitions
    */
   static hasFunctions(content: string): boolean {
-    return this.parse(content).some(node => node.type === 'function');
+    return this.parse(content).some((node) => node.type === 'function');
   }
-  
+
   /**
    * Detect if content is a Python expression vs complete code
    */
   static isExpression(content: string): boolean {
     const nodes = this.parse(content);
-    const hasStructuralElements = nodes.some(node => 
-      ['function', 'class'].includes(node.type)
-    );
-    
+    const hasStructuralElements = nodes.some((node) => ['function', 'class'].includes(node.type));
+
     // If no structural elements, it's likely an expression
     return !hasStructuralElements;
   }

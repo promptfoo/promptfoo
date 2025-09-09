@@ -1,7 +1,7 @@
 import fs from 'fs';
 
 import { state, validatePythonPath } from '../../src/python/pythonUtils';
-import { runPython as runPythonLegacy } from '../../src/python/pythonCore';
+import { runPythonLegacy } from '../../src/python/pythonCore';
 import { runPythonCode } from '../../src/python/wrapper';
 
 jest.mock('../../src/esm');
@@ -15,7 +15,7 @@ jest.mock('../../src/python/pythonCore', () => {
   const originalModule = jest.requireActual('../../src/python/pythonCore');
   return {
     ...originalModule,
-    runPython: jest.fn(originalModule.runPython),
+    runPythonLegacy: jest.fn(originalModule.runPythonLegacy),
   };
 });
 

@@ -1,0 +1,10 @@
+- vars:
+    name: Should PASS
+  assert:
+  - type: python
+    value: file://bug-investigation/good_assertion.py
+- vars:
+    name: Should FAIL
+  assert:
+  - type: python
+    value: file://bug-investigation/bad_assertion.py

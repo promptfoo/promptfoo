@@ -1,0 +1,25 @@
+providers:
+  - id: "python:./provider.py"
+tests:
+  - vars:
+      name: AST function detection test
+    assert:
+      - type: python  
+        value: |
+          import json
+          import os
+          
+          def calculate_score(output, context):
+              """Advanced function with multiple logic branches"""
+              if not output:
+                  return {"pass": False, "score": 0, "reason": "No output"}
+              
+              # Complex scoring logic
+              words = output.strip().split()
+              score = min(len(words) / 10.0, 1.0)
+              
+              return {
+                  "pass": score > 0.5,
+                  "score": score,
+                  "reason": f"Word count scoring: {len(words)} words"
+              }

@@ -1,0 +1,7 @@
+prompts:
+  - file://simple-prompt.py
+providers:
+  - openai:gpt-4o-mini
+tests:
+  - vars:
+      topic: test

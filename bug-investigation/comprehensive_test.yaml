@@ -1,0 +1,30 @@
+description: "Comprehensive test of smart Python runner features"
+providers:
+  - id: "python:./bug-investigation/provider.py"
+prompts:
+  - "What is 2+2?"
+tests:
+  - vars:
+      name: "File reference assertion"
+    assert:
+      - type: python
+        value: file://good_assertion.py
+  - vars:
+      name: "Inline Python assertion"
+    assert:
+      - type: python
+        value: |
+          def main(output, context):
+              import re
+              # Test if output contains numbers
+              has_numbers = bool(re.search(r'\d', output))
+              return {
+                  "pass": has_numbers,
+                  "score": 1.0 if has_numbers else 0.0,
+                  "reason": f"Output contains numbers: {has_numbers}"
+              }
+  - vars:
+      name: "Raw expression assertion"
+    assert:
+      - type: python
+        value: 'return {"pass": True, "score": 0.8, "reason": "Raw expression test"}'

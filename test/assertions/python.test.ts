@@ -223,10 +223,11 @@ describe('Python file references', () => {
     });
 
     expect(runPythonSmart).toHaveBeenCalledTimes(1);
-    expect(runPythonSmart).toHaveBeenCalledWith(expect.stringContaining('def main(output, context)'), 'main', [
-      output,
-      { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse },
-    ]);
+    expect(runPythonSmart).toHaveBeenCalledWith(
+      expect.stringContaining('def main(output, context)'),
+      'main',
+      [output, { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse }],
+    );
 
     expect(result).toMatchObject({
       pass: true,
@@ -289,10 +290,11 @@ describe('Python file references', () => {
       });
 
       expect(runPythonSmart).toHaveBeenCalledTimes(1);
-      expect(runPythonSmart).toHaveBeenCalledWith(expect.stringContaining('def main(output, context)'), 'main', [
-        output,
-        { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse },
-      ]);
+      expect(runPythonSmart).toHaveBeenCalledWith(
+        expect.stringContaining('def main(output, context)'),
+        'main',
+        [output, { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse }],
+      );
 
       expect(result).toMatchObject({
         pass: expectedPass,
@@ -342,16 +344,20 @@ describe('Python file references', () => {
         providerResponse,
       });
 
-      expect(runPythonSmart).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
-        output,
-        {
-          prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-          vars: {},
-          test: {},
-          provider,
-          providerResponse,
-        },
-      ]);
+      expect(runPythonSmart).toHaveBeenCalledWith(
+        path.resolve('/path/to/assert.py'),
+        'get_assert',
+        [
+          output,
+          {
+            prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
+            vars: {},
+            test: {},
+            provider,
+            providerResponse,
+          },
+        ],
+      );
 
       expect(result).toMatchObject({
         pass: expectedPass,

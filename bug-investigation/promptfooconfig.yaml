@@ -1,0 +1,4 @@
+providers:
+  - id: "python:./provider.py"
+tests:
+  - file://tests.yaml

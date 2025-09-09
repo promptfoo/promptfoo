@@ -1,0 +1,13 @@
+providers:
+  - id: "python:./provider.py"
+tests:
+  - vars:
+      name: Direct assertion test
+    assert:
+      - type: python  
+        value: "def get_assert(output, context): return {'pass': True, 'score': 1, 'reason': 'Direct test'}"
+  - vars:
+      name: File reference test
+    assert:
+      - type: python
+        value: file://good_assertion.py

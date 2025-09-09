@@ -1,0 +1,6 @@
+description: "Test case dereferencing with Python files"
+providers:
+  - id: "python:file://bug-investigation/provider.py"
+prompts:
+  - "file://bug-investigation/simple-prompt.py"
+tests: "file://bug-investigation/tests.yaml"

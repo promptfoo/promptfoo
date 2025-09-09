@@ -1,0 +1,13 @@
+providers:
+  - id: "python:./provider.py"
+tests:
+  - vars:
+      name: Should PASS Inline
+    assert:
+    - type: python
+      value: file://good_assertion.py
+  - vars:
+      name: Should FAIL Inline
+    assert:
+    - type: python
+      value: file://bad_assertion.py
