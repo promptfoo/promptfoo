@@ -1,5 +1,5 @@
 import packageJson from '../package.json';
-import { getEnvInt, getEnvString } from './envars';
+import { getEnvBool, getEnvInt, getEnvString } from './envars';
 
 export * from './providers/constants';
 
@@ -56,3 +56,9 @@ export const R_ENDPOINT = 'https://r.promptfoo.app/';
 export const PROBE_LIMIT_EMAIL = 'sales@promptfoo.dev';
 export const PROBE_LIMIT_URL = 'https://promptfoo.dev/pricing/';
 export const LIMITS_DOCS_PAGE = 'https://promptfoo.dev/docs/red-team/open-source-limits/';
+
+// Feature flag to control probe limits enforcement (disabled by default to keep feature hidden)
+export const PROBE_LIMITS_ENFORCEMENT_ENABLED = getEnvBool(
+  'PROMPTFOO_PROBE_LIMITS_ENFORCEMENT_ENABLED',
+  false,
+);

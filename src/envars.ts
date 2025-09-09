@@ -55,6 +55,7 @@ type EnvVars = {
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_TRACING_ENABLED?: boolean;
   PROMPTFOO_DISABLE_UNBLOCKING?: boolean;
+  PROMPTFOO_PROBE_LIMITS_ENFORCEMENT_ENABLED?: boolean;
 
   //=========================================================================
   // promptfoo configuration options

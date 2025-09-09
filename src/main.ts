@@ -33,6 +33,7 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
 import { redteamUsageCommand } from './redteam/commands/usage';
+import { PROBE_LIMITS_ENFORCEMENT_ENABLED } from './constants';
 import { checkForUpdates } from './updates';
 import { setupEnv } from './util';
 import { loadDefaultConfig } from './util/config/default';
@@ -134,7 +135,10 @@ async function main() {
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
-  redteamUsageCommand(redteamBaseCommand);
+  // Only add usage command if probe limits enforcement is enabled
+  if (PROBE_LIMITS_ENFORCEMENT_ENABLED) {
+    redteamUsageCommand(redteamBaseCommand);
+  }
   simbaCommand(redteamBaseCommand, defaultConfig);
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);

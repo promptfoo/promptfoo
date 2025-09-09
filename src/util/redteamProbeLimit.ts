@@ -1,10 +1,16 @@
 import chalk from 'chalk';
 import { and, eq, gte } from 'drizzle-orm';
-import { LIMITS_DOCS_PAGE, PROBE_LIMIT_EMAIL, PROBE_LIMIT_URL } from '../constants';
+import {
+  LIMITS_DOCS_PAGE,
+  PROBE_LIMIT_EMAIL,
+  PROBE_LIMIT_URL,
+  PROBE_LIMITS_ENFORCEMENT_ENABLED,
+} from '../constants';
 import { getDb } from '../database';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';
 import { ALLOWED_PROBE_LIMIT_EXCEEDANCE, MONTHLY_PROBE_LIMIT } from '../redteam/constants';
+import telemetry from '../telemetry';
 import { isEnterpriseCustomer } from './cloud';
 
 const CONTACT_MESSAGE = `Contact ${PROBE_LIMIT_EMAIL} to upgrade or visit ${PROBE_LIMIT_URL} to upgrade to our enterprise plan.`;
@@ -76,13 +82,25 @@ export async function checkMonthlyProbeLimit(): Promise<ProbeStatus> {
 
   const usedProbes = await getMonthlyRedteamProbeUsage();
   const remainingProbes = Math.max(0, MONTHLY_PROBE_LIMIT - usedProbes);
+  const hasExceeded = usedProbes >= MONTHLY_PROBE_LIMIT;
 
-  return {
-    hasExceeded: usedProbes >= MONTHLY_PROBE_LIMIT,
+  // Record telemetry for probe usage analytics
+  telemetry.record('feature_used', {
+    feature: 'redteam_probe_limits_check',
     usedProbes,
     remainingProbes,
     limit: MONTHLY_PROBE_LIMIT,
-    enabled: true,
+    hasExceeded,
+    enforcementEnabled: PROBE_LIMITS_ENFORCEMENT_ENABLED,
+    utilizationPercentage: Math.round((usedProbes / MONTHLY_PROBE_LIMIT) * 100),
+  });
+
+  return {
+    hasExceeded,
+    usedProbes,
+    remainingProbes,
+    limit: MONTHLY_PROBE_LIMIT,
+    enabled: PROBE_LIMITS_ENFORCEMENT_ENABLED,
   };
 }
 
@@ -200,8 +218,22 @@ export type ProbeCheckResult =
 export async function checkProbeLimit(estimatedProbes?: number): Promise<ProbeCheckResult> {
   const probeStatus = await checkMonthlyProbeLimit();
 
+  // If enforcement is disabled, always allow the operation to proceed
+  if (!probeStatus.enabled) {
+    return { canProceed: true, probeStatus };
+  }
+
   // Check if user has exceeded the monthly limit
   if (probeStatus.hasExceeded) {
+    // Record telemetry for limit enforcement
+    telemetry.record('feature_used', {
+      feature: 'redteam_probe_limits_enforced',
+      reason: 'monthly_limit_exceeded',
+      usedProbes: probeStatus.usedProbes,
+      limit: probeStatus.limit,
+      estimatedProbes: estimatedProbes || 0,
+    });
+
     const errorMessage = createFormattedBox(
       '🚫 PROBE LIMIT EXCEEDED',
       `${probeStatus.usedProbes.toLocaleString()} / ${probeStatus.limit.toLocaleString()} probes used this month`,
@@ -225,6 +257,16 @@ export async function checkProbeLimit(estimatedProbes?: number): Promise<ProbeCh
       estimatedProbes > probeStatus.remainingProbes + ALLOWED_PROBE_LIMIT_EXCEEDANCE;
 
     if (exceedsProbeLimit) {
+      // Record telemetry for scan blocked due to exceeding limits
+      telemetry.record('feature_used', {
+        feature: 'redteam_probe_limits_enforced',
+        reason: 'scan_exceeds_limit',
+        estimatedProbes,
+        remainingProbes: probeStatus.remainingProbes,
+        limit: probeStatus.limit,
+        excessAmount: estimatedProbes - probeStatus.remainingProbes,
+      });
+
       const errorMessage = createFormattedBox(
         '🚫 SCAN EXCEEDS LIMIT',
         `Need ${estimatedProbes.toLocaleString()} / Have ${probeStatus.remainingProbes.toLocaleString()} probes remaining`,
