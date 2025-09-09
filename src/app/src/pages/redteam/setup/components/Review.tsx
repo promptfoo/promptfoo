@@ -46,8 +46,8 @@ import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
-import { RunOptions } from './RunOptions';
-import { getEstimatedDuration, getEstimatedProbes } from './strategies/utils';
+import { RunOptionsContent } from './RunOptions';
+import { getEstimatedDuration } from './strategies/utils';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
 
@@ -1040,28 +1040,15 @@ export default function Review({
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Typography variant="body1" color="text.secondary">
-              Estimated Probes:
+              Estimated Duration:
             </Typography>
           </Box>
           <Typography variant="body1" fontWeight="bold" color="primary.main">
-            {getEstimatedProbes(config).toLocaleString()}
+            {getEstimatedDuration(config)}
           </Typography>
-          <Tooltip title="Probes are the number of requests to target application">
+          <Tooltip title="Estimated time includes test generation and probe execution. Actual time may vary based on target response times and network conditions.">
             <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
           </Tooltip>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Typography variant="body1" color="text.secondary">
-                Estimated Duration:
-              </Typography>
-            </Box>
-            <Typography variant="body1" fontWeight="bold" color="primary.main">
-              {getEstimatedDuration(config)}
-            </Typography>
-            <Tooltip title="Estimated time includes test generation and probe execution. Actual time may vary based on target response times and network conditions.">
-              <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
-            </Tooltip>
-          </Box>
         </Box>
 
         <Paper elevation={2} sx={{ p: 3 }}>
