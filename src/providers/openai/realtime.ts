@@ -93,8 +93,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   // Build base WebSocket URL from configured API base URL
   private getWebSocketBase(): string {
-    const apiUrl = this.getApiUrl();
-    return apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+    const base = this.getApiUrl();
+    // Convert scheme and strip trailing slashes
+    const wsBase = base.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
+    return wsBase.replace(/\/+$/, '');
   }
 
   // Build WebSocket URL for realtime model endpoint
@@ -107,6 +109,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private getClientSecretSocketUrl(clientSecret: string): string {
     const wsBase = this.getWebSocketBase();
     return `${wsBase}/realtime/socket?client_secret=${encodeURIComponent(clientSecret)}`;
+  }
+
+  // Compute Origin header from apiBaseUrl (match scheme and host)
+  private getWebSocketOrigin(): string {
+    const u = new URL(this.getApiUrl());
+    const scheme = u.protocol === 'http:' ? 'http:' : 'https:';
+    return `${scheme}//${u.host}`;
   }
 
   // Add method to reset audio state
@@ -184,7 +193,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       const wsOptions = {
         headers: {
           'User-Agent': 'promptfoo Realtime API Client',
-          Origin: 'https://api.openai.com',
+          Origin: this.getWebSocketOrigin(),
         },
         handshakeTimeout: 10000,
         perMessageDeflate: false,
@@ -794,7 +803,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           Authorization: `Bearer ${this.getApiKey()}`,
           'OpenAI-Beta': 'realtime=v1',
           'User-Agent': 'promptfoo Realtime API Client',
-          Origin: 'https://api.openai.com',
+          Origin: this.getWebSocketOrigin(),
         },
         handshakeTimeout: 10000,
         perMessageDeflate: false,
@@ -1232,7 +1241,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             Authorization: `Bearer ${this.getApiKey()}`,
             'OpenAI-Beta': 'realtime=v1',
             'User-Agent': 'promptfoo Realtime API Client',
-            Origin: 'https://api.openai.com',
+            Origin: this.getWebSocketOrigin(),
           },
           handshakeTimeout: 10000,
           perMessageDeflate: false,
