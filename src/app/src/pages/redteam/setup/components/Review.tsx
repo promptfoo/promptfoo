@@ -95,7 +95,7 @@ export default function Review({
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
   const estimatedProbes = useMemo(() => getEstimatedProbes(config), [config]);
   const exceedsProbeLimit = useMemo(() => {
-    if (!probeLimit) {
+    if (!probeLimit || !probeLimit.enabled) {
       return false;
     }
     return estimatedProbes > probeLimit.remainingProbes + ALLOWED_PROBE_LIMIT_EXCEEDANCE;
