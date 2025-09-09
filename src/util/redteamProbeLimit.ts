@@ -87,6 +87,8 @@ export async function checkMonthlyProbeLimit(): Promise<ProbeStatus> {
   });
 
   if (isEnterprise) {
+    // Return zeros to enterprise customers to hide limits UI completely
+    // while telemetry above captures real usage data for analytics
     return {
       hasExceeded: false,
       usedProbes: 0,
