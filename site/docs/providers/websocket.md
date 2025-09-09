@@ -98,10 +98,10 @@ Note that when using the WebSocket provider, the connection will be opened for e
 Supported config options:
 
 | Option            | Type   | Description                                                                                                              |
-| ----------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| ----------------- | ------ | ------------------------------------------------------------------------------------------------------------------------ |
 | url               | string | The WebSocket URL to connect to. If not provided, the `id` of the provider will be used as the URL.                      |
 | messageTemplate   | string | A template string for the message to be sent over the WebSocket connection. Supports Nunjucks templating.                |
-| transformResponse | string | Function                                                                                                                 | A function or string representation of a function to parse the response. If not provided, the entire response will be returned as the output. |
+| transformResponse | string | A function body or string to parse the response. If not provided, the entire response will be returned as the output.    |
 | timeoutMs         | number | The timeout in milliseconds for the WebSocket connection. Defaults to 10000 (10 seconds) if not specified.               |
 | headers           | object | A map of HTTP headers to include in the WebSocket connection request. Useful for authentication or other custom headers. |
 
