@@ -91,7 +91,9 @@ export const RunOptions: React.FC<RunOptionsProps> = ({
                   return;
                 }
                 const parsed = Number(numTestsInput);
-                updateConfig('numTests', parsed);
+                const safe = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+                updateConfig('numTests', safe);
+                setNumTestsInput(String(safe));
               }}
               onKeyDown={(e) => {
                 if (['e', 'E', '+', '-', '.'].includes(e.key)) {
