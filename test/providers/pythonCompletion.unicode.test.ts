@@ -35,7 +35,7 @@ describe('PythonProvider Unicode handling', () => {
     fs.writeFileSync(scriptPath, scriptContent);
     return new PythonProvider(scriptPath, {
       id: `python:${scriptName}`,
-      config: { basePath: tempDir },
+      config: { basePath: tempDir, persistent: false },
     });
   };
 
