@@ -96,7 +96,7 @@ prompts:
   - 'Refactor the authentication module to use async/await'
 ```
 
-> **Note:** when using `acceptEdits` and tools that allow side effects like writing to files, you'll need to consider how you will reset the files after each test run. See the [Testing with Side Effects](#testing-with-side-effects) section for more information.
+> **Note:** when using `acceptEdits` and tools that allow side effects like writing to files, you'll need to consider how you will reset the files after each test run. See the [Managing Side Effects](#managing-side-effects) section for more information.
 
 ## Supported Parameters
 
