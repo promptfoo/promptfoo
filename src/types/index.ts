@@ -1194,10 +1194,13 @@ export interface LoadApiProviderContext {
   env?: EnvOverrides;
 }
 
-export type EvalResultsFilterMode =
-  | 'all'
-  | 'failures'
-  | 'different'
-  | 'highlights'
-  | 'errors'
-  | 'passes';
+export const EvalResultsFilterMode = z.enum([
+  'all',
+  'failures',
+  'different',
+  'highlights',
+  'errors',
+  'passes',
+]);
+
+export type EvalResultsFilterMode = z.infer<typeof EvalResultsFilterMode>;
