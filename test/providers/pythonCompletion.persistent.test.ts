@@ -30,7 +30,7 @@ describe('PythonProvider Persistent Mode', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Mock file system operations
     mockFs.readFileSync = jest.fn().mockReturnValue('mock file content');
     mockPath.resolve = jest.fn().mockReturnValue('/absolute/path/to/script.py');
@@ -133,15 +133,19 @@ describe('PythonProvider Persistent Mode', () => {
 
       expect(mockManagerInstance.callMethod).toHaveBeenCalledWith(
         'call_api',
-        ['test prompt', expect.any(Object), expect.objectContaining({
-          vars: { test: 'value' },
-          traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
-        })],
+        [
+          'test prompt',
+          expect.any(Object),
+          expect.objectContaining({
+            vars: { test: 'value' },
+            traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+          }),
+        ],
         expect.any(Object),
         expect.objectContaining({
           vars: { test: 'value' },
           traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
-        })
+        }),
       );
 
       expect(result).toEqual({
@@ -161,7 +165,7 @@ describe('PythonProvider Persistent Mode', () => {
         'call_embedding_api',
         ['test text', expect.any(Object)],
         expect.any(Object),
-        expect.any(Object)
+        expect.any(Object),
       );
 
       expect(result).toEqual({
@@ -180,7 +184,7 @@ describe('PythonProvider Persistent Mode', () => {
         'call_classification_api',
         ['test text', expect.any(Object)],
         expect.any(Object),
-        expect.any(Object)
+        expect.any(Object),
       );
 
       expect(result).toEqual({
@@ -191,7 +195,7 @@ describe('PythonProvider Persistent Mode', () => {
     it('should handle custom function names', async () => {
       // First clear the mock to reset call history
       jest.clearAllMocks();
-      
+
       // Mock parsePathOrGlob to return function name before creating provider
       const { parsePathOrGlob } = require('../../src/util');
       parsePathOrGlob.mockReturnValue({
@@ -235,7 +239,7 @@ describe('PythonProvider Persistent Mode', () => {
         'custom_function',
         expect.any(Array),
         expect.any(Object),
-        expect.any(Object)
+        expect.any(Object),
       );
     });
   });
@@ -282,7 +286,7 @@ describe('PythonProvider Persistent Mode', () => {
       await provider.callApi('test prompt');
 
       expect(loggerSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Persistent mode failed, falling back')
+        expect.stringContaining('Persistent mode failed, falling back'),
       );
     });
   });
@@ -357,7 +361,7 @@ describe('PythonProvider Persistent Mode', () => {
     it('should use separate cache keys for persistent mode', async () => {
       const { getCache, isCacheEnabled } = require('../../src/cache');
       const mockCache = { get: jest.fn(), set: jest.fn() };
-      
+
       getCache.mockResolvedValue(mockCache);
       isCacheEnabled.mockReturnValue(true);
       mockCache.get.mockResolvedValue(null); // No cached result
@@ -369,23 +373,21 @@ describe('PythonProvider Persistent Mode', () => {
 
       await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('python-persistent:')
-      );
+      expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('python-persistent:'));
     });
 
     it('should return cached results correctly', async () => {
       const { getCache, isCacheEnabled } = require('../../src/cache');
       const mockCache = { get: jest.fn(), set: jest.fn() };
-      
+
       getCache.mockResolvedValue(mockCache);
       isCacheEnabled.mockReturnValue(true);
-      
+
       const cachedResult = {
         output: 'cached response',
         tokenUsage: { total: 100 },
       };
-      
+
       mockCache.get.mockResolvedValue(JSON.stringify(cachedResult));
 
       const result = await provider.callApi('test prompt');
@@ -430,7 +432,7 @@ describe('PythonProvider Persistent Mode', () => {
       // This will cause fallback, so let's test the validation in isolation
       const { isCacheEnabled } = require('../../src/cache');
       isCacheEnabled.mockReturnValue(false);
-      
+
       mockManagerInstance.callMethod.mockResolvedValue({
         invalid: 'response without output or error',
       });
@@ -442,7 +444,7 @@ describe('PythonProvider Persistent Mode', () => {
 
       const result = await provider.callApi('test prompt');
       expect(result).toEqual({ output: 'fallback worked', cached: false });
-      
+
       // Verify that persistent manager was called but failed validation
       expect(mockManagerInstance.callMethod).toHaveBeenCalled();
       expect(runPython).toHaveBeenCalled();
@@ -452,9 +454,9 @@ describe('PythonProvider Persistent Mode', () => {
       // Disable cache to ensure we hit the fallback
       const { isCacheEnabled } = require('../../src/cache');
       isCacheEnabled.mockReturnValue(false);
-      
+
       mockManagerInstance.callMethod.mockRejectedValue(
-        new Error('RuntimeError: cannot be called from a running event loop')
+        new Error('RuntimeError: cannot be called from a running event loop'),
       );
 
       const { runPython } = require('../../src/python/pythonUtils');
@@ -469,7 +471,7 @@ describe('PythonProvider Persistent Mode', () => {
       // Disable cache to ensure we hit the persistent manager
       const { isCacheEnabled } = require('../../src/cache');
       isCacheEnabled.mockReturnValue(false);
-      
+
       mockManagerInstance.callMethod.mockResolvedValue({
         error: 'Function failed',
         traceparent: '00-trace-id-parent-id-01',

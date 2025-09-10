@@ -1,0 +1,20 @@
+description: 'Performance test: Persistent mode with fixed wrapper'
+
+prompts:
+  - 'Calculate 2+2'
+  - 'What is the capital of France?'
+
+providers:
+  # Test persistent mode with clean script
+  - id: 'file://test_clean_example.py'
+    label: 'Python (Persistent Mode - Fixed)'
+    config:
+      basePath: '.'
+      persistent: true
+
+tests:
+  - description: 'Simple performance test with fixed wrapper'
+    vars: {}
+    assert:
+      - type: javascript
+        value: 'output && output.response && output.call_number'

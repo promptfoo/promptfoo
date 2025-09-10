@@ -81,8 +81,10 @@ export class PythonProvider implements ApiProvider {
 
         // Initialize persistent mode if enabled (default: true)
         if (this.config.persistent !== false) {
-          const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
-          
+          const absPath = path.resolve(
+            path.join(this.options?.config.basePath || '', this.scriptPath),
+          );
+
           this.persistentManager = new PersistentPythonManager(absPath, {
             pythonExecutable: this.config.pythonExecutable,
             persistentIdleTimeout: this.config.persistentIdleTimeout,
@@ -99,13 +101,13 @@ export class PythonProvider implements ApiProvider {
       } catch (error) {
         // Reset the initialization promise so future calls can retry
         this.initializationPromise = null;
-        
+
         // Cleanup persistent manager if initialization failed
         if (this.persistentManager) {
           this.persistentManager.shutdown();
           this.persistentManager = null;
         }
-        
+
         throw error;
       }
     })();
@@ -188,9 +190,10 @@ export class PythonProvider implements ApiProvider {
     };
 
     // Prepare arguments based on API type
-    const args = apiType === 'call_api' 
-      ? [prompt, optionsWithProcessedConfig, safeContext]
-      : [prompt, optionsWithProcessedConfig];
+    const args =
+      apiType === 'call_api'
+        ? [prompt, optionsWithProcessedConfig, safeContext]
+        : [prompt, optionsWithProcessedConfig];
 
     logger.debug(
       `Running persistent python script ${absPath} with method ${this.functionName || apiType} and args: ${safeJsonStringify(args)}`,
@@ -200,23 +203,40 @@ export class PythonProvider implements ApiProvider {
     let result;
 
     try {
-      result = await this.persistentManager.callMethod(functionName, args, optionsWithProcessedConfig, safeContext);
+      result = await this.persistentManager.callMethod(
+        functionName,
+        args,
+        optionsWithProcessedConfig,
+        safeContext,
+      );
 
       // Validate result based on API type
       if (apiType === 'call_api') {
-        if (!result || typeof result !== 'object' || (!('output' in result) && !('error' in result))) {
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          (!('output' in result) && !('error' in result))
+        ) {
           throw new Error(
             `The Python script \`${functionName}\` function must return a dict with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(result)}`,
           );
         }
       } else if (apiType === 'call_embedding_api') {
-        if (!result || typeof result !== 'object' || (!('embedding' in result) && !('error' in result))) {
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          (!('embedding' in result) && !('error' in result))
+        ) {
           throw new Error(
             `The Python script \`${functionName}\` function must return a dict with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(result)}`,
           );
         }
       } else if (apiType === 'call_classification_api') {
-        if (!result || typeof result !== 'object' || (!('classification' in result) && !('error' in result))) {
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          (!('classification' in result) && !('error' in result))
+        ) {
           throw new Error(
             `The Python script \`${functionName}\` function must return a dict with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(result)}`,
           );
@@ -224,7 +244,11 @@ export class PythonProvider implements ApiProvider {
       }
 
       // Store result in cache if enabled and no errors
-      const hasError = 'error' in result && result.error !== null && result.error !== undefined && result.error !== '';
+      const hasError =
+        'error' in result &&
+        result.error !== null &&
+        result.error !== undefined &&
+        result.error !== '';
 
       if (isCacheEnabled() && !hasError) {
         logger.debug(`PersistentPythonProvider caching result: ${cacheKey}`);

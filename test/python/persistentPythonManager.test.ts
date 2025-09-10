@@ -113,14 +113,14 @@ describe('PersistentPythonManager', () => {
       // Mock successful spawn
       const mockStdoutHandler = jest.fn();
       const mockSpawnHandler = jest.fn();
-      
+
       mockProcess.stdout.on.mockImplementation((event, handler) => {
         if (event === 'data') {
           mockStdoutHandler.mockImplementation(handler);
         }
         return mockProcess.stdout;
       });
-      
+
       mockProcess.on.mockImplementation((event, handler) => {
         if (event === 'spawn') {
           mockSpawnHandler.mockImplementation(handler);
@@ -134,11 +134,13 @@ describe('PersistentPythonManager', () => {
       });
 
       // Give it time to call spawn
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(mockSpawn).toHaveBeenCalledWith('python', [
-        expect.stringContaining('persistent_wrapper.py')
-      ], expect.any(Object));
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'python',
+        [expect.stringContaining('persistent_wrapper.py')],
+        expect.any(Object),
+      );
 
       // Cleanup
       manager.shutdown();
@@ -149,7 +151,7 @@ describe('PersistentPythonManager', () => {
         // Expected to fail due to mocking
       });
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Verify event handlers were setup
       expect(mockProcess.stdout.on).toHaveBeenCalledWith('data', expect.any(Function));

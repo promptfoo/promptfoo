@@ -88,7 +88,7 @@ describe('PythonProvider', () => {
   describe('callApi', () => {
     it('should call executePythonScript with correct parameters', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockRunPython.mockResolvedValue({ output: 'test output' });
 
@@ -106,8 +106,8 @@ describe('PythonProvider', () => {
     describe('error handling', () => {
       it('should throw a specific error when Python script returns invalid result', async () => {
         const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
-      });
+          config: { persistent: false },
+        });
         mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
@@ -117,8 +117,8 @@ describe('PythonProvider', () => {
 
       it('should not throw an error when Python script returns a valid error', async () => {
         const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
-      });
+          config: { persistent: false },
+        });
         mockRunPython.mockResolvedValue({ error: 'valid error message' });
 
         await expect(provider.callApi('test prompt')).resolves.not.toThrow();
@@ -126,8 +126,8 @@ describe('PythonProvider', () => {
 
       it('should throw an error when Python script returns null', async () => {
         const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
-      });
+          config: { persistent: false },
+        });
         mockRunPython.mockResolvedValue(null as never);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
@@ -137,8 +137,8 @@ describe('PythonProvider', () => {
 
       it('should throw an error when Python script returns a non-object', async () => {
         const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
-      });
+          config: { persistent: false },
+        });
         mockRunPython.mockResolvedValue('string result');
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
@@ -148,8 +148,8 @@ describe('PythonProvider', () => {
 
       it('should not throw an error when Python script returns a valid output', async () => {
         const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
-      });
+          config: { persistent: false },
+        });
         mockRunPython.mockResolvedValue({ output: 'valid output' });
 
         await expect(provider.callApi('test prompt')).resolves.not.toThrow();
@@ -160,7 +160,7 @@ describe('PythonProvider', () => {
   describe('callEmbeddingApi', () => {
     it('should call executePythonScript with correct parameters', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockRunPython.mockResolvedValue({ embedding: [0.1, 0.2, 0.3] });
 
@@ -177,7 +177,7 @@ describe('PythonProvider', () => {
 
     it('should throw an error if Python script returns invalid result', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
 
@@ -190,7 +190,7 @@ describe('PythonProvider', () => {
   describe('callClassificationApi', () => {
     it('should call executePythonScript with correct parameters', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockRunPython.mockResolvedValue({ classification: { label: 'test', score: 0.9 } });
 
@@ -207,7 +207,7 @@ describe('PythonProvider', () => {
 
     it('should throw an error if Python script returns invalid result', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
 
@@ -220,7 +220,7 @@ describe('PythonProvider', () => {
   describe('caching', () => {
     it('should use cached result when available', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -240,7 +240,7 @@ describe('PythonProvider', () => {
 
     it('should cache result when cache is enabled', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -260,7 +260,7 @@ describe('PythonProvider', () => {
 
     it('should properly transform token usage in cached results', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -293,7 +293,7 @@ describe('PythonProvider', () => {
 
     it('should preserve cached=false for fresh results with token usage', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -325,7 +325,7 @@ describe('PythonProvider', () => {
 
     it('should handle missing token usage in cached results', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -347,7 +347,7 @@ describe('PythonProvider', () => {
 
     it('should handle zero token usage in cached results', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -377,7 +377,7 @@ describe('PythonProvider', () => {
 
     it('should not cache results with errors', async () => {
       const provider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -406,10 +406,10 @@ describe('PythonProvider', () => {
 
       // Create providers with different function names
       const defaultProvider = new PythonProvider('script.py', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
       const customProvider = new PythonProvider('script.py:custom_function', {
-        config: { persistent: false }
+        config: { persistent: false },
       });
 
       // Call the APIs with the same prompt

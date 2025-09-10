@@ -26,7 +26,7 @@ export class PersistentPythonManager extends EventEmitter {
   private restartCount = 0;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
-  
+
   private readonly scriptPath: string;
   private readonly config: Required<PersistentPythonConfig>;
   private buffer = '';
@@ -58,7 +58,7 @@ export class PersistentPythonManager extends EventEmitter {
   private async _doInitialize(): Promise<void> {
     try {
       await this._startPythonProcess();
-      
+
       // Initialize the Python script
       const initResult = await this._sendRequest({
         type: 'initialize',
@@ -83,8 +83,10 @@ export class PersistentPythonManager extends EventEmitter {
 
   private async _startPythonProcess(): Promise<void> {
     const wrapperPath = path.join(__dirname, 'persistent_wrapper.py');
-    
-    logger.debug(`Starting persistent Python process: ${this.config.pythonExecutable} ${wrapperPath}`);
+
+    logger.debug(
+      `Starting persistent Python process: ${this.config.pythonExecutable} ${wrapperPath}`,
+    );
 
     this.pythonProcess = spawn(this.config.pythonExecutable, [wrapperPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -143,11 +145,11 @@ export class PersistentPythonManager extends EventEmitter {
 
     this.pythonProcess.stdout.on('data', (chunk: Buffer) => {
       this.buffer += chunk.toString('utf-8');
-      
+
       // Process complete lines
       const lines = this.buffer.split('\n');
       this.buffer = lines.pop() || ''; // Keep incomplete line in buffer
-      
+
       for (const line of lines) {
         if (line.trim()) {
           try {
@@ -164,14 +166,14 @@ export class PersistentPythonManager extends EventEmitter {
   private _handleResponse(response: any): void {
     const requestId = response.id;
     const pendingRequest = this.pendingRequests.get(requestId);
-    
+
     if (!pendingRequest) {
       logger.warn(`Received response for unknown request ID: ${requestId}`);
       return;
     }
 
     this.pendingRequests.delete(requestId);
-    
+
     if (pendingRequest.timeout) {
       clearTimeout(pendingRequest.timeout);
     }
@@ -189,7 +191,9 @@ export class PersistentPythonManager extends EventEmitter {
   private _handleProcessExit(code: number | null, signal: string | null): void {
     // Reject all pending requests
     for (const [_id, request] of this.pendingRequests) {
-      request.reject(new Error(`Python process exited unexpectedly: code=${code}, signal=${signal}`));
+      request.reject(
+        new Error(`Python process exited unexpectedly: code=${code}, signal=${signal}`),
+      );
     }
     this.pendingRequests.clear();
 
@@ -200,8 +204,10 @@ export class PersistentPythonManager extends EventEmitter {
     // Attempt restart if within limits
     if (this.restartCount < this.config.maxRestarts) {
       this.restartCount++;
-      logger.info(`Attempting to restart Python process (attempt ${this.restartCount}/${this.config.maxRestarts})`);
-      
+      logger.info(
+        `Attempting to restart Python process (attempt ${this.restartCount}/${this.config.maxRestarts})`,
+      );
+
       setTimeout(() => {
         this.initialize().catch((error) => {
           logger.error(`Failed to restart Python process: ${error.message}`);
@@ -216,7 +222,7 @@ export class PersistentPythonManager extends EventEmitter {
 
   private _handleProcessError(error: Error): void {
     logger.error(`Python process error: ${error.message}`);
-    
+
     // Reject all pending requests
     for (const [_id, request] of this.pendingRequests) {
       request.reject(error);
@@ -324,7 +330,7 @@ export class PersistentPythonManager extends EventEmitter {
 
     if (this.pythonProcess) {
       this.pythonProcess.kill('SIGTERM');
-      
+
       // Force kill after timeout
       setTimeout(() => {
         if (this.pythonProcess && !this.pythonProcess.killed) {
