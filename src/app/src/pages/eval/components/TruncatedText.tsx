@@ -31,9 +31,32 @@ export interface TruncatedTextProps {
 }
 
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
-  const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
+  // Normalize without destroying arrays/element structure
+  const text: React.ReactNode =
+    typeof rawText === 'string' ||
+    typeof rawText === 'number' ||
+    Array.isArray(rawText) ||
+    React.isValidElement(rawText)
+      ? rawText
+      : JSON.stringify(rawText);
+
+  const contentLen = textLength(text);
+  const isOverLength = maxLength > 0 && contentLen > maxLength;
+
+  // Initialize truncation state based on whether text actually exceeds maxLength
+  const [isTruncated, setIsTruncated] = React.useState(() => isOverLength);
+
+  // Only reset when textual content length changes (not when maxLength changes)
+  const prevContentLenRef = React.useRef(contentLen);
+  React.useEffect(() => {
+    if (prevContentLenRef.current !== contentLen) {
+      setIsTruncated(maxLength > 0 && contentLen > maxLength);
+      prevContentLenRef.current = contentLen;
+    }
+  }, [contentLen, maxLength]);
+
   const toggleTruncate = () => {
-    setIsTruncated(!isTruncated);
+    setIsTruncated((v) => !v);
   };
 
   const truncateText = (node: React.ReactNode, length: number = 0): React.ReactNode => {
@@ -68,15 +91,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     return node;
   };
 
-  let text;
-  if (React.isValidElement(rawText) || typeof rawText === 'string') {
-    text = rawText;
-  } else {
-    text = JSON.stringify(rawText);
-  }
   const truncatedText = isTruncated ? truncateText(text) : text;
-
-  const isOverLength = textLength(text) > maxLength;
   return (
     <div style={{ position: 'relative' }}>
       <div

@@ -2,6 +2,7 @@ import './syntax-highlighting.css';
 
 import React, { useCallback, useState } from 'react';
 
+import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckIcon from '@mui/icons-material/Check';
@@ -259,7 +260,7 @@ ${exampleRequest}`;
     setGenerating(true);
     setError('');
     try {
-      const res = await fetch('https://api.promptfoo.app/api/v1/http-provider-generator', {
+      const res = await callApi('/providers/http-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -269,7 +270,8 @@ ${exampleRequest}`;
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
       }
 
       const data = await res.json();
@@ -360,7 +362,7 @@ ${exampleRequest}`;
             },
           }}
         >
-          AI Auto-fill from Example
+          Auto-fill from Example
         </Button>
       </Box>
       {selectedTarget.config.request ? (

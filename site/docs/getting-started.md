@@ -78,7 +78,7 @@ To configure your evaluation:
      - 'Translate to {{language}}: {{input}}'
    ```
 
-   [&raquo; More information on setting up prompts](/docs/configuration/parameters)
+   [&raquo; More information on setting up prompts](/docs/configuration/prompts)
 
 2. Add `providers` to specify AI models you want to test. Promptfoo supports 50+ providers including OpenAI, Anthropic, Google, and many others:
 
