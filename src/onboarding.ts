@@ -292,10 +292,6 @@ async function askForPermissionToOverwrite({
     default: false,
   });
 
-  if (required && !hasPermissionToWrite) {
-    throw new Error(`User did not grant permission to overwrite ${relativePath}`);
-  }
-
   return hasPermissionToWrite;
 }
 
@@ -324,7 +320,11 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       });
 
       if (!hasPermissionToWrite) {
-        logger.info(`⏩ Skipping ${relativePath}`);
+        if (required) {
+          logger.warn(`⚠️ Skipping required file ${relativePath} - configuration may be incomplete`);
+        } else {
+          logger.info(`⏩ Skipping ${relativePath}`);
+        }
         return;
       }
     }
