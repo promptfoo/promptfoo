@@ -29,4 +29,14 @@ describe('FilterModeSelector', () => {
     // Check that "Show different outputs" option is present
     expect(screen.getByText('Show different outputs')).toBeInTheDocument();
   });
+
+  it('includes passes option', async () => {
+    const user = userEvent.setup();
+    render(<FilterModeSelector filterMode="all" onChange={noop} showDifferentOption />);
+
+    const select = screen.getByRole('combobox');
+    await user.click(select);
+
+    expect(screen.getByText('Show passes only')).toBeInTheDocument();
+  });
 });
