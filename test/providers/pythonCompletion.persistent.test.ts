@@ -126,6 +126,7 @@ describe('PythonProvider Persistent Mode', () => {
       });
 
       const result = await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test' },
         vars: { test: 'value' },
         traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
       });
@@ -245,7 +246,7 @@ describe('PythonProvider Persistent Mode', () => {
     });
 
     it('should fallback to traditional execution when persistent manager is unhealthy', async () => {
-      mockManagerInstance.isHealthy = false;
+      Object.defineProperty(mockManagerInstance, 'isHealthy', { value: false, configurable: true });
 
       // Mock traditional execution
       const { runPython } = require('../../src/python/pythonUtils');
@@ -295,12 +296,13 @@ describe('PythonProvider Persistent Mode', () => {
       mockManagerInstance.callMethod.mockResolvedValue({ output: 'response' });
 
       const context = {
+        prompt: { raw: 'test prompt', label: 'test' },
         vars: { test: 'value' },
         traceparent: '00-trace-id-parent-id-01',
         evaluationId: 'eval-123',
         testCaseId: 'test-456',
         getCache: () => 'non-serializable',
-        logger: { info: () => {} },
+        logger: { info: () => {} } as any,
       };
 
       await provider.callApi('test prompt', context);
@@ -324,6 +326,8 @@ describe('PythonProvider Persistent Mode', () => {
       mockManagerInstance.callMethod.mockResolvedValue({ output: 'response' });
 
       const context = {
+        prompt: { raw: 'test prompt', label: 'test' },
+        vars: {},
         traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
         tracestate: 'vendor=value',
         evaluationId: 'eval-789',
@@ -472,6 +476,8 @@ describe('PythonProvider Persistent Mode', () => {
       });
 
       const result = await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test' },
+        vars: {},
         traceparent: '00-trace-id-parent-id-01',
         evaluationId: 'eval-123',
       });

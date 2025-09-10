@@ -202,7 +202,7 @@ describe('PersistentPythonManager - Comprehensive Logic Tests', () => {
       const mockRequest = {
         resolve: jest.fn(),
         reject: jest.fn(),
-        timeout: undefined,
+        timeout: undefined as NodeJS.Timeout | undefined,
       };
       
       // Create timeout similar to _sendRequest

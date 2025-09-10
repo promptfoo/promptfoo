@@ -174,8 +174,8 @@ export class PythonProvider implements ApiProvider {
     const safeContext = context ? { ...context } : {};
     if (safeContext) {
       // Remove non-serializable properties
-      delete safeContext.getCache;
-      delete safeContext.logger;
+      delete (safeContext as any).getCache;
+      delete (safeContext as any).logger;
     }
 
     // Create options with processed config
