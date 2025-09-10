@@ -330,8 +330,11 @@ export async function doGenerateRedteam(
       if (policyData) {
         // Set the policy details
         policyPlugin.config!.policy = { id: policyId, text: policyData.text } as PolicyObject;
-        // Set the plugin severity
-        policyPlugin.severity = policyData.severity;
+        // Set the plugin severity if it hasn't been set already; this allows the user to override the severity
+        // on a per-config basis if necessary.
+        if (policyPlugin.severity == null) {
+          policyPlugin.severity = policyData.severity;
+        }
       }
     }
   }
