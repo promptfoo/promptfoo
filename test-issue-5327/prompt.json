@@ -1,0 +1,20 @@
+[
+  {
+    "role": "system",
+    "content": {{ policy_text | dump }}
+  },
+  {% for completion in _conversation %}
+    {
+      "role": "user",
+      "content": {{ completion.prompt[completion.prompt.length - 1].content | dump }}
+    },
+    {
+      "role": "assistant",
+      "content": {{ completion.output | dump }}
+    },
+  {% endfor %}
+  {
+    "role": "user",
+    "content": {{ user_input | dump }}
+  }
+]

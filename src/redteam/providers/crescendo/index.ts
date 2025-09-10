@@ -683,7 +683,32 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const conversationHistory = this.memory.getConversation(this.targetConversationId);
-    const targetPrompt = this.stateful ? renderedPrompt : JSON.stringify(conversationHistory);
+    let targetPrompt: string;
+
+    if (this.stateful) {
+      targetPrompt = renderedPrompt;
+    } else {
+      // Check if renderedPrompt is already a JSON chat structure
+      try {
+        const parsed = JSON.parse(renderedPrompt);
+        if (
+          Array.isArray(parsed) &&
+          parsed.every((msg) => msg && typeof msg === 'object' && msg.role && msg.content)
+        ) {
+          // It's already a structured chat array, use it directly
+          targetPrompt = renderedPrompt;
+          logger.debug('[Crescendo] Using rendered chat template instead of conversation history');
+        } else {
+          // It's not a chat structure, use conversation history
+          targetPrompt = JSON.stringify(conversationHistory);
+          logger.debug('[Crescendo] Using conversation history (not a chat template)');
+        }
+      } catch {
+        // Not valid JSON, use conversation history
+        targetPrompt = JSON.stringify(conversationHistory);
+        logger.debug('[Crescendo] Using conversation history (invalid JSON)');
+      }
+    }
 
     logger.debug(
       `[Crescendo] Sending to target chat (${this.stateful ? 1 : conversationHistory.length} messages):`,
