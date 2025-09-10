@@ -5,9 +5,10 @@ import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
+import type { FilterMode } from './types';
 
 interface FilterModeSelectorProps {
-  filterMode: string;
+  filterMode: FilterMode;
   onChange: (event: SelectChangeEvent) => void;
   showDifferentOption?: boolean;
 }
