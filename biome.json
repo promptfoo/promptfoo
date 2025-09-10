@@ -215,6 +215,15 @@
       }
     },
     {
+      "includes": ["examples/claude-code/advanced/workspace/**/*"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
       "includes": ["examples/**/*", "site/**/*"],
       "linter": {
         "rules": {
