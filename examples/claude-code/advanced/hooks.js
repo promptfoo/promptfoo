@@ -12,14 +12,6 @@ function extensionHook(hookName, context) {
     return;
   }
 
-  console.log('=== Git reset hook (afterEach) ===');
-  console.log('Hook context:', {
-    hasTest: !!context?.test,
-    hasResult: !!context?.result,
-    resultSuccess: context?.result?.success,
-    resultError: context?.result?.error,
-  });
-
   try {
     // Check git status before reset
     const workspacePath = path.resolve('./workspace');
