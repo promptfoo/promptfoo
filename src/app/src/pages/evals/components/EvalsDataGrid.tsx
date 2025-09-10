@@ -248,14 +248,23 @@ export default function EvalsDataGrid({
     }
 
     try {
-      await Promise.all(
-        rowSelectionModel.map((id) => callApi(`/eval/${id}`, { method: 'DELETE' })),
-      );
+      const res = await callApi(`/eval`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids: rowSelectionModel }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete evals');
+      }
+
       setEvals((prev) => prev.filter((e) => !rowSelectionModel.includes(e.evalId)));
       setRowSelectionModel([]);
     } catch (error) {
-      console.error('Failed to delete evaluations:', error);
-      alert('Failed to delete evaluations');
+      console.error('Failed to delete evals:', error);
+      alert('Failed to delete evals');
     }
   };
 
