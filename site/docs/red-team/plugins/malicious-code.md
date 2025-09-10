@@ -1,5 +1,6 @@
 ---
 sidebar_label: Malicious Code
+description: Red team malicious code generation vulnerabilities by simulating exploit requests to prevent AI systems from creating harmful malware and cyberattack tools
 ---
 
 import Tabs from '@theme/Tabs';

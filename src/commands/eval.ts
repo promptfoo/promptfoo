@@ -1,14 +1,14 @@
-import chalk from 'chalk';
-import chokidar from 'chokidar';
-import type { Command } from 'commander';
-import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
+
+import chalk from 'chalk';
+import chokidar from 'chokidar';
+import dedent from 'dedent';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
-import { getEnvFloat, getEnvInt } from '../envars';
+import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
 import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -19,19 +19,10 @@ import { loadApiProvider } from '../providers';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import type {
-  CommandLineOptions,
-  EvaluateOptions,
-  Scenario,
-  TestSuite,
-  TokenUsage,
-  UnifiedConfig,
-} from '../types';
-import { OutputFileExtension, TestSuiteSchema } from '../types';
-import { CommandLineOptionsSchema } from '../types';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
 import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx } from '../util';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { checkCloudPermissions } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -40,14 +31,25 @@ import invariant from '../util/invariant';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
-import type { FilterOptions } from './eval/filterTests';
 import { filterTests } from './eval/filterTests';
 import { notCloudEnabledShareInstructions } from './share';
+import type { Command } from 'commander';
+
+import type {
+  CommandLineOptions,
+  EvaluateOptions,
+  Scenario,
+  TestSuite,
+  TokenUsage,
+  UnifiedConfig,
+} from '../types';
+import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
+  noShare: z.boolean().optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -102,11 +104,13 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
+  // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
+  let commandLineOptions: Record<string, any> | undefined = undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -146,16 +150,18 @@ export async function doEval(
       }
     }
 
-    // Misc settings
-    const iterations = cmdObj.repeat ?? Number.NaN;
-    const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;
+    ({
+      config,
+      testSuite,
+      basePath: _basePath,
+      commandLineOptions,
+    } = await resolveConfigs(cmdObj, defaultConfig));
 
-    if (!cmdObj.cache || repeat > 1) {
-      logger.info('Cache is disabled.');
-      disableCache();
+    // Phase 2: Load environment from config files if not already set via CLI
+    if (!cmdObj.envPath && commandLineOptions?.envPath) {
+      logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
+      setupEnv(commandLineOptions.envPath);
     }
-
-    ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
 
     // Check if config has redteam section but no test cases
     if (
@@ -178,25 +184,39 @@ export async function doEval(
       Array.isArray(config.providers) &&
       config.providers.length > 0 &&
       typeof config.providers[0] === 'object' &&
-      config.providers[0].id === 'http' &&
-      config.providers[0].config.url.includes('promptfoo.app')
+      config.providers[0].id === 'http'
     ) {
-      telemetry.record('feature_used', {
-        feature: 'redteam_run_with_example',
-      });
+      const maybeUrl: unknown = (config.providers[0] as any)?.config?.url;
+      if (typeof maybeUrl === 'string' && maybeUrl.includes('promptfoo.app')) {
+        telemetry.record('feature_used', {
+          feature: 'redteam_run_with_example',
+        });
+      }
     }
 
     // Ensure evaluateOptions from the config file are applied
     if (config.evaluateOptions) {
       evaluateOptions = {
-        ...config.evaluateOptions,
         ...evaluateOptions,
+        ...config.evaluateOptions,
       };
+    }
+
+    // Misc settings with proper CLI vs config priority
+    // CLI values explicitly provided by user should override config, but defaults should not
+    const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
+    const repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
+
+    const cache = cmdObj.cache ?? evaluateOptions.cache;
+
+    if (!cache || repeat > 1) {
+      logger.info('Cache is disabled.');
+      disableCache();
     }
 
     let maxConcurrency =
       cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-    const delay = cmdObj.delay ?? 0;
+    const delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
 
     if (delay > 0) {
       maxConcurrency = 1;
@@ -232,12 +252,22 @@ export async function doEval(
       cmdObj.filterProviders || cmdObj.filterTargets,
     );
 
+    await checkCloudPermissions(config as UnifiedConfig);
+
     const options: EvaluateOptions = {
       ...evaluateOptions,
-      showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar,
+      showProgressBar:
+        getLogLevel() === 'debug'
+          ? false
+          : cmdObj.progressBar !== undefined
+            ? cmdObj.progressBar !== false
+            : evaluateOptions.showProgressBar !== undefined
+              ? evaluateOptions.showProgressBar
+              : true,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
+      cache,
     };
 
     if (cmdObj.grader) {
@@ -298,7 +328,13 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-    const wantsToShare = cmdObj.share && config.sharing;
+    // Check for explicit disable signals first
+    const hasExplicitDisable =
+      cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
+
+    const wantsToShare = hasExplicitDisable
+      ? false
+      : cmdObj.share || config.sharing || cloudConfig.isEnabled();
 
     const shareableUrl =
       wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
@@ -395,6 +431,7 @@ export async function doEval(
     const durationDisplay = formatDuration(duration);
 
     const isRedteam = Boolean(config.redteam);
+    const tracker = TokenUsageTracker.getInstance();
 
     // Handle token usage display
     if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
@@ -440,7 +477,7 @@ export async function doEval(
       }
 
       // Provider breakdown
-      const tracker = TokenUsageTracker.getInstance();
+
       const providerIds = tracker.getProviderIds();
       if (providerIds.length > 1) {
         logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
@@ -456,7 +493,7 @@ export async function doEval(
             // Extract just the provider ID part (remove class name in parentheses)
             const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
             logger.info(
-              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())}`,
+              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())} (${usage.numRequests} requests)`,
             );
 
             // Show breakdown if there are individual components
@@ -712,21 +749,10 @@ export function evalCommand(
     // Execution control
     .option(
       '-j, --max-concurrency <number>',
-      'Maximum number of concurrent API calls',
-      defaultConfig.evaluateOptions?.maxConcurrency
-        ? String(defaultConfig.evaluateOptions.maxConcurrency)
-        : `${DEFAULT_MAX_CONCURRENCY}`,
+      `Maximum number of concurrent API calls (default: ${DEFAULT_MAX_CONCURRENCY})`,
     )
-    .option(
-      '--repeat <number>',
-      'Number of times to run each test',
-      defaultConfig.evaluateOptions?.repeat ? String(defaultConfig.evaluateOptions.repeat) : '1',
-    )
-    .option(
-      '--delay <number>',
-      'Delay between each test (in milliseconds)',
-      defaultConfig.evaluateOptions?.delay ? String(defaultConfig.evaluateOptions.delay) : '0',
-    )
+    .option('--repeat <number>', 'Number of times to run each test (default: 1)')
+    .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
     .option(
       '--no-cache',
       'Do not read or write results to disk cache',
@@ -771,6 +797,7 @@ export function evalCommand(
       '250',
     )
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
+    .option('--no-share', 'Do not share, this overrides the config file')
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',
@@ -845,7 +872,6 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
       }
-
       doEval(
         validatedOpts as Partial<CommandLineOptions & Command>,
         defaultConfig,

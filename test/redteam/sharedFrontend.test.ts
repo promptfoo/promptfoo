@@ -125,11 +125,9 @@ describe('getUnifiedConfig', () => {
     };
 
     const result = getUnifiedConfig(configWithMaxConcurrency);
-    // @ts-expect-error property may not exist in type
     expect(result.redteam.maxConcurrency).toBe(5);
 
     const configWithoutMaxConcurrency = getUnifiedConfig(baseConfig);
-    // @ts-expect-error property may not exist in type
     expect(configWithoutMaxConcurrency.redteam.maxConcurrency).toBeUndefined();
   });
 

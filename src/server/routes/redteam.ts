@@ -212,11 +212,14 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     })
     .catch((error) => {
-      logger.error(`Error running redteam: ${error}`);
+      logger.error(`Error running red team: ${error}\n${error.stack || ''}`);
       const job = evalJobs.get(id);
       if (job && currentJobId === id) {
         job.status = 'error';
         job.logs.push(`Error: ${error.message}`);
+        if (error.stack) {
+          job.logs.push(`Stack trace: ${error.stack}`);
+        }
       }
       if (currentJobId === id) {
         cliState.webUI = false;

@@ -1,7 +1,7 @@
-import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
+import { fetchWithTimeout } from '../src/util/fetch';
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
@@ -17,6 +17,7 @@ jest.mock('../src/globalConfig/globalConfig', () => ({
 }));
 
 jest.mock('../src/constants', () => ({
+  ...jest.requireActual('../src/constants'),
   VERSION: '1.0.0',
 }));
 
@@ -64,6 +65,10 @@ jest.mock('../src/globalConfig/accounts', () => ({
   isLoggedIntoCloud: jest.fn().mockReturnValue(false),
   getUserEmail: jest.fn().mockReturnValue('test@example.com'),
   getUserId: jest.fn().mockReturnValue('test-user-id'),
+}));
+
+jest.mock('../src/constants/build', () => ({
+  POSTHOG_KEY: 'test-posthog-key',
 }));
 
 describe('Telemetry', () => {
@@ -134,7 +139,7 @@ describe('Telemetry', () => {
     jest.useRealTimers(); // Temporarily use real timers for this test
 
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-    process.env.IS_TESTING = ''; // Clear IS_TESTING to allow fetch calls
+    delete process.env.IS_TESTING; // Clear IS_TESTING to allow fetch calls
 
     const isCI = jest.requireMock('../src/envars').isCI;
     isCI.mockReturnValue(true);
@@ -234,7 +239,7 @@ describe('Telemetry', () => {
   describe('PostHog client initialization', () => {
     it('should initialize PostHog client when telemetry is enabled and POSTHOG_KEY is present', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       const mockPostHog = jest.fn().mockImplementation(() => ({
@@ -260,7 +265,7 @@ describe('Telemetry', () => {
 
     it('should handle PostHog initialization errors gracefully', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       const mockPostHog = jest.fn().mockImplementation(() => {
@@ -288,10 +293,14 @@ describe('Telemetry', () => {
         identify: jest.fn(),
         capture: jest.fn(),
         flush: jest.fn().mockResolvedValue(undefined),
+        on: jest.fn(), // Add the 'on' method for error handling
       };
       mockPostHog = jest.fn().mockImplementation(() => mockPostHogInstance);
 
+      // Clear all modules and re-mock
       jest.resetModules();
+      jest.clearAllMocks();
+
       jest.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
       }));
@@ -299,7 +308,7 @@ describe('Telemetry', () => {
 
     it('should call PostHog identify when telemetry is enabled', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       const telemetryModule = await import('../src/telemetry');
@@ -316,7 +325,7 @@ describe('Telemetry', () => {
 
     it('should handle PostHog identify errors gracefully', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       mockPostHogInstance.identify.mockImplementation(() => {
@@ -334,7 +343,7 @@ describe('Telemetry', () => {
 
     it('should call PostHog capture when sending events', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       const telemetryModule = await import('../src/telemetry');
@@ -356,7 +365,7 @@ describe('Telemetry', () => {
 
     it('should handle PostHog capture errors gracefully', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       mockPostHogInstance.capture.mockImplementation(() => {
@@ -374,7 +383,7 @@ describe('Telemetry', () => {
 
     it('should handle PostHog flush errors silently', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = '';
+      delete process.env.IS_TESTING;
       process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
 
       mockPostHogInstance.flush.mockRejectedValue(new Error('Flush failed'));
@@ -409,7 +418,7 @@ describe('Telemetry', () => {
       jest.resetModules();
 
       // Re-mock fetchWithTimeout
-      jest.doMock('../src/fetch', () => ({
+      jest.doMock('../src/util/fetch', () => ({
         fetchWithTimeout: jest.fn().mockRejectedValue(mockError),
       }));
 
@@ -461,17 +470,17 @@ describe('Telemetry', () => {
 
     it('should send identify data to KA endpoint', async () => {
       process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      process.env.IS_TESTING = ''; // Clear IS_TESTING to allow telemetry
+      delete process.env.IS_TESTING; // Clear IS_TESTING to allow telemetry
 
       // Need to reset modules to pick up the env change
       jest.resetModules();
 
       // Re-mock fetchWithTimeout
-      jest.doMock('../src/fetch', () => ({
+      jest.doMock('../src/util/fetch', () => ({
         fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
       }));
 
-      const { fetchWithTimeout } = await import('../src/fetch');
+      const { fetchWithTimeout } = await import('../src/util/fetch');
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
 

@@ -155,6 +155,19 @@ export default function TargetConfiguration({
     return selectedTarget.label && !providerError;
   };
 
+  const getNextButtonTooltip = () => {
+    if (!selectedTarget.label) {
+      return 'Please enter a target label';
+    }
+    if (providerError) {
+      return providerError;
+    }
+    if (validationErrors) {
+      return validationErrors;
+    }
+    return undefined;
+  };
+
   const handleNext = () => {
     // Enable validation when button is clicked
     setShouldValidate(true);
@@ -175,6 +188,7 @@ export default function TargetConfiguration({
       onNext={handleNext}
       onBack={onBack}
       nextDisabled={!isProviderValid()}
+      warningMessage={isProviderValid() ? undefined : getNextButtonTooltip()}
     >
       <Stack direction="column" spacing={3}>
         {/* Validation Error Display */}

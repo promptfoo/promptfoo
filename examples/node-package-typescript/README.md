@@ -10,7 +10,7 @@ This example demonstrates using promptfoo from a TypeScript script.
 
 ## Prerequisites
 
-- Node.js (version 18 or higher)
+- Node.js (version 20 or higher)
 - TypeScript and ts-node (installed via npm dependencies)
 - API keys for LLM providers set as environment variables:
   - `OPENAI_API_KEY` - Get from [OpenAI API keys page](https://platform.openai.com/api-keys)

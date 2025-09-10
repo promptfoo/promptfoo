@@ -1,7 +1,7 @@
 import { getEnvString } from '../envars';
-import { fetchWithTimeout } from '../fetch';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { fetchWithTimeout } from './fetch';
 
 interface HealthResponse {
   status: string;
@@ -37,15 +37,6 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
       },
     };
 
-    logger.debug(
-      `[CheckRemoteHealth] Making fetch request: ${JSON.stringify({
-        url,
-        options: requestOptions,
-        timeout: 5000,
-        nodeVersion: process.version,
-      })}`,
-    );
-
     const response = await fetchWithTimeout(url, requestOptions, 5000);
 
     if (!response.ok) {
@@ -63,7 +54,6 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
     }
 
     const data = await response.json();
-    logger.debug(`[CheckRemoteHealth] API health check response: ${JSON.stringify({ data })}`);
 
     if (data.status === 'OK') {
       return {

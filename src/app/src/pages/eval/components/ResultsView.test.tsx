@@ -116,8 +116,12 @@ let mockTableStoreData = {
     options: {
       metric: [] as string[],
       metadata: [] as string[],
+      plugin: [] as string[],
+      strategy: [] as string[],
+      severity: [] as string[],
     },
   },
+  removeFilter: vi.fn(),
 };
 
 let mockResultsViewSettingsStoreData = {
@@ -226,8 +230,12 @@ describe('ResultsView', () => {
         options: {
           metric: [] as string[],
           metadata: [] as string[],
+          plugin: [] as string[],
+          strategy: [] as string[],
+          severity: [] as string[],
         },
       },
+      removeFilter: vi.fn(),
     };
 
     mockResultsViewSettingsStoreData = {
@@ -348,6 +356,9 @@ describe('ResultsView', () => {
         options: {
           metric: ['accuracy', 'f1-score'],
           metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
         },
       },
     };
@@ -510,5 +521,123 @@ describe('ResultsView', () => {
 
     const showChartsButton = screen.getByText('Show Charts');
     expect(showChartsButton).toBeInTheDocument();
+  });
+
+  it('renders a severity filter chip with capitalized severity value when a severity filter is applied', () => {
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      filters: {
+        values: {
+          severityFilter: {
+            id: 'severityFilter',
+            type: 'severity',
+            operator: 'equals',
+            value: 'critical',
+            field: undefined,
+            logicOperator: 'and',
+            sortIndex: 0,
+          },
+        },
+        appliedCount: 1,
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+      },
+    };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.getByText('Severity: Critical')).toBeInTheDocument();
+  });
+
+  it('displays severity filter chip with existing capitalization', () => {
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      filters: {
+        values: {
+          severityFilter: {
+            id: 'severityFilter',
+            type: 'severity',
+            operator: 'equals',
+            value: 'MiXeD',
+            logicOperator: 'and',
+            field: undefined,
+            sortIndex: 0,
+          },
+        },
+        appliedCount: 1,
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+      },
+    };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    const chip = screen.getByText('Severity: MiXeD');
+    expect(chip).toBeInTheDocument();
+  });
+
+  it('renders without crashing when a severity filter with an empty value is applied', () => {
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      filters: {
+        values: {
+          severityFilter: {
+            id: 'severityFilter',
+            type: 'severity',
+            operator: 'equals',
+            value: '',
+            logicOperator: 'and',
+            field: undefined,
+            sortIndex: 0,
+          },
+        },
+        appliedCount: 1,
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+      },
+    };
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    expect(screen.getByText('Table Settings')).toBeInTheDocument();
+  });
+
+  it('renders with an empty search input when defaultEvalId is not in recentEvals', () => {
+    mockTableStoreData = {
+      ...mockTableStoreData,
+      evalId: 'nonexistent-eval-id',
+    };
+
+    renderWithProviders(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="nonexistent-eval-id"
+      />,
+    );
+
+    const searchInput = screen.getByPlaceholderText('Search or select an eval...');
+    expect(searchInput).toHaveValue('Test Config');
   });
 });

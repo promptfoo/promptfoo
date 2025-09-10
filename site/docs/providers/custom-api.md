@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Javascript
+description: Configure custom JavaScript providers to integrate any API or service with promptfoo's testing framework using TypeScript, CommonJS, or ESM modules
 ---
 
 # Javascript Provider
@@ -19,7 +20,8 @@ promptfoo supports multiple JavaScript module formats. Complete working examples
 
 At minimum, a custom provider must implement an `id` method and a `callApi` method.
 
-```javascript title="echoProvider.js"
+```javascript title="echoProvider.mjs"
+// Save as echoProvider.mjs for ES6 syntax, or echoProvider.js for CommonJS
 export default class EchoProvider {
   id = () => 'echo';
 
@@ -274,13 +276,14 @@ const { data, cached } = await promptfoo.cache.fetchWithCache(
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: file://./myProvider.js
+  - id: file://./myProvider.mjs # ES6 modules
     label: 'My Custom API' # Display name in UI
     config:
       model: 'gpt-4.1'
       temperature: 0.7
       max_tokens: 2000
       custom_parameter: 'custom value'
+  # - id: file://./myProvider.js   # CommonJS modules
 ```
 
 ### Multiple Instances

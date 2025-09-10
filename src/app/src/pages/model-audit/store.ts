@@ -18,6 +18,23 @@ interface InstallationStatus {
   cwd: string | null;
 }
 
+// History-related types
+interface HistoricalScan {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  name?: string | null;
+  author?: string | null;
+  modelPath: string;
+  modelType?: string | null;
+  results: ScanResult;
+  hasErrors: boolean;
+  totalChecks?: number | null;
+  passedChecks?: number | null;
+  failedChecks?: number | null;
+  metadata?: Record<string, any> | null;
+}
+
 interface ModelAuditState {
   // Recent scans
   recentScans: RecentScan[];
@@ -34,6 +51,11 @@ interface ModelAuditState {
   // Installation status
   installationStatus: InstallationStatus;
 
+  // History state
+  historicalScans: HistoricalScan[];
+  isLoadingHistory: boolean;
+  historyError: string | null;
+
   // UI state
   activeTab: number;
   showFilesDialog: boolean;
@@ -42,6 +64,7 @@ interface ModelAuditState {
   // Actions - Recent scans
   addRecentScan: (paths: ScanPath[], label?: string) => void;
   removeRecentScan: (id: string) => void;
+  removeRecentPath: (scanId: string, pathToRemove: string) => void;
   clearRecentScans: () => void;
 
   // Actions - Scan configuration
@@ -59,6 +82,11 @@ interface ModelAuditState {
   setInstallationStatus: (status: Partial<InstallationStatus>) => void;
   checkInstallation: () => Promise<{ installed: boolean; cwd: string }>;
 
+  // Actions - History
+  fetchHistoricalScans: () => Promise<void>;
+  deleteHistoricalScan: (id: string) => Promise<void>;
+  viewHistoricalScan: (scan: HistoricalScan) => void;
+
   // Actions - UI state
   setActiveTab: (tab: number) => void;
   setShowFilesDialog: (show: boolean) => void;
@@ -75,8 +103,7 @@ let checkInstallationPromise: Promise<{ installed: boolean; cwd: string }> | nul
 
 const DEFAULT_SCAN_OPTIONS: ScanOptions = {
   blacklist: [],
-  timeout: 300,
-  verbose: false,
+  timeout: 3600,
 };
 
 export const useModelAuditStore = create<ModelAuditState>()(
@@ -95,6 +122,9 @@ export const useModelAuditStore = create<ModelAuditState>()(
         error: null,
         cwd: null,
       },
+      historicalScans: [],
+      isLoadingHistory: false,
+      historyError: null,
       activeTab: 0,
       showFilesDialog: false,
       showOptionsDialog: false,
@@ -115,6 +145,24 @@ export const useModelAuditStore = create<ModelAuditState>()(
       removeRecentScan: (id) => {
         set((state) => ({
           recentScans: state.recentScans.filter((scan) => scan.id !== id),
+        }));
+      },
+
+      removeRecentPath: (scanId, pathToRemove) => {
+        set((state) => ({
+          recentScans: state.recentScans
+            .map((scan) => {
+              if (scan.id === scanId) {
+                const updatedPaths = scan.paths.filter((p) => p.path !== pathToRemove);
+                // If no paths left, remove the scan entirely
+                if (updatedPaths.length === 0) {
+                  return null;
+                }
+                return { ...scan, paths: updatedPaths };
+              }
+              return scan;
+            })
+            .filter(Boolean) as RecentScan[],
         }));
       },
 
@@ -201,6 +249,65 @@ export const useModelAuditStore = create<ModelAuditState>()(
           });
 
         return checkInstallationPromise;
+      },
+
+      // Actions - History
+      // TODO(faizan): Implement pagination
+      fetchHistoricalScans: async () => {
+        set({ isLoadingHistory: true, historyError: null });
+
+        try {
+          const response = await callApi('/model-audit/scans');
+          if (!response.ok) {
+            throw new Error('Failed to fetch historical scans');
+          }
+
+          const data = await response.json();
+          set({
+            historicalScans: data.scans || [],
+            isLoadingHistory: false,
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to fetch history';
+          set({
+            isLoadingHistory: false,
+            historyError: errorMessage,
+          });
+        }
+      },
+
+      deleteHistoricalScan: async (id: string) => {
+        try {
+          const response = await callApi(`/model-audit/scans/${id}`, {
+            method: 'DELETE',
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to delete scan');
+          }
+
+          // Remove from local state
+          set((state) => ({
+            historicalScans: state.historicalScans.filter((scan) => scan.id !== id),
+          }));
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to delete scan';
+          set({ historyError: errorMessage });
+          throw error;
+        }
+      },
+
+      viewHistoricalScan: (scan: HistoricalScan) => {
+        // Set the scan results and switch to Results tab
+        set({
+          scanResults: scan.results,
+          activeTab: 1,
+          paths:
+            scan.metadata?.originalPaths?.map((p: string) => ({
+              path: p,
+              type: 'file' as const,
+            })) || [],
+        });
       },
 
       // Actions - UI state
