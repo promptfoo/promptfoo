@@ -7,7 +7,8 @@ import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
 
 import type { Plugin, Severity } from '../redteam/constants';
-import type { PoliciesById, UnifiedConfig } from '../types';
+import type { PoliciesById } from '../redteam/types';
+import type { UnifiedConfig } from '../types';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
