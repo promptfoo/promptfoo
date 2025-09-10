@@ -152,11 +152,15 @@ export class OllamaCompletionProvider implements ApiProvider {
       model: this.modelName,
       prompt,
       stream: false,
-      think: false,
       options: Object.keys(this.config).reduce(
         (options, key) => {
           const optionName = key as keyof OllamaCompletionOptions;
-          if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'think' && optionName !== 'tools' && optionName !== 'passthrough') {
+          if (
+            OllamaCompletionOptionKeys.has(optionName) &&
+            optionName !== 'think' &&
+            optionName !== 'tools' &&
+            optionName !== 'passthrough'
+          ) {
             options[optionName] = this.config[optionName];
           }
           return options;
