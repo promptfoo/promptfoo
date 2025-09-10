@@ -22,7 +22,7 @@ const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }
   );
 };
 
-interface RunOptionsBaseProps {
+interface RunOptionsProps {
   numTests: number | undefined;
   runOptions?: Partial<RedteamRunOptions>;
   updateConfig: (section: keyof Config, value: any) => void;
@@ -31,7 +31,7 @@ interface RunOptionsBaseProps {
   useGuardrailAssertion?: boolean;
 }
 
-export const RunOptionsContent: React.FC<RunOptionsBaseProps> = ({
+export const RunOptionsContent: React.FC<RunOptionsProps> = ({
   numTests,
   runOptions,
   updateConfig,
@@ -53,6 +53,12 @@ export const RunOptionsContent: React.FC<RunOptionsBaseProps> = ({
   );
   return (
     <Stack spacing={3}>
+      {/**
+       * Number of test cases
+       * - Accepts only digits as the user types (temporary empty state allowed)
+       * - onBlur clamps to a minimum of 1 and persists via updateConfig
+       * - Prevents non-numeric characters like e/E/+/−/.
+       */}
       <TextField
         fullWidth
         type="number"
@@ -97,6 +103,13 @@ export const RunOptionsContent: React.FC<RunOptionsBaseProps> = ({
         })()}
       />
 
+      {/**
+       * Delay between API calls (ms)
+       * - Enabled only when maxConcurrency is 1 (mutual exclusivity rule)
+       * - Accepts only digits; onBlur clamps to ≥ 0 and persists via updateRunOption
+       * - If delay > 0, we force maxConcurrency to 1 to uphold exclusivity
+       * - Prevents non-numeric characters like e/E/+/−/.
+       */}
       <TextField
         fullWidth
         type="number"
@@ -139,18 +152,26 @@ export const RunOptionsContent: React.FC<RunOptionsBaseProps> = ({
             e.preventDefault();
           }
         }}
-        InputProps={{
-          endAdornment: (
-            <InputAdornment position="end">
-              <Typography variant="caption">ms</Typography>
-            </InputAdornment>
-          ),
-        }}
         slotProps={{
-          input: { inputProps: { inputMode: 'numeric', pattern: '[0-9]*', step: 1, min: 0 } },
+          input: {
+            endAdornment: (
+              <InputAdornment position="end">
+                <Typography variant="caption">ms</Typography>
+              </InputAdornment>
+            ),
+            inputProps: { inputMode: 'numeric', pattern: '[0-9]*', step: 1, min: 0 },
+          },
         }}
         helperText="Add a delay between API calls to avoid rate limits. This will not override a delay set on the target."
       />
+
+      {/**
+       * Max number of concurrent requests
+       * - Enabled only when delay is 0 (mutual exclusivity rule)
+       * - Accepts only digits; onBlur clamps to ≥ 1 and persists via updateRunOption
+       * - Any change forces delay to 0 to uphold exclusivity
+       * - Prevents non-numeric characters like e/E/+/−/.
+       */}
       <TextField
         fullWidth
         type="number"
@@ -190,15 +211,15 @@ export const RunOptionsContent: React.FC<RunOptionsBaseProps> = ({
             e.preventDefault();
           }
         }}
-        InputProps={{
-          endAdornment: (
-            <InputAdornment position="end">
-              <Typography variant="caption">requests</Typography>
-            </InputAdornment>
-          ),
-        }}
         slotProps={{
-          input: { inputProps: { inputMode: 'numeric', pattern: '[0-9]*', step: 1, min: 1 } },
+          input: {
+            endAdornment: (
+              <InputAdornment position="end">
+                <Typography variant="caption">requests</Typography>
+              </InputAdornment>
+            ),
+            inputProps: { inputMode: 'numeric', pattern: '[0-9]*', step: 1, min: 1 },
+          },
         }}
         helperText="The maximum number of concurrent requests to make to the target."
       />
@@ -223,12 +244,10 @@ export const RunOptionsContent: React.FC<RunOptionsBaseProps> = ({
   );
 };
 
-interface RunOptionsProps extends RunOptionsBaseProps {}
-
 export const RunOptions: React.FC<RunOptionsProps> = (props) => {
   const [expanded, setExpanded] = useState(true);
 
-  const normalizedProps: RunOptionsBaseProps = {
+  const normalizedProps: RunOptionsProps = {
     ...props,
     numTests: props.numTests ?? 0,
     runOptions: {
