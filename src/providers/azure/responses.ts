@@ -6,21 +6,31 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
-import { formatOpenAiError, getTokenUsage } from '../openai/util';
 import { calculateAzureCost } from './util';
+import { ResponsesProcessor } from '../responses';
 import invariant from '../../util/invariant';
 
 import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { OpenAiCompletionOptions, ReasoningEffort } from '../openai/types';
+import type { ReasoningEffort } from '../openai/types';
 
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
 export class AzureResponsesProvider extends AzureGenericProvider {
   private functionCallbackHandler = new FunctionCallbackHandler();
+  private processor: ResponsesProcessor;
 
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
+
+    // Initialize the shared response processor
+    this.processor = new ResponsesProcessor({
+      modelName: this.deploymentName,
+      providerType: 'azure',
+      functionCallbackHandler: this.functionCallbackHandler,
+      costCalculator: (modelName: string, usage: any) => calculateAzureCost(modelName, usage),
+    });
+
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
@@ -95,13 +105,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
           },
         };
       } else if (responseFormat.type === 'json_schema') {
-        const schema = maybeLoadFromExternalFile(
-          renderVarsInObject(
-            responseFormat.schema || responseFormat.json_schema?.schema,
-            context?.vars,
-          ),
-        );
-
+        // Don't double-load the schema - it's already loaded above
+        const schema = responseFormat.schema || responseFormat.json_schema?.schema;
         const schemaName =
           responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
 
@@ -109,7 +114,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
           format: {
             type: 'json_schema',
             name: schemaName,
-            schema,
+            schema: schema, // Use the already-loaded schema
             strict: true,
           },
         };
@@ -163,8 +168,36 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
 
+    // Improved error messages for common configuration issues
     if (!this.getApiBaseUrl()) {
-      throw new Error('Azure API host must be set.');
+      throw new Error(
+        'Azure API configuration missing. Set AZURE_API_HOST environment variable or configure apiHost in provider config.\n' +
+          'Example: AZURE_API_HOST=your-resource.openai.azure.com',
+      );
+    }
+
+    if (!this.authHeaders || !this.authHeaders['api-key']) {
+      throw new Error(
+        'Azure API authentication failed. Set AZURE_API_KEY environment variable or configure apiKey in provider config.\n' +
+          'You can also use Microsoft Entra ID authentication.',
+      );
+    }
+
+    // Validate response_format for better UX
+    if (
+      this.config.response_format &&
+      typeof this.config.response_format === 'string' &&
+      this.config.response_format.startsWith('file://')
+    ) {
+      try {
+        maybeLoadFromExternalFile(this.config.response_format);
+      } catch (error) {
+        throw new Error(
+          `Failed to load response_format file: ${this.config.response_format}\n` +
+            `Error: ${error.message}\n` +
+            `Make sure the file exists and contains valid JSON schema format.`,
+        );
+      }
     }
 
     const body = this.getAzureResponsesBody(prompt, context, callApiOptions);
@@ -183,7 +216,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     }
 
     logger.debug(`Calling Azure Responses API: ${JSON.stringify(body)}`);
-    
+
     let data, status, statusText;
     let cached = false;
     try {
@@ -223,60 +256,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     }
 
     logger.debug(`\tAzure Responses API response: ${JSON.stringify(data)}`);
-    if (data.error) {
-      return {
-        error: formatOpenAiError(data),
-      };
-    }
 
-    try {
-      // Find the assistant message in the output
-      const output = data.output;
-
-      // Log the structure for debugging
-      if (isDeepResearchModel && output) {
-        logger.debug(`Deep research response output structure: ${JSON.stringify(output)}`);
-      }
-
-      // Handle cases where output might be an array of messages or a single message
-      let assistantMessage;
-      if (Array.isArray(output)) {
-        assistantMessage = output.find((msg: any) => msg.role === 'assistant');
-      } else if (output && typeof output === 'object') {
-        assistantMessage = output;
-      }
-
-      // Extract the text content
-      let assistantText = '';
-      if (assistantMessage?.content) {
-        if (Array.isArray(assistantMessage.content)) {
-          assistantText = assistantMessage.content
-            .filter((item: any) => item.type === 'output_text' || item.type === 'text')
-            .map((item: any) => item.text || item.output_text || '')
-            .join('');
-        } else if (typeof assistantMessage.content === 'string') {
-          assistantText = assistantMessage.content;
-        }
-      } else if (data.output_text) {
-        // Some responses have output_text at the root level
-        assistantText = data.output_text;
-      } else if (typeof assistantMessage === 'string') {
-        assistantText = assistantMessage;
-      }
-
-      const usage = data.usage || {};
-      const cost = calculateAzureCost(this.deploymentName, usage);
-
-      return {
-        output: assistantText,
-        tokenUsage: getTokenUsage(usage, cached),
-        cached,
-        cost,
-      };
-    } catch (err) {
-      return {
-        error: `Error parsing response: ${String(err)}\nResponse: ${JSON.stringify(data)}`,
-      };
-    }
+    // Use the shared response processor for all response processing
+    return this.processor.processResponseOutput(data, body, cached);
   }
 }

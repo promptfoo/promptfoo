@@ -1,0 +1,64 @@
+# Azure OpenAI Responses API vs OpenAI Responses API Feature Parity Test
+# This verifies that the shared processor implementation provides identical behavior
+
+description: Comprehensive Azure vs OpenAI Responses API Parity Test
+
+prompts:
+  - 'Extract event information from this text: "The {{event_type}} will be held on {{date}} at {{location}} with {{participants}} attending."'
+
+providers:
+  # OpenAI Responses API (baseline)
+  - id: openai:responses:gpt-4o-mini
+    label: OpenAI-Responses
+    config:
+      temperature: 0
+      max_output_tokens: 500
+      response_format: file://examples/openai-responses/response_format.json
+
+  # Azure OpenAI Responses API (should behave identically)
+  - id: azure:responses:gpt-4o-mini
+    label: Azure-Responses
+    config:
+      apiHost: "promptfoo-openai-test.openai.azure.com"
+      apiKey: "dbe8e1aaf4f343638fabc30282278893"
+      temperature: 0
+      max_output_tokens: 500
+      response_format: file://examples/openai-responses/response_format.json
+
+tests:
+  # Test 1: Basic JSON Schema compliance
+  - vars:
+      event_type: AI Conference
+      date: December 15th, 2025
+      location: San Francisco Convention Center  
+      participants: tech leaders and researchers
+    assert:
+      - type: is-json
+      - type: contains
+        value: 'AI Conference'
+      - type: contains
+        value: 'December 15th, 2025'
+      - type: contains
+        value: 'San Francisco Convention Center'
+
+  # Test 2: Different event type
+  - vars:
+      event_type: Medical Symposium
+      date: March 10th, 2026
+      location: Boston Medical Center
+      participants: doctors and medical researchers
+    assert:
+      - type: is-json
+      - type: contains
+        value: 'Medical Symposium'
+      - type: contains
+        value: 'March 10th, 2026'
+      - type: contains
+        value: 'Boston Medical Center'
+
+# Expected behavior:
+# - Both providers should return identical JSON structures
+# - Both should comply with the external JSON schema
+# - Both should extract the same event information 
+# - Token usage should be similar
+# - Response format should be identical
