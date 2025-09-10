@@ -68,14 +68,6 @@ export const RunOptionsContent: React.FC<RunOptionsProps> = ({
           const raw = e.target.value;
           const digitsOnly = raw.replace(/\D/g, '');
           setNumTestsInput(digitsOnly);
-          if (digitsOnly === '') {
-            return;
-          }
-          const parsed = Number(digitsOnly);
-          if (Number.isNaN(parsed)) {
-            return;
-          }
-          updateConfig('numTests', parsed);
         }}
         onBlur={() => {
           if (numTestsInput === '') {
@@ -129,12 +121,6 @@ export const RunOptionsContent: React.FC<RunOptionsProps> = ({
           const raw = e.target.value;
           const digitsOnly = raw.replace(/\D/g, '');
           setDelayInput(digitsOnly);
-          const parsed = digitsOnly === '' ? 0 : Number(digitsOnly);
-          const safe = Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
-          updateRunOption('delay', safe);
-          if (safe > 0) {
-            updateRunOption('maxConcurrency', 1);
-          }
         }}
         onBlur={() => {
           const parsed = delayInput === '' ? 0 : Number(delayInput);
@@ -163,6 +149,13 @@ export const RunOptionsContent: React.FC<RunOptionsProps> = ({
           },
         }}
         helperText="Add a delay between API calls to avoid rate limits. This will not override a delay set on the target."
+        error={(() => {
+          if (delayInput === '') {
+            return false;
+          }
+          const n = Number(delayInput);
+          return Number.isNaN(n) || n < 0;
+        })()}
       />
 
       {/**
@@ -191,11 +184,6 @@ export const RunOptionsContent: React.FC<RunOptionsProps> = ({
           const raw = e.target.value;
           const digitsOnly = raw.replace(/\D/g, '');
           setMaxConcurrencyInput(digitsOnly);
-          const parsed = digitsOnly === '' ? 1 : Number(digitsOnly);
-          const safe = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
-          updateRunOption('maxConcurrency', safe);
-          // Enforce mutual exclusivity
-          updateRunOption('delay', 0);
         }}
         onBlur={() => {
           const parsed = maxConcurrencyInput === '' ? 1 : Number(maxConcurrencyInput);
@@ -222,6 +210,13 @@ export const RunOptionsContent: React.FC<RunOptionsProps> = ({
           },
         }}
         helperText="The maximum number of concurrent requests to make to the target."
+        error={(() => {
+          if (maxConcurrencyInput === '') {
+            return false;
+          }
+          const n = Number(maxConcurrencyInput);
+          return Number.isNaN(n) || n < 1;
+        })()}
       />
 
       <FormControlLabel
