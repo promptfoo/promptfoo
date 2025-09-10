@@ -78,6 +78,9 @@ vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
 describe('TestSuites Component', () => {
   const mockNavigate = vi.fn();
 
+  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
@@ -88,6 +91,9 @@ describe('TestSuites Component', () => {
       },
     },
     plugins: [],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -178,6 +184,9 @@ describe('TestSuites Component', () => {
 
 describe('TestSuites Component Navigation', () => {
   const mockNavigate = vi.fn();
+  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -194,6 +203,9 @@ describe('TestSuites Component Navigation', () => {
       },
     },
     plugins: [],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -268,6 +280,9 @@ describe('TestSuites Component Navigation', () => {
 describe('TestSuites Component Navigation with Missing EvalId', () => {
   const mockNavigate = vi.fn();
 
+  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
@@ -278,6 +293,9 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
       },
     },
     plugins: [],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -304,6 +322,9 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
 
 describe('TestSuites Component Filtering', () => {
   const mockNavigate = vi.fn();
+  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -320,6 +341,9 @@ describe('TestSuites Component Filtering', () => {
       },
     },
     plugins: [],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -344,6 +368,9 @@ describe('TestSuites Component Filtering', () => {
 describe('TestSuites Component CSV Export', () => {
   const mockNavigate = vi.fn();
 
+  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
@@ -354,6 +381,9 @@ describe('TestSuites Component CSV Export', () => {
       },
     },
     plugins: [],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -379,6 +409,9 @@ describe('TestSuites Component CSV Export', () => {
 
 describe('TestSuites Component - Zero Attack Success Rate', () => {
   const mockNavigate = vi.fn();
+  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -395,6 +428,9 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
       },
     },
     plugins: [],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -419,15 +455,6 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
   const mockNavigate = vi.fn();
 
   const evalId = 'test-eval-123';
-
-  const _categoryStats = {
-    'test-plugin': {
-      pass: 8,
-      total: 10,
-      passWithFilter: 9,
-    },
-  };
-
   const plugins: any[] = [];
 
   beforeEach(() => {
@@ -453,11 +480,18 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
       },
     };
 
+    const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+    const mockFilterModel = { items: [] } as any;
+    const mockSetFilterModel = vi.fn();
+
     render(
       <TestSuites
         evalId={evalId}
         categoryStats={categoryStatsWithSpecialChars}
         plugins={plugins}
+        vulnerabilitiesDataGridRef={mockRef}
+        vulnerabilitiesDataGridFilterModel={mockFilterModel}
+        setVulnerabilitiesDataGridFilterModel={mockSetFilterModel}
       />,
     );
 

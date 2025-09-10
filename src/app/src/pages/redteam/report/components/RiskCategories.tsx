@@ -29,9 +29,7 @@ const RiskCategories: React.FC<{
 
   return (
     <Stack spacing={4}>
-      <Typography variant="h5" id="table">
-        Risk Categories
-      </Typography>
+      <Typography variant="h5">Risk Categories</Typography>
       {categories.map((category, index) => {
         const categoryName = category.name as TopLevelCategory;
         const subCategories = riskCategories[categoryName];
