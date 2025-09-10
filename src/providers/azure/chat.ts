@@ -17,10 +17,15 @@ import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } fro
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;
-  private functionCallbackHandler = new FunctionCallbackHandler();
+  private functionCallbackHandler: FunctionCallbackHandler;
 
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
+
+    // Initialize callback handler immediately (will be replaced if MCP is enabled)
+    this.functionCallbackHandler = new FunctionCallbackHandler();
+
+    // Initialize MCP if enabled
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
@@ -29,6 +34,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
     await this.mcpClient.initialize();
+
+    // Initialize callback handler with MCP client
+    this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
   }
 
   async cleanup(): Promise<void> {
@@ -271,8 +279,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           const toolCalls = message.tool_calls;
           const functionCall = message.function_call;
 
-          // Process function/tool calls if callbacks are configured
-          if (config.functionToolCallbacks && (toolCalls || functionCall)) {
+          // Process function/tool calls if callbacks are configured or MCP is available
+          if (
+            (config.functionToolCallbacks && (toolCalls || functionCall)) ||
+            (this.mcpClient && (toolCalls || functionCall))
+          ) {
             // Combine all calls into a single array for processing
             const allCalls = [];
             if (toolCalls) {
