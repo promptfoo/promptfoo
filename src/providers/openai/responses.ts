@@ -264,8 +264,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    logger.debug(`Calling OpenAI Responses API: ${JSON.stringify(body)}`);
-
     // Calculate timeout for deep research models
     let timeout = REQUEST_TIMEOUT_MS;
     if (isDeepResearchModel) {
@@ -315,7 +313,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
       return {
@@ -350,15 +347,33 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         }
 
         if (item.type === 'function_call') {
-          // Skip completed status messages that are just status updates without meaningful arguments
-          if (item.status === 'completed' && (!item.arguments || item.arguments === '{}')) {
-            continue;
+          // Handle OpenAI Responses API function calls
+          let functionResult;
+
+          // Check if this is a meaningful function call or just a status update
+          if (item.arguments === '{}' && item.status === 'completed') {
+            // This appears to be a status update with no meaningful arguments
+            // This often happens when using Chat API tool format with Responses API
+            // In this case, return the function call info instead of trying to execute with empty args
+            functionResult = JSON.stringify({
+              type: 'function_call',
+              name: item.name,
+              status: 'no_arguments_provided',
+              note: 'Function called but no arguments were extracted. Consider using the correct Responses API tool format.',
+            });
+          } else {
+            // Normal function call with arguments - execute the callback
+            functionResult = await this.functionCallbackHandler.processCalls(
+              item,
+              config.functionToolCallbacks,
+            );
           }
 
-          result = await this.functionCallbackHandler.processCalls(
-            item,
-            config.functionToolCallbacks,
-          );
+          if (result) {
+            result += '\n' + functionResult;
+          } else {
+            result = functionResult;
+          }
         } else if (item.type === 'message' && item.role === 'assistant') {
           if (item.content) {
             for (const contentItem of item.content) {

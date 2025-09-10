@@ -23,7 +23,6 @@ import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
 import { addMultilingual } from './multilingual';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
-import { addPandamonium } from './pandamonium';
 import { addInjections } from './promptInjections';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
@@ -230,15 +229,6 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding multilingual test cases to ${testCases.length} test cases`);
       const newTestCases = await addMultilingual(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} multilingual test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'pandamonium',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding pandamonium runs to ${testCases.length} test cases`);
-      const newTestCases = await addPandamonium(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} Pandamonium test cases`);
       return newTestCases;
     },
   },

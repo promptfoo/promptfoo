@@ -2,6 +2,8 @@
 // In production builds, these values come from src/generated/constants.ts
 // In development, they fall back to environment variables
 
+import { getEnvString } from '../envars';
+
 let POSTHOG_KEY: string;
 
 try {
@@ -10,7 +12,7 @@ try {
   POSTHOG_KEY = generated.POSTHOG_KEY;
 } catch {
   // Fallback to environment variables for development
-  POSTHOG_KEY = process.env.PROMPTFOO_POSTHOG_KEY || '';
+  POSTHOG_KEY = getEnvString('PROMPTFOO_POSTHOG_KEY', '');
 }
 
 export { POSTHOG_KEY };

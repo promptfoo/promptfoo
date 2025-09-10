@@ -49,7 +49,7 @@ prompts:
   {% if prompts.length > 0 and not prompts[0].startsWith('file://') -%}
   # You can also reference external prompts, e.g.
   # - file:///path/to/prompt.json
-  # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
+  # Learn more: https://promptfoo.dev/docs/configuration/prompts/
   {% endif %}
 {% endif -%}
 
@@ -315,6 +315,10 @@ export async function redteamInit(directory: string | undefined) {
       {
         name: 'anthropic:claude-sonnet-4-20250514',
         value: 'anthropic:messages:claude-sonnet-4-20250514',
+      },
+      {
+        name: 'anthropic:claude-opus-4-1-20250805',
+        value: 'anthropic:messages:claude-opus-4-1-20250805',
       },
       {
         name: 'anthropic:claude-opus-4-20250514',

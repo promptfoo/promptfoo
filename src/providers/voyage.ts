@@ -73,7 +73,6 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       logger.error(`API call error: ${err}`);
       throw err;
     }
-    logger.debug(`\tVoyage embeddings API response: ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;
