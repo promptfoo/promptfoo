@@ -12,7 +12,6 @@ import { deleteEval, updateResult, writeResultsToDatabase } from '../../util/dat
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 import type { Request, Response } from 'express';
-import type { FilterMode } from '../../app/src/pages/eval/components/types';
 
 import type {
   EvalTableDTO,
@@ -22,6 +21,7 @@ import type {
   Job,
   ResultsFile,
 } from '../../index';
+import type { EvalResultsFilterMode } from '../../types';
 
 export const evalRouter = Router();
 
@@ -170,7 +170,8 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const { id } = req.params;
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
-  const filterMode: FilterMode = (req.query.filterMode as FilterMode | undefined) ?? 'all';
+  const filterMode: EvalResultsFilterMode =
+    (req.query.filterMode as EvalResultsFilterMode | undefined) ?? 'all';
   const searchText = req.query.search ? String(req.query.search) : '';
   const filters = Array.isArray(req.query.filter)
     ? req.query.filter

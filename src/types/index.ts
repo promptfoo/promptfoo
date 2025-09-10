@@ -1193,3 +1193,11 @@ export interface LoadApiProviderContext {
   basePath?: string;
   env?: EnvOverrides;
 }
+
+export type EvalResultsFilterMode =
+  | 'all'
+  | 'failures'
+  | 'different'
+  | 'highlights'
+  | 'errors'
+  | 'passes';

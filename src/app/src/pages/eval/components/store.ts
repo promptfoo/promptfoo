@@ -5,16 +5,15 @@ import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { VisibilityState } from '@tanstack/table-core';
-
 import type {
+  EvalResultsFilterMode,
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTable,
-  FilterMode,
   ResultsFile,
   UnifiedConfig,
-} from './types';
+} from '@promptfoo/types';
+import type { VisibilityState } from '@tanstack/table-core';
 
 function computeHighlightCount(table: EvaluateTable | null): number {
   if (!table) {
@@ -78,7 +77,7 @@ function computeAvailableSeverities(
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
-  filterMode?: FilterMode;
+  filterMode?: EvalResultsFilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
   skipLoadingState?: boolean;
