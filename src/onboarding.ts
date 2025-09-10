@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 
-import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
 import select from '@inquirer/select';
