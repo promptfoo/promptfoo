@@ -2,9 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { runAssertion } from '../../src/assertions';
-import { fetchWithRetries } from '../../src/fetch';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
+import { fetchWithRetries } from '../../src/util/fetch';
 import { TestGrader } from '../util/utils';
 
 import type {
@@ -35,8 +35,8 @@ jest.mock('node:module', () => {
   };
 });
 
-jest.mock('../../src/fetch', () => {
-  const actual = jest.requireActual('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts', () => {
+  const actual = jest.requireActual('../../src/util/fetch/index.ts');
   return {
     ...actual,
     fetchWithRetries: jest.fn(actual.fetchWithRetries),
@@ -2830,6 +2830,129 @@ describe('runAssertion', () => {
           providerResponse: { output: { some: 'object' } },
         }),
       ).rejects.toThrow('context-faithfulness assertion requires string output from the provider');
+    });
+  });
+
+  describe('assertion transform with metadata', () => {
+    it('should pass metadata to assertion transform when available', async () => {
+      const output = 'Test output';
+      const metadata = { key: 'value', nested: { data: 123 } };
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'Metadata: {"key":"value","nested":{"data":123}}',
+        transform: 'context.metadata ? `Metadata: ${JSON.stringify(context.metadata)}` : output',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output, metadata },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle transform when metadata is undefined', async () => {
+      const output = 'Test output';
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'No metadata',
+        transform: 'context.metadata ? "Has metadata" : "No metadata"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle transform when providerResponse has no metadata', async () => {
+      const output = 'Test output';
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'No metadata',
+        transform: 'context.metadata ? "Has metadata" : "No metadata"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output }, // No metadata property
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle empty metadata object', async () => {
+      const output = 'Test output';
+      const metadata = {};
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'Empty metadata',
+        transform:
+          '(context.metadata && Object.keys(context.metadata).length === 0) ? "Empty metadata" : output',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output, metadata },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should preserve existing context properties when adding metadata', async () => {
+      const output = 'Test output';
+      const metadata = { responseTime: 100 };
+      const testVars = { userInput: 'test input' };
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'All context properties present',
+        transform:
+          '(context.vars && context.prompt && context.metadata) ? "All context properties present" : "Missing context properties"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'test prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: testVars } as AtomicTestCase,
+        providerResponse: { output, metadata },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
     });
   });
 

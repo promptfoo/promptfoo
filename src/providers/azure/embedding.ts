@@ -1,5 +1,4 @@
 import { fetchWithCache } from '../../cache';
-import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
@@ -47,7 +46,6 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
         },
       };
     }
-    logger.debug(`\tAzure API response (embeddings): ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;

@@ -53,17 +53,22 @@ describe('viewCommand', () => {
 
   it('should handle browser behavior options correctly', async () => {
     viewCommand(program);
-    const viewCmd = program.commands[0];
+    let viewCmd = program.commands[0];
 
     await viewCmd.parseAsync(['node', 'test', '--yes']);
     expect(startServer).toHaveBeenCalledWith(getDefaultPort().toString(), BrowserBehavior.OPEN);
 
     jest.clearAllMocks();
 
+    // Reset program and viewCommand for the second test
+    program = new Command();
+    viewCommand(program);
+    viewCmd = program.commands[0];
+
     // Use a unique port to avoid confusion with default port
     await viewCmd.parseAsync(['node', 'test', '--no', '--port', '15500']);
-    // --no sets BrowserBehavior.OPEN when both --yes and --no are supplied due to commander behavior
-    expect(startServer).toHaveBeenCalledWith('15500', BrowserBehavior.OPEN);
+    // --no sets BrowserBehavior.SKIP
+    expect(startServer).toHaveBeenCalledWith('15500', BrowserBehavior.SKIP);
   });
 
   it('should ignore filter description option', async () => {
