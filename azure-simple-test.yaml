@@ -1,0 +1,26 @@
+# Simple Azure OpenAI Responses API test
+description: Simple Azure test with external file loading
+
+prompts:
+  - 'Extract event information from this text: "The {{event_type}} will be held on {{date}} at {{location}} with {{participants}} attending."'
+
+providers:
+  - id: azure:responses:gpt-4o-mini
+    config:
+      # Use the actual endpoint from Azure resource
+      apiHost: "promptfoo-openai-test.openai.azure.com" 
+      apiKey: "dbe8e1aaf4f343638fabc30282278893"
+      temperature: 0
+      max_output_tokens: 500
+      response_format: file://examples/openai-responses/response_format.json
+
+tests:
+  - vars:
+      event_type: Azure AI Conference
+      date: December 15th, 2025
+      location: Seattle Convention Center
+      participants: cloud architects and AI engineers
+    assert:
+      - type: is-json
+      - type: contains
+        value: 'Azure AI Conference'

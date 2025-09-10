@@ -1,0 +1,19 @@
+# Debug Azure without external files first
+description: Azure debug without external schema
+
+prompts:
+  - 'Say hello to Azure OpenAI Responses API'
+
+providers:
+  - id: azure:responses:gpt-4o-mini
+    config:
+      apiHost: "promptfoo-openai-test.openai.azure.com"
+      apiKey: "dbe8e1aaf4f343638fabc30282278893"
+      temperature: 0
+      max_output_tokens: 100
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'Hello'

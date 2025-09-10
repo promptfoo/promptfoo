@@ -28,7 +28,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       modelName: this.deploymentName,
       providerType: 'azure',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any) => calculateAzureCost(modelName, usage),
+      costCalculator: (modelName: string, usage: any, config?: any) => calculateAzureCost(modelName, usage) ?? 0,
     });
 
     if (this.config.mcp?.enabled) {
@@ -187,14 +187,14 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     if (
       this.config.response_format &&
       typeof this.config.response_format === 'string' &&
-      this.config.response_format.startsWith('file://')
+      (this.config.response_format as string).startsWith('file://')
     ) {
       try {
         maybeLoadFromExternalFile(this.config.response_format);
       } catch (error) {
         throw new Error(
           `Failed to load response_format file: ${this.config.response_format}\n` +
-            `Error: ${error.message}\n` +
+            `Error: ${error instanceof Error ? error.message : String(error)}\n` +
             `Make sure the file exists and contains valid JSON schema format.`,
         );
       }

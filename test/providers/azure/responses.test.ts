@@ -100,7 +100,7 @@ describe('AzureResponsesProvider', () => {
 
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: {
-          response_format: 'file://test-schema.json',
+          response_format: 'file://test-schema.json' as any,
         },
       });
 
@@ -132,7 +132,7 @@ describe('AzureResponsesProvider', () => {
             type: 'json_schema',
             json_schema: {
               name: 'inline_schema',
-              schema: { type: 'object', properties: { result: { type: 'string' } } },
+              schema: { type: 'object', properties: { result: { type: 'string' } }, additionalProperties: false },
             },
           },
         },
@@ -143,7 +143,7 @@ describe('AzureResponsesProvider', () => {
       expect(body.text.format).toMatchObject({
         type: 'json_schema',
         name: 'inline_schema',
-        schema: { type: 'object', properties: { result: { type: 'string' } } },
+        schema: { type: 'object', properties: { result: { type: 'string' } }, additionalProperties: false },
         strict: true,
       });
     });
@@ -206,7 +206,7 @@ describe('AzureResponsesProvider', () => {
 
     it('should validate external response_format files', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
-        config: { response_format: 'file://missing.json' },
+        config: { response_format: 'file://missing.json' as any },
       });
 
       mockMaybeLoadFromExternalFile.mockImplementation(() => {

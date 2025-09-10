@@ -399,9 +399,9 @@ describe('Behavioral Parity: OpenAI vs Azure Responses', () => {
       ]);
 
       expect(openAiResult.tokenUsage).toEqual(azureResult.tokenUsage);
-      expect(openAiResult.tokenUsage.total).toBe(15);
-      expect(openAiResult.tokenUsage.prompt).toBe(10);
-      expect(openAiResult.tokenUsage.completion).toBe(5);
+      expect(openAiResult.tokenUsage?.total).toBe(15);
+      expect(openAiResult.tokenUsage?.prompt).toBe(10);
+      expect(openAiResult.tokenUsage?.completion).toBe(5);
     });
   });
 });

@@ -19,8 +19,8 @@ providers:
   - id: azure:responses:gpt-4o-mini
     label: Azure-Responses
     config:
-      apiHost: "promptfoo-openai-test.openai.azure.com"
-      apiKey: "dbe8e1aaf4f343638fabc30282278893"
+      apiHost: 'promptfoo-openai-test.openai.azure.com'
+      apiKey: 'dbe8e1aaf4f343638fabc30282278893'
       temperature: 0
       max_output_tokens: 500
       response_format: file://examples/openai-responses/response_format.json
@@ -30,7 +30,7 @@ tests:
   - vars:
       event_type: AI Conference
       date: December 15th, 2025
-      location: San Francisco Convention Center  
+      location: San Francisco Convention Center
       participants: tech leaders and researchers
     assert:
       - type: is-json
@@ -55,10 +55,9 @@ tests:
         value: 'March 10th, 2026'
       - type: contains
         value: 'Boston Medical Center'
-
 # Expected behavior:
 # - Both providers should return identical JSON structures
 # - Both should comply with the external JSON schema
-# - Both should extract the same event information 
+# - Both should extract the same event information
 # - Token usage should be similar
 # - Response format should be identical

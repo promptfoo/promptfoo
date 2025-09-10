@@ -143,7 +143,7 @@ export class ResponsesProcessor {
       const processed = await this.processOutputItem(item, context);
 
       if (processed.isRefusal) {
-        refusal = processed.content;
+        refusal = processed.content || '';
         isRefusal = true;
       } else if (processed.content) {
         if (result) {
