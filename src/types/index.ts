@@ -5,7 +5,7 @@ import { ProviderEnvOverridesSchema } from '../types/env';
 import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
-import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+import { ApiProviderSchema, ProviderOptionsSchema, ProviderResponseSchema, ProvidersSchema } from '../validators/providers';
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema } from '../validators/shared';
 
@@ -1193,3 +1193,134 @@ export interface LoadApiProviderContext {
   basePath?: string;
   env?: EnvOverrides;
 }
+
+// Zod schemas for import/export validation
+
+// Create Zod schemas from existing TypeScript interfaces to avoid duplication
+// These schemas are more flexible for import validation (allowing optional fields)
+
+export const EvaluateTableOutputSchema = z.object({
+  cost: z.number(),
+  failureReason: z.nativeEnum(ResultFailureReason),
+  gradingResult: z.any().nullable().optional(),
+  id: z.string(),
+  latencyMs: z.number(),
+  metadata: z.record(z.any()).optional(),
+  namedScores: z.record(z.number()),
+  pass: z.boolean(),
+  prompt: z.string(),
+  provider: z.string().optional(),
+  response: ProviderResponseSchema.optional(),
+  score: z.number(),
+  success: z.boolean(),
+  testCase: z.any(), // AtomicTestCaseSchema may be too strict for import
+  testIdx: z.number(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
+  vars: z.record(z.any()),
+  audio: z.object({
+    id: z.string().optional(),
+    expiresAt: z.number().optional(),
+    data: z.string().optional(),
+    transcript: z.string().optional(),
+    format: z.string().optional(),
+  }).optional(),
+});
+
+export const EvaluateTableRowSchema = z.object({
+  description: z.string().optional(),
+  outputs: z.array(EvaluateTableOutputSchema),
+  vars: z.array(z.string()),
+  test: z.any(), // AtomicTestCaseSchema may be too strict for import
+  testIdx: z.number(),
+});
+
+export const EvaluateTableSchema = z.object({
+  head: z.object({
+    prompts: z.array(CompletedPromptSchema),
+    vars: z.array(z.string()),
+  }),
+  body: z.array(EvaluateTableRowSchema),
+});
+
+export const EvaluateStatsSchema = z.object({
+  successes: z.number(),
+  failures: z.number(),
+  errors: z.number(),
+  tokenUsage: BaseTokenUsageSchema,
+});
+
+// Minimal provider schema for results - subset of ProviderOptionsSchema
+// Matches the Pick<ProviderOptions, 'id' | 'label'> type used in EvaluateResult
+export const ProviderOptionsMinimalSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+});
+
+export const EvaluateResultSchema = z.object({
+  id: z.string().optional(),
+  description: z.string().optional(),
+  promptIdx: z.number(),
+  testIdx: z.number(),
+  testCase: z.any(), // AtomicTestCaseSchema may be too strict for import
+  promptId: z.string(),
+  provider: ProviderOptionsMinimalSchema,
+  prompt: z.any(), // PromptSchema may be too strict for import
+  vars: z.record(z.any()),
+  response: ProviderResponseSchema.optional(),
+  error: z.string().nullable().optional(),
+  failureReason: z.nativeEnum(ResultFailureReason),
+  success: z.boolean(),
+  score: z.number(),
+  latencyMs: z.number(),
+  gradingResult: z.any().nullable().optional(),
+  namedScores: z.record(z.number()),
+  cost: z.number().optional(),
+  metadata: z.record(z.any()).optional(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
+});
+
+// Make schemas more flexible for import validation by allowing optional fields
+export const EvaluateSummaryV3Schema = z.object({
+  version: z.literal(3),
+  timestamp: z.string().optional(),
+  results: z.array(EvaluateResultSchema),
+  prompts: z.array(CompletedPromptSchema),
+  stats: EvaluateStatsSchema.optional(),
+});
+
+// Make V2 schema more flexible for import validation
+export const EvaluateSummaryV2Schema = z.object({
+  version: z.number(),
+  timestamp: z.string().optional(),
+  results: z.array(EvaluateResultSchema),
+  table: EvaluateTableSchema.optional(),
+  stats: EvaluateStatsSchema.optional(),
+});
+
+export const OutputMetadataSchema = z.object({
+  promptfooVersion: z.string().optional(),
+  nodeVersion: z.string().optional(),
+  platform: z.string().optional(),
+  arch: z.string().optional(),
+  exportedAt: z.string().optional(),
+  evaluationCreatedAt: z.string().optional(),
+  author: z.string().optional(),
+});
+
+export const OutputFileSchema = z
+  .object({
+    evalId: z.string().nullable().optional(),
+    id: z.string().optional(), // Legacy V2 format uses 'id' instead of 'evalId'
+    results: z.union([EvaluateSummaryV3Schema, EvaluateSummaryV2Schema]),
+    config: z.any(), // UnifiedConfig is very complex, using any for now
+    shareableUrl: z.string().nullable().optional(),
+    metadata: OutputMetadataSchema.optional(),
+    // V2 legacy fields
+    version: z.number().optional(),
+    createdAt: z.string().optional(),
+  })
+  .refine((data) => data.evalId || data.id, {
+    message: 'Must have either evalId or id field',
+  });
+
+// Note: Inferred types are available via z.infer<typeof SchemaName> if needed

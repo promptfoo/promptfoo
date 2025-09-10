@@ -113,15 +113,53 @@ export default class EvalResult {
     return new EvalResult(args);
   }
 
-  static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
+  static createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    await db.transaction(async (tx) => {
+    db.transaction(() => {
       for (const result of results) {
-        const dbResult = await tx
-          .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
-          .returning();
+        const {
+          prompt,
+          error,
+          score,
+          latencyMs,
+          success,
+          provider,
+          gradingResult,
+          namedScores,
+          cost,
+          metadata,
+          failureReason,
+          testCase,
+        } = result;
+
+        const args = {
+          id: randomUUID(),
+          evalId,
+          testCase: {
+            ...testCase,
+            ...(testCase.provider && {
+              provider: sanitizeProvider(testCase.provider),
+            }),
+          },
+          promptIdx: result.promptIdx,
+          testIdx: result.testIdx,
+          prompt,
+          promptId: hashPrompt(prompt),
+          error: error?.toString(),
+          success,
+          score: score == null ? 0 : score,
+          response: result.response || null,
+          gradingResult: gradingResult || null,
+          namedScores,
+          provider: sanitizeProvider(provider),
+          latencyMs,
+          cost,
+          metadata,
+          failureReason,
+        };
+
+        const dbResult = db.insert(evalResultsTable).values(args).returning().all();
         returnResults.push(new EvalResult({ ...dbResult[0], persisted: true }));
       }
     });

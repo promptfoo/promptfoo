@@ -248,6 +248,19 @@ Export an eval record to JSON format. To export the most recent, use evalId `lat
 | ------------------------- | ------------------------------------------- |
 | `-o, --output <filepath>` | File to write. Writes to stdout by default. |
 
+**Examples:**
+
+```bash
+# Export the latest evaluation to a file
+promptfoo export latest -o my-eval.json
+
+# Import an evaluation from a file
+promptfoo import my-eval.json
+
+# Export a specific evaluation by ID
+promptfoo export eval-abc-2024-01-01 -o backup.json
+```
+
 ### `promptfoo export logs`
 
 Collect and zip log files for debugging purposes.
