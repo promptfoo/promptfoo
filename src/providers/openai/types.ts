@@ -35,6 +35,7 @@ export interface OpenAiSharedOptions {
   organization?: string;
   cost?: number;
   headers?: { [key: string]: string };
+  maxRetries?: number;
 }
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | null;
