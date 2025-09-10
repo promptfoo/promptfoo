@@ -8,7 +8,6 @@ keywords: [red team, multi-modal, image, safety, content moderation, unsafe cont
 
 The VLGuard plugin tests multi-modal models with potentially unsafe images from the [VLGuard dataset](https://huggingface.co/datasets/kirito011024/vlguard_unsafes).
 
-
 The plugin helps evaluate how well models:
 
 - Detect inappropriate content across multiple categories
