@@ -130,16 +130,9 @@ defaultTest:
       Does this response meet the criterion? Answer Y or N.
 ```
 
-## When to use vs. alternatives
-
-- **Use `model-graded-closedqa`** for binary criteria (yes/no requirements)
-- **Use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)** for nuanced evaluation with scoring
-- **Use [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality)** for fact-checking against ground truth
-
 ## Related assertions
 
 - [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - For scored evaluation (0-1) instead of binary
-- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - For checking factual accuracy
 - [`contains`](/docs/configuration/expected-outputs/deterministic#contains) - For simple string matching
 
 ## Further reading

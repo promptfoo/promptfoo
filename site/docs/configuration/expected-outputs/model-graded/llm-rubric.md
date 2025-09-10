@@ -330,20 +330,10 @@ assert:
 
 The threshold is applied to the score returned by the LLM (which ranges from 0.0 to 1.0). If the LLM returns an explicit pass/fail status, the threshold will still be enforced - both conditions must be met for the assertion to pass.
 
-## When to use llm-rubric vs. alternatives
-
-- **Use `llm-rubric`** for flexible custom evaluation with scoring and explanations
-- **Use [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)** for complex evaluation requiring structured chain-of-thought reasoning
-- **Use [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa)** for simple binary (pass/fail) requirements
-- **Use [`pi`](/docs/configuration/expected-outputs/model-graded/pi)** for consistent, deterministic scoring without explanations
-- **Use [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality)** for fact-checking against reference answers
-
 ## Related assertions
 
 - [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Chain-of-thought evaluation
-- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Binary pass/fail
-- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Fact-checking
-- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Query-answer relevance
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Fact-checking against ground truth
 
 ## Further reading
 
