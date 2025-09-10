@@ -52,6 +52,7 @@ import {
 import { JfrogMlChatCompletionProvider } from './jfrog';
 import { createLambdaLabsProvider } from './lambdalabs';
 import { LlamaProvider } from './llama';
+import { createLlamaApiProvider } from './llamaApi';
 import {
   LocalAiChatProvider,
   LocalAiCompletionProvider,
@@ -91,7 +92,6 @@ import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
-import { createLlamaApiProvider } from './llamaApi';
 
 import type { LoadApiProviderContext } from '../types';
 import type { ApiProvider, ProviderOptions } from '../types/providers';

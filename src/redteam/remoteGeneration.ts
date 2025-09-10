@@ -25,7 +25,7 @@ export function neverGenerateRemote(): boolean {
 /**
  * Builds a remote URL with a substituted pathname, honoring env vars / cloud config.
  */
-function buildRemoteUrl(pathname: string, fallback: string): string | null {
+export function buildRemoteUrl(pathname: string, fallback: string): string | null {
   if (neverGenerateRemote()) {
     return null;
   }
