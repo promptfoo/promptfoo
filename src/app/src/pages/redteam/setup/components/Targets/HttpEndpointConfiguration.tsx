@@ -16,7 +16,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
@@ -362,7 +362,7 @@ ${exampleRequest}`;
             },
           }}
         >
-          AI Auto-fill from Example
+          Auto-fill from Example
         </Button>
       </Box>
       {selectedTarget.config.request ? (
@@ -527,7 +527,7 @@ ${exampleRequest}`;
             the configuration for you.
           </Typography>
           <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Typography variant="h6" gutterBottom>
                 Example Request (paste your HTTP request here)
               </Typography>
@@ -546,7 +546,7 @@ ${exampleRequest}`;
                 />
               </Paper>
             </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Typography variant="h6" gutterBottom>
                 Example Response (optional, improves accuracy)
               </Typography>
@@ -566,12 +566,12 @@ ${exampleRequest}`;
               </Paper>
             </Grid>
             {error && (
-              <Grid size={12}>
+              <Grid item xs={12}>
                 <Typography color="error">Error: {error}</Typography>
               </Grid>
             )}
             {generatedConfig && (
-              <Grid size={12}>
+              <Grid item xs={12}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
                   <Typography variant="h6" sx={{ flexGrow: 1 }}>
                     Generated Configuration

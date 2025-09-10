@@ -4,7 +4,7 @@ import { useColorMode } from '@docusaurus/theme-common';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Layout from '@theme/Layout';
@@ -77,7 +77,7 @@ const PressContent = () => {
 
           {/* DeepSeek Research Coverage */}
           <Grid container spacing={4} mb={6}>
-            <Grid size={12}>
+            <Grid item xs={12}>
               <Box className={styles.coverageItem} p={3}>
                 <Typography variant="h6" component="h4" gutterBottom>
                   DeepSeek AI Censorship Research
@@ -148,7 +148,7 @@ const PressContent = () => {
                       link: 'https://news.ycombinator.com/item?id=42858552',
                     },
                   ].map((article) => (
-                    <Grid size={{ xs: 12, md: 6 }} key={article.link}>
+                    <Grid item xs={12} md={6} key={article.link}>
                       <Link href={article.link} className={styles.articleLink}>
                         <Typography variant="subtitle2" color="text.secondary" component="span">
                           {article.publication}
@@ -167,7 +167,7 @@ const PressContent = () => {
             Featured Podcasts
           </Typography>
           <Grid container spacing={4} mb={6}>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -195,7 +195,7 @@ const PressContent = () => {
                 </Link>
               </Box>
             </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -218,7 +218,7 @@ const PressContent = () => {
                 </Link>
               </Box>
             </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -254,7 +254,7 @@ const PressContent = () => {
           </Typography>
           <Grid container spacing={4} mb={6}>
             {/* OpenAI Build Hour */}
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -281,7 +281,7 @@ const PressContent = () => {
             </Grid>
 
             {/* Anthropic Course */}
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -311,7 +311,7 @@ const PressContent = () => {
             </Grid>
 
             {/* AWS Workshop */}
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -341,7 +341,7 @@ const PressContent = () => {
             </Grid>
 
             {/* IBM Course */}
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -375,7 +375,7 @@ const PressContent = () => {
             Technical Content & Guides
           </Typography>
           <Grid container spacing={4} mb={6}>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Box
                 className={styles.coverageItem}
                 p={3}
@@ -416,7 +416,7 @@ const PressContent = () => {
             Download official Promptfoo logos and brand assets for media use.
           </Typography>
           <Grid container spacing={4}>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Box
                 sx={{
                   border: '1px solid',
@@ -468,7 +468,7 @@ const PressContent = () => {
             Quick Facts
           </Typography>
           <Grid container spacing={4}>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Typography variant="h6" component="h4" gutterBottom>
                 Founded
               </Typography>
@@ -482,7 +482,7 @@ const PressContent = () => {
                 San Francisco, California
               </Typography>
             </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid item xs={12} md={6}>
               <Typography variant="h6" component="h4" gutterBottom>
                 Leadership
               </Typography>

@@ -445,7 +445,6 @@ export async function runEval({
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
     // Track token usage at the provider level
-
     if (response.tokenUsage) {
       const providerId = provider.id();
       const trackingId = provider.constructor?.name
@@ -1744,6 +1743,8 @@ class Evaluator {
       // Basic metrics
       numPrompts: prompts.length,
       numTests: this.stats.successes + this.stats.failures + this.stats.errors,
+      numRequests: this.stats.tokenUsage.numRequests || 0,
+      numResults: this.evalRecord.results.length,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
@@ -1766,6 +1767,8 @@ class Evaluator {
 
       // Token and cost metrics
       totalTokens,
+      promptTokens: this.stats.tokenUsage.prompt,
+      completionTokens: this.stats.tokenUsage.completion,
       cachedTokens,
       totalCost,
       totalRequests,
