@@ -137,7 +137,9 @@ export class PersistentPythonManager extends EventEmitter {
   }
 
   private _setupStdoutHandler(): void {
-    if (!this.pythonProcess?.stdout) return;
+    if (!this.pythonProcess?.stdout) {
+      return;
+    }
 
     this.pythonProcess.stdout.on('data', (chunk: Buffer) => {
       this.buffer += chunk.toString('utf-8');
@@ -151,7 +153,7 @@ export class PersistentPythonManager extends EventEmitter {
           try {
             const response = JSON.parse(line);
             this._handleResponse(response);
-          } catch (e) {
+          } catch (_e) {
             logger.error(`Failed to parse Python response: ${line}`);
           }
         }
@@ -186,7 +188,7 @@ export class PersistentPythonManager extends EventEmitter {
 
   private _handleProcessExit(code: number | null, signal: string | null): void {
     // Reject all pending requests
-    for (const [id, request] of this.pendingRequests) {
+    for (const [_id, request] of this.pendingRequests) {
       request.reject(new Error(`Python process exited unexpectedly: code=${code}, signal=${signal}`));
     }
     this.pendingRequests.clear();
@@ -216,7 +218,7 @@ export class PersistentPythonManager extends EventEmitter {
     logger.error(`Python process error: ${error.message}`);
     
     // Reject all pending requests
-    for (const [id, request] of this.pendingRequests) {
+    for (const [_id, request] of this.pendingRequests) {
       request.reject(error);
     }
     this.pendingRequests.clear();
@@ -303,7 +305,7 @@ export class PersistentPythonManager extends EventEmitter {
     try {
       const response = await this._sendRequest({ type: 'ping' }, 5000);
       return response.type === 'pong';
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   }
@@ -315,7 +317,7 @@ export class PersistentPythonManager extends EventEmitter {
     }
 
     // Reject all pending requests
-    for (const [id, request] of this.pendingRequests) {
+    for (const [_id, request] of this.pendingRequests) {
       request.reject(new Error('Python manager shutting down'));
     }
     this.pendingRequests.clear();

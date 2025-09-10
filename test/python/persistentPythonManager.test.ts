@@ -1,6 +1,5 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
-import path from 'path';
 import { PersistentPythonManager } from '../../src/python/persistentPythonManager';
 
 // Mock child_process
@@ -9,7 +8,7 @@ const mockSpawn = jest.mocked(spawn);
 
 // Mock fs
 jest.mock('fs');
-const mockFs = jest.mocked(fs);
+const _mockFs = jest.mocked(fs);
 
 describe('PersistentPythonManager', () => {
   let manager: PersistentPythonManager;
@@ -116,17 +115,21 @@ describe('PersistentPythonManager', () => {
       const mockSpawnHandler = jest.fn();
       
       mockProcess.stdout.on.mockImplementation((event, handler) => {
-        if (event === 'data') mockStdoutHandler.mockImplementation(handler);
+        if (event === 'data') {
+          mockStdoutHandler.mockImplementation(handler);
+        }
         return mockProcess.stdout;
       });
       
       mockProcess.on.mockImplementation((event, handler) => {
-        if (event === 'spawn') mockSpawnHandler.mockImplementation(handler);
+        if (event === 'spawn') {
+          mockSpawnHandler.mockImplementation(handler);
+        }
         return mockProcess;
       });
 
       // Start initialization (won't complete due to mocking, but will call spawn)
-      const initPromise = manager.initialize().catch(() => {
+      const _initPromise = manager.initialize().catch(() => {
         // Expected to fail due to mocking
       });
 
@@ -142,7 +145,7 @@ describe('PersistentPythonManager', () => {
     });
 
     it('should setup event handlers correctly', async () => {
-      const initPromise = manager.initialize().catch(() => {
+      const _initPromise = manager.initialize().catch(() => {
         // Expected to fail due to mocking
       });
 

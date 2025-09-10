@@ -251,7 +251,7 @@ describe('PythonProvider Persistent Mode', () => {
       const { runPython } = require('../../src/python/pythonUtils');
       runPython.mockResolvedValue({ output: 'fallback response' });
 
-      const result = await provider.callApi('test prompt');
+      const _result = await provider.callApi('test prompt');
 
       expect(mockManagerInstance.callMethod).not.toHaveBeenCalled();
       expect(runPython).toHaveBeenCalled();
@@ -264,7 +264,7 @@ describe('PythonProvider Persistent Mode', () => {
       const { runPython } = require('../../src/python/pythonUtils');
       runPython.mockResolvedValue({ output: 'fallback response' });
 
-      const result = await provider.callApi('test prompt');
+      const _result = await provider.callApi('test prompt');
 
       expect(mockManagerInstance.callMethod).toHaveBeenCalled();
       expect(runPython).toHaveBeenCalled();
