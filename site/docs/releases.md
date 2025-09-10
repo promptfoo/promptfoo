@@ -161,7 +161,7 @@ Supply chain attacks through compromised models are a growing threat. We've sign
 **Expanded Format Support**:
 
 - **[SafeTensors](/docs/model-audit/scanners/#safetensors-scanner)** - Support for Hugging Face's secure tensor format
-- **[HuggingFace URLs](/docs/model-audit/usage/#huggingface-url-scanning)** - Scan models directly from HuggingFace without downloading
+- **[HuggingFace URLs](/docs/model-audit/usage/#huggingface)** - Scan models directly from HuggingFace without downloading
 - **Enhanced Binary Detection** - Automatic format detection for `.bin` files (PyTorch, SafeTensors, etc.)
 - **Weight Analysis** - Statistical anomaly detection to identify potential backdoors
 

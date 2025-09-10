@@ -11,9 +11,10 @@ import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { getConfigFromCloud } from '../../../src/util/cloud';
+import { checkCloudPermissions, ConfigPermissionError } from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
-import { writePromptfooConfig } from '../../../src/util/config/manage';
+import { writePromptfooConfig } from '../../../src/util/config/writer';
 
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types';
@@ -54,10 +55,17 @@ jest.mock('../../../src/envars', () => ({
 }));
 
 jest.mock('../../../src/util/cloud', () => ({
+  ...jest.requireActual('../../../src/util/cloud'),
   getConfigFromCloud: jest.fn(),
   getCloudDatabaseId: jest.fn(),
   getPluginSeverityOverridesFromCloud: jest.fn(),
   isCloudProvider: jest.fn(),
+  getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
+  checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../../../src/util/config/writer', () => ({
+  writePromptfooConfig: jest.fn(),
 }));
 
 jest.mock('../../../src/cliState', () => ({
@@ -70,6 +78,7 @@ jest.mock('../../../src/globalConfig/cloud', () => ({
     getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
   })),
   cloudConfig: {
+    isEnabled: jest.fn().mockReturnValue(false),
     getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
   },
 }));
@@ -1043,6 +1052,118 @@ describe('doGenerateRedteam', () => {
       expect(headerComments!.some((comment) => comment.includes('https://api.promptfoo.app'))).toBe(
         true,
       );
+    });
+  });
+
+  describe('checkCloudPermissions', () => {
+    it('should fail when checkCloudPermissions throws an error', async () => {
+      // Mock cloudConfig to be enabled
+      const mockCloudConfig = {
+        isEnabled: jest.fn().mockReturnValue(true),
+        getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+      };
+      jest.mocked(cloudConfig).isEnabled = mockCloudConfig.isEnabled;
+
+      // Mock checkCloudPermissions to throw an error
+      const permissionError = new ConfigPermissionError('Permission denied: insufficient access');
+      jest.mocked(checkCloudPermissions).mockRejectedValueOnce(permissionError);
+
+      // Setup the test configuration
+      jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          providers: ['openai:gpt-4'],
+          redteam: {},
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
+
+      await expect(doGenerateRedteam(options)).rejects.toThrow(
+        'Permission denied: insufficient access',
+      );
+
+      // Verify checkCloudPermissions was called with the correct arguments
+      expect(checkCloudPermissions).toHaveBeenCalledWith({
+        providers: ['openai:gpt-4'],
+        redteam: {},
+      });
+
+      // Verify that synthesize was not called
+      expect(synthesize).not.toHaveBeenCalled();
+    });
+
+    it('should call checkCloudPermissions and proceed when it succeeds', async () => {
+      // Mock cloudConfig to be enabled
+      const mockCloudConfig = {
+        isEnabled: jest.fn().mockReturnValue(true),
+        getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+      };
+      jest.mocked(cloudConfig).isEnabled = mockCloudConfig.isEnabled;
+
+      // Mock checkCloudPermissions to succeed (resolve without throwing)
+      jest.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
+
+      // Setup the test configuration
+      jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          providers: ['openai:gpt-4'],
+          redteam: {},
+        },
+      });
+
+      jest.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'redteam' },
+          },
+        ],
+        purpose: 'Test purpose',
+        entities: ['Test entity'],
+        injectVar: 'input',
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+        force: true,
+      };
+
+      const result = await doGenerateRedteam(options);
+
+      // Verify checkCloudPermissions was called
+      expect(checkCloudPermissions).toHaveBeenCalledWith({
+        providers: ['openai:gpt-4'],
+        redteam: {},
+      });
+
+      // Verify that the function proceeded normally
+      expect(result).not.toBeNull();
+
+      // Verify that synthesize was called
+      expect(synthesize).toHaveBeenCalled();
     });
   });
 });

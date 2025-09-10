@@ -23,8 +23,8 @@ jest.mock('node:module', () => {
   };
 });
 
-jest.mock('../../src/fetch', () => {
-  const actual = jest.requireActual('../../src/fetch');
+jest.mock('../../src/util/fetch', () => {
+  const actual = jest.requireActual('../../src/util/fetch');
   return {
     ...actual,
     fetchWithRetries: jest.fn(actual.fetchWithRetries),

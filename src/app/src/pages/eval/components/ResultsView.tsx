@@ -642,6 +642,11 @@ export default function ResultsView({
                           displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
                           filter.value;
                         label = `Strategy: ${displayName}`;
+                      } else if (filter.type === 'severity') {
+                        // Capitalize the first letter of severity value for display
+                        const severityDisplay =
+                          filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
+                        label = `Severity: ${severityDisplay}`;
                       } else {
                         // metadata type
                         label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
@@ -780,7 +785,7 @@ export default function ResultsView({
                       color="primary"
                       variant="contained"
                       startIcon={<EyeIcon />}
-                      onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
+                      onClick={() => navigate(`/reports/?evalId=${evalId || defaultEvalId}`)}
                     >
                       Vulnerability Report
                     </Button>
