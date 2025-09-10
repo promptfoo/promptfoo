@@ -641,8 +641,45 @@ function ResultsTable({
                   <TruncatedText text={value} maxLength={maxTextLength} />
                 );
 
-                // If this is an injected value, wrap in tooltip showing original
+                // Helper decode functions
+                const tryDecodeBase64 = (str: string): string | null => {
+                  try {
+                    // Require typical base64 charset and length
+                    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(str) || str.length < 8) {
+                      return null;
+                    }
+                    // atob may throw if invalid
+                    const decoded = typeof atob !== 'undefined' ? atob(str) : Buffer.from(str, 'base64').toString('binary');
+                    // Heuristic: ensure result has printable characters
+                    const printable = decoded.replace(/[\x00-\x08\x0E-\x1F\x7F]/g, '');
+                    return printable.length > 0 ? decoded : null;
+                  } catch {
+                    return null;
+                  }
+                };
+                const tryDecodeHex = (str: string): string | null => {
+                  // Matches space-separated hex bytes like "68 65 6C 6C 6F"
+                  if (!/^(?:[0-9A-Fa-f]{2}(?:\s|$))+$/u.test(str)) {
+                    return null;
+                  }
+                  try {
+                    const bytes = str
+                      .trim()
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .map((b) => parseInt(b, 16));
+                    return String.fromCharCode(...bytes);
+                  } catch {
+                    return null;
+                  }
+                };
+
+                // If this is an injected value, show original (decoded) text as well
                 if (isInjected && typeof originalValue === 'string') {
+                  const testMetadata = (row as any)?.test?.metadata || {};
+                  const metadataOriginal = typeof testMetadata.originalText === 'string' ? testMetadata.originalText : undefined;
+                  const heuristicDecoded = metadataOriginal || tryDecodeBase64(originalValue) || tryDecodeHex(originalValue) || undefined;
+                  const originalForDisplay = heuristicDecoded || originalValue;
                   return (
                     <div className="cell" data-capture="true">
                       <Tooltip
@@ -650,7 +687,7 @@ function ResultsTable({
                           <div style={{ maxWidth: 500, whiteSpace: 'pre-wrap' }}>
                             <strong>Original Attack:</strong>
                             <br />
-                            {originalValue}
+                            {originalForDisplay}
                           </div>
                         }
                         placement="top"
@@ -666,6 +703,12 @@ function ResultsTable({
                           {cellContent}
                         </div>
                       </Tooltip>
+                      {originalForDisplay && originalForDisplay !== value && (
+                        <div style={{ marginTop: '6px', color: '#666', fontSize: '0.8em' }}>
+                          <strong>Original (decoded):</strong>{' '}
+                          <TruncatedText text={String(originalForDisplay)} maxLength={maxTextLength} />
+                        </div>
+                      )}
                     </div>
                   );
                 }
