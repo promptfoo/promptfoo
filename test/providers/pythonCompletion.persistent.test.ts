@@ -312,6 +312,7 @@ describe('PythonProvider Persistent Mode', () => {
       const passedContext = callArgs[3];
 
       expect(passedContext).toEqual({
+        prompt: { raw: 'test prompt', label: 'test' },
         vars: { test: 'value' },
         traceparent: '00-trace-id-parent-id-01',
         evaluationId: 'eval-123',
