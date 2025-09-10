@@ -152,10 +152,25 @@ defaultTest:
       Choose the best output by responding with its index (0 to {{ outputs | length - 1 }}).
 ```
 
+## When to use select-best
+
+- **Prompt optimization**: Finding the best wording or structure across variations
+- **Model comparison**: Comparing different models on the same task
+- **Style evaluation**: Identifying which approach works best for your use case
+- **A/B testing**: Systematically evaluating different approaches
+
+## Performance considerations
+
+- Requires one additional LLM API call per test case for evaluation
+- More expensive than [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) which uses existing assertion scores
+- Results may vary between runs due to LLM non-determinism
+- Best for subjective criteria where human-like judgment is needed
+
 ## Related assertions
 
-- [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - Objective selection based on assertion scores
-- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - Individual output scoring
+- [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - Accepts any output meeting a threshold
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - For individual scoring without comparison
+- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - For detailed evaluation with reasoning
 
 ## Further reading
 

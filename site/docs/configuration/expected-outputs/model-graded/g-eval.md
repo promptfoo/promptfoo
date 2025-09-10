@@ -123,10 +123,17 @@ tests:
         threshold: 0.85
 ```
 
+## When to use G-Eval vs. alternatives
+
+- **Use `g-eval`** for complex criteria requiring thoughtful analysis
+- **Use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)** for simpler custom evaluation
+- **Use [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa)** for binary yes/no evaluation
+
 ## Related assertions
 
-- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - Custom evaluation without chain-of-thought
-- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Fact-checking against ground truth
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - Simpler custom evaluation without CoT
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - For fact-checking against ground truth
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - For checking if answers address the query
 
 ## Further reading
 

@@ -160,10 +160,22 @@ tests:
         threshold: 0.85
 ```
 
+## When to use Pi vs. alternatives
+
+- **Use `pi`** for consistent benchmarking, CI/CD pipelines, and reproducible scoring
+- **Use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)** when you need detailed reasoning for evaluation decisions
+- **Use [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)** for complex evaluation requiring chain-of-thought analysis
+- **Use [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa)** for simple binary (yes/no) requirements
+
 ## Related assertions
 
 - [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - LLM-as-judge with explanations
 - [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Chain-of-thought evaluation
+- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Binary yes/no evaluation
+
+## Further reading
+
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
 - [Pi Documentation](https://docs.withpi.ai) for advanced configuration and calibration
 - [Pi Labs Copilot](https://build.withpi.ai) for interactive metric development
 - [Getting Started](/docs/getting-started) guide for promptfoo basics
