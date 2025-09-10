@@ -257,10 +257,10 @@ This increases complexity, so first consider if you can achieve your goal with a
 
 Here are a few complete example implementations:
 
-- [Simple usage](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code-basic) - Basic usage with no tools
-- [File operations](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code-working-dir) - Read-only access to a working directory
-- [Advanced editing](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code-advanced) - File edits and working directory reset in an extension hook
-- [MCP integration](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code-mcp) - Read-only MCP server integration with weather API
+- [Basic usage](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code#basic-usage) - Basic usage with no tools
+- [Working directory](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code#working-directory) - Read-only access to a working directory
+- [Advanced editing](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code#advanced-editing) - File edits and working directory reset in an extension hook
+- [MCP integration](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-code#mcp-integration) - Read-only MCP server integration with weather API
 
 ## See Also
 
