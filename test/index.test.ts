@@ -94,6 +94,7 @@ describe('index.ts exports', () => {
     'CompletedPromptSchema',
     'CompletionTokenDetailsSchema',
     'DerivedMetricSchema',
+    'EvalResultsFilterMode',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',
