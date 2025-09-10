@@ -280,7 +280,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           const functionCall = message.function_call;
 
           // Process function/tool calls if callbacks are configured or MCP is available
-          if ((config.functionToolCallbacks && (toolCalls || functionCall)) || (this.mcpClient && (toolCalls || functionCall))) {
+          if (
+            (config.functionToolCallbacks && (toolCalls || functionCall)) ||
+            (this.mcpClient && (toolCalls || functionCall))
+          ) {
             // Combine all calls into a single array for processing
             const allCalls = [];
             if (toolCalls) {

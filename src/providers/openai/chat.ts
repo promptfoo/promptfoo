@@ -410,17 +410,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
-          
+
           // Try MCP first if available
           if (this.mcpClient) {
             const mcpTools = this.mcpClient.getAllTools();
-            const mcpTool = mcpTools.find(tool => tool.name === functionName);
+            const mcpTool = mcpTools.find((tool) => tool.name === functionName);
             if (mcpTool) {
               try {
                 const args = functionCall.arguments || functionCall.function?.arguments || '{}';
                 const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
                 const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
-                
+
                 if (mcpResult?.error) {
                   results.push(`MCP Tool Error (${functionName}): ${mcpResult.error}`);
                 } else {
@@ -433,28 +433,30 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                       return content;
                     }
                     if (Array.isArray(content)) {
-                      return content.map((part) => {
-                        if (typeof part === 'string') {
-                          return part;
-                        }
-                        if (part && typeof part === 'object') {
-                          if ('text' in part && (part as any).text != null) {
-                            return String((part as any).text);
+                      return content
+                        .map((part) => {
+                          if (typeof part === 'string') {
+                            return part;
                           }
-                          if ('json' in part) {
-                            return JSON.stringify((part as any).json);
+                          if (part && typeof part === 'object') {
+                            if ('text' in part && (part as any).text != null) {
+                              return String((part as any).text);
+                            }
+                            if ('json' in part) {
+                              return JSON.stringify((part as any).json);
+                            }
+                            if ('data' in part) {
+                              return JSON.stringify((part as any).data);
+                            }
+                            return JSON.stringify(part);
                           }
-                          if ('data' in part) {
-                            return JSON.stringify((part as any).data);
-                          }
-                          return JSON.stringify(part);
-                        }
-                        return String(part);
-                      }).join('\n');
+                          return String(part);
+                        })
+                        .join('\n');
                     }
                     return JSON.stringify(content);
                   };
-                  
+
                   const content = normalizeContent(mcpResult?.content);
                   results.push(`MCP Tool Result (${functionName}): ${content}`);
                 }
@@ -468,7 +470,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               }
             }
           }
-          
+
           // Fall back to regular function callbacks
           if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
             try {
