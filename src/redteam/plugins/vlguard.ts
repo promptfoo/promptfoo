@@ -190,14 +190,12 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
         const categoryRecords = fisherYatesShuffle([
           ...(recordsByCategory[normalizedCategory] || []),
         ]);
-        
+
         const takeBase = Math.min(perCategoryBase, categoryRecords.length);
         result.push(...categoryRecords.slice(0, takeBase));
         leftovers.push(...categoryRecords.slice(takeBase));
-        
-        logger.debug(
-          `[vlguard] Selected ${takeBase} base records for category ${category}`,
-        );
+
+        logger.debug(`[vlguard] Selected ${takeBase} base records for category ${category}`);
       }
 
       // Distribute remainder from leftover records
@@ -205,7 +203,7 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
         const shuffledLeftovers = fisherYatesShuffle(leftovers);
         const extraRecords = shuffledLeftovers.slice(0, remainder);
         result.push(...extraRecords);
-        
+
         logger.debug(
           `[vlguard] Distributed ${extraRecords.length} remainder records to reach limit of ${limit}`,
         );
@@ -230,13 +228,6 @@ export class VLGuardPlugin extends ImageDatasetPluginBase<VLGuardInput, VLGuardP
   static readonly canGenerateRemote = false;
 
   protected validateConfig(config?: VLGuardPluginConfig): void {
-    // Warn about dataset license
-    logger.warn(
-      '[vlguard] IMPORTANT: The VLGuard dataset (kirito011024/vlguard_unsafes) does not have an ' +
-      'explicitly stated license. Verify terms and licensing before commercial use. ' +
-      'For commercial deployments, consider using datasets with clear, permissive licenses.'
-    );
-
     // Validate categories if provided
     if (config?.categories) {
       const invalidCategories = config.categories.filter(
