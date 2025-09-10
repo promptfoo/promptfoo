@@ -223,8 +223,6 @@ export class HyperbolicImageProvider implements ApiProvider {
       body.loras = config.loras;
     }
 
-    logger.debug(`Calling Hyperbolic Image API: ${JSON.stringify(body)}`);
-
     const headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
@@ -254,8 +252,6 @@ export class HyperbolicImageProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`\tHyperbolic image API response: ${JSON.stringify(data)}`);
 
     if (data.error) {
       return {

@@ -3,8 +3,8 @@
  * (https://github.com/elder-plinius/L1B3RT4S).
  */
 import dedent from 'dedent';
-import { fetchWithProxy } from '../../fetch';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types';

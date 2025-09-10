@@ -2,12 +2,13 @@ import { spawn } from 'child_process';
 
 import chalk from 'chalk';
 import { getAuthor } from '../globalConfig/accounts';
-import logger from '../logger';
 import ModelAudit from '../models/modelAudit';
 import { checkModelAuditUpdates } from '../updates';
 import type { Command } from 'commander';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
+import { parseModelAuditArgs, DEPRECATED_OPTIONS_MAP } from '../util/modelAuditCliParser';
+import { z } from 'zod';
 
 export async function checkModelAuditInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -28,190 +29,124 @@ export function modelScanCommand(program: Command): void {
       '-b, --blacklist <patterns...>',
       'Additional blacklist patterns to check against model names',
     )
-    .option('--registry-uri <uri>', 'MLflow registry URI (only used for MLflow model URIs)')
 
     // Output configuration
     .option('-o, --output <path>', 'Output file path (prints to stdout if not specified)')
-    .option('-f, --format <format>', 'Output format (text, json)', 'text')
+    .option('-f, --format <format>', 'Output format (text, json, sarif)', 'text')
     .option('--sbom <path>', 'Write CycloneDX SBOM to the specified file')
     .option('--no-write', 'Do not write results to database')
     .option('--name <name>', 'Name for the audit (when saving to database)')
 
     // Execution control
     .option('-t, --timeout <seconds>', 'Scan timeout in seconds', '300')
-    .option('--max-file-size <bytes>', 'Maximum file size to scan in bytes (0 for unlimited)', '0')
-    .option(
-      '--max-total-size <bytes>',
-      'Maximum total bytes to scan before stopping (0 for unlimited)',
-      '0',
-    )
-
-    // Cloud storage options
-    .option(
-      '--jfrog-api-token <token>',
-      'JFrog API token for authentication (can also use JFROG_API_TOKEN env var)',
-    )
-    .option(
-      '--jfrog-access-token <token>',
-      'JFrog access token for authentication (can also use JFROG_ACCESS_TOKEN env var)',
-    )
-    .option(
-      '--max-download-size <size>',
-      'Maximum download size for cloud storage (e.g., 500MB, 2GB)',
-    )
-    .option('--no-cache', 'Do not use cache for downloaded cloud storage files')
-    .option(
-      '--cache-dir <path>',
-      'Directory for caching downloaded files (default: ~/.modelaudit/cache)',
-    )
-    .option('--preview', 'Preview what would be downloaded without actually downloading')
-    .option('--all-files', 'Download all files from directories (default: selective)')
-    .option('--stream', 'Use streaming analysis for large cloud files (experimental)')
+    .option('--max-size <size>', 'Override auto-detected size limits (e.g., 10GB, 500MB)')
 
     // Scanning behavior
-    .option('--skip-files', 'Skip non-model file types during directory scans')
-    .option('--strict-license', 'Fail scan when incompatible or deprecated licenses are detected')
-    .option('--no-large-model-support', 'Disable optimized scanning for large models (≈10GB+)')
-
-    // Progress reporting
-    .option('--no-progress', 'Disable progress reporting for large model scans')
-    .option('--progress-log <path>', 'Write progress information to log file')
-    .option('--progress-format <format>', 'Progress display format (tqdm, simple, json)', 'tqdm')
-    .option('--progress-interval <seconds>', 'Progress update interval in seconds', '2.0')
+    .option(
+      '--strict',
+      'Strict mode: fail on warnings, scan all file types, strict license validation',
+    )
+    .option('--dry-run', 'Preview what would be scanned/downloaded without actually doing it')
+    .option('--no-cache', 'Force disable caching (overrides smart detection)')
+    .option('--quiet', 'Silence detection messages')
+    .option('--progress', 'Force enable progress reporting (auto-detected by default)')
 
     // Miscellaneous
     .option('-v, --verbose', 'Enable verbose output')
 
     .action(async (paths: string[], options) => {
       if (!paths || paths.length === 0) {
-        logger.error(
+        console.error(
           'No paths specified. Please provide at least one model file or directory to scan.',
         );
         process.exit(1);
       }
 
+      // Check for deprecated options and warn users
+      const deprecatedOptionsUsed = Object.keys(options).filter((opt) => {
+        const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+        return DEPRECATED_OPTIONS_MAP[fullOption] !== undefined;
+      });
+
+      if (deprecatedOptionsUsed.length > 0) {
+        deprecatedOptionsUsed.forEach((opt) => {
+          const fullOption = `--${opt.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+          const replacement = DEPRECATED_OPTIONS_MAP[fullOption];
+          if (replacement) {
+            console.warn(
+              `⚠️  Warning: The '${fullOption}' option is deprecated. Please use '${replacement}' instead.`,
+            );
+          } else {
+            // Provide specific guidance for common cases
+            if (fullOption === '--jfrog-api-token') {
+              console.warn(
+                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_API_TOKEN environment variable instead.`,
+              );
+            } else if (fullOption === '--jfrog-access-token') {
+              console.warn(
+                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_ACCESS_TOKEN environment variable instead.`,
+              );
+            } else if (fullOption === '--registry-uri') {
+              console.warn(
+                `⚠️  Warning: '${fullOption}' is deprecated. Set JFROG_URL or MLFLOW_TRACKING_URI environment variable instead.`,
+              );
+            } else {
+              console.warn(
+                `⚠️  Warning: The '${fullOption}' option is deprecated and has been removed. It may be handled automatically or via environment variables. See documentation for details.`,
+              );
+            }
+          }
+        });
+      }
+
       // Check if modelaudit is installed
       const isModelAuditInstalled = await checkModelAuditInstalled();
       if (!isModelAuditInstalled) {
-        logger.error('ModelAudit is not installed.');
-        logger.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
-        logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
+        console.error('ModelAudit is not installed.');
+        console.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
+        console.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
         process.exit(1);
       }
 
       // Check for modelaudit updates
       await checkModelAuditUpdates();
 
-      const args = ['scan', ...paths];
-
-      // Add options
-      if (options.blacklist && options.blacklist.length > 0) {
-        options.blacklist.forEach((pattern: string) => {
-          args.push('--blacklist', pattern);
-        });
-      }
-
       // When saving to database (default), always use JSON format internally
-      const saveToDatabase = options.write !== false;
+      // Note: --no-write flag sets options.write to false
+      const saveToDatabase = options.write === undefined || options.write === true;
       const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
-      args.push('--format', outputFormat);
 
-      if (options.output && !saveToDatabase) {
-        args.push('--output', options.output);
+      // Prepare options for CLI parser, excluding output when saving to database
+      // Convert string values from Commander to expected types
+      const cliOptions = {
+        ...options,
+        format: outputFormat,
+        output: options.output && !saveToDatabase ? options.output : undefined,
+        timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+      };
+
+      // Use centralized CLI argument parser with error handling
+      let args: string[];
+      try {
+        const result = parseModelAuditArgs(paths, cliOptions);
+        args = result.args;
+
+        // Optional: Handle any unsupported options (though shouldn't occur with our CLI)
+        if (result.unsupportedOptions.length > 0) {
+          console.warn(`Unsupported options detected: ${result.unsupportedOptions.join(', ')}`);
+        }
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          console.error('Invalid model audit options provided:');
+          error.errors.forEach((err) => {
+            console.error(`  - ${err.path.join('.')}: ${err.message}`);
+          });
+          process.exit(1);
+        }
+        throw error;
       }
 
-      if (options.sbom) {
-        args.push('--sbom', options.sbom);
-      }
-
-      if (options.timeout) {
-        args.push('--timeout', options.timeout);
-      }
-
-      if (options.verbose) {
-        args.push('--verbose');
-      }
-
-      if (options.maxFileSize && options.maxFileSize !== '0') {
-        args.push('--max-file-size', options.maxFileSize);
-      }
-
-      if (options.maxTotalSize && options.maxTotalSize !== '0') {
-        args.push('--max-total-size', options.maxTotalSize);
-      }
-
-      // Cloud storage options
-      if (options.registryUri) {
-        args.push('--registry-uri', options.registryUri);
-      }
-
-      if (options.jfrogApiToken) {
-        args.push('--jfrog-api-token', options.jfrogApiToken);
-      }
-
-      if (options.jfrogAccessToken) {
-        args.push('--jfrog-access-token', options.jfrogAccessToken);
-      }
-
-      if (options.maxDownloadSize) {
-        args.push('--max-download-size', options.maxDownloadSize);
-      }
-
-      if (options.cache === false) {
-        args.push('--no-cache');
-      }
-
-      if (options.cacheDir) {
-        args.push('--cache-dir', options.cacheDir);
-      }
-
-      if (options.preview) {
-        args.push('--preview');
-      }
-
-      if (options.allFiles) {
-        args.push('--all-files');
-      } else {
-        args.push('--selective');
-      }
-
-      if (options.stream) {
-        args.push('--stream');
-      }
-
-      // Scanning behavior
-      if (options.skipFiles) {
-        args.push('--skip-files');
-      } else {
-        args.push('--no-skip-files');
-      }
-
-      if (options.strictLicense) {
-        args.push('--strict-license');
-      }
-
-      if (options.largeModelSupport === false) {
-        args.push('--no-large-model-support');
-      }
-
-      // Progress reporting
-      if (options.progress === false) {
-        args.push('--no-progress');
-      }
-
-      if (options.progressLog) {
-        args.push('--progress-log', options.progressLog);
-      }
-
-      if (options.progressFormat) {
-        args.push('--progress-format', options.progressFormat);
-      }
-
-      if (options.progressInterval) {
-        args.push('--progress-interval', options.progressInterval);
-      }
-
-      logger.info(`Running model scan on: ${paths.join(', ')}`);
+      console.info(`Running model scan on: ${paths.join(', ')}`);
 
       // Set up environment for delegation
       const delegationEnv = {
@@ -251,17 +186,17 @@ export function modelScanCommand(program: Command): void {
         });
 
         modelAudit.on('error', (error) => {
-          logger.error(`Failed to start modelaudit: ${error.message}`);
-          logger.info('Make sure modelaudit is installed and available in your PATH.');
-          logger.info('Install it using: pip install modelaudit');
+          console.error(`Failed to start modelaudit: ${error.message}`);
+          console.info('Make sure modelaudit is installed and available in your PATH.');
+          console.info('Install it using: pip install modelaudit');
           process.exit(1);
         });
 
         modelAudit.on('close', async (code) => {
           if (code !== null && code !== 0 && code !== 1) {
-            logger.error(`Model scan process exited with code ${code}`);
+            console.error(`Model scan process exited with code ${code}`);
             if (stderr) {
-              logger.error(`Error output: ${stderr}`);
+              console.error(`Error output: ${stderr}`);
             }
             process.exit(code);
           }
@@ -270,7 +205,7 @@ export function modelScanCommand(program: Command): void {
           try {
             const jsonOutput = stdout.trim();
             if (!jsonOutput) {
-              logger.error('No output received from model scan');
+              console.error('No output received from model scan');
               process.exit(1);
             }
 
@@ -286,27 +221,15 @@ export function modelScanCommand(program: Command): void {
                 paths,
                 options: {
                   blacklist: options.blacklist,
-                  timeout: options.timeout,
-                  maxFileSize: options.maxFileSize,
-                  maxTotalSize: options.maxTotalSize,
+                  timeout: cliOptions.timeout,
+                  maxSize: options.maxSize,
                   verbose: options.verbose,
                   sbom: options.sbom,
-                  registryUri: options.registryUri,
-                  jfrogApiToken: options.jfrogApiToken ? '***' : undefined, // Mask sensitive data
-                  jfrogAccessToken: options.jfrogAccessToken ? '***' : undefined, // Mask sensitive data
-                  maxDownloadSize: options.maxDownloadSize,
+                  strict: options.strict,
+                  dryRun: options.dryRun,
                   cache: options.cache,
-                  cacheDir: options.cacheDir,
-                  preview: options.preview,
-                  allFiles: options.allFiles,
-                  stream: options.stream,
-                  skipFiles: options.skipFiles,
-                  strictLicense: options.strictLicense,
-                  largeModelSupport: options.largeModelSupport,
+                  quiet: options.quiet,
                   progress: options.progress,
-                  progressLog: options.progressLog,
-                  progressFormat: options.progressFormat,
-                  progressInterval: options.progressInterval,
                 },
               },
             });
@@ -364,9 +287,9 @@ export function modelScanCommand(program: Command): void {
               }
 
               console.log(
-                `\nScanned ${results.files_scanned ?? 0} files (${(results.bytes_scanned ?? 0 / 1024 / 1024).toFixed(2)} MB)`,
+                `\nScanned ${results.files_scanned ?? 0} files (${((results.bytes_scanned ?? 0) / 1024 / 1024).toFixed(2)} MB)`,
               );
-              console.log(`Duration: ${(results.duration ?? 0 / 1000).toFixed(2)} seconds`);
+              console.log(`Duration: ${((results.duration ?? 0) / 1000).toFixed(2)} seconds`);
               console.log(chalk.green(`\n✓ Results saved to database with ID: ${audit.id}`));
             }
 
@@ -374,13 +297,15 @@ export function modelScanCommand(program: Command): void {
             if (options.output) {
               const fs = await import('fs');
               fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
-              logger.info(`Results also saved to ${options.output}`);
+              console.info(`Results also saved to ${options.output}`);
             }
 
             process.exit(code || 0);
           } catch (error) {
-            logger.error(`Failed to parse or save scan results: ${error}`);
-            logger.debug(`Raw output: ${stdout}`);
+            console.error(`Failed to parse or save scan results: ${error}`);
+            if (options.verbose) {
+              console.error(`Raw output: ${stdout}`);
+            }
             process.exit(1);
           }
         });
@@ -388,15 +313,15 @@ export function modelScanCommand(program: Command): void {
         const modelAudit = spawn('modelaudit', args, { stdio: 'inherit', env: delegationEnv });
 
         modelAudit.on('error', (error) => {
-          logger.error(`Failed to start modelaudit: ${error.message}`);
-          logger.info('Make sure modelaudit is installed and available in your PATH.');
-          logger.info('Install it using: pip install modelaudit');
+          console.error(`Failed to start modelaudit: ${error.message}`);
+          console.info('Make sure modelaudit is installed and available in your PATH.');
+          console.info('Install it using: pip install modelaudit');
           process.exit(1);
         });
 
         modelAudit.on('close', (code) => {
           if (code !== null && code !== 0 && code !== 1) {
-            logger.error(`Model scan process exited with code ${code}`);
+            console.error(`Model scan process exited with code ${code}`);
           }
           process.exit(code || 0);
         });

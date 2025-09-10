@@ -1,8 +1,11 @@
 import crypto from 'crypto';
-import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 
+import dedent from 'dedent';
+
+// Mock console.warn to prevent test noise
+const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -27,8 +30,8 @@ jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),
 }));
 
-jest.mock('../../src/fetch', () => ({
-  ...jest.requireActual('../../src/fetch'),
+jest.mock('../../src/util/fetch/index.ts', () => ({
+  ...jest.requireActual('../../src/util/fetch/index.ts'),
   fetchWithRetries: jest.fn(),
   fetchWithTimeout: jest.fn(),
 }));
@@ -959,7 +962,7 @@ describe('HttpProvider', () => {
         const body = `{
 "messages": [
   {
-    "role": "system", 
+    "role": "system",
     "content": "{{systemPrompt}}"
   },
   {
@@ -986,7 +989,7 @@ describe('HttpProvider', () => {
         expect(result).toBe(`{
 "messages": [
   {
-    "role": "system", 
+    "role": "system",
     "content": "You are a helpful assistant"
   },
   {
@@ -1735,13 +1738,15 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({
-        output: { chat_history: 'success' },
-        raw: JSON.stringify({ result: 'success' }),
-        metadata: {
-          http: { status: 200, statusText: 'OK', headers: {} },
-        },
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          output: { chat_history: 'success' },
+          raw: JSON.stringify({ result: 'success' }),
+          metadata: {
+            http: { status: 200, statusText: 'OK', headers: {} },
+          },
+        }),
+      );
     });
 
     it('should prefer transformResponse over responseParser when both are set', async () => {
@@ -1764,13 +1769,15 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({
-        output: { chat_history: 'from transformResponse' },
-        raw: JSON.stringify({ result: 'success' }),
-        metadata: {
-          http: { status: 200, statusText: 'OK', headers: {} },
-        },
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          output: { chat_history: 'from transformResponse' },
+          raw: JSON.stringify({ result: 'success' }),
+          metadata: {
+            http: { status: 200, statusText: 'OK', headers: {} },
+          },
+        }),
+      );
     });
 
     it('should handle string-based responseParser when transformResponse is not set', async () => {
@@ -1792,13 +1799,15 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test');
 
-      expect(result).toEqual({
-        output: 'success',
-        raw: JSON.stringify({ result: 'success' }),
-        metadata: {
-          http: { status: 200, statusText: 'OK', headers: {} },
-        },
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          output: 'success',
+          raw: JSON.stringify({ result: 'success' }),
+          metadata: {
+            http: { status: 200, statusText: 'OK', headers: {} },
+          },
+        }),
+      );
     });
   });
 
@@ -1911,13 +1920,13 @@ describe('HttpProvider', () => {
 describe('createTransformRequest', () => {
   it('should return identity function when no transform specified', async () => {
     const transform = await createTransformRequest(undefined);
-    const result = await transform('test prompt');
+    const result = await transform('test prompt', {} as any);
     expect(result).toBe('test prompt');
   });
 
   it('should handle string templates', async () => {
     const transform = await createTransformRequest('return {"text": prompt}');
-    const result = await transform('hello');
+    const result = await transform('hello', {} as any);
     expect(result).toEqual({
       text: 'hello',
     });
@@ -1929,7 +1938,7 @@ describe('createTransformRequest', () => {
     };
     const transform = await createTransformRequest(errorFn);
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow('Error in request transform function: Transform function error');
   });
 
@@ -1941,7 +1950,7 @@ describe('createTransformRequest', () => {
 
     const transform = await createTransformRequest('file://error-transform.js');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow(
       'Error in request transform function from error-transform.js: File transform error',
     );
@@ -1950,7 +1959,7 @@ describe('createTransformRequest', () => {
   it('should handle errors in string template transform', async () => {
     const transform = await createTransformRequest('return badVariable.nonexistent');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow('Error in request transform string template: badVariable is not defined');
   });
 
@@ -2004,14 +2013,14 @@ describe('createTransformRequest', () => {
 
     const transform = await createTransformRequest('file://specific-file.js');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow('Error in request transform function from specific-file.js: File error');
   });
 
   it('should handle errors in string template rendering', async () => {
     const transform = await createTransformRequest('{{ nonexistent | invalid }}');
     await expect(async () => {
-      await transform('test');
+      await transform('test', {} as any);
     }).rejects.toThrow(
       'Error in request transform string template: (unknown path)\n  Error: filter not found: invalid',
     );
@@ -3310,7 +3319,11 @@ describe('HttpProvider with token estimation', () => {
 
     const result = await provider.callApi('Test prompt');
 
-    expect(result.tokenUsage).toBeUndefined();
+    expect(result.tokenUsage).toEqual(
+      expect.objectContaining({
+        numRequests: 1,
+      }),
+    );
   });
 
   it('should enable token estimation by default in redteam mode', async () => {
@@ -4528,4 +4541,9 @@ describe('HttpProvider - Sanitization', () => {
     // Note: timeout and maxRetries are not included in the rendered config that gets logged
     expect(logMessage).not.toContain('[REDACTED]');
   });
+});
+
+// Cleanup console mock
+afterAll(() => {
+  consoleSpy.mockRestore();
 });

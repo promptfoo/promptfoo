@@ -1,5 +1,4 @@
 import { fetchWithCache } from '../cache';
-import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type { ApiProvider, ProviderResponse } from '../types';
@@ -31,7 +30,6 @@ export class WebhookProvider implements ApiProvider {
       params.config = this.config;
     }
 
-    logger.debug(`Calling Webhook: ${this.webhookUrl} with params: ${JSON.stringify(params)}`);
     let response;
     try {
       response = await fetchWithCache(
@@ -51,7 +49,6 @@ export class WebhookProvider implements ApiProvider {
         error: `Webhook call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tWebhook response: ${JSON.stringify(response.data)}`);
 
     if (response.data && typeof response.data.output === 'string') {
       return {

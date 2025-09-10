@@ -100,9 +100,15 @@ export interface ModelAuditScanConfig {
   options: {
     blacklist?: string[];
     timeout?: number;
-    maxFileSize?: number;
-    maxTotalSize?: number;
+    maxSize?: string;
     verbose?: boolean;
-    format?: 'text' | 'json';
+    format?: 'text' | 'json' | 'sarif';
+    strict?: boolean;
+    dryRun?: boolean;
+    cache?: boolean;
+    quiet?: boolean;
+    progress?: boolean;
+    sbom?: string;
+    output?: string;
   };
 }

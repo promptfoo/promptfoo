@@ -58,6 +58,7 @@ providers:
 | [JFrog ML](./jfrog.md)                              | JFrog's LLM Model Library                                 | `jfrog:llama_3_8b_instruct`                                               |
 | [Lambda Labs](./lambdalabs.md)                      | Access Lambda Labs models via their Inference API         | `lambdalabs:model-name`                                                   |
 | [LiteLLM](./litellm.md)                             | Unified interface for 400+ LLMs with embedding support    | `litellm:gpt-4.1`, `litellm:embedding:text-embedding-3-small`             |
+| [Llama API](./llamaApi.md)                          | Meta's hosted Llama models with multimodal capabilities   | `llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8`                         |
 | [Mistral AI](./mistral.md)                          | Mistral's language models                                 | `mistral:magistral-medium-latest`                                         |
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework                         | Compatible with OpenAI syntax                                             |
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                        | `openrouter:mistral/7b-instruct`                                          |
