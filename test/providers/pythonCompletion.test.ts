@@ -6,6 +6,7 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { runPython } from '../../src/python/pythonUtils';
 
 jest.mock('../../src/python/pythonUtils');
+jest.mock('../../src/python/persistentPythonManager');
 jest.mock('../../src/cache');
 jest.mock('fs');
 jest.mock('path');
@@ -54,7 +55,7 @@ describe('PythonProvider', () => {
     it('should initialize with correct properties', () => {
       const provider = new PythonProvider('script.py', {
         id: 'testId',
-        config: { basePath: '/base' },
+        config: { basePath: '/base', persistent: false },
       });
       expect(provider.id()).toBe('testId');
     });
@@ -62,7 +63,7 @@ describe('PythonProvider', () => {
     it('should initialize with python: syntax', () => {
       const provider = new PythonProvider('python:script.py', {
         id: 'testId',
-        config: { basePath: '/base' },
+        config: { basePath: '/base', persistent: false },
       });
       expect(provider.id()).toBe('testId');
     });
@@ -70,7 +71,7 @@ describe('PythonProvider', () => {
     it('should initialize with file:// prefix', () => {
       const provider = new PythonProvider('file://script.py', {
         id: 'testId',
-        config: { basePath: '/base' },
+        config: { basePath: '/base', persistent: false },
       });
       expect(provider.id()).toBe('testId');
     });
@@ -78,7 +79,7 @@ describe('PythonProvider', () => {
     it('should initialize with file:// prefix and function name', () => {
       const provider = new PythonProvider('file://script.py:function_name', {
         id: 'testId',
-        config: { basePath: '/base' },
+        config: { basePath: '/base', persistent: false },
       });
       expect(provider.id()).toBe('testId');
     });
@@ -86,7 +87,9 @@ describe('PythonProvider', () => {
 
   describe('callApi', () => {
     it('should call executePythonScript with correct parameters', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockRunPython.mockResolvedValue({ output: 'test output' });
 
       const result = await provider.callApi('test prompt', { someContext: true } as any);
@@ -94,7 +97,7 @@ describe('PythonProvider', () => {
       expect(mockRunPython).toHaveBeenCalledWith(
         expect.any(String),
         'call_api',
-        ['test prompt', { config: {} }, { someContext: true }],
+        ['test prompt', { config: { persistent: false } }, { someContext: true }],
         { pythonExecutable: undefined },
       );
       expect(result).toEqual({ output: 'test output', cached: false });
@@ -102,7 +105,9 @@ describe('PythonProvider', () => {
 
     describe('error handling', () => {
       it('should throw a specific error when Python script returns invalid result', async () => {
-        const provider = new PythonProvider('script.py');
+        const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
         mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
@@ -111,14 +116,18 @@ describe('PythonProvider', () => {
       });
 
       it('should not throw an error when Python script returns a valid error', async () => {
-        const provider = new PythonProvider('script.py');
+        const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
         mockRunPython.mockResolvedValue({ error: 'valid error message' });
 
         await expect(provider.callApi('test prompt')).resolves.not.toThrow();
       });
 
       it('should throw an error when Python script returns null', async () => {
-        const provider = new PythonProvider('script.py');
+        const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
         mockRunPython.mockResolvedValue(null as never);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
@@ -127,7 +136,9 @@ describe('PythonProvider', () => {
       });
 
       it('should throw an error when Python script returns a non-object', async () => {
-        const provider = new PythonProvider('script.py');
+        const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
         mockRunPython.mockResolvedValue('string result');
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
@@ -136,7 +147,9 @@ describe('PythonProvider', () => {
       });
 
       it('should not throw an error when Python script returns a valid output', async () => {
-        const provider = new PythonProvider('script.py');
+        const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
         mockRunPython.mockResolvedValue({ output: 'valid output' });
 
         await expect(provider.callApi('test prompt')).resolves.not.toThrow();
@@ -146,7 +159,9 @@ describe('PythonProvider', () => {
 
   describe('callEmbeddingApi', () => {
     it('should call executePythonScript with correct parameters', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockRunPython.mockResolvedValue({ embedding: [0.1, 0.2, 0.3] });
 
       const result = await provider.callEmbeddingApi('test prompt');
@@ -154,14 +169,16 @@ describe('PythonProvider', () => {
       expect(mockRunPython).toHaveBeenCalledWith(
         expect.any(String),
         'call_embedding_api',
-        ['test prompt', { config: {} }],
+        ['test prompt', { config: { persistent: false } }],
         { pythonExecutable: undefined },
       );
       expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
     });
 
     it('should throw an error if Python script returns invalid result', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
@@ -172,7 +189,9 @@ describe('PythonProvider', () => {
 
   describe('callClassificationApi', () => {
     it('should call executePythonScript with correct parameters', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockRunPython.mockResolvedValue({ classification: { label: 'test', score: 0.9 } });
 
       const result = await provider.callClassificationApi('test prompt');
@@ -180,14 +199,16 @@ describe('PythonProvider', () => {
       expect(mockRunPython).toHaveBeenCalledWith(
         expect.any(String),
         'call_classification_api',
-        ['test prompt', { config: {} }],
+        ['test prompt', { config: { persistent: false } }],
         { pythonExecutable: undefined },
       );
       expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
     });
 
     it('should throw an error if Python script returns invalid result', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockRunPython.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
@@ -198,7 +219,9 @@ describe('PythonProvider', () => {
 
   describe('caching', () => {
     it('should use cached result when available', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: jest.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
@@ -209,14 +232,16 @@ describe('PythonProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(mockCache.get).toHaveBeenCalledWith(
-        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:{"config":{"persistent":false}}:undefined',
       );
       expect(mockRunPython).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
     });
 
     it('should cache result when cache is enabled', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: jest.fn().mockResolvedValue(null),
@@ -228,13 +253,15 @@ describe('PythonProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:{"config":{"persistent":false}}:undefined',
         '{"output":"new result"}',
       );
     });
 
     it('should properly transform token usage in cached results', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: jest.fn().mockResolvedValue(
@@ -265,7 +292,9 @@ describe('PythonProvider', () => {
     });
 
     it('should preserve cached=false for fresh results with token usage', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: jest.fn().mockResolvedValue(null),
@@ -295,7 +324,9 @@ describe('PythonProvider', () => {
     });
 
     it('should handle missing token usage in cached results', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: jest.fn().mockResolvedValue(
@@ -315,7 +346,9 @@ describe('PythonProvider', () => {
     });
 
     it('should handle zero token usage in cached results', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: jest.fn().mockResolvedValue(
@@ -343,7 +376,9 @@ describe('PythonProvider', () => {
     });
 
     it('should not cache results with errors', async () => {
-      const provider = new PythonProvider('script.py');
+      const provider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: jest.fn().mockResolvedValue(null),
@@ -370,8 +405,12 @@ describe('PythonProvider', () => {
       mockRunPython.mockResolvedValue({ output: 'test output' });
 
       // Create providers with different function names
-      const defaultProvider = new PythonProvider('script.py');
-      const customProvider = new PythonProvider('script.py:custom_function');
+      const defaultProvider = new PythonProvider('script.py', {
+        config: { persistent: false }
+      });
+      const customProvider = new PythonProvider('script.py:custom_function', {
+        config: { persistent: false }
+      });
 
       // Call the APIs with the same prompt
       await defaultProvider.callApi('test prompt');
