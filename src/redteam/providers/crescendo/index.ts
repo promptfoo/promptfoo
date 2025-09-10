@@ -4,7 +4,7 @@ import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
+import { extractFirstJsonObject, isValidJson, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
@@ -39,6 +39,24 @@ import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
+
+/**
+ * Validates if a parsed JSON object is a valid chat message array
+ */
+function isValidChatMessageArray(parsed: unknown): parsed is Message[] {
+  return (
+    Array.isArray(parsed) &&
+    parsed.every(
+      (msg) =>
+        msg &&
+        typeof msg === 'object' &&
+        'role' in msg &&
+        'content' in msg &&
+        typeof msg.role === 'string' &&
+        typeof msg.content === 'string',
+    )
+  );
+}
 
 /**
  * Represents metadata for the Crescendo conversation process.
@@ -689,12 +707,9 @@ export class CrescendoProvider implements ApiProvider {
       targetPrompt = renderedPrompt;
     } else {
       // Check if renderedPrompt is already a JSON chat structure
-      try {
+      if (isValidJson(renderedPrompt)) {
         const parsed = JSON.parse(renderedPrompt);
-        if (
-          Array.isArray(parsed) &&
-          parsed.every((msg) => msg && typeof msg === 'object' && msg.role && msg.content)
-        ) {
+        if (isValidChatMessageArray(parsed)) {
           // It's already a structured chat array, use it directly
           targetPrompt = renderedPrompt;
           logger.debug('[Crescendo] Using rendered chat template instead of conversation history');
@@ -703,7 +718,7 @@ export class CrescendoProvider implements ApiProvider {
           targetPrompt = JSON.stringify(conversationHistory);
           logger.debug('[Crescendo] Using conversation history (not a chat template)');
         }
-      } catch {
+      } else {
         // Not valid JSON, use conversation history
         targetPrompt = JSON.stringify(conversationHistory);
         logger.debug('[Crescendo] Using conversation history (invalid JSON)');

@@ -1719,7 +1719,6 @@ describe('CrescendoProvider - Chat Template Support', () => {
 
     expect(mockTargetProvider.callApi).toHaveBeenCalled();
     expect(result.metadata?.stopReason).toBe('Internal evaluator success');
-
   });
 
   it('should fall back to conversation history for non-chat templates when stateful=false', async () => {
@@ -1740,7 +1739,9 @@ describe('CrescendoProvider - Chat Template Support', () => {
     });
 
     // Mock renderPrompt to return plain text (non-chat template)
-    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce('Please respond to: test attack');
+    jest
+      .mocked(evaluatorHelpers.renderPrompt)
+      .mockResolvedValueOnce('Please respond to: test attack');
 
     // Mock target provider to verify it receives JSON stringified conversation history
     mockTargetProvider.callApi.mockImplementation((prompt: string) => {
@@ -1774,7 +1775,6 @@ describe('CrescendoProvider - Chat Template Support', () => {
     await crescendoProvider.callApi(textPrompt, context);
 
     expect(mockTargetProvider.callApi).toHaveBeenCalled();
-
   });
 
   it('should always use rendered prompt when stateful=true regardless of template type', async () => {
@@ -1802,7 +1802,9 @@ describe('CrescendoProvider - Chat Template Support', () => {
     });
 
     // Mock renderPrompt to return structured JSON
-    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce('[{"role": "user", "content": "test attack"}]');
+    jest
+      .mocked(evaluatorHelpers.renderPrompt)
+      .mockResolvedValueOnce('[{"role": "user", "content": "test attack"}]');
 
     mockTargetProvider.callApi.mockImplementation((prompt: string) => {
       // With stateful=true, should always receive rendered prompt directly
@@ -1825,6 +1827,5 @@ describe('CrescendoProvider - Chat Template Support', () => {
     await statefulProvider.callApi(chatTemplatePrompt, context);
 
     expect(mockTargetProvider.callApi).toHaveBeenCalled();
-
   });
 });
