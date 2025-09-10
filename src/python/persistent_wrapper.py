@@ -137,21 +137,12 @@ class PersistentPythonProvider:
                 # Sync method - handle based on concurrency setting
                 concurrency = options.get('config', {}).get('concurrency', 'async')
                 
-                if concurrency == 'async':
-                    # Run in executor to prevent blocking the event loop
-                    if call_kwargs:
-                        result = self.event_loop.run_in_executor(None, lambda: method(**call_kwargs))
-                    else:
-                        result = self.event_loop.run_in_executor(None, lambda: method(*call_args))
-                    
-                    # Since run_in_executor returns a coroutine, we need to await it
-                    result = self.event_loop.run_until_complete(result)
+                # Temporarily disable run_in_executor to debug the issue
+                # TODO: Fix the event loop interaction and re-enable
+                if call_kwargs:
+                    result = method(**call_kwargs)
                 else:
-                    # Serial execution - run directly (blocking)
-                    if call_kwargs:
-                        result = method(**call_kwargs)
-                    else:
-                        result = method(*call_args)
+                    result = method(*call_args)
                 
                 # Ensure trace context is preserved in result
                 return self._preserve_trace_in_result(result, safe_context)
@@ -390,52 +381,43 @@ class PersistentPythonProvider:
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8', newline=None)
         
-        buffer = ""
-        
         try:
-            for chunk in iter(lambda: sys.stdin.read(1024), ''):
-                if not chunk:
-                    break
-                    
-                buffer += chunk
+            # Read line by line instead of chunks to avoid blocking
+            for line in sys.stdin:
+                line = line.rstrip('\r\n')  # Handle Windows \r\n and Unix \n
                 
-                # Process complete lines
-                while '\n' in buffer:
-                    line, buffer = buffer.split('\n', 1)
-                    line = line.rstrip('\r')  # Handle Windows \r\n
-                    
-                    if not line.strip():
-                        continue
-                    
-                    try:
-                        request = json.loads(line)
-                        response = self.dispatch_request(request)
-                    except json.JSONDecodeError as e:
-                        response = {
-                            "id": None,
-                            "error": f"Invalid JSON: {str(e)}",
-                            "type": "protocol_error",
-                            "received_line": line[:100] + "..." if len(line) > 100 else line
-                        }
-                    except Exception as e:
-                        response = {
-                            "id": request.get("id") if 'request' in locals() else None,
-                            "error": str(e),
-                            "type": "execution_error",
-                            "traceback": traceback.format_exc()
-                        }
-                    
-                    # Send response as single JSON line
-                    try:
-                        response_line = json.dumps(response, ensure_ascii=False)
-                        print(response_line, flush=True)
-                    except Exception as e:
-                        error_response = {
-                            "id": response.get("id"),
-                            "error": f"Failed to serialize response: {str(e)}",
-                            "type": "serialization_error"
-                        }
-                        print(json.dumps(error_response), flush=True)
+                if not line.strip():
+                    continue
+                
+                try:
+                    request = json.loads(line)
+                    response = self.dispatch_request(request)
+                except json.JSONDecodeError as e:
+                    response = {
+                        "id": None,
+                        "error": f"Invalid JSON: {str(e)}",
+                        "type": "protocol_error",
+                        "received_line": line[:100] + "..." if len(line) > 100 else line
+                    }
+                except Exception as e:
+                    response = {
+                        "id": request.get("id") if 'request' in locals() else None,
+                        "error": str(e),
+                        "type": "execution_error",
+                        "traceback": traceback.format_exc()
+                    }
+                
+                # Send response as single JSON line
+                try:
+                    response_line = json.dumps(response, ensure_ascii=False)
+                    print(response_line, flush=True)
+                except Exception as e:
+                    error_response = {
+                        "id": response.get("id"),
+                        "error": f"Failed to serialize response: {str(e)}",
+                        "type": "serialization_error"
+                    }
+                    print(json.dumps(error_response), flush=True)
                         
         except KeyboardInterrupt:
             print(json.dumps({"type": "shutdown", "reason": "interrupted"}), flush=True)

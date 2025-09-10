@@ -231,7 +231,7 @@ export class PersistentPythonManager extends EventEmitter {
       throw new Error('Python process not available');
     }
 
-    const jsonLine = JSON.stringify(message) + '\n';
+    const jsonLine = safeJsonStringify(message) + '\n';
     this.pythonProcess.stdin.write(jsonLine);
   }
 

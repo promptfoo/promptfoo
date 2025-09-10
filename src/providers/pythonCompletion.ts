@@ -135,10 +135,10 @@ export class PythonProvider implements ApiProvider {
     logger.debug(`Computing file hash for persistent script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
 
-    // Create cache key for persistent mode
-    const cacheKey = `python-persistent:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
+    // Create cache key for persistent mode (using safe JSON stringify to avoid circular references)
+    const cacheKey = `python-persistent:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
       this.options,
-    )}:${JSON.stringify(context?.vars)}`;
+    )}:${safeJsonStringify(context?.vars)}`;
     logger.debug(`PersistentPythonProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
