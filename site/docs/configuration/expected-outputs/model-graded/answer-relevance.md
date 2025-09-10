@@ -1,6 +1,6 @@
 ---
 sidebar_label: Answer Relevance
-description: 'Score LLM response relevance and completeness against user queries'
+description: 'Score LLM response relevance and completeness against user queries using sophisticated AI-powered evaluation metrics'
 ---
 
 # Answer relevance
@@ -43,7 +43,7 @@ The answer relevance checker:
 
 1. Uses an LLM to generate potential questions the response could be answering
 2. Compares these questions with the original query using embedding similarity
-3. Returns a relevance score from 0 to 1
+3. Returns a relevance score from 0 to 1 based on the embedding similarity score
 
 This approach catches responses that are topically related but don't actually answer the specific question asked.
 

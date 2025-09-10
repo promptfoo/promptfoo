@@ -144,7 +144,9 @@ tests:
       task: 'merge two sorted lists'
     assert:
       - type: python
-        value: 'def merge_lists' in output and 'return' in output
+        value: |
+          result = merge_lists([1, 3, 5], [2, 4, 6])
+          assert result == [1, 2, 3, 4, 5, 6]
 
       - type: llm-rubric
         value: 'Code has O(n+m) time complexity and is efficient'
