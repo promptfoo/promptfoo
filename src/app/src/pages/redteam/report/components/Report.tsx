@@ -47,6 +47,7 @@ import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
 
+
 const App: React.FC = () => {
   const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
@@ -55,14 +56,6 @@ const App: React.FC = () => {
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
   const { recordEvent } = useTelemetry();
-
-  // Vulnerabilities DataGrid
-  const vulnerabilitiesDataGridRef = React.useRef<HTMLDivElement>(null);
-  const [vulnerabilitiesDataGridFilterModel, setVulnerabilitiesDataGridFilterModel] =
-    React.useState<GridFilterModel>({
-      items: [],
-      logicOperator: GridLogicOperator.Or,
-    });
 
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
@@ -456,12 +449,7 @@ const App: React.FC = () => {
             )}
           </Box>
         </Card>
-        <Overview
-          categoryStats={categoryStats}
-          plugins={evalData.config.redteam.plugins || []}
-          vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
-          setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
-        />
+        <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
         <StrategyStats
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
@@ -478,9 +466,6 @@ const App: React.FC = () => {
           evalId={evalId}
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
-          vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
-          vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
-          setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
           failuresByPlugin={failuresByPlugin}
           passesByPlugin={passesByPlugin}
         />

@@ -1,4 +1,3 @@
-import { GridLogicOperator } from '@mui/x-data-grid';
 import { Severity } from '@promptfoo/redteam/constants';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
@@ -78,8 +77,6 @@ vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
 
 describe('TestSuites Component', () => {
   const mockNavigate = vi.fn();
-  const mockSetFilterModel = vi.fn();
-  const mockRef = { current: null };
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -91,12 +88,6 @@ describe('TestSuites Component', () => {
       },
     },
     plugins: [],
-    vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: {
-      items: [],
-      logicOperator: GridLogicOperator.Or,
-    },
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -187,8 +178,6 @@ describe('TestSuites Component', () => {
 
 describe('TestSuites Component Navigation', () => {
   const mockNavigate = vi.fn();
-  const mockSetFilterModel = vi.fn();
-  const mockRef = { current: null };
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -205,12 +194,6 @@ describe('TestSuites Component Navigation', () => {
       },
     },
     plugins: [],
-    vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: {
-      items: [],
-      logicOperator: GridLogicOperator.Or,
-    },
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -284,8 +267,6 @@ describe('TestSuites Component Navigation', () => {
 
 describe('TestSuites Component Navigation with Missing EvalId', () => {
   const mockNavigate = vi.fn();
-  const mockSetFilterModel = vi.fn();
-  const mockRef = { current: null };
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -297,12 +278,6 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
       },
     },
     plugins: [],
-    vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: {
-      items: [],
-      logicOperator: GridLogicOperator.Or,
-    },
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -329,8 +304,6 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
 
 describe('TestSuites Component Filtering', () => {
   const mockNavigate = vi.fn();
-  const mockSetFilterModel = vi.fn();
-  const mockRef = { current: null };
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -347,12 +320,6 @@ describe('TestSuites Component Filtering', () => {
       },
     },
     plugins: [],
-    vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: {
-      items: [],
-      logicOperator: GridLogicOperator.Or,
-    },
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -376,8 +343,6 @@ describe('TestSuites Component Filtering', () => {
 
 describe('TestSuites Component CSV Export', () => {
   const mockNavigate = vi.fn();
-  const mockSetFilterModel = vi.fn();
-  const mockRef = { current: null };
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -389,12 +354,6 @@ describe('TestSuites Component CSV Export', () => {
       },
     },
     plugins: [],
-    vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: {
-      items: [],
-      logicOperator: GridLogicOperator.Or,
-    },
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -420,8 +379,6 @@ describe('TestSuites Component CSV Export', () => {
 
 describe('TestSuites Component - Zero Attack Success Rate', () => {
   const mockNavigate = vi.fn();
-  const mockSetFilterModel = vi.fn();
-  const mockRef = { current: null };
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -438,12 +395,6 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
       },
     },
     plugins: [],
-    vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: {
-      items: [],
-      logicOperator: GridLogicOperator.Or,
-    },
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -466,8 +417,6 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
 
 describe('TestSuites Component CSV Export - Special Characters', () => {
   const mockNavigate = vi.fn();
-  const mockSetFilterModel = vi.fn();
-  const mockRef = { current: null };
 
   const evalId = 'test-eval-123';
 
@@ -480,13 +429,6 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
   };
 
   const plugins: any[] = [];
-
-  const vulnerabilitiesDataGridRef = mockRef;
-  const vulnerabilitiesDataGridFilterModel = {
-    items: [],
-    logicOperator: GridLogicOperator.Or,
-  };
-  const setVulnerabilitiesDataGridFilterModel = mockSetFilterModel;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -516,9 +458,6 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
         evalId={evalId}
         categoryStats={categoryStatsWithSpecialChars}
         plugins={plugins}
-        vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
-        vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
-        setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
       />,
     );
 
