@@ -430,6 +430,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
           'anthropic:messages:claude-3-7-sonnet-20250219',
         ],
       },
+      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro'] },
       {
         name: '[HuggingFace] Llama, Phi, Gemma, ...',
         value: [
@@ -455,6 +456,17 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         value: ['https://example.com/api/generate'],
       },
       {
+        name: '[Azure] OpenAI, DeepSeek, Llama, ...',
+        value: [
+          {
+            id: 'azure:chat:deploymentNameHere',
+            config: {
+              apiHost: 'xxxxxxxx.openai.azure.com',
+            },
+          },
+        ],
+      },
+      {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
         value: ['bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0'],
       },
@@ -462,7 +474,6 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[Cohere] Command R, Command R+, ...',
         value: ['cohere:command-r', 'cohere:command-r-plus'],
       },
-      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro'] },
       {
         name: '[Ollama] Llama, Qwen, Phi, ...',
         value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],
