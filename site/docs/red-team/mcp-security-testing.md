@@ -45,7 +45,7 @@ This scenario tests natural language attacks through a trusted application or mo
 description: 'MCP server security testing via thin client'
 
 targets:
-  - id: gpt-5
+  - id: openai:gpt-5
     config:
       mcp:
         enabled: true

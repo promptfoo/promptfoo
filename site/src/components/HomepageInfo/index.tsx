@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeBlock from '@theme/CodeBlock';
