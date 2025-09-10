@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
+import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -107,10 +108,12 @@ function CustomToolbar({
           {selectedCount > 0 && (
             <Button
               color="error"
-              variant="contained"
+              variant="outlined"
               size="small"
               onClick={onDeleteSelected}
               data-testid="delete-selected-button"
+              startIcon={<DeleteIcon />}
+              sx={{ border: 0 }}
             >
               Delete ({selectedCount})
             </Button>
@@ -226,13 +229,19 @@ export default function EvalsDataGrid({
 
   const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
 
+  /**
+   * Handles the deletion of selected evals.
+   * @returns A promise that resolves when the evals are deleted.
+   */
   const handleDeleteSelected = async () => {
     if (rowSelectionModel.length === 0) {
       return;
     }
 
     const confirm = window.confirm(
-      `Are you sure you want to delete ${rowSelectionModel.length} evaluation(s)?`,
+      `Are you sure you want to delete ${rowSelectionModel.length} evaluation${
+        rowSelectionModel.length === 1 ? '' : 's'
+      }?`,
     );
     if (!confirm) {
       return;
@@ -240,11 +249,7 @@ export default function EvalsDataGrid({
 
     try {
       await Promise.all(
-        rowSelectionModel.map((id) =>
-          callApi(`/eval/${id}`, {
-            method: 'DELETE',
-          }),
-        ),
+        rowSelectionModel.map((id) => callApi(`/eval/${id}`, { method: 'DELETE' })),
       );
       setEvals((prev) => prev.filter((e) => !rowSelectionModel.includes(e.evalId)));
       setRowSelectionModel([]);
