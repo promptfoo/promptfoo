@@ -1739,15 +1739,12 @@ class Evaluator {
         (r) => r.failureReason === ResultFailureReason.ERROR && r.error?.includes('timed out'),
       );
 
-    // Calculate number of probes (total API requests made)
-    // This matches how Report.tsx calculates probes: selectedPrompt?.metrics?.tokenUsage?.numRequests
-    const numProbes = this.stats.tokenUsage.numRequests || this.evalRecord.results.length;
-
     telemetry.record('eval_ran', {
       // Basic metrics
       numPrompts: prompts.length,
       numTests: this.stats.successes + this.stats.failures + this.stats.errors,
-      numProbes,
+      numRequests: this.stats.tokenUsage.numRequests || 0,
+      numResults: this.evalRecord.results.length,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
