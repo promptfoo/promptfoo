@@ -7,17 +7,9 @@ import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
-import { getDb } from '../../src/database';
-import { isEnterpriseCustomer } from '../../src/util/cloud';
 import FakeDataFactory from '../factories/data/fakeDataFactory';
 
 jest.mock('../../src/redteam/commands/generate');
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
-}));
-jest.mock('../../src/util/cloud', () => ({
-  isEnterpriseCustomer: jest.fn(),
-}));
 jest.mock('../../src/commands/eval', () => ({
   doEval: jest.fn().mockResolvedValue({
     table: [],
@@ -78,16 +70,6 @@ describe('doRedteamRun', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-
-    // Mock database functions
-    const mockDb = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      all: jest.fn().mockResolvedValue([]),
-    };
-    (getDb as jest.Mock).mockReturnValue(mockDb);
-    (isEnterpriseCustomer as jest.Mock).mockResolvedValue(false);
 
     dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(mockDate.getTime());
     jest.mocked(checkRemoteHealth).mockResolvedValue({ status: 'OK', message: 'Healthy' });

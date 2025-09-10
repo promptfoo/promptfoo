@@ -445,7 +445,6 @@ export async function runEval({
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
     // Track token usage at the provider level
-
     if (response.tokenUsage) {
       const providerId = provider.id();
       const trackingId = provider.constructor?.name
