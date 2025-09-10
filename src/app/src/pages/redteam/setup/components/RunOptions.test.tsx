@@ -93,6 +93,7 @@ describe('RunOptionsContent', () => {
       const numTestsInput = screen.getByLabelText('Number of test cases');
 
       fireEvent.change(numTestsInput, { target: { value: '25' } });
+      fireEvent.blur(numTestsInput);
 
       expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
       expect(mockUpdateConfig).toHaveBeenCalledWith('numTests', 25);
@@ -112,6 +113,7 @@ describe('RunOptionsContent', () => {
 
       const delayInput = screen.getByLabelText('Delay between API calls (ms)');
       fireEvent.change(delayInput, { target: { value: '500' } });
+      fireEvent.blur(delayInput);
 
       expect(mockUpdateRunOption).toHaveBeenCalledWith('delay', 500);
       expect(mockUpdateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
@@ -122,6 +124,7 @@ describe('RunOptionsContent', () => {
 
       const maxConcurrencyInput = screen.getByLabelText('Max number of concurrent requests');
       fireEvent.change(maxConcurrencyInput, { target: { value: '5' } });
+      fireEvent.blur(maxConcurrencyInput);
 
       expect(mockUpdateRunOption).toHaveBeenCalledTimes(2);
       expect(mockUpdateRunOption).toHaveBeenCalledWith('maxConcurrency', 5);
@@ -135,11 +138,13 @@ describe('RunOptionsContent', () => {
       const maxConcurrencyInput = screen.getByLabelText('Max number of concurrent requests');
 
       fireEvent.change(maxConcurrencyInput, { target: { value: '-1' } });
+      fireEvent.blur(maxConcurrencyInput);
       expect(mockUpdateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
 
       mockUpdateRunOption.mockClear();
 
       fireEvent.change(maxConcurrencyInput, { target: { value: 'abc' } });
+      fireEvent.blur(maxConcurrencyInput);
       expect(mockUpdateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
     });
   });
