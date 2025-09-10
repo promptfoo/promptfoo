@@ -1645,6 +1645,103 @@ describe('CrescendoProvider - Chat Template Support', () => {
     jest.restoreAllMocks();
   });
 
+  it('should reject invalid chat structures with invalid roles', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      stateful: false,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    // Mock renderPrompt to return JSON with invalid roles
+    const invalidChatStructure = JSON.stringify([
+      { role: 'system', content: 'You are a helpful assistant' },
+      { role: 'invalid_role', content: 'This has an invalid role' },
+    ]);
+    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(invalidChatStructure);
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ value: false, metadata: 50 }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    // Should fall back to conversation history because structure is invalid
+    // The first call should be the stringified conversation history sent directly as prompt
+    const firstCall = mockTargetProvider.callApi.mock.calls[0];
+    const firstCallPrompt = firstCall[0];
+
+    // Should be wrapped in a single user message containing the entire invalid structure as a string
+    expect(firstCallPrompt).toContain('"role":"user"');
+    expect(firstCallPrompt).toContain('"content":');
+    expect(firstCallPrompt).toContain('invalid_role'); // The invalid structure should be in content as a string
+  });
+
+  it('should reject non-array JSON structures', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      stateful: false,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    // Mock renderPrompt to return JSON object (not array)
+    const nonArrayJson = JSON.stringify({ role: 'user', content: 'not an array' });
+    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(nonArrayJson);
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ value: false, metadata: 50 }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    // Should fall back to conversation history because it's not an array
+    // The first call should be the stringified conversation history sent directly as prompt
+    const firstCall = mockTargetProvider.callApi.mock.calls[0];
+    const firstCallPrompt = firstCall[0];
+
+    // Should be wrapped in a single user message containing the entire non-array structure as a string
+    expect(firstCallPrompt).toContain('"role":"user"');
+    expect(firstCallPrompt).toContain('"content":');
+    expect(firstCallPrompt).toContain('not an array'); // The non-array structure should be in content as a string
+  });
+
   it('should use rendered chat template instead of conversation history when template contains structured JSON', async () => {
     // Simulate a chat template that renders to structured JSON (like _conversation templates)
     const chatTemplatePrompt = `[

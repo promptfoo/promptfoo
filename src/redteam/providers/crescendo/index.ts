@@ -53,7 +53,8 @@ function isValidChatMessageArray(parsed: unknown): parsed is Message[] {
         'role' in msg &&
         'content' in msg &&
         typeof msg.role === 'string' &&
-        typeof msg.content === 'string',
+        typeof msg.content === 'string' &&
+        ['user', 'assistant', 'system'].includes(msg.role),
     )
   );
 }
