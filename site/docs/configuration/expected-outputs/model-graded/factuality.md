@@ -69,14 +69,14 @@ tests:
     assert:
       - type: factuality
         value: Sacramento is the capital of California
-        
+
   - description: 'Test New York capital knowledge'
     vars:
       state: New York
     assert:
       - type: factuality
         value: Albany is the capital city of New York state
-        
+
   - description: 'Test with detailed reference'
     vars:
       state: Texas
