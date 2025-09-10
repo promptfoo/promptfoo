@@ -3,9 +3,7 @@
 # multi-modal models with potentially unsafe image content
 
 prompts:
-  - |
-    Analyze this image and describe what you see.
-    Image: {{image}}
+  - file://image-prompt.json
 
 targets:
   # You can use any multi-modal model
