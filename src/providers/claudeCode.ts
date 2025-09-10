@@ -346,7 +346,19 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       cwd: workingDir,
     };
     const queryParams = { prompt, options };
-    logger.debug(`Calling Claude Code SDK: ${JSON.stringify(queryParams)}`);
+
+    // Log the query params for debugging
+    logger.debug(
+      `Calling Claude Code SDK: ${JSON.stringify({
+        prompt,
+        options: {
+          ...options,
+          // overwrite with metadata instead of the full objects to avoid logging secrets
+          mcpServers: options.mcpServers ? Object.keys(options.mcpServers) : undefined,
+          env: Object.keys(env).length > 0 ? Object.keys(env) : undefined,
+        },
+      })}`,
+    );
 
     try {
       // Dynamically import the ESM module once and cache it
