@@ -134,11 +134,24 @@ class PersistentPythonProvider:
             if asyncio.iscoroutinefunction(method):
                 return self._run_async_method(method, call_args, call_kwargs, safe_context)
             else:
-                # Sync method
-                if call_kwargs:
-                    result = method(**call_kwargs)
+                # Sync method - handle based on concurrency setting
+                concurrency = options.get('config', {}).get('concurrency', 'async')
+                
+                if concurrency == 'async':
+                    # Run in executor to prevent blocking the event loop
+                    if call_kwargs:
+                        result = self.event_loop.run_in_executor(None, lambda: method(**call_kwargs))
+                    else:
+                        result = self.event_loop.run_in_executor(None, lambda: method(*call_args))
+                    
+                    # Since run_in_executor returns a coroutine, we need to await it
+                    result = self.event_loop.run_until_complete(result)
                 else:
-                    result = method(*call_args)
+                    # Serial execution - run directly (blocking)
+                    if call_kwargs:
+                        result = method(**call_kwargs)
+                    else:
+                        result = method(*call_args)
                 
                 # Ensure trace context is preserved in result
                 return self._preserve_trace_in_result(result, safe_context)
