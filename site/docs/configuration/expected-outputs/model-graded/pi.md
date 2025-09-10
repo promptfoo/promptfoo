@@ -3,7 +3,7 @@ sidebar_position: 8
 description: 'Use specialized scoring models for consistent, deterministic evaluation of LLM outputs'
 ---
 
-# Pi scorer
+# Pi Scorer
 
 The `pi` assertion uses a specialized scoring model for consistent, deterministic evaluation of LLM outputs.
 

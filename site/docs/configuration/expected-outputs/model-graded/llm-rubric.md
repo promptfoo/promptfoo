@@ -3,7 +3,7 @@ sidebar_label: LLM Rubric
 description: 'Create flexible custom rubrics using natural language to evaluate LLM outputs against specific quality and safety criteria'
 ---
 
-# LLM rubric
+# LLM Rubric
 
 The `llm-rubric` assertion uses an LLM to grade outputs against custom criteria.
 
