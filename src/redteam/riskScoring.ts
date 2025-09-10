@@ -231,7 +231,29 @@ export function calculatePluginRiskScore(
 
   // Take the maximum score across all strategies (worst case)
   const maxScore = Math.max(...strategyScores.map((s) => s.score));
-  const worstStrategy = strategyScores.find((s) => s.score === maxScore)!;
+  const worstStrategy = strategyScores.find((s) => s.score === maxScore);
+
+  // Handle edge case where no strategy is found (should not happen, but safety check)
+  if (!worstStrategy) {
+    console.warn(
+      `No worst strategy found for plugin ${pluginId} with severity ${severity}. ${JSON.stringify(strategyScores)}`,
+    );
+    return {
+      pluginId,
+      severity,
+      score: 0,
+      level: 'low',
+      complexityScore: 0,
+      worstStrategy: 'none',
+      strategyBreakdown: [],
+      components: {
+        impact: 0,
+        exploitability: 0,
+        humanFactor: 0,
+        strategyWeight: 0,
+      },
+    };
+  }
 
   // Decompose the max score for reporting
   const impactBase = {
@@ -239,7 +261,7 @@ export function calculatePluginRiskScore(
     [Severity.High]: 3,
     [Severity.Medium]: 2,
     [Severity.Low]: 1,
-  }[severity];
+  }[severity]; // Default to Low severity for unknown values
 
   const exploitabilityScore =
     worstStrategy.successRate > 0 ? Math.min(4, 1.5 + 2.5 * worstStrategy.successRate) : 0;
