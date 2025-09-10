@@ -1,4 +1,4 @@
-import { fetchWithProxy } from '../../fetch';
+import { fetchWithProxy } from '../../util/fetch';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 

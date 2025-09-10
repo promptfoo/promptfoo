@@ -7,13 +7,13 @@ import {
   VALID_SUBCATEGORIES,
 } from '../../../src/redteam/plugins/vlguard';
 import * as huggingfaceDatasets from '../../../src/integrations/huggingfaceDatasets';
-import * as fetchModule from '../../../src/fetch';
+import * as fetchModule from '../../../src/util/fetch';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 
 jest.mock('../../../src/logger');
 jest.mock('../../../src/integrations/huggingfaceDatasets');
-jest.mock('../../../src/fetch');
+jest.mock('../../../src/util/fetch');
 
 describe('VLGuardPlugin', () => {
   const mockProvider: ApiProvider = {
