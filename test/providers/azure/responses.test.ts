@@ -117,14 +117,8 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should handle inline response_format', () => {
-      // First call will return the inline schema
-      mockMaybeLoadFromExternalFile.mockReturnValue({
-        type: 'json_schema',
-        json_schema: {
-          name: 'inline_schema',
-          schema: { type: 'object', properties: { result: { type: 'string' } } },
-        },
-      });
+      // For inline schemas, maybeLoadFromExternalFile should return the object unchanged
+      mockMaybeLoadFromExternalFile.mockImplementation((input) => input);
 
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: {
