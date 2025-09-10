@@ -44,7 +44,6 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       ...(this.config.passthrough || {}),
     };
 
-    logger.debug(`Calling Azure API: ${JSON.stringify(body)}`);
     let data;
     let cached = false;
     try {
@@ -71,7 +70,6 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
       // Handle content filter errors (HTTP 400 with content_filter code)
       if (data.error) {

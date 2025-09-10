@@ -322,15 +322,4 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/retry/',
     recommended: false,
   },
-  {
-    category: 'Multi-turn',
-    strategy: 'pandamonium',
-    displayName: 'Pandamonium',
-    description: 'Dynamic attack generation',
-    longDescription:
-      'Advanced automated red teaming technique that dynamically generates single or multi-turn conversations aimed at bypassing safety measures',
-    cost: 'High',
-    asrIncrease: '70-90%',
-    link: '/docs/red-team/strategies/pandamonium/',
-  },
 ];

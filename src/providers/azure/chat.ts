@@ -145,14 +145,14 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
-      ...(config.dataSources ? { dataSources: config.dataSources } : {}),
+      ...(config.dataSources ? { dataSources: config.dataSources } : {}), // legacy support for versions < 2024-02-15-preview
+      ...(config.data_sources ? { data_sources: config.data_sources } : {}),
       ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
 
-    logger.debug(`Azure API request body: ${JSON.stringify(body)}`);
     return { body, config };
   }
 
@@ -175,7 +175,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     let data;
     let cached = false;
-    let httpStatus: number;
+
     try {
       const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
@@ -206,7 +206,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       );
 
       cached = isCached;
-      httpStatus = status;
 
       // Handle the response data
       if (typeof responseData === 'string') {
@@ -225,8 +224,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
-
-    logger.debug(`Azure API response (status ${httpStatus}): ${JSON.stringify(data)}`);
 
     // Inputs and outputs can be flagged by content filters.
     // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
@@ -249,7 +246,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           };
         }
       } else {
-        const hasDataSources = !!config.dataSources;
+        const hasDataSources = !!config.dataSources || !!config.data_sources;
         const choice = hasDataSources
           ? data.choices.find(
               (choice: { message: { role: string; content: string } }) =>

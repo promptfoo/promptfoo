@@ -65,6 +65,47 @@ assert:
 
 For more information on factuality, see the [guide on LLM factuality](/docs/guides/factuality-eval).
 
+## Non-English Evaluation
+
+For multilingual evaluation output with compatible assertion types, use a custom `rubricPrompt`:
+
+```yaml
+defaultTest:
+  options:
+    rubricPrompt: |
+      [
+        {
+          "role": "system",
+          // German: "You evaluate outputs based on criteria. Respond with JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALL responses in German."
+          "content": "Du bewertest Ausgaben nach Kriterien. Antworte mit JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALLE Antworten auf Deutsch."
+        },
+        {
+          "role": "user", 
+          // German: "Output: {{ output }}\nCriterion: {{ rubric }}"
+          "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}"
+        }
+      ]
+
+assert:
+  - type: llm-rubric
+    # German: "Responds helpfully"
+    value: 'Antwortet hilfreich'
+  - type: g-eval
+    # German: "Clear and precise"
+    value: 'Klar und präzise'
+  - type: model-graded-closedqa
+    # German: "Gives direct answer"
+    value: 'Gibt direkte Antwort'
+```
+
+This produces German reasoning: `{"reason": "Die Antwort ist hilfreich und klar.", "pass": true, "score": 1.0}`
+
+<!-- German reasoning: "The answer is helpful and clear." -->
+
+**Note:** This approach works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. Other assertions like `factuality` and `context-recall` require specific output formats and need assertion-specific prompts.
+
+For more language options and alternative approaches, see the [llm-rubric language guide](/docs/configuration/expected-outputs/model-graded/llm-rubric#non-english-evaluation).
+
 Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading)):
 
 [![LLM prompt quality evaluation with PASS/FAIL expectations](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)

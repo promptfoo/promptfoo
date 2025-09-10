@@ -5,11 +5,11 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
-import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
 import { checkCloudPermissions, makeRequest as makeCloudRequest } from './util/cloud';
+import { fetchWithProxy } from './util/fetch';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -415,6 +415,12 @@ export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
+  // If sharing is explicitly disabled, return null
+  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
+    logger.debug('Sharing is explicitly disabled, returning null');
+    return null;
+  }
+
   // 1. Handle email collection
   await handleEmailCollection(evalRecord);
 

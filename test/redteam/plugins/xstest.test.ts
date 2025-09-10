@@ -1,11 +1,11 @@
 import { parse } from 'csv-parse/sync';
-import { fetchWithTimeout } from '../../../src/fetch';
 import logger from '../../../src/logger';
 import { fetchDataset, XSTestPlugin } from '../../../src/redteam/plugins/xstest';
+import { fetchWithTimeout } from '../../../src/util/fetch';
 
 jest.mock('fs');
 jest.mock('csv-parse/sync');
-jest.mock('../../../src/fetch');
+jest.mock('../../../src/util/fetch');
 jest.mock('../../../src/logger');
 
 describe('XSTest Plugin', () => {

@@ -5,6 +5,13 @@ description: Debug and resolve common promptfoo issues with solutions for memory
 
 # Troubleshooting
 
+## Log Files and Debugging
+
+Before troubleshooting specific issues, you can access detailed logs to help diagnose problems:
+
+- **View logs directly**: Log files are stored in your config directory at `~/.promptfoo/logs` by default
+- **Export logs for sharing**: Use `promptfoo export logs` to create a compressed archive of your log files for debugging or support
+
 ## Out of memory error
 
 If you have a large number of tests or your tests have large outputs, you may encounter an out of memory error. There are several ways to handle this:
