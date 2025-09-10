@@ -34,8 +34,8 @@ redteam:
     #       - violence
     #       - disinformation
     #       - professional advice
-# Uncomment and set your Hugging Face token if needed
-# defaultTest:
-#   options:
-#     env:
-#       HF_TOKEN: your_huggingface_token
+
+  # Uncomment and set your Hugging Face token if needed
+  # options:
+  #   env:
+  #     HF_TOKEN: your_huggingface_token
