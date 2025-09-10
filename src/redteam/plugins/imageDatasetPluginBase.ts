@@ -92,10 +92,7 @@ export abstract class ImageDatasetPluginBase<
       }
 
       // Fetch and filter records
-      const records = await (this.datasetManager as any).getFilteredRecords(
-        limit,
-        this.pluginConfig,
-      );
+      const records = await this.datasetManager.getFilteredRecords(limit, this.pluginConfig);
 
       if (records.length === 0) {
         const errorMessage = this.getNoRecordsErrorMessage();

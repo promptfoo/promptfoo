@@ -178,26 +178,40 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
         recordsByCategory[normalizedCategory].push(record);
       }
 
-      // Calculate how many records per category
-      const perCategory = Math.floor(limit / config.categories.length);
+      // Calculate base allocation per category and remainder
+      const perCategoryBase = Math.floor(limit / config.categories.length);
+      const remainder = limit % config.categories.length;
       const result: VLGuardInput[] = [];
+      const leftovers: VLGuardInput[] = [];
 
-      // Take an equal number from each category
+      // Base allocation per category
       for (const category of config.categories) {
         const normalizedCategory = category.toLowerCase();
-        const categoryRecords = recordsByCategory[normalizedCategory] || [];
-
-        // Fisher-Yates shuffle and take up to perCategory records
-        const shuffled = fisherYatesShuffle([...categoryRecords]);
-        result.push(...shuffled.slice(0, perCategory));
-
+        const categoryRecords = fisherYatesShuffle([
+          ...(recordsByCategory[normalizedCategory] || []),
+        ]);
+        
+        const takeBase = Math.min(perCategoryBase, categoryRecords.length);
+        result.push(...categoryRecords.slice(0, takeBase));
+        leftovers.push(...categoryRecords.slice(takeBase));
+        
         logger.debug(
-          `[vlguard] Selected ${Math.min(perCategory, shuffled.length)} records for category ${category}`,
+          `[vlguard] Selected ${takeBase} base records for category ${category}`,
         );
       }
 
-      // Return the results, limiting to the requested total
-      return result.slice(0, limit);
+      // Distribute remainder from leftover records
+      if (remainder > 0 && leftovers.length > 0) {
+        const shuffledLeftovers = fisherYatesShuffle(leftovers);
+        const extraRecords = shuffledLeftovers.slice(0, remainder);
+        result.push(...extraRecords);
+        
+        logger.debug(
+          `[vlguard] Distributed ${extraRecords.length} remainder records to reach limit of ${limit}`,
+        );
+      }
+
+      return result;
     }
 
     // If no categories specified, just shuffle and return the requested number
@@ -216,6 +230,13 @@ export class VLGuardPlugin extends ImageDatasetPluginBase<VLGuardInput, VLGuardP
   static readonly canGenerateRemote = false;
 
   protected validateConfig(config?: VLGuardPluginConfig): void {
+    // Warn about dataset license
+    logger.warn(
+      '[vlguard] IMPORTANT: The VLGuard dataset (kirito011024/vlguard_unsafes) does not have an ' +
+      'explicitly stated license. Verify terms and licensing before commercial use. ' +
+      'For commercial deployments, consider using datasets with clear, permissive licenses.'
+    );
+
     // Validate categories if provided
     if (config?.categories) {
       const invalidCategories = config.categories.filter(

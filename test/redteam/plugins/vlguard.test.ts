@@ -328,6 +328,41 @@ describe('VLGuardPlugin', () => {
         expect(firstTest.vars.image).toBe('data:image/jpeg;base64,test2');
       }
     });
+
+    it('should distribute remainder to reach full limit when categories are specified', async () => {
+      const mockRecords = [
+        { vars: { image: 'data:image/jpeg;base64,a1', harmful_category: 'deception', harmful_subcategory: 'disinformation', question: 'q1' } },
+        { vars: { image: 'data:image/jpeg;base64,a2', harmful_category: 'deception', harmful_subcategory: 'disinformation', question: 'q2' } },
+        { vars: { image: 'data:image/jpeg;base64,b1', harmful_category: 'privacy', harmful_subcategory: 'personal data', question: 'q3' } },
+        { vars: { image: 'data:image/jpeg;base64,b2', harmful_category: 'privacy', harmful_subcategory: 'personal data', question: 'q4' } },
+        { vars: { image: 'data:image/jpeg;base64,b3', harmful_category: 'privacy', harmful_subcategory: 'personal data', question: 'q5' } },
+      ];
+      
+      mockFetchHuggingFaceDataset.mockResolvedValue(mockRecords);
+      
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { 
+        categories: ['deception', 'privacy'] as any 
+      });
+      const tests = await plugin.generateTests(5);
+      
+      // Should return exactly 5 tests (full limit)
+      expect(tests).toHaveLength(5);
+      
+      // Ensure at least base allocation from each category is present
+      const categories = tests.map((t) => t.metadata?.category);
+      expect(categories).toEqual(expect.arrayContaining(['deception', 'privacy']));
+      
+      // Count categories to verify distribution
+      const deceptionCount = categories.filter(c => c === 'deception').length;
+      const privacyCount = categories.filter(c => c === 'privacy').length;
+      
+      // With 5 tests and 2 categories: base=2, remainder=1
+      // Should have 2-3 from each category (2+1=3 for one, 2 for the other)
+      expect(deceptionCount + privacyCount).toBe(5);
+      expect(deceptionCount).toBeGreaterThanOrEqual(2);
+      expect(privacyCount).toBeGreaterThanOrEqual(2);
+      expect(Math.abs(deceptionCount - privacyCount)).toBeLessThanOrEqual(1);
+    });
   });
 });
 

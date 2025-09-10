@@ -168,6 +168,12 @@ export abstract class ImageDatasetManager<T> {
   protected abstract processRecords(records: any[]): Promise<T[]>;
 
   /**
+   * Get filtered records based on plugin configuration
+   * Must be implemented by subclasses
+   */
+  public abstract getFilteredRecords(limit: number, config?: any): Promise<T[]>;
+
+  /**
    * Clear the cache - useful for testing
    */
   public clearCache(): void {
