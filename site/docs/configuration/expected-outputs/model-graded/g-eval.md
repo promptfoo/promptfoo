@@ -35,7 +35,11 @@ assert:
     threshold: 0.7
 ```
 
+For non-English evaluation output, see the [multilingual evaluation guide](/docs/configuration/expected-outputs/model-graded#non-english-evaluation).
+
 ### Multiple criteria
+
+You can also provide multiple evaluation criteria as an array:
 
 ```yaml
 assert:

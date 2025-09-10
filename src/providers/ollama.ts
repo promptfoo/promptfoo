@@ -87,6 +87,8 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'stop',
   'num_thread',
   'tools',
+  'think',
+  'passthrough',
 ]);
 
 interface OllamaCompletionJsonL {
@@ -153,7 +155,12 @@ export class OllamaCompletionProvider implements ApiProvider {
       options: Object.keys(this.config).reduce(
         (options, key) => {
           const optionName = key as keyof OllamaCompletionOptions;
-          if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
+          if (
+            OllamaCompletionOptionKeys.has(optionName) &&
+            optionName !== 'think' &&
+            optionName !== 'tools' &&
+            optionName !== 'passthrough'
+          ) {
             options[optionName] = this.config[optionName];
           }
           return options;
@@ -163,6 +170,10 @@ export class OllamaCompletionProvider implements ApiProvider {
       ...(this.config.think !== undefined ? { think: this.config.think } : {}),
       ...(this.config.passthrough || {}),
     };
+
+    if (this.config.think !== undefined) {
+      params.think = this.config.think;
+    }
 
     logger.debug(`Calling Ollama API: ${JSON.stringify(params)}`);
     let response;
@@ -389,7 +400,6 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tOllama embeddings API response: ${JSON.stringify(response.data)}`);
 
     try {
       const embedding = response.data.embedding as number[];

@@ -100,7 +100,6 @@ export default function StrategyConfigDialog({
       strategy === 'goat' ||
       strategy === 'crescendo' ||
       strategy === 'custom' ||
-      strategy === 'pandamonium' ||
       strategy === 'gcg' ||
       strategy === 'citation' ||
       strategy === 'mischievous-user'
@@ -392,48 +391,6 @@ export default function StrategyConfigDialog({
                 </Typography>
                 <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
                   - Enable to maintain conversation history (recommended)
-                </Typography>
-              </Box>
-            }
-          />
-        </Box>
-      );
-    } else if (strategy === 'pandamonium') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the Pandamonium experimental jailbreak strategy parameters.
-          </Typography>
-
-          <TextField
-            fullWidth
-            label="Max Turns"
-            type="number"
-            value={localConfig.maxTurns || 500}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 500;
-              setLocalConfig({ ...localConfig, maxTurns: value });
-            }}
-            placeholder="Maximum number of iterations (default: 500)"
-            InputProps={{ inputProps: { min: 100, max: 1000 } }}
-            helperText="Maximum number of iterations to try (note: Pandamonium can be expensive)"
-          />
-
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localConfig.stateful !== false}
-                onChange={(e) => setLocalConfig({ ...localConfig, stateful: e.target.checked })}
-                color="primary"
-              />
-            }
-            label={
-              <Box component="span">
-                <Typography variant="body2" component="span">
-                  Stateful
-                </Typography>
-                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                  - Enable to maintain conversation history
                 </Typography>
               </Box>
             }

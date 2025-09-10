@@ -1,5 +1,5 @@
 import { clearCache } from '../../src/cache';
-import * as fetchModule from '../../src/fetch';
+import * as fetchModule from '../../src/util/fetch';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
@@ -9,7 +9,7 @@ jest.mock('../../src/util', () => ({
   renderVarsInObject: jest.fn((x) => x),
 }));
 
-jest.mock('../../src/fetch');
+jest.mock('../../src/util/fetch');
 
 describe('OpenRouter', () => {
   const mockedFetchWithRetries = jest.mocked(fetchModule.fetchWithRetries);
@@ -362,6 +362,296 @@ describe('OpenRouter', () => {
         // Tool calls should never include reasoning, regardless of showThinking setting
         expect(result.output).toEqual([mockToolCall]);
         expect(result.tokenUsage).toEqual({ total: 55, prompt: 20, completion: 35 });
+      });
+
+      it('should handle tool calls when content is empty string', async () => {
+        const mockToolCall = {
+          id: 'call_abc123',
+          type: 'function',
+          function: {
+            name: 'get_current_weather',
+            arguments: '{"location": "New York, NY", "unit": "fahrenheit"}',
+          },
+        };
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: '', // Empty string
+                tool_calls: [mockToolCall],
+              },
+            },
+          ],
+          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('What is the weather in New York?');
+
+        // Should return tool_calls when content is empty string
+        expect(result.output).toEqual([mockToolCall]);
+        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+      });
+
+      it('should handle tool calls when content is whitespace only', async () => {
+        const mockToolCall = {
+          id: 'call_def456',
+          type: 'function',
+          function: {
+            name: 'get_current_weather',
+            arguments: '{"location": "New York, NY", "unit": "fahrenheit"}',
+          },
+        };
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: '\n\n', // Whitespace only
+                tool_calls: [mockToolCall],
+              },
+            },
+          ],
+          usage: { total_tokens: 50, prompt_tokens: 20, completion_tokens: 30 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('What is the weather?');
+
+        // Should return tool_calls when content is only whitespace
+        expect(result.output).toEqual([mockToolCall]);
+        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+      });
+
+      it('should handle function calls when content is whitespace only', async () => {
+        const mockFunctionCall = {
+          name: 'calculate_sum',
+          arguments: '{"a": 5, "b": 10}',
+        };
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: '  \t  ', // Various whitespace characters
+                function_call: mockFunctionCall,
+              },
+            },
+          ],
+          usage: { total_tokens: 40, prompt_tokens: 15, completion_tokens: 25 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Calculate 5 + 10');
+
+        // Should return function_call when content is only whitespace
+        expect(result.output).toEqual(mockFunctionCall);
+        expect(result.tokenUsage).toEqual({ total: 40, prompt: 15, completion: 25 });
+      });
+
+      it('should handle tool calls with reasoning when content is whitespace only', async () => {
+        const mockToolCall = {
+          id: 'call_ghi789',
+          type: 'function',
+          function: {
+            name: 'get_stock_price',
+            arguments: '{"symbol": "AAPL"}',
+          },
+        };
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: '\t\n \n\t', // Mixed whitespace
+                tool_calls: [mockToolCall],
+                reasoning: 'The user wants to know the stock price for Apple Inc.',
+              },
+            },
+          ],
+          usage: { total_tokens: 60, prompt_tokens: 25, completion_tokens: 35 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('What is AAPL stock price?');
+
+        // Should return tool_calls, ignoring reasoning when there are tool calls
+        expect(result.output).toEqual([mockToolCall]);
+        expect(result.tokenUsage).toEqual({ total: 60, prompt: 25, completion: 35 });
+      });
+
+      it('should prioritize tool calls over content+reasoning when all three are present (fixes Qwen thinking models)', async () => {
+        const providerWithoutThinking = new OpenRouterProvider(
+          'qwen/qwen3-235b-a22b-thinking-2507',
+          {
+            config: { showThinking: false },
+          },
+        );
+
+        const mockToolCall = {
+          id: 'call_qwen_thinking_fix',
+          type: 'function',
+          function: {
+            name: 'get_weather',
+            arguments: '{"location": "San Francisco"}',
+          },
+        };
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                // This is the problematic scenario: model returns ALL THREE fields
+                content: 'I need to get the weather for San Francisco.',
+                reasoning:
+                  'The user is asking for weather information. I should use the get_weather function with San Francisco as the location parameter.',
+                tool_calls: [mockToolCall],
+              },
+            },
+          ],
+          usage: { total_tokens: 100, prompt_tokens: 50, completion_tokens: 50 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await providerWithoutThinking.callApi('Get weather for San Francisco');
+
+        // Should prioritize tool_calls and ignore content+reasoning when showThinking is false
+        expect(result.output).toEqual([mockToolCall]);
+        expect(result.tokenUsage).toEqual({ total: 100, prompt: 50, completion: 50 });
+      });
+
+      it('should prioritize tool calls over content+reasoning even when showThinking is true', async () => {
+        // Using the default provider which has showThinking enabled by default
+        const mockToolCall = {
+          id: 'call_qwen_thinking_enabled',
+          type: 'function',
+          function: {
+            name: 'search_database',
+            arguments: '{"query": "user data"}',
+          },
+        };
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                // All three fields present
+                content: 'I will search the database for user data.',
+                reasoning:
+                  'The user wants to find information in the database. I should call the search function.',
+                tool_calls: [mockToolCall],
+              },
+            },
+          ],
+          usage: { total_tokens: 80, prompt_tokens: 40, completion_tokens: 40 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Search for user data');
+
+        // Tool calls should always take priority, regardless of showThinking setting
+        expect(result.output).toEqual([mockToolCall]);
+        expect(result.tokenUsage).toEqual({ total: 80, prompt: 40, completion: 40 });
+      });
+
+      it('should handle responses with empty content and reasoning when showThinking is false', async () => {
+        const providerWithoutThinking = new OpenRouterProvider('some/thinking-model', {
+          config: { showThinking: false },
+        });
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                content: '',
+                reasoning: 'Some thinking process here',
+                // No tool_calls
+              },
+            },
+          ],
+          usage: { total_tokens: 30, prompt_tokens: 15, completion_tokens: 15 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await providerWithoutThinking.callApi('Test prompt');
+
+        // Should return empty string when content is empty and showThinking is false
+        expect(result.output).toBe('');
+        expect(result.tokenUsage).toEqual({ total: 30, prompt: 15, completion: 15 });
+      });
+
+      it('should handle responses with only reasoning and no content/tools when showThinking is false', async () => {
+        const providerWithoutThinking = new OpenRouterProvider('some/reasoning-model', {
+          config: { showThinking: false },
+        });
+
+        const mockResponse = {
+          choices: [
+            {
+              message: {
+                // No content, no tool_calls
+                reasoning: 'This is only reasoning content',
+              },
+            },
+          ],
+          usage: { total_tokens: 25, prompt_tokens: 10, completion_tokens: 15 },
+        };
+
+        const response = new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await providerWithoutThinking.callApi('Test prompt');
+
+        // Should return empty string when only reasoning is available and showThinking is false
+        expect(result.output).toBe('');
+        expect(result.tokenUsage).toEqual({ total: 25, prompt: 10, completion: 15 });
       });
 
       it('should handle API errors', async () => {
