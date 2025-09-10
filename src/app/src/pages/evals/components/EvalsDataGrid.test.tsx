@@ -1,11 +1,10 @@
-import React from 'react';
-import { render, waitFor, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import React, { useState } from 'react';
+
 import { callApi } from '@app/utils/api';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalsDataGrid from './EvalsDataGrid';
-import { useState } from 'react';
-import { act } from '@testing-library/react';
 
 // Mock the API
 vi.mock('@app/utils/api');
@@ -731,7 +730,7 @@ describe('EvalsDataGrid', () => {
     // DELETE API should not have been called
     expect(mockCall).not.toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ method: 'DELETE' })
+      expect.objectContaining({ method: 'DELETE' }),
     );
   });
 
