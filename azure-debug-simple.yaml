@@ -7,8 +7,8 @@ prompts:
 providers:
   - id: azure:responses:gpt-4o-mini
     config:
-      apiHost: "promptfoo-openai-test.openai.azure.com"
-      apiKey: "dbe8e1aaf4f343638fabc30282278893"
+      apiHost: 'promptfoo-openai-test.openai.azure.com'
+      apiKey: 'dbe8e1aaf4f343638fabc30282278893'
       temperature: 0
       max_output_tokens: 100
 

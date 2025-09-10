@@ -10,12 +10,12 @@ providers:
   - id: azure:responses:gpt-4o-mini
     config:
       # Replace with your Azure OpenAI resource hostname
-      apiHost: "your-resource.openai.azure.com"
-      # Replace with your Azure OpenAI API key  
-      apiKey: "your-actual-api-key"
+      apiHost: 'your-resource.openai.azure.com'
+      # Replace with your Azure OpenAI API key
+      apiKey: 'your-actual-api-key'
       # Optional: specify API version
-      apiVersion: "2024-12-01-preview"
-      
+      apiVersion: '2024-12-01-preview'
+
       # Test external file loading (the key feature we fixed)
       temperature: 0
       max_output_tokens: 500
@@ -33,7 +33,6 @@ tests:
         value: file://examples/openai-responses/response_format.json
       - type: contains
         value: 'Azure AI Conference'
-
 # Instructions:
 # 1. Replace "your-resource.openai.azure.com" with your actual Azure resource hostname
 # 2. Replace "your-actual-api-key" with your actual Azure API key

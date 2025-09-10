@@ -132,7 +132,12 @@ describe('AzureResponsesProvider', () => {
             type: 'json_schema',
             json_schema: {
               name: 'inline_schema',
-              schema: { type: 'object', properties: { result: { type: 'string' } }, additionalProperties: false },
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: { result: { type: 'string' } },
+                additionalProperties: false,
+              },
             },
           },
         },
@@ -143,7 +148,11 @@ describe('AzureResponsesProvider', () => {
       expect(body.text.format).toMatchObject({
         type: 'json_schema',
         name: 'inline_schema',
-        schema: { type: 'object', properties: { result: { type: 'string' } }, additionalProperties: false },
+        schema: {
+          type: 'object',
+          properties: { result: { type: 'string' } },
+          additionalProperties: false,
+        },
         strict: true,
       });
     });

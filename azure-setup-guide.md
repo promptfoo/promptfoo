@@ -27,7 +27,7 @@ providers:
     config:
       apiHost: your-resource.openai.azure.com
       apiKey: your-azure-api-key
-      apiVersion: "2024-12-01-preview"  # optional
+      apiVersion: '2024-12-01-preview' # optional
 ```
 
 ## Test Commands

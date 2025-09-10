@@ -28,7 +28,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       modelName: this.deploymentName,
       providerType: 'azure',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any, config?: any) => calculateAzureCost(modelName, usage) ?? 0,
+      costCalculator: (modelName: string, usage: any, config?: any) =>
+        calculateAzureCost(modelName, usage) ?? 0,
     });
 
     if (this.config.mcp?.enabled) {

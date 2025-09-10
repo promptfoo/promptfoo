@@ -86,7 +86,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       providerType: 'openai',
       functionCallbackHandler: this.functionCallbackHandler,
       costCalculator: (modelName: string, usage: any, config?: any) =>
-        calculateOpenAICost(modelName, config, usage?.input_tokens, usage?.output_tokens, 0, 0) ?? 0,
+        calculateOpenAICost(modelName, config, usage?.input_tokens, usage?.output_tokens, 0, 0) ??
+        0,
     });
   }
 
