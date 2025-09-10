@@ -239,7 +239,7 @@ export default function EvalsDataGrid({
     }
 
     const confirm = window.confirm(
-      `Are you sure you want to delete ${rowSelectionModel.length} evaluation${
+      `Are you sure you want to delete ${rowSelectionModel.length} eval${
         rowSelectionModel.length === 1 ? '' : 's'
       }?`,
     );
