@@ -595,6 +595,110 @@ describe('file utilities', () => {
       expect(result.func).toBe(testFunction);
       expect(result.nested.func2).toBe(testFunction);
     });
+
+    it('should return original string for Python files with function names', () => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+
+      const result = maybeLoadFromExternalFile('file://assert.py:my_function');
+
+      // Should return the original string, not attempt to load file
+      expect(result).toBe('file://assert.py:my_function');
+      expect(fs.existsSync).not.toHaveBeenCalled();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('should return original string for JavaScript files with function names', () => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+
+      const jsFiles = ['file://test.js:myFunc', 'file://test.ts:myFunc', 'file://test.mjs:myFunc'];
+
+      for (const fileRef of jsFiles) {
+        const result = maybeLoadFromExternalFile(fileRef);
+        expect(result).toBe(fileRef);
+      }
+
+      expect(fs.existsSync).not.toHaveBeenCalled();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('should load Python/JS files normally when no function name specified', () => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockReturnValue('file contents');
+
+      const result = maybeLoadFromExternalFile('file://test.py');
+
+      expect(result).toBe('file contents');
+      expect(fs.existsSync).toHaveBeenCalled();
+      expect(fs.readFileSync).toHaveBeenCalled();
+    });
+
+    it('should handle Windows drive letters correctly', () => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+
+      // Drive letter colon should not be treated as function separator
+      const result = maybeLoadFromExternalFile('file://C:/path/test.py:myFunc');
+
+      expect(result).toBe('file://C:/path/test.py:myFunc');
+    });
+
+    it('should handle non-Python/JS files with colons normally', () => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+      jest.mocked(fs.readFileSync).mockReturnValue('{"data": "test"}');
+
+      // JSON file with colon should still load normally (not treated as function)
+      const result = maybeLoadFromExternalFile('file://data:test.json');
+
+      expect(result).toEqual({ data: 'test' });
+      expect(fs.existsSync).toHaveBeenCalled();
+    });
+
+    it('should preserve function references in config objects (integration test)', () => {
+      jest.mocked(fs.existsSync).mockReturnValue(true);
+
+      // Mock config object similar to what would be loaded from YAML tests
+      const config = {
+        assert: [
+          {
+            type: 'python',
+            value: 'file://assert.py:my_function',
+          },
+          {
+            type: 'javascript',
+            value: 'file://assert.js:my_function',
+          },
+        ],
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      // Function references should be preserved unchanged
+      expect(result.assert[0].value).toBe('file://assert.py:my_function');
+      expect(result.assert[1].value).toBe('file://assert.js:my_function');
+
+      // No file system calls should have been made for function references
+      expect(fs.existsSync).not.toHaveBeenCalled();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('should still support glob patterns after refactor (regression test)', () => {
+      const mockFiles = ['/mock/base/path/test1.yaml', '/mock/base/path/test2.yaml'];
+      const mockData1 = { test: 'data1' };
+      const mockData2 = { test: 'data2' };
+
+      jest.mocked(globSync).mockReturnValue(mockFiles);
+      jest
+        .mocked(fs.readFileSync)
+        .mockReturnValueOnce(yaml.dump(mockData1))
+        .mockReturnValueOnce(yaml.dump(mockData2));
+
+      const result = maybeLoadFromExternalFile('file://test*.yaml');
+
+      // Glob expansion should still work correctly
+      expect(result).toEqual([mockData1, mockData2]);
+      expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/base/path', 'test*.yaml'), {
+        windowsPathsNoEscape: true,
+      });
+    });
   });
 
   describe('getResolvedRelativePath', () => {
