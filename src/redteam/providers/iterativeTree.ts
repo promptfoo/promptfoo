@@ -613,7 +613,7 @@ async function runRedteamConversation({
           throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
         }
         invariant(
-          'output' in targetResponse,
+          Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
           '[IterativeTree] Target did not return an output property',
         );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);

@@ -738,7 +738,7 @@ export class CustomProvider implements ApiProvider {
     if (targetResponse.error) {
       throw new Error(`[Custom] Target returned an error: ${targetResponse.error}`);
     }
-    invariant('output' in targetResponse, '[Custom] Target did not return an output property');
+    invariant(Object.prototype.hasOwnProperty.call(targetResponse, 'output'), '[Custom] Target did not return an output property');
     logger.debug(`[Custom] Received response from target: ${targetResponse.output}`);
 
     this.memory.addMessage(this.targetConversationId, {
