@@ -1,0 +1,33 @@
+description: 'Simple Anthropic Web Fetch test'
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-20250514
+    config:
+      temperature: 0
+      max_tokens: 1024
+      tools:
+        - type: web_fetch_20250910
+          name: web_fetch
+          max_uses: 1
+          allowed_domains:
+            - docs.anthropic.com
+          citations:
+            enabled: true
+          max_content_tokens: 5000
+
+prompts:
+  - |
+    Please fetch and summarize the content from this URL: https://docs.anthropic.com/en/docs/build-with-claude/tool-use
+    
+    Focus on:
+    - What tool use is
+    - Key capabilities
+    - Basic usage patterns
+
+tests:
+  - assert:
+      - type: contains-any
+        value: ['tool', 'function', 'API', 'schema']
+        reason: 'Response should mention tool/function related concepts'
+      - type: llm-rubric
+        value: 'The response should provide a clear summary of the tool use documentation'

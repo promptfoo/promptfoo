@@ -1,0 +1,34 @@
+description: 'Test domain filtering and multiple tools'
+
+providers:
+  - id: anthropic:messages:claude-opus-4-1-20250805
+    config:
+      temperature: 0
+      max_tokens: 1024
+      tools:
+        - type: web_fetch_20250910
+          name: web_fetch
+          max_uses: 2
+          allowed_domains:
+            - docs.anthropic.com
+          blocked_domains:
+            - spam.example.com
+          citations:
+            enabled: true
+          max_content_tokens: 3000
+
+prompts:
+  - |
+    Please fetch content from this Anthropic documentation page and summarize it:
+    https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/web-fetch-tool
+    
+    Focus on the main features and capabilities of the web fetch tool.
+
+tests:
+  - assert:
+      - type: contains-any
+        value: ['web fetch', 'tool', 'URL', 'content']
+        reason: 'Response should mention web fetch concepts'
+      - type: not-contains
+        value: 'error'
+        reason: 'Should not have errors'

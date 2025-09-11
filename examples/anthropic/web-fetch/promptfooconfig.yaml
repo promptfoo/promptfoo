@@ -1,0 +1,45 @@
+description: 'Anthropic Web Fetch example - demonstrates Claude fetching and analyzing web content'
+
+providers:
+  - id: anthropic:messages:claude-opus-4-20250514
+    config:
+      temperature: 0
+      max_tokens: 2048
+      tools:
+        - type: web_fetch_20250910
+          name: web_fetch
+          max_uses: 3
+          allowed_domains:
+            - docs.anthropic.com
+            - github.com
+          citations:
+            enabled: true
+          max_content_tokens: 10000
+
+prompts:
+  - 'Analyze the content at this URL and provide a summary: {{url}}'
+
+tests:
+  - vars:
+      url: 'https://docs.anthropic.com/en/docs/build-with-claude/tool-use'
+    assert:
+      - type: contains
+        value: 'tool'
+      - type: llm-rubric
+        value: 'The response should provide a clear summary of the web page content'
+
+  - vars:
+      url: 'https://github.com/anthropics/anthropic-sdk-typescript'
+    assert:
+      - type: contains
+        value: 'anthropic'
+      - type: llm-rubric
+        value: 'The response should describe the TypeScript SDK for Anthropic'
+
+  - vars:
+      url: 'https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/web-fetch-tool'
+    assert:
+      - type: contains
+        value: 'web fetch'
+      - type: llm-rubric
+        value: 'The response should explain web fetch tool capabilities'
