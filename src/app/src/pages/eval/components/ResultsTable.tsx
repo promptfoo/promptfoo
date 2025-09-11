@@ -2,12 +2,6 @@ import React, { useEffect, useRef } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
-import {
-  type EvaluateTable,
-  type EvaluateTableOutput,
-  type EvaluateTableRow,
-  type FilterMode,
-} from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -25,6 +19,12 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
+import {
+  type EvalResultsFilterMode,
+  type EvaluateTable,
+  type EvaluateTableOutput,
+  type EvaluateTableRow,
+} from '@promptfoo/types';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -126,13 +126,13 @@ interface ResultsTableProps {
   maxTextLength: number;
   columnVisibility: VisibilityState;
   wordBreak: 'break-word' | 'break-all';
-  filterMode: FilterMode;
+  filterMode: EvalResultsFilterMode;
   failureFilter: { [key: string]: boolean };
   debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   onSearchTextChange: (text: string) => void;
-  setFilterMode: (mode: FilterMode) => void;
+  setFilterMode: (mode: EvalResultsFilterMode) => void;
   zoom: number;
 }
 

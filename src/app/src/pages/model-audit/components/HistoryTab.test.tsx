@@ -1,10 +1,9 @@
+import { formatDataGridDate } from '@app/utils/date';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-
-import HistoryTab from './HistoryTab';
 import { useModelAuditStore } from '../store';
+import HistoryTab from './HistoryTab';
 
 vi.mock('../store');
 
@@ -110,7 +109,7 @@ describe('HistoryTab', () => {
     const row1 = rows[0];
     expect(within(row1).getByText(mockHistoricalScans[0].id)).toBeInTheDocument();
     expect(
-      within(row1).getByText(new Date(mockHistoricalScans[0].createdAt).toLocaleString()),
+      within(row1).getByText(formatDataGridDate(mockHistoricalScans[0].createdAt)),
     ).toBeInTheDocument();
     expect(within(row1).getByText('Scan with multiple issues')).toBeInTheDocument();
     expect(within(row1).getByText('/path/to/model1.gguf')).toBeInTheDocument();
@@ -127,7 +126,7 @@ describe('HistoryTab', () => {
     const row2 = rows[1];
     expect(within(row2).getByText(mockHistoricalScans[1].id)).toBeInTheDocument();
     expect(
-      within(row2).getByText(new Date(mockHistoricalScans[1].createdAt).toLocaleString()),
+      within(row2).getByText(formatDataGridDate(mockHistoricalScans[1].createdAt)),
     ).toBeInTheDocument();
     expect(within(row2).getByText('Unnamed scan')).toBeInTheDocument();
     expect(within(row2).getByText('/path/to/model2.safetensors')).toBeInTheDocument();

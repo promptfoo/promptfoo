@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { formatDataGridDate } from '@app/utils/date';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Paper from '@mui/material/Paper';
@@ -135,7 +136,7 @@ export default function Prompts({
                   '&:hover': { textDecoration: 'underline' },
                 }}
               >
-                {params.value}
+                {formatDataGridDate(params.value)}
               </Typography>
             </Link>
           );
