@@ -132,6 +132,12 @@
                             "BAM_API_KEY": {
                               "type": "string"
                             },
+                            "CLAUDE_CODE_USE_BEDROCK": {
+                              "type": "string"
+                            },
+                            "CLAUDE_CODE_USE_VERTEX": {
+                              "type": "string"
+                            },
                             "CLOUDFLARE_ACCOUNT_ID": {
                               "type": "string"
                             },

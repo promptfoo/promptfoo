@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Code basic usage - temp directory with no tools'
+
+prompts:
+  - 'Output a Python function that prints the first 10 numbers in the Fibonacci sequence'
+
+providers:
+  - anthropic:claude-code
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'fibonacci'
+      - type: llm-rubric
+        value: 'Should generate working Python code that prints first 10 Fibonacci numbers'

@@ -1,0 +1,4 @@
+# Exclude sample/demo code from ruff checks
+exclude = [
+    "examples/claude-code/working-dir/sample-project/",
+]

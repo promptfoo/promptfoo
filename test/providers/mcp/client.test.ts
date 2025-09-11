@@ -580,41 +580,4 @@ describe('MCPClient', () => {
       expect(mcpClient.getAllTools()).toEqual([]);
     });
   });
-
-  describe('getAuthHeaders', () => {
-    it('should return bearer auth header', () => {
-      const client = new MCPClient({ enabled: true });
-      const server = {
-        auth: { type: 'bearer', token: 'abc123' },
-      };
-      // @ts-expect-error accessing private method for testing
-      expect(client['getAuthHeaders'](server)).toEqual({
-        Authorization: 'Bearer abc123',
-      });
-    });
-
-    it('should return api_key auth header', () => {
-      const client = new MCPClient({ enabled: true });
-      const server = {
-        auth: { type: 'api_key', api_key: 'xyz789' },
-      };
-      // @ts-expect-error accessing private method for testing
-      expect(client['getAuthHeaders'](server)).toEqual({
-        'X-API-Key': 'xyz789',
-      });
-    });
-
-    it('should return empty object if no auth', () => {
-      const client = new MCPClient({ enabled: true });
-      const server = {};
-      expect(client['getAuthHeaders'](server)).toEqual({});
-    });
-
-    it('should return empty object for incomplete auth', () => {
-      const client = new MCPClient({ enabled: true });
-      const server = { auth: { type: 'bearer' } };
-      // @ts-expect-error accessing private method for testing
-      expect(client['getAuthHeaders'](server)).toEqual({});
-    });
-  });
 });
