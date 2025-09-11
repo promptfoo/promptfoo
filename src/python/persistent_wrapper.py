@@ -29,6 +29,7 @@ class PersistentPythonProvider:
         self.user_instance = None
         self.user_state = {}
         self.event_loop = None
+        self.user_output_buffer = {"stdout": [], "stderr": []}
         self._setup_event_loop()
 
     def _setup_event_loop(self):
@@ -139,8 +140,15 @@ class PersistentPythonProvider:
                 # Sync method - handle based on concurrency setting
                 concurrency = options.get("config", {}).get("concurrency", "async")
 
-                # Temporarily disable run_in_executor due to deadlock issues
-                # TODO: Investigate and fix event loop deadlock, then re-enable
+                # DEADLOCK ISSUE DETAILS:
+                # Previously, we used asyncio.get_event_loop().run_in_executor to call sync methods from async context.
+                # However, this caused deadlocks when the event loop was already running (e.g., when called from within an async framework),
+                # especially under "concurrency=async" settings or when nested event loops were present.
+                # As a workaround, we now call the sync method directly, which blocks the event loop but avoids deadlocks.
+                # PLAN FOR RESOLUTION:
+                # - Investigate safe patterns for running sync code in async context, such as using a dedicated thread or process pool.
+                # - Add tests to reproduce and detect deadlocks under various concurrency settings.
+                # - Once a safe solution is found, re-enable run_in_executor or an equivalent mechanism.
                 if call_kwargs:
                     result = method(**call_kwargs)
                 else:
@@ -334,6 +342,9 @@ class PersistentPythonProvider:
         """Call method with robust error handling and discovery"""
         if options is None:
             options = {}
+        
+        # Clear user output buffer before each call
+        self.user_output_buffer = {"stdout": [], "stderr": []}
         if context is None:
             context = {}
 
@@ -380,6 +391,15 @@ class PersistentPythonProvider:
             if not isinstance(result, dict):
                 result = {"output": result}
 
+            # Add captured user output if any
+            if self.user_output_buffer["stdout"] or self.user_output_buffer["stderr"]:
+                if "metadata" not in result:
+                    result["metadata"] = {}
+                result["metadata"]["userOutput"] = {
+                    "stdout": self.user_output_buffer["stdout"],
+                    "stderr": self.user_output_buffer["stderr"]
+                }
+
             return result
 
         except Exception as e:
@@ -406,26 +426,20 @@ class PersistentPythonProvider:
 
         # Create wrapper to capture user print statements
         class UserOutputCapture:
-            def __init__(self, stream_type):
+            def __init__(self, provider_instance, stream_type):
+                self.provider = provider_instance
                 self.stream_type = stream_type
 
             def write(self, text):
-                if text.strip():  # Only log non-empty output
-                    # Send user output as structured log message over stderr
-                    log_message = {
-                        "type": "user_log",
-                        "stream": self.stream_type,
-                        "message": text.rstrip("\r\n"),
-                    }
-                    original_stderr.write(f"USER_LOG: {json.dumps(log_message)}\n")
-                    original_stderr.flush()
+                if text.strip():  # Only buffer non-empty output
+                    self.provider.user_output_buffer[self.stream_type].append(text.rstrip("\r\n"))
 
             def flush(self):
                 pass
 
         # Redirect user stdout/stderr
-        sys.stdout = UserOutputCapture("stdout")
-        sys.stderr = UserOutputCapture("stderr")
+        sys.stdout = UserOutputCapture(self, "stdout")
+        sys.stderr = UserOutputCapture(self, "stderr")
 
         try:
             # Read line by line instead of chunks to avoid blocking

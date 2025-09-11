@@ -213,23 +213,11 @@ describe('PythonProvider Persistent Mode', () => {
         config: { basePath: '/test' },
       });
 
-      // Mock manager instance for new provider
-      mockManagerInstance = {
-        initialize: jest.fn().mockResolvedValue(undefined),
-        callMethod: jest.fn(),
-        shutdown: jest.fn(),
-        on: jest.fn(), // Add EventEmitter method
-        isHealthy: true,
-        stats: {
-          isHealthy: true,
-          isInitialized: true,
-          pendingRequests: 0,
-          restartCount: 0,
-          processId: 12345,
-        },
-      } as any;
-
-      mockPersistentManager.mockImplementation(() => mockManagerInstance);
+      // Reset the existing mock instance instead of creating a new one
+      mockManagerInstance.initialize.mockClear().mockResolvedValue(undefined);
+      mockManagerInstance.callMethod.mockClear();
+      mockManagerInstance.shutdown.mockClear();
+      mockManagerInstance.on.mockClear();
 
       await provider.initialize();
 
