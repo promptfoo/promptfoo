@@ -92,6 +92,16 @@ export class PythonProvider implements ApiProvider {
             concurrency: this.config.concurrency,
           });
 
+          // Handle critical errors from persistent manager to prevent crashes
+          this.persistentManager.on('error', (error) => {
+            logger.error(`Persistent Python manager fatal error: ${error.message}`);
+            logger.warn('Disabling persistent mode for this provider, falling back to traditional execution');
+            
+            // Disable persistent manager to force fallback to traditional mode
+            this.persistentManager?.shutdown();
+            this.persistentManager = null;
+          });
+
           await this.persistentManager.initialize();
           logger.debug(`Initialized persistent Python provider ${this.id()}`);
         }

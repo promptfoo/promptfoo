@@ -137,12 +137,29 @@ class PersistentPythonProvider:
                 # Sync method - handle based on concurrency setting
                 concurrency = options.get('config', {}).get('concurrency', 'async')
                 
-                # Temporarily disable run_in_executor to debug the issue
-                # TODO: Fix the event loop interaction and re-enable
-                if call_kwargs:
-                    result = method(**call_kwargs)
+                if concurrency == 'async' and self.event_loop:
+                    # Run sync function in executor to prevent blocking
+                    try:
+                        if call_kwargs:
+                            result = self.event_loop.run_until_complete(
+                                self.event_loop.run_in_executor(None, lambda: method(**call_kwargs))
+                            )
+                        else:
+                            result = self.event_loop.run_until_complete(
+                                self.event_loop.run_in_executor(None, lambda: method(*call_args))
+                            )
+                    except RuntimeError:
+                        # Fall back to direct execution if event loop issues
+                        if call_kwargs:
+                            result = method(**call_kwargs)
+                        else:
+                            result = method(*call_args)
                 else:
-                    result = method(*call_args)
+                    # Direct execution for sync concurrency or no event loop
+                    if call_kwargs:
+                        result = method(**call_kwargs)
+                    else:
+                        result = method(*call_args)
                 
                 # Ensure trace context is preserved in result
                 return self._preserve_trace_in_result(result, safe_context)
@@ -381,6 +398,33 @@ class PersistentPythonProvider:
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8', newline=None)
         
+        # Redirect user stdout/stderr to prevent pollution of NDJSON protocol
+        original_stdout = sys.stdout
+        original_stderr = sys.stderr
+        
+        # Create wrapper to capture user print statements
+        class UserOutputCapture:
+            def __init__(self, stream_type):
+                self.stream_type = stream_type
+                
+            def write(self, text):
+                if text.strip():  # Only log non-empty output
+                    # Send user output as structured log message over stderr
+                    log_message = {
+                        "type": "user_log",
+                        "stream": self.stream_type,
+                        "message": text.rstrip('\r\n')
+                    }
+                    original_stderr.write(f"USER_LOG: {json.dumps(log_message)}\n")
+                    original_stderr.flush()
+                    
+            def flush(self):
+                pass
+        
+        # Redirect user stdout/stderr 
+        sys.stdout = UserOutputCapture("stdout")
+        sys.stderr = UserOutputCapture("stderr")
+        
         try:
             # Read line by line instead of chunks to avoid blocking
             for line in sys.stdin:
@@ -410,23 +454,27 @@ class PersistentPythonProvider:
                 # Send response as single JSON line
                 try:
                     response_line = json.dumps(response, ensure_ascii=False)
-                    print(response_line, flush=True)
+                    original_stdout.write(response_line + '\n')
+                    original_stdout.flush()
                 except Exception as e:
                     error_response = {
                         "id": response.get("id"),
                         "error": f"Failed to serialize response: {str(e)}",
                         "type": "serialization_error"
                     }
-                    print(json.dumps(error_response), flush=True)
+                    original_stdout.write(json.dumps(error_response) + '\n')
+                    original_stdout.flush()
                         
         except KeyboardInterrupt:
-            print(json.dumps({"type": "shutdown", "reason": "interrupted"}), flush=True)
+            original_stdout.write(json.dumps({"type": "shutdown", "reason": "interrupted"}) + '\n')
+            original_stdout.flush()
         except Exception as e:
-            print(json.dumps({
+            original_stdout.write(json.dumps({
                 "type": "fatal_error", 
                 "error": str(e),
                 "traceback": traceback.format_exc()
-            }), flush=True)
+            }) + '\n')
+            original_stdout.flush()
         finally:
             # Cleanup event loop
             if self.event_loop and not self.event_loop.is_closed():
