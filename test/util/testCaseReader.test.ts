@@ -132,7 +132,7 @@ describe('readStandaloneTestsFile', () => {
 
   it('should read CSV file and return test cases', async () => {
     const csvContent =
-      'prompt,expected\n"Hello {{name}}","Hello world"\n"Goodbye {{name}}","Goodbye world"';
+      'prompt,__expected\n"Hello {{name}}","Hello world"\n"Goodbye {{name}}","Goodbye world"';
     jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const testCases = await readStandaloneTestsFile('test.csv');
@@ -141,18 +141,20 @@ describe('readStandaloneTestsFile', () => {
       {
         description: 'Row #1',
         vars: { prompt: 'Hello {{name}}' },
-        assert: [{ type: 'equals', value: 'Hello world' }],
+        assert: [{ type: 'equals', value: 'Hello world', metric: undefined }],
+        options: {},
       },
       {
         description: 'Row #2',
         vars: { prompt: 'Goodbye {{name}}' },
-        assert: [{ type: 'equals', value: 'Goodbye world' }],
+        assert: [{ type: 'equals', value: 'Goodbye world', metric: undefined }],
+        options: {},
       },
     ]);
   });
 
   it('should read CSV file with BOM (Byte Order Mark) and return test cases', async () => {
-    const csvContent = '\ufeffprompt,expected\n"Hello {{name}}","Hello world"';
+    const csvContent = '\ufeffprompt,__expected\n"Hello {{name}}","Hello world"';
     jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const testCases = await readStandaloneTestsFile('test.csv');
@@ -161,7 +163,8 @@ describe('readStandaloneTestsFile', () => {
       {
         description: 'Row #1',
         vars: { prompt: 'Hello {{name}}' },
-        assert: [{ type: 'equals', value: 'Hello world' }],
+        assert: [{ type: 'equals', value: 'Hello world', metric: undefined }],
+        options: {},
       },
     ]);
   });
@@ -179,7 +182,18 @@ describe('readStandaloneTestsFile', () => {
 
     const testCases = await readStandaloneTestsFile('test.json');
 
-    expect(testCases).toEqual(jsonData);
+    expect(testCases).toEqual([
+      { 
+        description: 'Row #1',
+        vars: { prompt: 'Hello {{name}}' }, 
+        assert: [{ type: 'equals', value: 'Hello world' }] 
+      },
+      {
+        description: 'Row #2',
+        vars: { prompt: 'Goodbye {{name}}' },
+        assert: [{ type: 'equals', value: 'Goodbye world' }],
+      },
+    ]);
   });
 
   it('should read JSONL file and return test cases', async () => {
@@ -193,8 +207,13 @@ describe('readStandaloneTestsFile', () => {
     const testCases = await readStandaloneTestsFile('test.jsonl');
 
     expect(testCases).toEqual([
-      { vars: { prompt: 'Hello {{name}}' }, assert: [{ type: 'equals', value: 'Hello world' }] },
+      { 
+        description: 'Row #1',
+        vars: { prompt: 'Hello {{name}}' }, 
+        assert: [{ type: 'equals', value: 'Hello world' }] 
+      },
       {
+        description: 'Row #2',
         vars: { prompt: 'Goodbye {{name}}' },
         assert: [{ type: 'equals', value: 'Goodbye world' }],
       },
@@ -218,8 +237,10 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should read Google Sheets and return test cases', async () => {
-    const csvContent = 'prompt,expected\n"Hello {{name}}","Hello world"';
-    jest.mocked(fetchCsvFromGoogleSheet).mockResolvedValue(csvContent);
+    const csvRows = [
+      { prompt: 'Hello {{name}}', __expected: 'Hello world' }
+    ];
+    jest.mocked(fetchCsvFromGoogleSheet).mockResolvedValue(csvRows);
 
     const testCases = await readStandaloneTestsFile(
       'https://docs.google.com/spreadsheets/d/test-sheet-id/edit',
@@ -229,7 +250,8 @@ describe('readStandaloneTestsFile', () => {
       {
         description: 'Row #1',
         vars: { prompt: 'Hello {{name}}' },
-        assert: [{ type: 'equals', value: 'Hello world' }],
+        assert: [{ type: 'equals', value: 'Hello world', metric: undefined }],
+        options: {},
       },
     ]);
   });
@@ -280,7 +302,7 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should handle file:// prefix in file path', async () => {
-    const csvContent = 'prompt,expected\n"Hello {{name}}","Hello world"';
+    const csvContent = 'prompt,__expected\n"Hello {{name}}","Hello world"';
     jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const testCases = await readStandaloneTestsFile('file://test.csv');
@@ -289,7 +311,8 @@ describe('readStandaloneTestsFile', () => {
       {
         description: 'Row #1',
         vars: { prompt: 'Hello {{name}}' },
-        assert: [{ type: 'equals', value: 'Hello world' }],
+        assert: [{ type: 'equals', value: 'Hello world', metric: undefined }],
+        options: {},
       },
     ]);
   });
@@ -300,7 +323,7 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should read CSV file with default delimiter', async () => {
-    const csvContent = 'prompt,expected\n"Hello {{name}}","Hello world"';
+    const csvContent = 'prompt,__expected\n"Hello {{name}}","Hello world"';
     jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
     jest.mocked(getEnvString).mockReturnValue(','); // Default delimiter
 
@@ -310,13 +333,14 @@ describe('readStandaloneTestsFile', () => {
       {
         description: 'Row #1',
         vars: { prompt: 'Hello {{name}}' },
-        assert: [{ type: 'equals', value: 'Hello world' }],
+        assert: [{ type: 'equals', value: 'Hello world', metric: undefined }],
+        options: {},
       },
     ]);
   });
 
   it('should read CSV file with custom delimiter', async () => {
-    const csvContent = 'prompt;expected\n"Hello {{name}}";"Hello world"';
+    const csvContent = 'prompt;__expected\n"Hello {{name}}";"Hello world"';
     jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
     jest.mocked(getEnvString).mockReturnValue(';'); // Custom delimiter
 
@@ -326,7 +350,8 @@ describe('readStandaloneTestsFile', () => {
       {
         description: 'Row #1',
         vars: { prompt: 'Hello {{name}}' },
-        assert: [{ type: 'equals', value: 'Hello world' }],
+        assert: [{ type: 'equals', value: 'Hello world', metric: undefined }],
+        options: {},
       },
     ]);
   });
@@ -581,7 +606,7 @@ describe('readTests', () => {
   });
 
   it('readTests with string input (CSV file path)', async () => {
-    const csvContent = 'prompt,expected\n"Hello {{name}}","Hello world"';
+    const csvContent = 'prompt,__expected\n"Hello {{name}}","Hello world"';
     jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const testCases = await readTests('test.csv', '');
@@ -590,13 +615,14 @@ describe('readTests', () => {
       {
         description: 'Row #1',
         vars: { prompt: 'Hello {{name}}' },
-        assert: [{ type: 'equals', value: 'Hello world' }],
+        assert: [{ type: 'equals', value: 'Hello world', metric: undefined }],
+        options: {},
       },
     ]);
   });
 
   it('readTests with string input (CSV file path with file:// prefix)', async () => {
-    const csvContent = 'prompt,expected\n"Hello {{name}}","Hello world"';
+    const csvContent = 'prompt,__expected\n"Hello {{name}}","Hello world"';
     jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const testCases = await readTests('file://test.csv', '');
@@ -605,7 +631,8 @@ describe('readTests', () => {
       {
         description: 'Row #1',
         vars: { prompt: 'Hello {{name}}' },
-        assert: [{ type: 'equals', value: 'Hello world' }],
+        assert: [{ type: 'equals', value: 'Hello world', metric: undefined }],
+        options: {},
       },
     ]);
   });
@@ -670,8 +697,10 @@ describe('readTests', () => {
   });
 
   it('should read tests from a Google Sheets URL', async () => {
-    const csvContent = 'prompt,expected\n"Hello {{name}}","Hello world"';
-    jest.mocked(fetchCsvFromGoogleSheet).mockResolvedValue(csvContent);
+    const csvRows = [
+      { prompt: 'Hello {{name}}', __expected: 'Hello world' }
+    ];
+    jest.mocked(fetchCsvFromGoogleSheet).mockResolvedValue(csvRows);
 
     const testCases = await readTests(
       'https://docs.google.com/spreadsheets/d/test-sheet-id/edit',
@@ -682,7 +711,8 @@ describe('readTests', () => {
       {
         description: 'Row #1',
         vars: { prompt: 'Hello {{name}}' },
-        assert: [{ type: 'equals', value: 'Hello world' }],
+        assert: [{ type: 'equals', value: 'Hello world', metric: undefined }],
+        options: {},
       },
     ]);
   });
@@ -701,13 +731,17 @@ describe('readTests', () => {
   });
 
   it('should read tests from multiple Google Sheets URLs', async () => {
-    const csvContent1 = 'prompt,expected\n"Hello {{name}}","Hello world"';
-    const csvContent2 = 'prompt,expected\n"Goodbye {{name}}","Goodbye world"';
+    const csvRows1 = [
+      { prompt: 'Hello {{name}}', __expected: 'Hello world' }
+    ];
+    const csvRows2 = [
+      { prompt: 'Goodbye {{name}}', __expected: 'Goodbye world' }
+    ];
 
     jest
       .mocked(fetchCsvFromGoogleSheet)
-      .mockResolvedValueOnce(csvContent1)
-      .mockResolvedValueOnce(csvContent2);
+      .mockResolvedValueOnce(csvRows1)
+      .mockResolvedValueOnce(csvRows2);
 
     const testCases = await readTests(
       [
@@ -721,12 +755,14 @@ describe('readTests', () => {
       {
         description: 'Row #1',
         vars: { prompt: 'Hello {{name}}' },
-        assert: [{ type: 'equals', value: 'Hello world' }],
+        assert: [{ type: 'equals', value: 'Hello world', metric: undefined }],
+        options: {},
       },
       {
         description: 'Row #1',
         vars: { prompt: 'Goodbye {{name}}' },
-        assert: [{ type: 'equals', value: 'Goodbye world' }],
+        assert: [{ type: 'equals', value: 'Goodbye world', metric: undefined }],
+        options: {},
       },
     ]);
   });
@@ -921,12 +957,12 @@ describe('testCaseFromCsvRow', () => {
     const testCase = testCaseFromCsvRow(csvRow);
 
     expect(testCase).toEqual({
-      vars: { prompt: 'Hello {{name}}' },
+      vars: { prompt: 'Hello {{name}}', expected: 'Hello world' },
       assert: [
-        { type: 'equals', value: 'Hello world' },
-        { type: 'equals', value: 'Hello world' },
-        { type: 'equals', value: 'Hi world' },
+        { type: 'equals', value: 'Hello world', metric: undefined },
+        { type: 'equals', value: 'Hi world', metric: undefined },
       ],
+      options: {},
     });
   });
 });

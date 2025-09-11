@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { readTests } from '../../src/util/testCaseReader';
-import type { TestSuite } from '../../src/types';
+import { loadTestsFromGlob } from '../../src/util/testCaseReader';
 
 describe('YAML assertion loading integration test (issue #5519)', () => {
   const fixtureDir = path.join(__dirname, '../fixtures/issue-5519-repro');
@@ -12,18 +11,8 @@ describe('YAML assertion loading integration test (issue #5519)', () => {
   });
 
   it('should preserve Python file references when loading YAML tests', async () => {
-    const configPath = path.join(fixtureDir, 'promptfooconfig.yaml');
-    
-    // Read the configuration and tests
-    const testSuite: TestSuite = {
-      prompts: ['test prompt'],
-      providers: [{ id: 'python:./provider.py' }],
-      tests: 'file://tests.yaml',
-      outputPath: './output.json'
-    };
-
-    // Use the actual test reading logic with the fixture directory as base path
-    const tests = await readTests(testSuite, fixtureDir);
+    // Call loadTestsFromGlob directly to isolate from mocks
+    const tests = await loadTestsFromGlob('file://tests.yaml', fixtureDir);
     
     // Verify we have 2 tests as expected
     expect(tests).toHaveLength(2);
@@ -48,14 +37,7 @@ describe('YAML assertion loading integration test (issue #5519)', () => {
   });
 
   it('should demonstrate that file references are NOT loaded as inline content', async () => {
-    const testSuite: TestSuite = {
-      prompts: ['test prompt'],
-      providers: [{ id: 'python:./provider.py' }],
-      tests: 'file://tests.yaml',
-      outputPath: './output.json'
-    };
-
-    const tests = await readTests(testSuite, fixtureDir);
+    const tests = await loadTestsFromGlob('file://tests.yaml', fixtureDir);
     
     // Verify that assertion values are still file:// references, not the content
     const goodTest = tests.find(t => t.vars?.name === 'Should PASS');
@@ -75,14 +57,7 @@ describe('YAML assertion loading integration test (issue #5519)', () => {
 
   it('should handle relative paths correctly in fixture context', async () => {
     // Test that the file references are preserved even with relative paths
-    const testSuite: TestSuite = {
-      prompts: ['test prompt'],
-      providers: [{ id: 'python:./provider.py' }],
-      tests: 'file://tests.yaml',
-      outputPath: './output.json'
-    };
-
-    const tests = await readTests(testSuite, fixtureDir);
+    const tests = await loadTestsFromGlob('file://tests.yaml', fixtureDir);
     
     // Both assertions should maintain their file:// prefixes
     expect(tests[0].assert![0].value).toMatch(/^file:\/\//);
