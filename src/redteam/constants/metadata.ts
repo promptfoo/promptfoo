@@ -16,6 +16,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'bias:gender': 'Gender-related bias detection',
   'bias:race': 'Race-related bias detection',
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
+  bopla: 'Tests for Broken Object Property Level Authorization',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   citation: 'Exploits academic authority bias to bypass content filters',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
@@ -133,6 +134,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   religion: 'Tests handling of religious content and bias',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
+  'resource-consumption': 'Unrestricted Resource Consumption tests',
   rot13: 'Tests handling of ROT13-encoded malicious content',
   'shell-injection': 'Tests for command injection vulnerabilities',
   'special-token-injection':
@@ -141,6 +143,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
+  'unrestricted-access': 'Unrestricted Access to Sensitive Business Flows tests',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
   xstest: 'Tests for XSTest attacks',
@@ -164,6 +167,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
+  bopla: 'Object-Property-Level Authorization Bypass',
   camelcase: 'CamelCase Encoding',
   emoji: 'Emoji Smuggling',
   cca: 'Context Compliance Attack',
@@ -271,17 +275,19 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'mischievous-user': 'Mischievous User',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
+  'resource-consumption': 'Resource Consumption',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
   'special-token-injection': 'Special Token Injection',
   'sql-injection': 'SQL Injection',
-  ssrf: 'SSRF Vulnerability',
+  ssrf: 'Server-Side Request Forgery',
   'system-prompt-override': 'System Prompt Override',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   'unverifiable-claims': 'Unverifiable Claims',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
+  'unrestricted-access': 'Unrestricted Access',
 };
 
 export enum Severity {
@@ -309,6 +315,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   beavertails: Severity.Low,
   bfla: Severity.High,
   bola: Severity.High,
+  bopla: Severity.High,
   cca: Severity.High,
   'financial:calculation-error': Severity.Low,
   'financial:compliance-violation': Severity.Medium,
@@ -395,6 +402,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
+  'resource-consumption': Severity.High,
   'shell-injection': Severity.High,
   'special-token-injection': Severity.Medium,
   'sql-injection': Severity.High,
@@ -403,6 +411,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   unsafebench: Severity.Medium,
   'unverifiable-claims': Severity.Medium,
   xstest: Severity.Low,
+  'unrestricted-access': Severity.High,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -411,15 +420,18 @@ export const riskCategories: Record<string, Plugin[]> = {
     'ascii-smuggling',
     'bfla',
     'bola',
+    'bopla',
     'debug-access',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
+    'resource-consumption',
     'shell-injection',
     'special-token-injection',
     'sql-injection',
     'ssrf',
     'tool-discovery',
+    'unrestricted-access',
     'mcp',
 
     // Data protection
@@ -548,6 +560,7 @@ export const categoryAliases: Record<Plugin, string> = {
   beavertails: 'BeaverTails',
   bfla: 'BFLAEnforcement',
   bola: 'BOLAEnforcement',
+  bopla: 'BOPLAEnforcement',
   cca: 'CCAEnforcement',
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
@@ -635,11 +648,13 @@ export const categoryAliases: Record<Plugin, string> = {
   rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
+  'resource-consumption': 'Resource Consumption',
   'shell-injection': 'ShellInjection',
   'special-token-injection': 'SpecialTokenInjection',
   'sql-injection': 'SqlInjection',
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
+  'unrestricted-access': 'Unrestricted Access',
   unsafebench: 'UnsafeBench',
   'unverifiable-claims': 'Unverifiable Claims',
   xstest: 'XSTest',
@@ -660,6 +675,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
   bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
+  bopla:
+    'Tests object-property-level authorization mechanisms to detect unauthorized data access vulnerabilities',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   competitors:
     'Assesses system protection against unauthorized competitor endorsements and brand security risks',
@@ -771,12 +788,14 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'reasoning-dos':
     'Tests for computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
+  'resource-consumption': 'Tests for unrestricted resource consumption',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'special-token-injection':
     'Tests for token injection vulnerabilities using conversation format delimiters',
   'sql-injection': 'Evaluates resilience against SQL injection attacks',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'unrestricted-access': 'Tests for unrestricted access to sensitive business flows',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   'unverifiable-claims':

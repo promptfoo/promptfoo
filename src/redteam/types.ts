@@ -37,6 +37,8 @@ export type PluginConfig = {
   targetIdentifiers?: string[];
   // BFLA
   targetSystems?: string[];
+  // BOPLA
+  targetProperties?: string[];
   // Competitor
   mentions?: boolean;
   // SSRF
@@ -45,6 +47,10 @@ export type PluginConfig = {
   name?: string;
   // CyberSecEval
   multilingual?: boolean;
+  // Resource Consumption
+  targetResources?: string[];
+  // Unrestricted Access
+  targetFlows?: string[];
 
   indirectInjectionVar?: string;
   intent?: Intent | Intent[];
