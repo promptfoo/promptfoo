@@ -98,6 +98,7 @@ vi.mock('@promptfoo/redteam/constants', () => ({
   AGENTIC_EXEMPT_PLUGINS: [],
   DATASET_EXEMPT_PLUGINS: [],
   PLUGINS_REQUIRING_CONFIG: ['indirect-prompt-injection'],
+  HUGGINGFACE_GATED_PLUGINS: ['beavertails', 'unsafebench', 'aegis'],
   REDTEAM_DEFAULTS: {
     MAX_CONCURRENCY: 4,
     NUM_TESTS: 10,
