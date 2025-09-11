@@ -6,6 +6,9 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
+import logger from '../logger';
+import { isJavascriptFile } from './fileExtensions';
+import { parseFileUrl } from './functions/loadFunction';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
@@ -35,16 +38,21 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  *
  * @param filePath - The input to process. Can be a file path string starting with "file://",
  * an array of file paths, or any other type of data.
+ * @param context - Optional context to control file loading behavior. 'assertion' context
+ * preserves Python/JS file references instead of loading their content.
  * @returns The loaded content if the input was a file path, otherwise the original input.
  * For JSON and YAML files, the content is parsed into an object.
  * For other file types, the raw file content is returned as a string.
  *
  * @throws {Error} If the specified file does not exist.
  */
-export function maybeLoadFromExternalFile(filePath: string | object | Function | undefined | null) {
+export function maybeLoadFromExternalFile(
+  filePath: string | object | Function | undefined | null,
+  context?: 'assertion' | 'general',
+) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path);
+      const content: any = maybeLoadFromExternalFile(path, context);
       return content;
     });
   }
@@ -58,6 +66,17 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
 
   // Render the file path using Nunjucks
   const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
+
+  // Parse the file URL to extract file path and function name
+  const { filePath: cleanPath } = parseFileUrl(renderedFilePath);
+
+  // In assertion contexts, always preserve Python/JS file references
+  // This prevents premature dereferencing of assertion files that should be
+  // handled by the assertion system, not the generic config loader
+  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+    logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
+    return renderedFilePath;
+  }
 
   const pathWithoutProtocol = renderedFilePath.slice('file://'.length);
   const resolvedPath = path.resolve(cliState.basePath || '', pathWithoutProtocol);
@@ -162,16 +181,34 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
   return path.join(process.cwd(), filePath);
 }
 
-export function maybeLoadConfigFromExternalFile(config: any): any {
+/**
+ * Recursively loads external file references from a configuration object.
+ *
+ * @param config - The configuration object to process
+ * @param context - Optional context to control file loading behavior
+ * @returns The configuration with external file references resolved
+ */
+export function maybeLoadConfigFromExternalFile(
+  config: any,
+  context?: 'assertion' | 'general',
+): any {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item));
+    return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
   if (config && typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
-      result[key] = maybeLoadConfigFromExternalFile(config[key]);
+      // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
+      // and current key is 'value', switch to assertion context
+      const isAssertionValue =
+        key === 'value' &&
+        config.type &&
+        (config.type === 'python' || config.type === 'javascript');
+
+      const childContext = isAssertionValue ? 'assertion' : context;
+      result[key] = maybeLoadConfigFromExternalFile(config[key], childContext);
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config);
+  return maybeLoadFromExternalFile(config, context);
 }
