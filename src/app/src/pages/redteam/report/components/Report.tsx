@@ -38,7 +38,6 @@ import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import './Report.css';
 
-import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -47,8 +46,7 @@ import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
 
-
-import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 
 const App: React.FC = () => {
   const navigate = useNavigate();

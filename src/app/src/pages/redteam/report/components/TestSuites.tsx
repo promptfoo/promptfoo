@@ -256,7 +256,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
             title={
               <Box>
                 <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                  CVSS-Style Risk Score
+                  Risk Score
                 </Typography>
                 <Typography variant="caption" component="div">
                   Risk = Impact + Exploitability + Human Factor + Complexity
@@ -326,7 +326,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
                       ? 'Hard - Requires expertise'
                       : value >= 3
                         ? 'Medium - Requires some skill'
-                        : 'Easy - Basic human exploitable'}
+                        : 'Easy - Average user could exploit'}
                 </Typography>
               </Box>
             }
