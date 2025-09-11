@@ -7,6 +7,7 @@ import { safeJsonStringify } from '../util/json';
 
 export interface PersistentPythonConfig {
   pythonExecutable?: string;
+  // Legacy configs maintained for backwards compatibility but not exposed in docs
   persistentIdleTimeout?: number;
   maxRestarts?: number;
   concurrency?: 'serial' | 'async';
@@ -29,7 +30,7 @@ export class PersistentPythonManager extends EventEmitter {
   private isShuttingDown = false;
 
   private readonly scriptPath: string;
-  private readonly config: Required<PersistentPythonConfig>;
+  private readonly config: Required<Pick<PersistentPythonConfig, 'pythonExecutable' | 'persistentIdleTimeout' | 'maxRestarts' | 'concurrency'>>;
   private buffer = '';
 
   constructor(scriptPath: string, config: PersistentPythonConfig = {}) {

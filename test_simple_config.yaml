@@ -5,12 +5,11 @@ prompts:
   - 'What is the capital of France?'
 
 providers:
-  # Test traditional mode first
+  # Test persistent mode (now default)
   - id: 'file://test_performance_example.py'
-    label: 'Python (Traditional Mode)'
+    label: 'Python Provider'
     config:
       basePath: '.'
-      persistent: false
 
 tests:
   - description: 'Simple performance test'

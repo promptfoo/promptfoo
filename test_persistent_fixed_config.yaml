@@ -5,12 +5,11 @@ prompts:
   - 'What is the capital of France?'
 
 providers:
-  # Test persistent mode with clean script
+  # Test persistent mode (now default)
   - id: 'file://test_clean_example.py'
-    label: 'Python (Persistent Mode - Fixed)'
+    label: 'Python Provider'
     config:
       basePath: '.'
-      persistent: true
 
 tests:
   - description: 'Simple performance test with fixed wrapper'

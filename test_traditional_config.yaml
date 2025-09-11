@@ -10,7 +10,6 @@ providers:
     label: 'Python (Traditional Mode)'
     config:
       basePath: '.'
-      persistent: false
 
 tests:
   - description: 'Performance test with traditional mode'

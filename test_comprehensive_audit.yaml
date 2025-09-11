@@ -6,58 +6,49 @@ providers:
     label: 'Stateful Provider (Persistent)'
     config:
       basePath: '.'
-      persistent: true
 
   # Test 2: Function Signature Flexibility  
   - id: 'file://test_signature_provider.py:call_simple'
     label: 'Simple Signature'
     config:
       basePath: '.'
-      persistent: true
       
   - id: 'file://test_signature_provider.py:call_with_options'
     label: 'Options Signature'
     config:
       basePath: '.'
-      persistent: true
       
   - id: 'file://test_signature_provider.py:call_full'
     label: 'Full Signature'
     config:
       basePath: '.'
-      persistent: true
       
   - id: 'file://test_signature_provider.py:call_with_state'
     label: 'State Signature'
     config:
       basePath: '.'
-      persistent: true
       
   - id: 'file://test_signature_provider.py:call_kwargs'
     label: 'Kwargs Signature'
     config:
       basePath: '.'
-      persistent: true
 
   # Test 3: Async vs Sync Concurrency
   - id: 'file://test_async_provider.py:call_async'
     label: 'Async Provider'
     config:
       basePath: '.'
-      persistent: true
       
   - id: 'file://test_async_provider.py:call_sync'
     label: 'Sync Provider (Blocking)'
     config:
       basePath: '.'
-      persistent: true
 
   # Test 4: Runtime Error Handling
   - id: 'file://test_error_provider.py'
     label: 'Error Provider'
     config:
       basePath: '.'
-      persistent: true
 
 prompts:
   # Test 1: Multiple calls to test state persistence and performance

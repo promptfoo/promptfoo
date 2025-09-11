@@ -11,7 +11,6 @@ providers:
     label: 'Async Provider'
     config:
       basePath: '.'
-      persistent: true
 
 tests:
   - description: 'Test async concurrent behavior'

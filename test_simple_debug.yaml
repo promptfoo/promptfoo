@@ -8,7 +8,6 @@ providers:
     label: 'Stateful Provider'
     config:
       basePath: '.'
-      persistent: true
 
 tests:
   - description: 'Simple debug test'

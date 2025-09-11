@@ -56,7 +56,7 @@ describe('PythonProvider Persistent Mode', () => {
 
     provider = new PythonProvider('script.py', {
       id: 'test-provider',
-      config: { basePath: '/test', persistent: true },
+      config: { basePath: '/test' },
     });
   });
 
@@ -207,7 +207,7 @@ describe('PythonProvider Persistent Mode', () => {
 
       provider = new PythonProvider('script.py:custom_function', {
         id: 'test-provider',
-        config: { basePath: '/test', persistent: true },
+        config: { basePath: '/test' },
       });
 
       // Mock manager instance for new provider

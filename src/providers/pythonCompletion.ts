@@ -21,10 +21,8 @@ import type {
 
 interface PythonProviderConfig {
   pythonExecutable?: string;
+  // Internal/legacy config for backwards compatibility
   persistent?: boolean;
-  persistentIdleTimeout?: number;
-  maxRestarts?: number;
-  concurrency?: 'serial' | 'async';
 }
 
 export class PythonProvider implements ApiProvider {
@@ -79,7 +77,7 @@ export class PythonProvider implements ApiProvider {
           this.options?.config.basePath || '',
         );
 
-        // Initialize persistent mode if enabled (default: true)
+        // Initialize persistent mode (enabled by default, can be disabled with persistent: false)
         if (this.config.persistent !== false) {
           const absPath = path.resolve(
             path.join(this.options?.config.basePath || '', this.scriptPath),
@@ -87,9 +85,6 @@ export class PythonProvider implements ApiProvider {
 
           this.persistentManager = new PersistentPythonManager(absPath, {
             pythonExecutable: this.config.pythonExecutable,
-            persistentIdleTimeout: this.config.persistentIdleTimeout,
-            maxRestarts: this.config.maxRestarts,
-            concurrency: this.config.concurrency,
           });
 
           // Handle critical errors from persistent manager to prevent crashes
@@ -104,6 +99,8 @@ export class PythonProvider implements ApiProvider {
 
           await this.persistentManager.initialize();
           logger.debug(`Initialized persistent Python provider ${this.id()}`);
+        } else {
+          logger.debug(`Persistent mode disabled for provider ${this.id()}, using traditional execution`);
         }
 
         this.isInitialized = true;
