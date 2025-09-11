@@ -102,7 +102,7 @@ export class PersistentPythonManager extends EventEmitter {
       env: process.env,
     });
 
-    if (!this.pythonProcess.stdout || !this.pythonProcess.stderr || !this.pythonProcess.stdin) {
+    if (!this.pythonProcess?.stdout || !this.pythonProcess?.stderr || !this.pythonProcess?.stdin) {
       throw new Error('Failed to create Python process stdio streams');
     }
 
@@ -110,7 +110,7 @@ export class PersistentPythonManager extends EventEmitter {
     this._setupStdoutHandler();
 
     // Setup stderr handler for debugging
-    this.pythonProcess.stderr.on('data', (chunk: Buffer) => {
+    this.pythonProcess.stderr?.on('data', (chunk: Buffer) => {
       const output = chunk.toString('utf-8').trim();
       if (output) {
         logger.debug(`Python stderr: ${output}`);
@@ -150,11 +150,16 @@ export class PersistentPythonManager extends EventEmitter {
   }
 
   private _setupStdoutHandler(): void {
-    if (!this.pythonProcess?.stdout) {
+    if (!this.pythonProcess?.stdout || this.isShuttingDown) {
       return;
     }
 
     this.pythonProcess.stdout.on('data', (chunk: Buffer) => {
+      // Check if manager is still active before processing data
+      if (this.isShuttingDown) {
+        return;
+      }
+
       this.buffer += chunk.toString('utf-8');
 
       // Process complete lines
@@ -238,10 +243,18 @@ export class PersistentPythonManager extends EventEmitter {
       );
 
       setTimeout(() => {
-        this.initialize().catch((error) => {
-          logger.error(`Failed to restart Python process for ${this.providerId}: ${error.message}`);
-          this.emit('error', error);
-        });
+        // Check if we're still supposed to be running (not shut down)
+        if (!this.isShuttingDown) {
+          this.initialize().catch((error) => {
+            logger.error(
+              `Failed to restart Python process for ${this.providerId}: ${error.message}`,
+            );
+            // Only emit error if this manager is still active
+            if (!this.isShuttingDown) {
+              this.emit('error', error);
+            }
+          });
+        }
       }, 1000 * this.restartCount); // Exponential backoff
     } else {
       logger.error(
@@ -269,7 +282,7 @@ export class PersistentPythonManager extends EventEmitter {
     }
 
     const jsonLine = safeJsonStringify(message) + '\n';
-    this.pythonProcess.stdin.write(jsonLine);
+    this.pythonProcess?.stdin?.write(jsonLine);
   }
 
   private async _sendRequest(request: any, timeout: number = 30000): Promise<any> {
@@ -366,13 +379,13 @@ export class PersistentPythonManager extends EventEmitter {
       logger.debug(
         `Sending SIGTERM to Python process for ${this.providerId} for graceful shutdown`,
       );
-      this.pythonProcess.kill('SIGTERM');
+      this.pythonProcess?.kill('SIGTERM');
 
       // Force kill after timeout
       setTimeout(() => {
         if (this.pythonProcess && !this.pythonProcess.killed) {
           logger.warn(`Force killing Python process for ${this.providerId} after timeout`);
-          this.pythonProcess.kill('SIGKILL');
+          this.pythonProcess?.kill('SIGKILL');
         }
       }, 5000);
     }
@@ -383,7 +396,7 @@ export class PersistentPythonManager extends EventEmitter {
   }
 
   get isHealthy(): boolean {
-    return this.pythonProcess !== null && !this.pythonProcess.killed && this.isInitialized;
+    return this.pythonProcess !== null && !this.pythonProcess?.killed && this.isInitialized;
   }
 
   get stats() {
