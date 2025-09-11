@@ -22,19 +22,19 @@ import {
   Severity,
 } from '@promptfoo/redteam/constants';
 import {
-  type CategoryStats,
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
   getPluginDisplayName,
   getSeverityColor,
 } from './FrameworkComplianceUtils';
+import { type PluginCategoryStatsByPluginId } from './types';
 
 interface FrameworkCardProps {
   framework: string;
   isCompliant: boolean;
   frameworkSeverity: Severity;
-  categoryStats: CategoryStats;
+  categoryStats: PluginCategoryStatsByPluginId;
   pluginPassRateThreshold: number;
   nonCompliantPlugins: string[];
   sortedNonCompliantPlugins: (plugins: string[]) => string[];
@@ -434,7 +434,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                 <Typography variant="subtitle2">Framework Results</Typography>
 
                 <Chip
-                  label={`${nonCompliantPlugins.length} / ${Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length} failed`}
+                  label={`${nonCompliantPlugins.length} / ${Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].stats.total > 0).length} failed`}
                   size="small"
                   sx={{
                     backgroundColor: nonCompliantPlugins.length === 0 ? '#4caf50' : '#f44336',
@@ -498,8 +498,8 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                 {/* Passing plugins */}
                 {Object.keys(categoryStats).filter(
                   (plugin) =>
-                    categoryStats[plugin].total > 0 &&
-                    categoryStats[plugin].pass / categoryStats[plugin].total >=
+                    categoryStats[plugin].stats.total > 0 &&
+                    categoryStats[plugin].stats.pass / categoryStats[plugin].stats.total >=
                       pluginPassRateThreshold,
                 ).length > 0 && (
                   <ListItem sx={{ py: 0.5, px: 1, bgcolor: 'rgba(76, 175, 80, 0.05)', mt: 1 }}>
@@ -511,8 +511,8 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                 {Object.keys(categoryStats)
                   .filter(
                     (plugin) =>
-                      categoryStats[plugin].total > 0 &&
-                      categoryStats[plugin].pass / categoryStats[plugin].total >=
+                      categoryStats[plugin].stats.total > 0 &&
+                      categoryStats[plugin].stats.pass / categoryStats[plugin].stats.total >=
                         pluginPassRateThreshold,
                   )
                   .sort((a, b) => {
@@ -585,7 +585,9 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                     // Expand plugins using the utility function
                     return Array.from(expandPluginCollections(categoryPlugins, categoryStats));
                   })
-                  .filter((plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0)
+                  .filter(
+                    (plugin) => !categoryStats[plugin] || categoryStats[plugin].stats.total === 0,
+                  )
                   .sort((a, b) => {
                     // Sort by severity first
                     const severityA =

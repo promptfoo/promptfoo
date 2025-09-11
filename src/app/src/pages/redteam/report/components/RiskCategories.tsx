@@ -52,9 +52,9 @@ const RiskCategories: React.FC<{
             numTestsPassed={totalPasses}
             numTestsFailed={totalTests - totalPasses}
             testTypes={subCategories.map((subCategory) => {
-              const { stats } = categoryStats[subCategory];
-              const numPassed = stats?.pass || 0;
-              const totalForSubcategory = stats?.total || 0;
+              const { stats } = categoryStats[subCategory] ?? { stats: { pass: 0, total: 0 } };
+              const numPassed = stats?.pass;
+              const totalForSubcategory = stats?.total;
               const numFailed = totalForSubcategory - numPassed;
 
               return {

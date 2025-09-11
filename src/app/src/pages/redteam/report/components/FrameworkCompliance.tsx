@@ -62,7 +62,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
 
   const getPluginPassRate = React.useCallback(
     (plugin: string): { pass: number; total: number; rate: number } => {
-      const { stats } = categoryStats[plugin] || { pass: 0, total: 0 };
+      const { stats } = categoryStats[plugin] || { stats: { pass: 0, total: 0 } };
       return {
         pass: stats.pass,
         total: stats.total,
@@ -74,7 +74,9 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
 
   const getFrameworkSeverity = React.useCallback(
     (framework: string): Severity => {
+      //console.log('framework', framework);
       const nonCompliantPlugins = getNonCompliantPlugins(framework);
+      //console.log('nonCompliantPlugins', nonCompliantPlugins);
 
       if (nonCompliantPlugins.length === 0) {
         return Severity.Low;
