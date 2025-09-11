@@ -189,10 +189,10 @@ describe('readStandaloneTestsFile', () => {
     const testCases = await readStandaloneTestsFile('test.json');
 
     expect(testCases).toEqual([
-      { 
+      {
         description: 'Row #1',
-        vars: { prompt: 'Hello {{name}}' }, 
-        assert: [{ type: 'equals', value: 'Hello world' }] 
+        vars: { prompt: 'Hello {{name}}' },
+        assert: [{ type: 'equals', value: 'Hello world' }],
       },
       {
         description: 'Row #2',
@@ -213,10 +213,10 @@ describe('readStandaloneTestsFile', () => {
     const testCases = await readStandaloneTestsFile('test.jsonl');
 
     expect(testCases).toEqual([
-      { 
+      {
         description: 'Row #1',
-        vars: { prompt: 'Hello {{name}}' }, 
-        assert: [{ type: 'equals', value: 'Hello world' }] 
+        vars: { prompt: 'Hello {{name}}' },
+        assert: [{ type: 'equals', value: 'Hello world' }],
       },
       {
         description: 'Row #2',
@@ -239,13 +239,24 @@ describe('readStandaloneTestsFile', () => {
 
     const testCases = await readStandaloneTestsFile('test.yaml');
 
-    expect(testCases).toEqual(yamlData);
+    expect(testCases).toEqual([
+      {
+        description: 'Row #1',
+        vars: { vars: { prompt: 'Hello {{name}}' }, assert: [{ type: 'equals', value: 'Hello world' }] },
+        assert: [],
+        options: {},
+      },
+      {
+        description: 'Row #2',
+        vars: { vars: { prompt: 'Goodbye {{name}}' }, assert: [{ type: 'equals', value: 'Goodbye world' }] },
+        assert: [],
+        options: {},
+      },
+    ]);
   });
 
   it('should read Google Sheets and return test cases', async () => {
-    const csvRows = [
-      { prompt: 'Hello {{name}}', __expected: 'Hello world' }
-    ];
+    const csvRows = [{ prompt: 'Hello {{name}}', __expected: 'Hello world' }];
     jest.mocked(fetchCsvFromGoogleSheet).mockResolvedValue(csvRows);
 
     const testCases = await readStandaloneTestsFile(
@@ -479,7 +490,10 @@ describe('readTest', () => {
   });
 
   it('readTest with string input (path to test config)', async () => {
-    const testCase = { vars: { name: 'Test' }, assert: [{ type: 'equals', value: 'Expected' } as TestAssertion] };
+    const testCase = {
+      vars: { name: 'Test' },
+      assert: [{ type: 'equals', value: 'Expected' } as TestAssertion],
+    };
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(testCase));
 
     const result = await readTest(testCase as TestCase, '/path/to/test');
@@ -488,7 +502,10 @@ describe('readTest', () => {
   });
 
   it('readTest with TestCase input', async () => {
-    const testCase = { vars: { name: 'Test' }, assert: [{ type: 'equals', value: 'Expected' } as TestAssertion] };
+    const testCase = {
+      vars: { name: 'Test' },
+      assert: [{ type: 'equals', value: 'Expected' } as TestAssertion],
+    };
 
     const result = await readTest(testCase as TestCase, '/path/to/test');
 
@@ -662,7 +679,10 @@ describe('readTests', () => {
 
   it('readTests with array input (TestCase[])', async () => {
     const inputTestCases = [
-      { vars: { prompt: 'Hello {{name}}' }, assert: [{ type: 'equals', value: 'Hello world' } as TestAssertion] },
+      {
+        vars: { prompt: 'Hello {{name}}' },
+        assert: [{ type: 'equals', value: 'Hello world' } as TestAssertion],
+      },
     ];
 
     const testCases = await readTests(inputTestCases as TestCase[], '');
@@ -671,8 +691,14 @@ describe('readTests', () => {
   });
 
   it('readTests with string array input (paths to test configs)', async () => {
-    const testCase1 = { vars: { name: 'Test1' }, assert: [{ type: 'equals', value: 'Expected1' } as TestAssertion] };
-    const testCase2 = { vars: { name: 'Test2' }, assert: [{ type: 'equals', value: 'Expected2' } as TestAssertion] };
+    const testCase1 = {
+      vars: { name: 'Test1' },
+      assert: [{ type: 'equals', value: 'Expected1' } as TestAssertion],
+    };
+    const testCase2 = {
+      vars: { name: 'Test2' },
+      assert: [{ type: 'equals', value: 'Expected2' } as TestAssertion],
+    };
 
     jest
       .mocked(fs.readFileSync)
@@ -700,7 +726,10 @@ describe('readTests', () => {
   });
 
   it('readTests with single TestCase content', async () => {
-    const testCase = { vars: { name: 'Test' }, assert: [{ type: 'equals', value: 'Expected' } as TestAssertion] };
+    const testCase = {
+      vars: { name: 'Test' },
+      assert: [{ type: 'equals', value: 'Expected' } as TestAssertion],
+    };
 
     const testCases = await readTests(testCase as TestCase, '');
 
@@ -708,9 +737,7 @@ describe('readTests', () => {
   });
 
   it('should read tests from a Google Sheets URL', async () => {
-    const csvRows = [
-      { prompt: 'Hello {{name}}', __expected: 'Hello world' }
-    ];
+    const csvRows = [{ prompt: 'Hello {{name}}', __expected: 'Hello world' }];
     jest.mocked(fetchCsvFromGoogleSheet).mockResolvedValue(csvRows);
 
     const testCases = await readTests(
@@ -742,12 +769,8 @@ describe('readTests', () => {
   });
 
   it('should read tests from multiple Google Sheets URLs', async () => {
-    const csvRows1 = [
-      { prompt: 'Hello {{name}}', __expected: 'Hello world' }
-    ];
-    const csvRows2 = [
-      { prompt: 'Goodbye {{name}}', __expected: 'Goodbye world' }
-    ];
+    const csvRows1 = [{ prompt: 'Hello {{name}}', __expected: 'Hello world' }];
+    const csvRows2 = [{ prompt: 'Goodbye {{name}}', __expected: 'Goodbye world' }];
 
     jest
       .mocked(fetchCsvFromGoogleSheet)
@@ -920,7 +943,7 @@ describe('readTests', () => {
     await readTests([testCase as TestCase], '');
 
     expect(logger.warn).toHaveBeenCalledWith(
-      'Found `assert` in test case vars. Did you mean to put this in the `assert` property?',
+      expect.stringContaining("Found 'assert' key in vars"),
     );
   });
 
@@ -1015,7 +1038,9 @@ describe('loadTestsFromGlob', () => {
   });
 
   it('should handle Hugging Face dataset URLs', async () => {
-    const mockDataset = [{ vars: { prompt: 'Hello' }, assert: [{ type: 'equals', value: 'Hi' } as TestAssertion] }];
+    const mockDataset = [
+      { vars: { prompt: 'Hello' }, assert: [{ type: 'equals', value: 'Hi' } as TestAssertion] },
+    ];
 
     jest.doMock('../../src/integrations/huggingfaceDatasets', () => ({
       fetchHuggingFaceDataset: jest.fn().mockResolvedValue(mockDataset),
