@@ -175,8 +175,8 @@ providers:
 | `type` | string | Must be `web_fetch_20250910` |
 | `name` | string | Must be `web_fetch` |
 | `max_uses` | number | Maximum number of web fetches per request (optional) |
-| `allowed_domains` | string[] | List of domains to allow fetching from (optional) |
-| `blocked_domains` | string[] | List of domains to block fetching from (optional) |
+| `allowed_domains` | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`) |
+| `blocked_domains` | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`) |
 | `citations` | object | Enable citations with `{ enabled: true }` (optional) |
 | `max_content_tokens` | number | Maximum tokens for web content (optional) |
 
@@ -227,7 +227,10 @@ This configuration allows Claude to first search for relevant information, then 
 
 - The web fetch tool requires trusted environments due to potential data exfiltration risks
 - Claude cannot dynamically construct URLs - only URLs provided by users or from search results can be fetched
-- Use domain filtering (`allowed_domains`, `blocked_domains`) to restrict access to specific sites
+- Use domain filtering to restrict access to specific sites:
+  - Use `allowed_domains` to whitelist trusted domains (recommended)
+  - Use `blocked_domains` to blacklist specific domains
+  - **Note:** Only one of `allowed_domains` or `blocked_domains` can be specified, not both
 
 See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use).
 

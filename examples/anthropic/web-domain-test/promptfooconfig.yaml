@@ -11,8 +11,6 @@ providers:
           max_uses: 2
           allowed_domains:
             - docs.anthropic.com
-          blocked_domains:
-            - spam.example.com
           citations:
             enabled: true
           max_content_tokens: 3000
@@ -29,6 +27,6 @@ tests:
       - type: contains-any
         value: ['web fetch', 'tool', 'URL', 'content']
         reason: 'Response should mention web fetch concepts'
-      - type: not-contains
-        value: 'error'
-        reason: 'Should not have errors'
+      - type: contains-any
+        value: ['capabilities', 'features', 'documentation']
+        reason: 'Response should summarize the documentation content'
