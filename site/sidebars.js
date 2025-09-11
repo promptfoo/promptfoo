@@ -35,6 +35,10 @@ const redTeamSidebar = [
     id: 'red-team/owasp-llm-top-10',
   },
   {
+    type: 'doc',
+    id: 'red-team/risk-scoring',
+  },
+  {
     type: 'category',
     label: 'Plugins',
     collapsed: true,

@@ -38,7 +38,6 @@ import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import './Report.css';
 
-import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -46,6 +45,8 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
+
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 
 const App: React.FC = () => {
   const navigate = useNavigate();
@@ -478,6 +479,8 @@ const App: React.FC = () => {
           evalId={evalId}
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
           vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
           vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
           setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
