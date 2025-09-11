@@ -7,7 +7,9 @@ import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -99,6 +101,8 @@ export default function Review({
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
   const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
   const [isRunOptionsExpanded, setIsRunOptionsExpanded] = useState(true);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [tempDescription, setTempDescription] = useState(config.description || '');
 
   // Auto-expand advanced config if there are existing test variables
   const hasTestVariables =
@@ -173,13 +177,31 @@ export default function Review({
     });
   };
 
-  const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    updateConfig('description', event.target.value);
+  const handleStartEditingDescription = () => {
+    setTempDescription(config.description || '');
+    setIsEditingDescription(true);
+  };
+
+  const handleSaveDescription = () => {
+    updateConfig('description', tempDescription);
+    setIsEditingDescription(false);
+  };
+
+  const handleCancelEditingDescription = () => {
+    setTempDescription(config.description || '');
+    setIsEditingDescription(false);
   };
 
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
+
+  // Update tempDescription when config.description changes
+  useEffect(() => {
+    if (!isEditingDescription) {
+      setTempDescription(config.description || '');
+    }
+  }, [config.description, isEditingDescription]);
 
   // Sync local maxConcurrency state with config
   useEffect(() => {
@@ -452,16 +474,54 @@ export default function Review({
   return (
     <PageWrapper title="Review & Run" onBack={onBack}>
       <Box>
-        <TextField
-          fullWidth
-          label="Description"
-          placeholder="My Red Team Configuration"
-          value={config.description}
-          onChange={handleDescriptionChange}
-          variant="outlined"
-          sx={{ mb: 4 }}
-          autoFocus
-        />
+        {isEditingDescription ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 4 }}>
+            <TextField
+              fullWidth
+              label="Configuration Name"
+              placeholder="My Red Team Configuration"
+              value={tempDescription}
+              onChange={(e) => setTempDescription(e.target.value)}
+              variant="outlined"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleSaveDescription();
+                } else if (e.key === 'Escape') {
+                  handleCancelEditingDescription();
+                }
+              }}
+            />
+            <IconButton
+              onClick={handleSaveDescription}
+              color="primary"
+              size="small"
+              disabled={!tempDescription.trim()}
+            >
+              <CheckIcon />
+            </IconButton>
+            <IconButton
+              onClick={handleCancelEditingDescription}
+              color="default"
+              size="small"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 4 }}>
+            <Typography variant="h6" sx={{ py: 1 }}>
+              Configuration: {config.description || 'Untitled Configuration'}
+            </Typography>
+            <IconButton
+              onClick={handleStartEditingDescription}
+              size="small"
+              sx={{ color: 'text.secondary', ml: 0.5 }}
+            >
+              <EditIcon />
+            </IconButton>
+          </Box>
+        )}
 
         <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
           Configuration Summary

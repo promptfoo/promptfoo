@@ -270,10 +270,10 @@ export default function RedTeamSetupPage() {
     return hash ? Number.parseInt(hash, 10) : 0;
   });
 
-  const { hasSeenSetup, markSetupAsSeen } = useSetupState();
-  const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
-  const [highlightConfigName, setHighlightConfigName] = useState(false);
+  const { markSetupAsSeen } = useSetupState();
   const { config, setFullConfig, resetConfig } = useRedTeamConfig();
+  const [setupModalOpen, setSetupModalOpen] = useState(!config.description);
+  const [highlightConfigName, setHighlightConfigName] = useState(false);
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
@@ -561,6 +561,13 @@ export default function RedTeamSetupPage() {
     event.target.value = '';
   };
 
+  // Show setup modal if no configuration name is set
+  useEffect(() => {
+    if (!config.description && !setupModalOpen) {
+      setSetupModalOpen(true);
+    }
+  }, [config.description, setupModalOpen]);
+
   // Sync configName with config.description
   useEffect(() => {
     if (config.description && config.description !== configName) {
@@ -588,6 +595,7 @@ export default function RedTeamSetupPage() {
     lastSavedConfig.current = '';
     setHasUnsavedChanges(false);
     setResetDialogOpen(false);
+    setSetupModalOpen(true);
     toast.showToast('Configuration reset to defaults', 'success');
   };
 
