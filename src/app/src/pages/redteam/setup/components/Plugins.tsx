@@ -994,17 +994,16 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         <Tooltip title="This dataset requires a HuggingFace API key to access. Set HF_TOKEN environment variable.">
                           <Typography
                             variant="caption"
-                            sx={{
+                            sx={(theme) => ({
                               fontSize: '0.7rem',
                               color: 'warning.main',
                               fontWeight: 500,
-                              backgroundColor: 'warning.50',
+                              backgroundColor: alpha(theme.palette.warning.main, 0.08),
                               px: 0.5,
                               py: 0.25,
                               borderRadius: 0.5,
-                              border: '1px solid',
-                              borderColor: 'warning.200',
-                            }}
+                              border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`,
+                            })}
                           >
                             🤗 API key required
                           </Typography>
