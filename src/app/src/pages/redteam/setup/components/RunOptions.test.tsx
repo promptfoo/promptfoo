@@ -211,7 +211,7 @@ describe('RunOptions', () => {
     expect(delayInput).toHaveValue(0);
 
     const maxConcurrencyInput = screen.getByLabelText('Max number of concurrent requests');
-    expect(maxConcurrencyInput).toHaveValue(1);
+    expect(maxConcurrencyInput).toHaveValue(5);
   });
 
   it('should set the correct ARIA attributes on the AccordionSummary for accessibility', () => {
