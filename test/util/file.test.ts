@@ -783,4 +783,165 @@ describe('file utilities', () => {
       expect(safeJoin('')).toBe(path.join(''));
     });
   });
+
+  describe('context-aware file loading', () => {
+    beforeEach(() => {
+      jest.resetAllMocks();
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readFileSync as jest.Mock).mockReturnValue('file content');
+      cliState.basePath = '/test';
+    });
+
+    describe('maybeLoadFromExternalFile with context', () => {
+      it('should preserve Python files in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.py', 'assertion');
+        expect(result).toBe('file://assert.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve Python files with function names in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.py:get_assert', 'assertion');
+        expect(result).toBe('file://assert.py:get_assert');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve JavaScript files in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.js', 'assertion');
+        expect(result).toBe('file://assert.js');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve TypeScript files in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.ts', 'assertion');
+        expect(result).toBe('file://assert.ts');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should load Python files normally in general context', () => {
+        (fs.readFileSync as jest.Mock).mockReturnValue('def test(): pass');
+        const result = maybeLoadFromExternalFile('file://script.py', 'general');
+        expect(result).toBe('def test(): pass');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+
+      it('should load JavaScript files normally in general context', () => {
+        (fs.readFileSync as jest.Mock).mockReturnValue('module.exports = {};');
+        const result = maybeLoadFromExternalFile('file://script.js', 'general');
+        expect(result).toBe('module.exports = {};');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+
+      it('should load Python files normally when no context provided', () => {
+        (fs.readFileSync as jest.Mock).mockReturnValue('def test(): pass');
+        const result = maybeLoadFromExternalFile('file://script.py');
+        expect(result).toBe('def test(): pass');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+
+      it('should load non-code files normally in assertion context', () => {
+        (fs.readFileSync as jest.Mock).mockReturnValue('test data');
+        const result = maybeLoadFromExternalFile('file://data.txt', 'assertion');
+        expect(result).toBe('test data');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+
+      it('should handle Windows paths correctly in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://C:/test/assert.py', 'assertion');
+        expect(result).toBe('file://C:/test/assert.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should handle arrays in assertion context', () => {
+        const files = ['file://assert1.py', 'file://assert2.js', 'file://data.txt'];
+        (fs.readFileSync as jest.Mock).mockReturnValue('file content');
+        const result = maybeLoadFromExternalFile(files, 'assertion');
+
+        expect(result).toEqual(['file://assert1.py', 'file://assert2.js', 'file content']);
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1); // Only data.txt should be loaded
+      });
+    });
+
+    describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
+      it('should preserve Python assertion file references', () => {
+        const config = {
+          assert: [
+            {
+              type: 'python',
+              value: 'file://good_assertion.py',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toBe('file://good_assertion.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve JavaScript assertion file references', () => {
+        const config = {
+          assert: [
+            {
+              type: 'javascript',
+              value: 'file://assertion.js:checkResult',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toBe('file://assertion.js:checkResult');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should load non-assertion Python files normally', () => {
+        (fs.readFileSync as jest.Mock).mockReturnValue('def utility(): pass');
+        const config = {
+          util: 'file://helper.py',
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.util).toBe('def utility(): pass');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+
+      it('should handle nested assertion objects', () => {
+        const config = {
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'python',
+                  value: 'file://nested_assertion.py',
+                },
+              ],
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.tests[0].assert[0].value).toBe('file://nested_assertion.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should handle mixed assertion types', () => {
+        (fs.readFileSync as jest.Mock).mockReturnValue('some data');
+        const config = {
+          assert: [
+            {
+              type: 'python',
+              value: 'file://python_assert.py',
+            },
+            {
+              type: 'contains',
+              value: 'file://expected.txt',
+            },
+            {
+              type: 'javascript',
+              value: 'file://js_assert.js',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toBe('file://python_assert.py');
+        expect(result.assert[1].value).toBe('some data'); // contains assertion loads file
+        expect(result.assert[2].value).toBe('file://js_assert.js');
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1); // Only expected.txt
+      });
+    });
+  });
 });
