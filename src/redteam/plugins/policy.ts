@@ -103,7 +103,11 @@ export class PolicyPlugin extends RedteamPluginBase {
     return [
       {
         type: PLUGIN_ID,
-        metric: 'PolicyViolation',
+        // If policyId is provided, use the last part of the policyId as the metric
+        // TODO: Otherwise, hash the policy text to ensure duplicate policies counted as different metrics.
+        metric: this.policyId
+          ? `PolicyViolation:${this.policyId.split('-').pop()}`
+          : 'PolicyViolation',
       },
     ];
   }
