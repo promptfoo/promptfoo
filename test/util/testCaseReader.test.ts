@@ -1461,23 +1461,24 @@ describe('loadTestsFromGlob', () => {
         assert: [
           {
             type: 'python',
-            value: 'file://good_assertion.py'
-          }
-        ]
-      }
+            value: 'file://good_assertion.py',
+          },
+        ],
+      },
     ];
 
     jest.mocked(globSync).mockReturnValue(['tests.yaml']);
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlContentWithPythonAssertion));
 
     // Mock maybeLoadConfigFromExternalFile to preserve Python files in assertion contexts
-    const mockMaybeLoadConfig = jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+    const mockMaybeLoadConfig =
+      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
     mockMaybeLoadConfig.mockReturnValue(yamlContentWithPythonAssertion);
 
     const result = await loadTestsFromGlob('tests.yaml');
 
     expect(mockMaybeLoadConfig).toHaveBeenCalledWith(yamlContentWithPythonAssertion);
-    expect(result[0].assert[0].value).toBe('file://good_assertion.py'); // Should remain as file reference
+    expect((result[0].assert![0] as any).value).toBe('file://good_assertion.py'); // Should remain as file reference
   });
 });
 
