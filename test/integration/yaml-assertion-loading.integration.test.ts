@@ -41,18 +41,18 @@ describe('YAML assertion loading integration test (issue #5519)', () => {
     
     // Verify that assertion values are still file:// references, not the content
     const goodTest = tests.find(t => t.vars?.name === 'Should PASS');
-    expect(goodTest!.assert![0].value).toBe('file://good_assertion.py');
+    expect((goodTest!.assert![0] as any).value).toBe('file://good_assertion.py');
     
     // The value should NOT contain the actual Python code
-    expect(goodTest!.assert![0].value).not.toContain('def get_assert');
-    expect(goodTest!.assert![0].value).not.toContain('return {');
+    expect((goodTest!.assert![0] as any).value).not.toContain('def get_assert');
+    expect((goodTest!.assert![0] as any).value).not.toContain('return {');
     
     const badTest = tests.find(t => t.vars?.name === 'Should FAIL');
-    expect(badTest!.assert![0].value).toBe('file://bad_assertion.py');
+    expect((badTest!.assert![0] as any).value).toBe('file://bad_assertion.py');
     
     // The value should NOT contain the actual Python code
-    expect(badTest!.assert![0].value).not.toContain('import inspect');
-    expect(badTest!.assert![0].value).not.toContain('return {');
+    expect((badTest!.assert![0] as any).value).not.toContain('import inspect');
+    expect((badTest!.assert![0] as any).value).not.toContain('return {');
   });
 
   it('should handle relative paths correctly in fixture context', async () => {
@@ -60,7 +60,7 @@ describe('YAML assertion loading integration test (issue #5519)', () => {
     const tests = await loadTestsFromGlob('file://tests.yaml', fixtureDir);
     
     // Both assertions should maintain their file:// prefixes
-    expect(tests[0].assert![0].value).toMatch(/^file:\/\//);
-    expect(tests[1].assert![0].value).toMatch(/^file:\/\//);
+    expect((tests[0].assert![0] as any).value).toMatch(/^file:\/\//);
+    expect((tests[1].assert![0] as any).value).toMatch(/^file:\/\//);
   });
 });

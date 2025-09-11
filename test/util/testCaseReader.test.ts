@@ -18,6 +18,12 @@ import {
 
 import type { TestCase } from '../../src/types';
 
+type TestAssertion = {
+  type: string;
+  value?: string | string[] | number | object;
+  metric?: string;
+};
+
 // Mock fetchWithTimeout before any imports that might use telemetry
 jest.mock('../../src/util/fetch', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
@@ -473,18 +479,18 @@ describe('readTest', () => {
   });
 
   it('readTest with string input (path to test config)', async () => {
-    const testCase = { vars: { name: 'Test' }, assert: [{ type: 'equals', value: 'Expected' }] };
+    const testCase = { vars: { name: 'Test' }, assert: [{ type: 'equals', value: 'Expected' } as TestAssertion] };
     jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(testCase));
 
-    const result = await readTest(testCase, '/path/to/test');
+    const result = await readTest(testCase as TestCase, '/path/to/test');
 
     expect(result).toEqual(testCase);
   });
 
   it('readTest with TestCase input', async () => {
-    const testCase = { vars: { name: 'Test' }, assert: [{ type: 'equals', value: 'Expected' }] };
+    const testCase = { vars: { name: 'Test' }, assert: [{ type: 'equals', value: 'Expected' } as TestAssertion] };
 
-    const result = await readTest(testCase, '/path/to/test');
+    const result = await readTest(testCase as TestCase, '/path/to/test');
 
     expect(result).toEqual(testCase);
   });
@@ -498,12 +504,17 @@ describe('readTest', () => {
   it('readTest with TestCase that contains a vars glob input', async () => {
     const testCase: TestCase = {
       vars: 'file://vars.yaml',
-      assert: [{ type: 'equals', value: 'Expected' }],
+      assert: [{ type: 'equals', value: 'Expected' } as TestAssertion],
     };
 
     // Mock file loading for vars
     const fileModule = jest.requireMock('../../src/util/file');
-    fileModule.maybeLoadConfigFromExternalFile.mockReturnValue({ name: 'Test' });
+    fileModule.maybeLoadConfigFromExternalFile.mockImplementation((config: any) => {
+      if (typeof config === 'string' && config.startsWith('file://')) {
+        return { name: 'Test' };
+      }
+      return config;
+    });
 
     const result = await readTest(testCase, '/path/to/test');
 
@@ -651,17 +662,17 @@ describe('readTests', () => {
 
   it('readTests with array input (TestCase[])', async () => {
     const inputTestCases = [
-      { vars: { prompt: 'Hello {{name}}' }, assert: [{ type: 'equals', value: 'Hello world' }] },
+      { vars: { prompt: 'Hello {{name}}' }, assert: [{ type: 'equals', value: 'Hello world' } as TestAssertion] },
     ];
 
-    const testCases = await readTests(inputTestCases, '');
+    const testCases = await readTests(inputTestCases as TestCase[], '');
 
     expect(testCases).toEqual(inputTestCases);
   });
 
   it('readTests with string array input (paths to test configs)', async () => {
-    const testCase1 = { vars: { name: 'Test1' }, assert: [{ type: 'equals', value: 'Expected1' }] };
-    const testCase2 = { vars: { name: 'Test2' }, assert: [{ type: 'equals', value: 'Expected2' }] };
+    const testCase1 = { vars: { name: 'Test1' }, assert: [{ type: 'equals', value: 'Expected1' } as TestAssertion] };
+    const testCase2 = { vars: { name: 'Test2' }, assert: [{ type: 'equals', value: 'Expected2' } as TestAssertion] };
 
     jest
       .mocked(fs.readFileSync)
@@ -675,7 +686,7 @@ describe('readTests', () => {
 
   it('readTests with vars glob input (paths to vars configs)', async () => {
     const testSuite = {
-      tests: [{ assert: [{ type: 'equals', value: 'Expected' }] }],
+      tests: [{ assert: [{ type: 'equals', value: 'Expected' } as TestAssertion] }],
       scenarios: [{ config: { vars: 'file://vars.yaml' } }],
     };
 
@@ -683,15 +694,15 @@ describe('readTests', () => {
     const fileModule = jest.requireMock('../../src/util/file');
     fileModule.maybeLoadConfigFromExternalFile.mockReturnValue({ name: 'Test' });
 
-    const testCases = await readTests(testSuite, '');
+    const testCases = await readTests(testSuite as any, '');
 
     expect(testCases[0].vars).toEqual({ name: 'Test' });
   });
 
   it('readTests with single TestCase content', async () => {
-    const testCase = { vars: { name: 'Test' }, assert: [{ type: 'equals', value: 'Expected' }] };
+    const testCase = { vars: { name: 'Test' }, assert: [{ type: 'equals', value: 'Expected' } as TestAssertion] };
 
-    const testCases = await readTests(testCase, '');
+    const testCases = await readTests(testCase as TestCase, '');
 
     expect(testCases).toEqual([testCase]);
   });
@@ -855,7 +866,7 @@ describe('readTests', () => {
 
     const testSuite = { tests: '/path/to/test.py:generateTests', config };
 
-    await readTests(testSuite, '');
+    await readTests(testSuite as any, '');
 
     expect(mockRunPython).toHaveBeenCalledWith(
       expect.stringContaining('test.py'),
@@ -903,10 +914,10 @@ describe('readTests', () => {
   it('should warn when assert is found in vars', async () => {
     const testCase = {
       vars: { name: 'Test', assert: 'This should not be here' },
-      assert: [{ type: 'equals', value: 'Expected' }],
+      assert: [{ type: 'equals', value: 'Expected' } as TestAssertion],
     };
 
-    await readTests([testCase], '');
+    await readTests([testCase as TestCase], '');
 
     expect(logger.warn).toHaveBeenCalledWith(
       'Found `assert` in test case vars. Did you mean to put this in the `assert` property?',
@@ -918,10 +929,10 @@ describe('readTests', () => {
 
     const testCase = {
       vars: { name: 'Test', assert: 'This should not be here' },
-      assert: [{ type: 'equals', value: 'Expected' }],
+      assert: [{ type: 'equals', value: 'Expected' } as TestAssertion],
     };
 
-    await readTests([testCase], '');
+    await readTests([testCase as TestCase], '');
 
     expect(logger.warn).not.toHaveBeenCalled();
   });
@@ -1004,7 +1015,7 @@ describe('loadTestsFromGlob', () => {
   });
 
   it('should handle Hugging Face dataset URLs', async () => {
-    const mockDataset = [{ vars: { prompt: 'Hello' }, assert: [{ type: 'equals', value: 'Hi' }] }];
+    const mockDataset = [{ vars: { prompt: 'Hello' }, assert: [{ type: 'equals', value: 'Hi' } as TestAssertion] }];
 
     jest.doMock('../../src/integrations/huggingfaceDatasets', () => ({
       fetchHuggingFaceDataset: jest.fn().mockResolvedValue(mockDataset),
