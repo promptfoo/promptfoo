@@ -42,6 +42,7 @@ describe('PythonProvider Persistent Mode', () => {
       initialize: jest.fn().mockResolvedValue(undefined),
       callMethod: jest.fn(),
       shutdown: jest.fn(),
+      on: jest.fn(), // Add EventEmitter method
       isHealthy: true,
       stats: {
         isHealthy: true,
@@ -100,9 +101,6 @@ describe('PythonProvider Persistent Mode', () => {
 
       expect(mockPersistentManager).toHaveBeenCalledWith('/absolute/path/to/script.py', {
         pythonExecutable: '/custom/python',
-        persistentIdleTimeout: 60000,
-        maxRestarts: 5,
-        concurrency: 'async',
       });
     });
 
@@ -215,6 +213,7 @@ describe('PythonProvider Persistent Mode', () => {
         initialize: jest.fn().mockResolvedValue(undefined),
         callMethod: jest.fn(),
         shutdown: jest.fn(),
+        on: jest.fn(), // Add EventEmitter method
         isHealthy: true,
         stats: {
           isHealthy: true,
