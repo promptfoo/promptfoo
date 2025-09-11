@@ -18,8 +18,7 @@ import {
   GridToolbarDensitySelector,
   GridToolbarFilterButton,
 } from '@mui/x-data-grid';
-import { displayNameOverrides, type Plugin, Severity } from '@promptfoo/redteam/constants';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
+import { displayNameOverrides, Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 import { useNavigate } from 'react-router-dom';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
@@ -68,7 +67,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
         pluginName,
         type: metadata.type,
         description: metadata.description,
-        severity: getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown',
+        severity: metadata.severity,
         passRate: (stats.pass / stats.total) * 100,
         passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
         attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
@@ -76,8 +75,6 @@ const TestSuites: React.FC<TestSuitesProps> = ({
         successfulAttacks: stats.total - stats.pass,
       }));
   }, [categoryStats, plugins]);
-
-  console.log('rows', rows);
 
   const exportToCSV = React.useCallback(() => {
     // Format data for CSV
@@ -196,7 +193,11 @@ const TestSuites: React.FC<TestSuitesProps> = ({
       headerName: 'Severity',
       type: 'singleSelect',
       flex: 0.5,
-      valueOptions: Object.values(Severity),
+      valueFormatter: (value: Severity) => severityDisplayNames[value],
+      valueOptions: Object.values(Severity).map((severity) => ({
+        value: severity,
+        label: severityDisplayNames[severity],
+      })),
       renderCell: (params: GridRenderCellParams) => (
         <Box className={`vuln-${params.value.toLowerCase()} vuln`}>{params.value}</Box>
       ),

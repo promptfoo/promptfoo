@@ -45,7 +45,12 @@ import ToolsDialog from './ToolsDialog';
 import './Report.css';
 
 import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
-import { categoryAliases, subCategoryDescriptions } from '@promptfoo/redteam/constants';
+import {
+  categoryAliases,
+  riskCategorySeverityMap,
+  type Severity,
+  subCategoryDescriptions,
+} from '@promptfoo/redteam/constants';
 import { type PluginCategoryStatsByPluginId } from './types';
 
 const App: React.FC = () => {
@@ -210,23 +215,26 @@ const App: React.FC = () => {
       }
 
       // Determine the description for the plugin based on its type
-      // TODO(Will): Ensure severity is set; see https://github.com/promptfoo/promptfoo/pull/5539.
       let type = '';
       let description = '';
+      let severity: Severity | undefined;
       if (pluginId.startsWith('PolicyViolation:')) {
         type = row.metadata?.policyId
           ? `Policy ${row.metadata?.policyId.split('-').pop()} Violation`
           : 'Policy Violation';
         description = `${row.metadata?.policy}`;
+        severity = row.metadata?.severity as Severity;
       } else {
         type = categoryAliases[pluginId as keyof typeof categoryAliases] || pluginId;
         description =
           subCategoryDescriptions[pluginId as keyof typeof subCategoryDescriptions] ?? '';
+        severity = riskCategorySeverityMap[pluginId as keyof typeof riskCategorySeverityMap];
       }
 
       acc[pluginId] = acc[pluginId] || {
+        // TODO: We're calculating pass rate in several places; do it once here!
         stats: { pass: 0, total: 0, passWithFilter: 0 },
-        metadata: { type, description },
+        metadata: { type, description, severity },
       };
       acc[pluginId].stats.total++;
 

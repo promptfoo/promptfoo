@@ -11,7 +11,6 @@ import {
   Severity,
   severityDisplayNames,
 } from '@promptfoo/redteam/constants';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
@@ -71,12 +70,9 @@ const Overview: React.FC<OverviewProps> = ({
   const severityCounts = Object.values(Severity).reduce(
     (acc, severity) => {
       acc[severity] = Object.keys(categoryStats).reduce((count, category) => {
-        const { stats } = categoryStats[category as PluginType];
+        const { stats, metadata } = categoryStats[category as PluginType];
         const passRate = stats.pass / stats.total;
-        if (
-          getRiskCategorySeverityMap(plugins)[category as PluginType] === severity &&
-          passRate < pluginPassRateThreshold
-        ) {
+        if (metadata.severity === severity && passRate < pluginPassRateThreshold) {
           return count + 1;
         }
         return count;

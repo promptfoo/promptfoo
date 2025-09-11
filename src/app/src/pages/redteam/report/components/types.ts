@@ -1,3 +1,5 @@
+import { type Severity } from '@promptfoo/redteam/constants';
+
 export type PluginCategoryStats = {
   stats: {
     pass: number;
@@ -7,6 +9,7 @@ export type PluginCategoryStats = {
   metadata: {
     type: string;
     description: string;
+    severity?: Severity;
   };
 };
 
