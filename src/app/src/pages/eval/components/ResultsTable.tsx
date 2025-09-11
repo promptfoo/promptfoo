@@ -674,36 +674,30 @@ function ResultsTable({
                   }
                 };
 
-                // If this is an injected value, show original (decoded) text as well
-                if (isInjected && typeof originalValue === 'string') {
-                  const testMetadata = (row as any)?.test?.metadata || {};
-                  const metadataOriginal = typeof testMetadata.originalText === 'string' ? testMetadata.originalText : undefined;
-                  const heuristicDecoded = metadataOriginal || tryDecodeBase64(originalValue) || tryDecodeHex(originalValue) || undefined;
-                  const originalForDisplay = heuristicDecoded || originalValue;
+                // Determine if we should show original text (decoded) even without redteamFinalPrompt
+                const testMetadata = (row as any)?.test?.metadata || {};
+                const metadataOriginal = typeof testMetadata.originalText === 'string' ? testMetadata.originalText : undefined;
+                const heuristicDecodedFromValue =
+                  typeof value === 'string' ? tryDecodeBase64(value) || tryDecodeHex(value) : null;
+                const valuesDiffer =
+                  typeof metadataOriginal === 'string' && typeof value === 'string'
+                    ? metadataOriginal !== value
+                    : Boolean(metadataOriginal);
+                const shouldShowOriginal =
+                  varName === injectVarName && (valuesDiffer || Boolean(heuristicDecodedFromValue));
+
+                // If injected or an encoding strategy is detected, show original (decoded) text as well
+                if (shouldShowOriginal) {
+                  const heuristicDecoded =
+                    metadataOriginal ||
+                    (typeof originalValue === 'string' ? tryDecodeBase64(originalValue) || tryDecodeHex(originalValue) : null) ||
+                    heuristicDecodedFromValue ||
+                    undefined;
+                  const originalForDisplay = heuristicDecoded || metadataOriginal || (typeof originalValue === 'string' ? originalValue : undefined) || '';
                   return (
                     <div className="cell" data-capture="true">
-                      <Tooltip
-                        title={
-                          <div style={{ maxWidth: 500, whiteSpace: 'pre-wrap' }}>
-                            <strong>Original Attack:</strong>
-                            <br />
-                            {originalForDisplay}
-                          </div>
-                        }
-                        placement="top"
-                        arrow
-                      >
-                        <div
-                          style={{
-                            cursor: 'help',
-                            borderBottom: '1px dashed #888',
-                            paddingBottom: '2px',
-                          }}
-                        >
-                          {cellContent}
-                        </div>
-                      </Tooltip>
-                      {originalForDisplay && originalForDisplay !== value && (
+                      {cellContent}
+                      {originalForDisplay && String(originalForDisplay) !== String(value) && (
                         <div style={{ marginTop: '6px', color: '#666', fontSize: '0.8em' }}>
                           <strong>Original (decoded):</strong>{' '}
                           <TruncatedText text={String(originalForDisplay)} maxLength={maxTextLength} />
