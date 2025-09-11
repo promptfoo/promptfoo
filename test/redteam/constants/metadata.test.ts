@@ -19,7 +19,6 @@ import {
 
 import {
   ADDITIONAL_PLUGINS,
-  ALL_PLUGINS,
   BASE_PLUGINS,
   BIAS_PLUGINS,
   FINANCIAL_PLUGINS,
@@ -94,7 +93,7 @@ describe('metadata constants', () => {
 
       // Get all defined plugins from constants
       const allDefinedPlugins = new Set<Plugin>();
-      
+
       // Add plugins from various constant arrays
       [...BASE_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
       [...ADDITIONAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
@@ -102,7 +101,7 @@ describe('metadata constants', () => {
       [...PII_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
       [...MEDICAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
       [...FINANCIAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
-      
+
       // Add plugins from HARM_PLUGINS object
       Object.keys(HARM_PLUGINS).forEach((plugin) => {
         allDefinedPlugins.add(plugin as Plugin);
@@ -110,14 +109,14 @@ describe('metadata constants', () => {
 
       // Special plugins that shouldn't be in risk categories (collections and custom plugins)
       const excludedPlugins = new Set([
-        'intent',           // Custom intent plugin handled separately in UI
-        'policy',           // Custom policy plugin handled separately in UI
-        'default',          // Collection
-        'foundation',       // Collection
-        'harmful',          // Collection
-        'bias',            // Collection
-        'pii',             // Collection
-        'medical',         // Collection
+        'intent', // Custom intent plugin handled separately in UI
+        'policy', // Custom policy plugin handled separately in UI
+        'default', // Collection
+        'foundation', // Collection
+        'harmful', // Collection
+        'bias', // Collection
+        'pii', // Collection
+        'medical', // Collection
         'guardrails-eval', // Collection
       ]);
 
