@@ -18,7 +18,7 @@ import json
 import os
 import sys
 import traceback
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List
 
 
 class PersistentPythonProvider:
@@ -138,8 +138,6 @@ class PersistentPythonProvider:
                 )
             else:
                 # Sync method - handle based on concurrency setting
-                concurrency = options.get("config", {}).get("concurrency", "async")
-
                 # DEADLOCK ISSUE DETAILS:
                 # Previously, we used asyncio.get_event_loop().run_in_executor to call sync methods from async context.
                 # However, this caused deadlocks when the event loop was already running (e.g., when called from within an async framework),
