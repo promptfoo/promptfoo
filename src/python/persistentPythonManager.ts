@@ -26,6 +26,7 @@ export class PersistentPythonManager extends EventEmitter {
   private restartCount = 0;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
+  private isShuttingDown = false;
 
   private readonly scriptPath: string;
   private readonly config: Required<PersistentPythonConfig>;
@@ -189,7 +190,23 @@ export class PersistentPythonManager extends EventEmitter {
   }
 
   private _handleProcessExit(code: number | null, signal: string | null): void {
-    // Reject all pending requests
+    // Check if this is an intentional shutdown
+    if (this.isShuttingDown) {
+      logger.debug(`Python process exited gracefully during shutdown: code=${code}, signal=${signal}`);
+      
+      // Reject any remaining pending requests with appropriate message
+      for (const [_id, request] of this.pendingRequests) {
+        request.reject(new Error('Python manager shutting down'));
+      }
+      this.pendingRequests.clear();
+
+      this.pythonProcess = null;
+      this.isInitialized = false;
+      this.initializationPromise = null;
+      return; // Don't attempt restart during shutdown
+    }
+
+    // Unintentional exit - reject pending requests
     for (const [_id, request] of this.pendingRequests) {
       request.reject(
         new Error(`Python process exited unexpectedly: code=${code}, signal=${signal}`),
@@ -205,7 +222,7 @@ export class PersistentPythonManager extends EventEmitter {
     if (this.restartCount < this.config.maxRestarts) {
       this.restartCount++;
       logger.info(
-        `Attempting to restart Python process (attempt ${this.restartCount}/${this.config.maxRestarts})`,
+        `Attempting to restart Python process (attempt ${this.restartCount}/${this.config.maxRestarts}) after unexpected exit: code=${code}, signal=${signal}`,
       );
 
       setTimeout(() => {
@@ -215,7 +232,7 @@ export class PersistentPythonManager extends EventEmitter {
         });
       }, 1000 * this.restartCount); // Exponential backoff
     } else {
-      logger.error(`Python process restart limit exceeded (${this.config.maxRestarts})`);
+      logger.error(`Python process restart limit exceeded (${this.config.maxRestarts}) after unexpected exits`);
       this.emit('error', new Error('Python process restart limit exceeded'));
     }
   }
@@ -317,6 +334,9 @@ export class PersistentPythonManager extends EventEmitter {
   }
 
   shutdown(): void {
+    // Set shutdown flag to prevent restart attempts
+    this.isShuttingDown = true;
+    
     if (this.idleTimer) {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
@@ -329,12 +349,13 @@ export class PersistentPythonManager extends EventEmitter {
     this.pendingRequests.clear();
 
     if (this.pythonProcess) {
+      logger.debug('Sending SIGTERM to Python process for graceful shutdown');
       this.pythonProcess.kill('SIGTERM');
 
       // Force kill after timeout
       setTimeout(() => {
         if (this.pythonProcess && !this.pythonProcess.killed) {
-          logger.warn('Force killing Python process');
+          logger.warn('Force killing Python process after timeout');
           this.pythonProcess.kill('SIGKILL');
         }
       }, 5000);

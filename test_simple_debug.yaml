@@ -1,0 +1,18 @@
+description: 'Simple debug test'
+
+prompts:
+  - 'Test prompt'
+
+providers:
+  - id: 'file://test_stateful_provider.py'
+    label: 'Stateful Provider'
+    config:
+      basePath: '.'
+      persistent: true
+
+tests:
+  - description: 'Simple debug test'
+    vars: {}
+    assert:
+      - type: javascript
+        value: 'output && output.output ? true : false'

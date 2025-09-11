@@ -137,29 +137,12 @@ class PersistentPythonProvider:
                 # Sync method - handle based on concurrency setting
                 concurrency = options.get('config', {}).get('concurrency', 'async')
                 
-                if concurrency == 'async' and self.event_loop:
-                    # Run sync function in executor to prevent blocking
-                    try:
-                        if call_kwargs:
-                            result = self.event_loop.run_until_complete(
-                                self.event_loop.run_in_executor(None, lambda: method(**call_kwargs))
-                            )
-                        else:
-                            result = self.event_loop.run_until_complete(
-                                self.event_loop.run_in_executor(None, lambda: method(*call_args))
-                            )
-                    except RuntimeError:
-                        # Fall back to direct execution if event loop issues
-                        if call_kwargs:
-                            result = method(**call_kwargs)
-                        else:
-                            result = method(*call_args)
+                # Temporarily disable run_in_executor due to deadlock issues
+                # TODO: Investigate and fix event loop deadlock, then re-enable
+                if call_kwargs:
+                    result = method(**call_kwargs)
                 else:
-                    # Direct execution for sync concurrency or no event loop
-                    if call_kwargs:
-                        result = method(**call_kwargs)
-                    else:
-                        result = method(*call_args)
+                    result = method(*call_args)
                 
                 # Ensure trace context is preserved in result
                 return self._preserve_trace_in_result(result, safe_context)
