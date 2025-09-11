@@ -28,8 +28,7 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
 import { useTableStore } from './store';
-
-import type { EvaluateTable, UnifiedConfig } from './types';
+import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 interface ResultsChartsProps {
   handleHideCharts: () => void;
