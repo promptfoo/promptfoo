@@ -546,8 +546,6 @@ function ResultsTable({
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 let value: string | object = info.getValue();
                 const originalValue = value; // Store original value for tooltip
-                let isInjected = false;
-
                 const row = info.row.original;
 
                 // For red team evals, show the final injected prompt for the configured inject variable
@@ -559,7 +557,6 @@ function ResultsTable({
                     if (output?.metadata?.redteamFinalPrompt) {
                       // Replace the original prompt with the injected version
                       value = output.metadata.redteamFinalPrompt;
-                      isInjected = true;
                       break;
                     }
                   }
@@ -642,11 +639,12 @@ function ResultsTable({
                   <TruncatedText text={value} maxLength={maxTextLength} />
                 );
 
-                // Helper decode functions are imported from @app/utils/encoding
-
                 // Determine if we should show original text (decoded) even without redteamFinalPrompt
                 const testMetadata = (row as any)?.test?.metadata || {};
-                const metadataOriginal = typeof testMetadata.originalText === 'string' ? testMetadata.originalText : undefined;
+                const metadataOriginal =
+                  typeof testMetadata.originalText === 'string'
+                    ? testMetadata.originalText
+                    : undefined;
                 const heuristicDecodedFromValue =
                   typeof value === 'string' ? tryDecodeBase64(value) || tryDecodeHex(value) : null;
                 const valuesDiffer =
@@ -660,17 +658,26 @@ function ResultsTable({
                 if (shouldShowOriginal) {
                   const heuristicDecoded =
                     metadataOriginal ||
-                    (typeof originalValue === 'string' ? tryDecodeBase64(originalValue) || tryDecodeHex(originalValue) : null) ||
+                    (typeof originalValue === 'string'
+                      ? tryDecodeBase64(originalValue) || tryDecodeHex(originalValue)
+                      : null) ||
                     heuristicDecodedFromValue ||
                     undefined;
-                  const originalForDisplay = heuristicDecoded || metadataOriginal || (typeof originalValue === 'string' ? originalValue : undefined) || '';
+                  const originalForDisplay =
+                    heuristicDecoded ||
+                    metadataOriginal ||
+                    (typeof originalValue === 'string' ? originalValue : undefined) ||
+                    '';
                   return (
                     <div className="cell" data-capture="true">
                       {cellContent}
                       {originalForDisplay && String(originalForDisplay) !== String(value) && (
                         <div style={{ marginTop: '6px', color: '#666', fontSize: '0.8em' }}>
                           <strong>Original (decoded):</strong>{' '}
-                          <TruncatedText text={String(originalForDisplay)} maxLength={maxTextLength} />
+                          <TruncatedText
+                            text={String(originalForDisplay)}
+                            maxLength={maxTextLength}
+                          />
                         </div>
                       )}
                     </div>

@@ -32,5 +32,3 @@ describe('encoding utils', () => {
     });
   });
 });
-
-

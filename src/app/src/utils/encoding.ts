@@ -8,7 +8,8 @@ export function tryDecodeBase64(str: string): string | null {
     if (!/^[A-Za-z0-9+/]+={0,2}$/.test(str) || str.length < 8) {
       return null;
     }
-    const decoded = typeof atob !== 'undefined' ? atob(str) : Buffer.from(str, 'base64').toString('binary');
+    const decoded =
+      typeof atob !== 'undefined' ? atob(str) : Buffer.from(str, 'base64').toString('binary');
     const printable = decoded.replace(/[\x00-\x08\x0E-\x1F\x7F]/g, '');
     return printable.length > 0 ? decoded : null;
   } catch {
@@ -34,5 +35,3 @@ export function tryDecodeHex(str: string): string | null {
     return null;
   }
 }
-
-
