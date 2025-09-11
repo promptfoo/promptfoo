@@ -21,6 +21,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { constructMetricId as constructPolicyMetricId } from '@promptfoo/redteam/plugins/policy/utils';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -51,6 +52,7 @@ import {
   type Severity,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
+import { POLICY_METRIC_PREFIX } from '@promptfoo/redteam/plugins/policy/constants';
 import { type PluginCategoryStatsByPluginId } from './types';
 
 const App: React.FC = () => {
@@ -218,9 +220,12 @@ const App: React.FC = () => {
       let type = '';
       let description = '';
       let severity: Severity | undefined;
-      if (pluginId.startsWith('PolicyViolation:')) {
+
+      // Custom policy plugins require special handling:
+      if (pluginId.startsWith(`${POLICY_METRIC_PREFIX}:`)) {
         type = row.metadata?.policyId
-          ? `Policy ${row.metadata?.policyId.split('-').pop()} Violation`
+          ? // Match the id used in the metric.
+            `Policy ${constructPolicyMetricId(row.metadata?.policyId)} Violation`
           : 'Policy Violation';
         description = `${row.metadata?.policy}`;
         severity = row.metadata?.severity as Severity;
