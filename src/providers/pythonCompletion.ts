@@ -38,7 +38,7 @@ export class PythonProvider implements ApiProvider {
 
   private getCachedOptionsString(): string {
     if (this.cachedOptionsString === null) {
-      this.cachedOptionsString = safeJsonStringify(this.options);
+      this.cachedOptionsString = safeJsonStringify(this.options) || '{}';
     }
     return this.cachedOptionsString;
   }
@@ -158,7 +158,7 @@ export class PythonProvider implements ApiProvider {
 
     // Create cache key for persistent mode (using safe JSON stringify to avoid circular references)
     // Include provider ID to ensure cache isolation between different provider configurations
-    const contextVarsHash = context?.vars ? sha256(safeJsonStringify(context.vars)) : '';
+    const contextVarsHash = context?.vars ? sha256(safeJsonStringify(context.vars) || '{}') : '';
     const cacheKey = `python-persistent:${this.id()}:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${this.getCachedOptionsString()}:${contextVarsHash}`;
     logger.debug(`PersistentPythonProvider cache key: ${cacheKey}`);
 
