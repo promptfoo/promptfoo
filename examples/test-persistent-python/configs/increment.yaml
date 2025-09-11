@@ -1,0 +1,19 @@
+
+prompts:
+  - 'Hello, world!'
+
+providers:
+  - id: python:../script.py:increment
+
+tests:
+  - description: 'Test stateful incrementer - first call'
+    vars:
+      prompt: 'increment'
+    expected:
+      - output: 'Count is 1'
+
+  - description: 'Test stateful incrementer - second call'
+    vars:
+      prompt: 'increment'
+    expected:
+      - output: 'Count is 2'

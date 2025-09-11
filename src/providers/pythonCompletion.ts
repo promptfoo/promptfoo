@@ -83,7 +83,7 @@ export class PythonProvider implements ApiProvider {
             path.join(this.options?.config.basePath || '', this.scriptPath),
           );
 
-          this.persistentManager = new PersistentPythonManager(absPath, {
+          this.persistentManager = new PersistentPythonManager(absPath, this.id(), {
             pythonExecutable: this.config.pythonExecutable,
           });
 
@@ -145,7 +145,8 @@ export class PythonProvider implements ApiProvider {
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
 
     // Create cache key for persistent mode (using safe JSON stringify to avoid circular references)
-    const cacheKey = `python-persistent:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
+    // Include provider ID to ensure cache isolation between different provider configurations
+    const cacheKey = `python-persistent:${this.id()}:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
       this.options,
     )}:${safeJsonStringify(context?.vars)}`;
     logger.debug(`PersistentPythonProvider cache key: ${cacheKey}`);
@@ -296,8 +297,8 @@ export class PythonProvider implements ApiProvider {
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
 
-    // Create cache key including the function name to ensure different functions don't share caches
-    const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
+    // Create cache key including the provider ID and function name to ensure different provider configurations don't share caches
+    const cacheKey = `python:${this.id()}:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
     )}:${JSON.stringify(context?.vars)}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);

@@ -1,0 +1,87 @@
+prompts:
+  - 'Hello, world!'
+
+providers:
+  - id: python:./script.py:call_api
+    config:
+      id: 'basic_call'
+  - id: python:./script.py:increment
+    config:
+      id: 'incrementer_1'
+  - id: python:./script.py:increment
+    config:
+      id: 'incrementer_2'
+  - id: python:./script.py:async_call
+    config:
+      id: 'async_call'
+  - id: python:./script.py:error_func
+    config:
+      id: 'error_func'
+  - id: python:./script.py:slow_func
+    config:
+      id: 'slow_func'
+
+tests:
+  - description: 'Test basic call'
+    vars:
+      prompt: 'basic'
+    expected:
+      - provider: 'python:./script.py:call_api'
+        output: 'Received prompt: basic'
+
+  - description: 'Test stateful incrementer 1 - first call'
+    providers: ['python:./script.py:increment#incrementer_1']
+    vars:
+      prompt: 'increment'
+    expected:
+      - output: 'Count is 1'
+
+  - description: 'Test stateful incrementer 1 - second call'
+    providers: ['python:./script.py:increment#incrementer_1']
+    vars:
+      prompt: 'increment'
+    expected:
+      - output: 'Count is 2'
+
+  - description: 'Test stateful incrementer 2 - first call'
+    providers: ['python:./script.py:increment#incrementer_2']
+    vars:
+      prompt: 'increment'
+    expected:
+      - output: 'Count is 1'
+
+  - description: 'Test async call'
+    providers: ['python:./script.py:async_call']
+    vars:
+      prompt: 'async'
+    expected:
+      - output: 'Async call received: async'
+
+  - description: 'Test error handling'
+    providers: ['python:./script.py:error_func']
+    vars:
+      prompt: 'error'
+    expected:
+      - error: 'This is a test error'
+
+  - description: 'Test performance of first call to slow_func'
+    providers: ['python:./script.py:slow_func']
+    vars:
+      prompt: 'slow'
+    options:
+      metrics:
+        - type: latency
+          threshold: 2000 # Expect it to be slow
+    expected:
+      - output: 'Finished sleeping'
+
+  - description: 'Test performance of second call to slow_func'
+    providers: ['python:./script.py:slow_func']
+    vars:
+      prompt: 'slow'
+    options:
+      metrics:
+        - type: latency
+          threshold: 200 # Expect it to be fast
+    expected:
+      - output: 'Finished sleeping'

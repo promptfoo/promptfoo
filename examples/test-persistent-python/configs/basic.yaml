@@ -1,0 +1,12 @@
+
+prompts:
+  - 'Hello, world!'
+
+providers:
+  - id: python:../script.py:call_api
+
+tests:
+  - vars:
+      prompt: 'basic'
+    expected:
+      - output: 'Received prompt: basic'

@@ -65,11 +65,8 @@ describe('PythonProvider Persistent Mode', () => {
     it('should initialize persistent manager by default', async () => {
       await provider.initialize();
 
-      expect(mockPersistentManager).toHaveBeenCalledWith('/absolute/path/to/script.py', {
+      expect(mockPersistentManager).toHaveBeenCalledWith('/absolute/path/to/script.py', 'test-provider', {
         pythonExecutable: undefined,
-        persistentIdleTimeout: undefined,
-        maxRestarts: undefined,
-        concurrency: undefined,
       });
       expect(mockManagerInstance.initialize).toHaveBeenCalled();
     });
@@ -99,7 +96,7 @@ describe('PythonProvider Persistent Mode', () => {
 
       await provider.initialize();
 
-      expect(mockPersistentManager).toHaveBeenCalledWith('/absolute/path/to/script.py', {
+      expect(mockPersistentManager).toHaveBeenCalledWith('/absolute/path/to/script.py', 'test-provider', {
         pythonExecutable: '/custom/python',
       });
     });

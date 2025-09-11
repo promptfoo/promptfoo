@@ -1,0 +1,13 @@
+
+prompts:
+  - 'Hello, world!'
+
+providers:
+  - id: python:../script.py:async_call
+
+tests:
+  - description: 'Test async call'
+    vars:
+      prompt: 'async'
+    expected:
+      - output: 'Async call received: async'

@@ -31,7 +31,7 @@ describe('PersistentPythonManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSpawn.mockReturnValue(mockProcess as any);
-    manager = new PersistentPythonManager('/test/script.py');
+    manager = new PersistentPythonManager('/test/script.py', 'test-provider');
   });
 
   afterEach(() => {
@@ -57,7 +57,7 @@ describe('PersistentPythonManager', () => {
 
   describe('process management', () => {
     it('should handle idle timeout', (done) => {
-      const manager = new PersistentPythonManager('/test/script.py', {
+      const manager = new PersistentPythonManager('/test/script.py', 'idle-test-provider', {
         persistentIdleTimeout: 100, // 100ms for test
       });
 
@@ -85,7 +85,7 @@ describe('PersistentPythonManager', () => {
 
   describe('configuration options', () => {
     it('should respect custom Python executable', () => {
-      const customManager = new PersistentPythonManager('/test/script.py', {
+      const customManager = new PersistentPythonManager('/test/script.py', 'custom-python-provider', {
         pythonExecutable: '/custom/python',
       });
 
@@ -93,7 +93,7 @@ describe('PersistentPythonManager', () => {
     });
 
     it('should respect custom timeout settings', () => {
-      const customManager = new PersistentPythonManager('/test/script.py', {
+      const customManager = new PersistentPythonManager('/test/script.py', 'timeout-provider', {
         persistentIdleTimeout: 60000,
         maxRestarts: 5,
       });
