@@ -247,7 +247,7 @@ export const RunOptions: React.FC<RunOptionsProps> = (props) => {
     numTests: props.numTests ?? 0,
     runOptions: {
       delay: props.runOptions?.delay ?? 0,
-      maxConcurrency: props.runOptions?.maxConcurrency ?? 1,
+      maxConcurrency: props.runOptions?.maxConcurrency ?? 5,
       verbose: props.runOptions?.verbose,
     },
   };
