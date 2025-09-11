@@ -612,7 +612,10 @@ async function runRedteamConversation({
         if (targetResponse.error) {
           throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
         }
-        invariant(targetResponse.output, '[IterativeTree] Target did not return an output');
+        invariant(
+          'output' in targetResponse,
+          '[IterativeTree] Target did not return an output property',
+        );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
