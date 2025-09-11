@@ -40,8 +40,10 @@ import { convertTestResultsToTableRow } from '../util/exportToFile';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import EvalResult from './evalResult';
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
+import EvalResult from './evalResult';
+
+import type { EvalResultsFilterMode } from '../types';
 
 interface FilteredCountRow {
   count: number | null;
@@ -425,14 +427,14 @@ export default class Eval {
   private async queryTestIndices(opts: {
     offset?: number;
     limit?: number;
-    filterMode?: string;
+    filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
     const db = getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
-    const mode = opts.filterMode ?? 'all';
+    const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
     // Build filter conditions
     const conditions = [`eval_id = '${this.id}'`];
@@ -583,7 +585,7 @@ export default class Eval {
   async getTablePage(opts: {
     offset?: number;
     limit?: number;
-    filterMode?: string;
+    filterMode?: EvalResultsFilterMode;
     testIndices?: number[];
     searchQuery?: string;
     filters?: string[];

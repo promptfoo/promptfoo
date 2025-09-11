@@ -839,6 +839,11 @@ providers:
       instructions: 'You are a helpful assistant.'
       temperature: 0.7
       websocketTimeout: 60000 # 60 seconds
+      # Optional: point to custom/proxy endpoints; WS URL is derived automatically
+      # https:// → wss://, http:// → ws://
+      # Example: wss://my-custom-api.com/v1/realtime
+      # Example: ws://localhost:8080/v1/realtime
+      # apiBaseUrl: 'https://my-custom-api.com/v1'
 ```
 
 ### Realtime-specific Configuration Options
@@ -856,6 +861,23 @@ The Realtime API configuration supports these parameters in addition to standard
 | `max_response_output_tokens` | Maximum tokens in model response                    | 'inf'                  | Number or 'inf'                         |
 | `tools`                      | Array of tool definitions for function calling      | []                     | Array of tool objects                   |
 | `tool_choice`                | Controls how tools are selected                     | 'auto'                 | 'none', 'auto', 'required', or object   |
+
+#### Custom endpoints and proxies (Realtime)
+
+The Realtime provider respects the same base URL configuration as other OpenAI providers. The WebSocket URL is derived from `getApiUrl()` by converting protocols: `https://` → `wss://` and `http://` → `ws://`.
+
+You can use this to target Azure-compatible endpoints, proxies, or local/dev servers:
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview
+    config:
+      apiBaseUrl: 'https://my-custom-api.com/v1' # connects to wss://my-custom-api.com/v1/realtime
+      modalities: ['text']
+      temperature: 0.7
+```
+
+Environment variables `OPENAI_API_BASE_URL` and `OPENAI_BASE_URL` also apply to Realtime WebSocket connections.
 
 ### Function Calling with Realtime API
 
