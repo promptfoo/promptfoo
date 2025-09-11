@@ -23,6 +23,9 @@ const RunTestSuiteButton: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
 
+  const isDisabled =
+    isRunning || !prompts || prompts.length === 0 || !tests || tests.length === 0;
+
   const runTestSuite = async () => {
     setIsRunning(true);
 
@@ -96,7 +99,7 @@ const RunTestSuiteButton: React.FC = () => {
   };
 
   return (
-    <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isRunning}>
+    <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isDisabled}>
       {isRunning ? (
         <>
           <CircularProgress size={24} sx={{ marginRight: 2 }} />
