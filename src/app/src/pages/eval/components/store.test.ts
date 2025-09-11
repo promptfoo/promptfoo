@@ -1,11 +1,10 @@
 import { callApi } from '@app/utils/api';
-import { act } from '@testing-library/react';
 import { Severity } from '@promptfoo/redteam/constants';
+import { act } from '@testing-library/react';
 import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
-
-import type { EvaluateTable, PromptMetrics, ResultsFile } from './types';
+import type { EvaluateTable, PromptMetrics, ResultsFile } from '@promptfoo/types';
 
 vi.mock('uuid', () => ({
   v4: vi.fn(),
