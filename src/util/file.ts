@@ -142,12 +142,25 @@ export function maybeLoadFromExternalFile(
     throw new Error(`File does not exist: ${finalPath}`);
   }
 
-  const contents = fs.readFileSync(finalPath, 'utf8');
+  let contents: string;
+  try {
+    contents = fs.readFileSync(finalPath, 'utf8');
+  } catch (error) {
+    throw new Error(`Failed to read file ${finalPath}: ${error}`);
+  }
   if (finalPath.endsWith('.json')) {
-    return JSON.parse(contents);
+    try {
+      return JSON.parse(contents);
+    } catch (error) {
+      throw new Error(`Failed to parse JSON file ${finalPath}: ${error}`);
+    }
   }
   if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
-    return yaml.load(contents);
+    try {
+      return yaml.load(contents);
+    } catch (error) {
+      throw new Error(`Failed to parse YAML file ${finalPath}: ${error}`);
+    }
   }
   if (finalPath.endsWith('.csv')) {
     const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
@@ -202,7 +215,10 @@ export function maybeLoadConfigFromExternalFile(
       // and current key is 'value', switch to assertion context
       const isAssertionValue =
         key === 'value' &&
-        config.type &&
+        typeof config === 'object' &&
+        config &&
+        'type' in config &&
+        typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
 
       const childContext = isAssertionValue ? 'assertion' : context;
