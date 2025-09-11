@@ -340,7 +340,7 @@ class PersistentPythonProvider:
         """Call method with robust error handling and discovery"""
         if options is None:
             options = {}
-        
+
         # Clear user output buffer before each call
         self.user_output_buffer = {"stdout": [], "stderr": []}
         if context is None:
@@ -395,7 +395,7 @@ class PersistentPythonProvider:
                     result["metadata"] = {}
                 result["metadata"]["userOutput"] = {
                     "stdout": self.user_output_buffer["stdout"],
-                    "stderr": self.user_output_buffer["stderr"]
+                    "stderr": self.user_output_buffer["stderr"],
                 }
 
             return result
@@ -430,7 +430,9 @@ class PersistentPythonProvider:
 
             def write(self, text):
                 if text.strip():  # Only buffer non-empty output
-                    self.provider.user_output_buffer[self.stream_type].append(text.rstrip("\r\n"))
+                    self.provider.user_output_buffer[self.stream_type].append(
+                        text.rstrip("\r\n")
+                    )
 
             def flush(self):
                 pass
