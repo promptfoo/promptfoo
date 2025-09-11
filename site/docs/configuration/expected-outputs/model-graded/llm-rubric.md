@@ -5,22 +5,89 @@ description: 'Create flexible custom rubrics using natural language to evaluate 
 
 # LLM Rubric
 
-`llm-rubric` is promptfoo's general-purpose grader for "LLM as a judge" evaluation.
+The `llm-rubric` assertion uses an LLM to grade outputs against custom criteria.
 
-It is similar to OpenAI's [model-graded-closedqa](/docs/configuration/expected-outputs) prompt, but can be more effective and robust in certain cases.
+**What it measures**: Given evaluation criteria (the rubric), an LLM judge evaluates the output and provides a score (0-1), pass/fail status, and reasoning.
 
-## How to use it
+**Example**:
 
-To use the `llm-rubric` assertion type, add it to your test configuration like this:
+- Rubric: "Response should be professional yet friendly"
+- Output evaluation: Score 0.8, Pass, "Uses formal language while maintaining approachable tone"
+
+## Required fields
+
+The llm-rubric assertion requires:
+
+- `value` - Your evaluation criteria (the rubric)
+- `threshold` (optional) - Minimum score from 0 to 1 (no default - uses pass/fail from LLM)
+- Output - The LLM's response to evaluate
+
+## Configuration
+
+### Basic usage
 
 ```yaml
 assert:
   - type: llm-rubric
-    # Specify the criteria for grading the LLM output:
-    value: Is not apologetic and provides a clear, concise answer
+    value: 'Is not apologetic and provides a clear, concise answer'
 ```
 
-This assertion will use a language model to grade the output based on the specified rubric.
+### With threshold
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: 'Response demonstrates deep technical understanding'
+    threshold: 0.8
+```
+
+### Complete example
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Use LLM rubric for flexible custom evaluation'
+
+prompts:
+  - 'Write a {{type}} about {{topic}}'
+
+providers:
+  - id: openai:gpt-4.1-mini
+
+tests:
+  - description: 'Evaluate professional email'
+    vars:
+      type: 'business email'
+      topic: 'project delay'
+    assert:
+      - type: llm-rubric
+        value: 'Email is professional, empathetic, and provides clear next steps'
+
+      - type: llm-rubric
+        value: |
+          Evaluate the email on professionalism (0.0-1.0):
+          - 0.0-0.3: Casual or inappropriate tone
+          - 0.4-0.6: Somewhat professional but lacking
+          - 0.7-0.9: Professional and appropriate
+          - 1.0: Exemplary business communication
+
+          Pass if score >= 0.7
+        threshold: 0.7
+
+  - description: 'Evaluate creative writing'
+    vars:
+      type: 'short story'
+      topic: 'time travel'
+    assert:
+      - type: llm-rubric
+        value: |
+          Grade the story on creativity and engagement:
+          - Does it have an original twist?
+          - Are the characters compelling?
+          - Is the plot engaging?
+
+          Score 0.8+ for publication-quality writing
+        threshold: 0.6
+```
 
 ## How it works
 
@@ -36,28 +103,32 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 
 You can override this by setting the `provider` option (see below).
 
-It asks the model to output a JSON object that looks like this:
+The LLM rubric evaluation process:
 
-```json
-{
-  "reason": "<Analysis of the rubric and the output>",
-  "score": 0.5, // 0.0-1.0
-  "pass": true // true or false
-}
-```
+1. **Sends your rubric and output** to a grading LLM (GPT-4o by default)
+2. **LLM analyzes the output** against your criteria
+3. **Returns structured feedback**:
 
-Use your knowledge of this structure to give special instructions in your rubric, for example:
+   ```json
+   {
+     "reason": "Clear analysis of strengths and weaknesses",
+     "score": 0.75, // 0.0-1.0 scale
+     "pass": true // Pass/fail judgment
+   }
+   ```
+
+You can use this structure knowledge to craft detailed rubrics:
 
 ```yaml
 assert:
   - type: llm-rubric
     value: |
-      Evaluate the output based on how funny it is.  Grade it on a scale of 0.0 to 1.0, where:
-      Score of 0.1: Only a slight smile.
-      Score of 0.5: Laughing out loud.
-      Score of 1.0: Rolling on the floor laughing.
+      Evaluate humor level (0.0 to 1.0):
+      - 0.1: Slight smile
+      - 0.5: Laughing out loud
+      - 1.0: Rolling on floor laughing
 
-      Anything funny enough to be on SNL should pass, otherwise fail.
+      Pass if funny enough for SNL (0.7+)
 ```
 
 ## Using variables in the rubric
@@ -259,6 +330,23 @@ assert:
 
 The threshold is applied to the score returned by the LLM (which ranges from 0.0 to 1.0). If the LLM returns an explicit pass/fail status, the threshold will still be enforced - both conditions must be met for the assertion to pass.
 
+## When to use llm-rubric vs. alternatives
+
+- **Use `llm-rubric`** for flexible custom evaluation with scoring and explanations
+- **Use [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)** for complex evaluation requiring structured chain-of-thought reasoning
+- **Use [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa)** for simple binary (pass/fail) requirements
+- **Use [`pi`](/docs/configuration/expected-outputs/model-graded/pi)** for consistent, deterministic scoring without explanations
+- **Use [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality)** for fact-checking against reference answers
+
+## Related assertions
+
+- [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Chain-of-thought evaluation
+- [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Binary pass/fail
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Fact-checking
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Query-answer relevance
+
 ## Further reading
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
+- [Getting Started](/docs/getting-started) guide
+- [Red team best practices](/docs/red-team/troubleshooting/best-practices) for evaluation design

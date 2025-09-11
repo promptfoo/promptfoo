@@ -1,21 +1,36 @@
 ---
 sidebar_label: Factuality
-description: 'Validate factual accuracy of LLM responses using AI-powered fact-checking against verified knowledge bases and sources'
+description: 'Validate factual accuracy of LLM responses against reference answers'
 ---
 
 # Factuality
 
-The `factuality` assertion evaluates the factual consistency between an LLM output and a reference answer. It uses a structured prompt based on [OpenAI's evals](https://github.com/openai/evals/blob/main/evals/registry/modelgraded/fact.yaml) to determine if the output is factually consistent with the reference.
+The `factuality` assertion checks if the LLM output is factually consistent with a ground truth reference.
 
-## How to use it
+**What it measures**: Given a reference answer (ground truth) and the LLM's output, it evaluates whether they are factually consistent - the output doesn't have to match exactly, but it can't contradict the facts.
 
-To use the `factuality` assertion type, add it to your test configuration like this:
+**Example**:
+
+- Reference: "Paris is the capital of France with 2.2 million residents"
+- Good output: "The capital of France is Paris" ✓
+- Good output: "Paris, France's capital, has 2.2M people in a metro area of 10M" ✓
+- Bad output: "Lyon is the capital of France" ✗
+
+## Required fields
+
+The factuality assertion requires:
+
+- `value` - The reference answer/ground truth to check against
+- Output - The LLM's response to evaluate
+
+## Configuration
+
+### Basic usage
 
 ```yaml
 assert:
   - type: factuality
-    # Specify the reference statement to check against:
-    value: The Earth orbits around the Sun
+    value: 'The Earth orbits around the Sun'
 ```
 
 For non-English evaluation output, see the [multilingual evaluation guide](/docs/configuration/expected-outputs/model-graded#non-english-evaluation).
@@ -37,22 +52,37 @@ By default, options A, B, C, and E are considered passing grades, while D is con
 Here's a complete example showing how to use factuality checks:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Verify factual accuracy against known correct answers'
+
 prompts:
   - 'What is the capital of {{state}}?'
+  - 'Tell me about the capital city of {{state}}'
+
 providers:
-  - openai:gpt-4.1
-  - anthropic:claude-3-7-sonnet-20250219
+  - id: openai:gpt-4.1-mini
+
 tests:
-  - vars:
+  - description: 'Test California capital knowledge'
+    vars:
       state: California
     assert:
       - type: factuality
         value: Sacramento is the capital of California
-  - vars:
+
+  - description: 'Test New York capital knowledge'
+    vars:
       state: New York
     assert:
       - type: factuality
         value: Albany is the capital city of New York state
+
+  - description: 'Test with detailed reference'
+    vars:
+      state: Texas
+    assert:
+      - type: factuality
+        value: Austin is the capital of Texas, located in central Texas
 ```
 
 ## Customizing Score Thresholds
@@ -85,7 +115,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: anthropic:claude-3-7-sonnet-20250219
+       provider: anthropic:messages:claude-opus-4-1-latest
    ```
 
 3. Using assertion-level override:

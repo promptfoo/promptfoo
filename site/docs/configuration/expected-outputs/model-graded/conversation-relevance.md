@@ -3,9 +3,17 @@ sidebar_position: 25
 description: 'Evaluate conversation coherence by checking if LLM responses maintain context relevance across multi-turn dialogues'
 ---
 
-# Conversation Relevance
+# Conversation relevance
 
-The `conversation-relevance` assertion evaluates whether responses in a conversation remain relevant throughout the dialogue. This is particularly useful for chatbot applications where maintaining conversational coherence is critical.
+The `conversation-relevance` assertion evaluates whether responses remain relevant throughout multi-turn conversations.
+
+**What it measures**: Given a conversation history, it evaluates whether each response remains relevant to the conversation context using a sliding window approach.
+
+**Example**:
+
+- User: "What's the weather?" → Bot: "It's sunny today" ✓ Relevant
+- User: "What about tomorrow?" → Bot: "Tomorrow will be rainy" ✓ Relevant
+- User: "Should I bring an umbrella?" → Bot: "The capital of France is Paris" ✗ Irrelevant
 
 ## How it works
 
@@ -81,7 +89,7 @@ prompts:
   - 'Explain {{topic}}'
 
 providers:
-  - openai:gpt-4
+  - id: openai:gpt-4.1
 
 tests:
   - vars:
@@ -121,7 +129,7 @@ tests:
         - input: 'What is 2+2?'
           output: '2+2 equals 4.'
         - input: 'What about 3+3?'
-          output: 'The capital of France is Paris.' # Irrelevant response
+          output: 'The capital of France is Paris.'
         - input: 'Can you solve 5+5?'
           output: '5+5 equals 10.'
     assert:
@@ -162,7 +170,7 @@ Like other model-graded assertions, you can override the default grading provide
 assert:
   - type: conversation-relevance
     threshold: 0.8
-    provider: openai:gpt-4o-mini
+    provider: openai:gpt-4.1-mini
 ```
 
 Or set it globally:
@@ -170,14 +178,26 @@ Or set it globally:
 ```yaml
 defaultTest:
   options:
-    provider: anthropic:claude-3-7-sonnet-latest
+    provider: anthropic:messages:claude-opus-4-1-latest
 ```
 
-## See also
+## Tips for effective conversation evaluation
 
-- [Context relevance](/docs/configuration/expected-outputs/model-graded/context-relevance) - For evaluating if context is relevant to a query
-- [Answer relevance](/docs/configuration/expected-outputs/model-graded/answer-relevance) - For evaluating if an answer is relevant to a question
-- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) - Overview of all model-graded assertions
+- **Use appropriate window sizes**: Smaller windows (2-3) for short interactions, larger (5-7) for complex conversations
+- **Test edge cases**: Include conversations with topic changes, clarifications, and follow-up questions
+- **Consider context**: Vague responses to vague inputs are often acceptable
+- **Combine with other assertions**: Use alongside [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) for comprehensive evaluation
+
+## Related assertions
+
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - For evaluating if context is relevant to a query
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - For evaluating if an answer is relevant to a question
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - For custom conversation quality criteria
+
+## Further reading
+
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
+- [Getting Started](/docs/getting-started) guide
 
 ## Citation
 

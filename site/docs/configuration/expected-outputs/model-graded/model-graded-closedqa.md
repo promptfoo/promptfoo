@@ -3,49 +3,90 @@ sidebar_label: Model-graded Closed QA
 description: 'Assess closed-domain QA performance using model-based evaluation for accuracy, completeness, and answer correctness'
 ---
 
-# Model-graded Closed QA
+# Model-graded closed QA
 
-`model-graded-closedqa` is a criteria-checking evaluation that uses OpenAI's public evals prompt to determine if an LLM output meets specific requirements.
+The `model-graded-closedqa` assertion provides simple yes/no evaluation of whether the LLM output meets a specific criterion.
 
-### How to use it
+**What it measures**: Given a criterion and the LLM's response, it evaluates with a binary yes/no whether the response satisfies that criterion. This is useful for clear-cut requirements that don't need nuanced scoring.
 
-To use the `model-graded-closedqa` assertion type, add it to your test configuration like this:
+**Example**:
+
+- Criterion: "Response is under 100 words"
+- Good response: A 50-word answer → Passes (Y)
+- Poor response: A 200-word answer → Fails (N)
+
+This assertion handles binary requirements where something either meets the criterion or doesn't.
+
+## Required fields
+
+The model-graded-closedqa assertion requires:
+
+- `value` - The criterion that the output must meet
+- Prompt - The original prompt (required for context)
+- Output - The LLM's response to evaluate
+
+## Configuration
+
+### Basic usage
 
 ```yaml
 assert:
   - type: model-graded-closedqa
-    # Specify the criteria that the output must meet:
-    value: Provides a clear answer without hedging or uncertainty
+    value: 'Provides a clear answer without hedging or uncertainty'
 ```
 
-This assertion will use a language model to evaluate whether the output meets the specified criterion, returning a simple yes/no response.
+:::tip
+Use specific, measurable criteria. "Is good" is vague; "Includes at least 3 examples" is clear.
+:::
 
-### How it works
+:::warning
+This assertion returns binary results only. For scored evaluation (0-1 scale), use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) instead.
+:::
 
-Under the hood, `model-graded-closedqa` uses OpenAI's closed QA evaluation prompt to analyze the output. The grader will return:
+## How it works
 
-- `Y` if the output meets the criterion
-- `N` if the output does not meet the criterion
+The model-graded-closedqa checker:
 
-The assertion passes if the response ends with 'Y' and fails if it ends with 'N'.
+1. Takes the criterion and the LLM output
+2. Uses a grading LLM to evaluate if the output meets the criterion
+3. Returns Y (pass) if the output meets the criterion, N (fail) otherwise
 
-### Example Configuration
+Unlike scored assertions, this provides clear pass/fail results without ambiguity.
 
-Here's a complete example showing how to use model-graded-closedqa:
+### Complete example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Evaluate responses against specific binary criteria'
+
 prompts:
-  - 'What is {{topic}}?'
+  - 'Explain {{topic}} to a {{audience}}'
+
 providers:
-  - openai:gpt-4
+  - id: openai:gpt-4.1-mini
+
 tests:
-  - vars:
+  - description: 'Test explanation for beginners'
+    vars:
       topic: quantum computing
+      audience: 5-year-old
     assert:
       - type: model-graded-closedqa
-        value: Explains the concept without using technical jargon
+        value: 'Uses simple language appropriate for a child'
       - type: model-graded-closedqa
-        value: Includes a practical real-world example
+        value: 'Avoids technical jargon completely'
+      - type: model-graded-closedqa
+        value: 'Includes a relatable analogy or example'
+
+  - description: 'Test professional explanation'
+    vars:
+      topic: quantum computing
+      audience: software engineer
+    assert:
+      - type: model-graded-closedqa
+        value: 'Mentions quantum bits (qubits)'
+      - type: model-graded-closedqa
+        value: 'Discusses superposition or entanglement'
 ```
 
 ### Overriding the Grader
@@ -89,6 +130,19 @@ defaultTest:
       Does this response meet the criterion? Answer Y or N.
 ```
 
-# Further reading
+## When to use vs. alternatives
 
-See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
+- **Use `model-graded-closedqa`** for binary criteria (yes/no requirements)
+- **Use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)** for nuanced evaluation with scoring
+- **Use [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality)** for fact-checking against ground truth
+
+## Related assertions
+
+- [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - For scored evaluation (0-1) instead of binary
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - For checking factual accuracy
+- [`contains`](/docs/configuration/expected-outputs/deterministic#contains) - For simple string matching
+
+## Further reading
+
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) overview
+- See [deterministic assertions](/docs/configuration/expected-outputs/deterministic) for non-LLM-based checks
