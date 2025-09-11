@@ -559,7 +559,7 @@ describe('shared redteam provider utilities', () => {
             .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
             .mockResolvedValue({
               someOtherField: 'value',
-            }),
+            } as any),
         };
 
         await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(

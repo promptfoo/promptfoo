@@ -82,7 +82,7 @@ describe('Multi-turn strategies empty response handling', () => {
       for (const value of falsyValues) {
         // Mock getTargetResponse to return falsy value
         mockGetTargetResponse.mockResolvedValue({
-          output: value,
+          output: value as any,
           tokenUsage: { numRequests: 1 },
         });
 
@@ -145,7 +145,7 @@ describe('Multi-turn strategies empty response handling', () => {
       const strategy = new RedteamIterativeProvider({
         injectVar: 'prompt',
         redteamProvider: 'openai:gpt-4',
-        numIterations: 2,
+        numIterations: '2',
       });
       const context = createTestContext(mockTarget);
 
