@@ -42,6 +42,7 @@ import {
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  MCP_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
   OWASP_API_TOP_10_MAPPING,
@@ -340,6 +341,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'Guardrails Evaluation',
       plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
+    },
+    {
+      name: 'MCP',
+      plugins: new Set(MCP_PLUGINS),
     },
     {
       name: 'Harmful',
