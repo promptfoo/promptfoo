@@ -10,13 +10,13 @@ import Link from '@mui/material/Link';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-
 interface SetupProps {
   open: boolean;
   onClose: () => void;
   highlightConfigName?: boolean;
   setHighlightConfigName?: (highlight: boolean) => void;
+  configName: string;
+  setConfigName: (name: string) => void;
 }
 
 export default function Setup({
@@ -24,9 +24,10 @@ export default function Setup({
   onClose,
   highlightConfigName,
   setHighlightConfigName,
+  configName,
+  setConfigName,
 }: SetupProps) {
   const theme = useTheme();
-  const { config, updateConfig } = useRedTeamConfig();
 
   return (
     <Dialog
@@ -58,13 +59,11 @@ export default function Setup({
           fullWidth
           label="Configuration Name"
           placeholder="My Red Team Configuration"
-          value={config.description || ''}
-          onChange={(e) => updateConfig('description', e.target.value)}
+          value={configName}
+          onChange={(e) => setConfigName(e.target.value)}
           autoFocus
-          error={Boolean(highlightConfigName && !config.description)}
-          helperText={
-            highlightConfigName && !config.description ? 'Configuration name is required' : ''
-          }
+          error={Boolean(highlightConfigName && !configName)}
+          helperText={highlightConfigName && !configName ? 'Configuration name is required' : ''}
           onFocus={() => setHighlightConfigName?.(false)}
         />
         <Box
@@ -87,7 +86,7 @@ export default function Setup({
             variant="contained"
             endIcon={<KeyboardArrowRightIcon />}
             onClick={() => {
-              if (!config.description) {
+              if (!configName) {
                 setHighlightConfigName?.(true);
                 return;
               }
@@ -99,7 +98,7 @@ export default function Setup({
               px: 4,
               py: 1,
             }}
-            disabled={!config.description}
+            disabled={!configName}
           >
             Continue
           </Button>

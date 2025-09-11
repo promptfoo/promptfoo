@@ -8,7 +8,10 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import AppIcon from '@mui/icons-material/Apps';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 import DownloadIcon from '@mui/icons-material/Download';
+import EditIcon from '@mui/icons-material/Edit';
 import PluginIcon from '@mui/icons-material/Extension';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import TargetIcon from '@mui/icons-material/GpsFixed';
@@ -23,6 +26,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
@@ -270,16 +274,18 @@ export default function RedTeamSetupPage() {
     return hash ? Number.parseInt(hash, 10) : 0;
   });
 
-  const { markSetupAsSeen } = useSetupState();
+  const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const { config, setFullConfig, resetConfig } = useRedTeamConfig();
-  const [setupModalOpen, setSetupModalOpen] = useState(!config.description);
+  const [configName, setConfigName] = useState('');
+  const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup || !configName);
   const [highlightConfigName, setHighlightConfigName] = useState(false);
+  const [isEditingConfigName, setIsEditingConfigName] = useState(false);
+  const [tempConfigName, setTempConfigName] = useState(configName);
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
-  const [configName, setConfigName] = useState('');
   const toast = useToast();
 
   // Add new state:
@@ -370,13 +376,30 @@ export default function RedTeamSetupPage() {
   };
 
   const closeSetupModal = () => {
+    if (!configName) {
+      setConfigName('New Configuration');
+    }
     setSetupModalOpen(false);
     markSetupAsSeen();
   };
 
+  const handleStartEditingConfigName = () => {
+    setTempConfigName(configName);
+    setIsEditingConfigName(true);
+  };
+
+  const handleSaveConfigName = () => {
+    setConfigName(tempConfigName);
+    setIsEditingConfigName(false);
+  };
+
+  const handleCancelEditingConfigName = () => {
+    setTempConfigName(configName);
+    setIsEditingConfigName(false);
+  };
+
   const handleSaveConfig = async () => {
-    const effectiveConfigName = configName || config.description;
-    if (!effectiveConfigName) {
+    if (!configName) {
       setHighlightConfigName(true);
       setSetupModalOpen(true);
       return;
@@ -406,7 +429,7 @@ export default function RedTeamSetupPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: effectiveConfigName,
+          name: configName,
           type: 'redteam',
           config,
         }),
@@ -421,7 +444,7 @@ export default function RedTeamSetupPage() {
       setSaveDialogOpen(false);
       lastSavedConfig.current = JSON.stringify(config);
       setHasUnsavedChanges(false);
-      setConfigName(effectiveConfigName);
+      setConfigName(configName);
       setConfigDate(data.createdAt);
     } catch (error) {
       console.error('Failed to save configuration', error);
@@ -561,24 +584,23 @@ export default function RedTeamSetupPage() {
     event.target.value = '';
   };
 
+  // Sync tempConfigName with configName
+  useEffect(() => {
+    if (!isEditingConfigName) {
+      setTempConfigName(configName);
+    }
+  }, [configName, isEditingConfigName]);
+
   // Show setup modal if no configuration name is set
   useEffect(() => {
-    if (!config.description && !setupModalOpen) {
+    if (!configName && !setupModalOpen) {
       setSetupModalOpen(true);
     }
-  }, [config.description, setupModalOpen]);
-
-  // Sync configName with config.description
-  useEffect(() => {
-    if (config.description && config.description !== configName) {
-      setConfigName(config.description);
-    }
-  }, [config.description]);
+  }, [configName, setupModalOpen]);
 
   // Replace the existing effect with this one
   useEffect(() => {
-    const effectiveConfigName = configName || config.description;
-    if (!effectiveConfigName) {
+    if (!configName) {
       setHasUnsavedChanges(false);
       return;
     }
@@ -605,7 +627,7 @@ export default function RedTeamSetupPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${configName || config.description || 'redteam-config'}.yaml`;
+    link.download = `${configName || 'redteam-config'}.yaml`;
     link.click();
     URL.revokeObjectURL(url);
     recordEvent('feature_used', {
@@ -623,11 +645,51 @@ export default function RedTeamSetupPage() {
           <OuterSidebarContainer>
             <InnerSidebarContainer>
               <StatusSection>
-                <Typography className="configName">
-                  {configName || config.description
-                    ? `Config: ${configName || config.description}`
-                    : 'New Configuration'}
-                </Typography>
+                {isEditingConfigName ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <TextField
+                      size="small"
+                      value={tempConfigName}
+                      onChange={(e) => setTempConfigName(e.target.value)}
+                      autoFocus
+                      sx={{ width: '155px' }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleSaveConfigName();
+                        } else if (e.key === 'Escape') {
+                          handleCancelEditingConfigName();
+                        }
+                      }}
+                    />
+                    <Box sx={{ display: 'flex', gap: 0.25 }}>
+                      <IconButton
+                        size="small"
+                        onClick={handleSaveConfigName}
+                        disabled={!tempConfigName.trim()}
+                      >
+                        <CheckIcon />
+                      </IconButton>
+                      <IconButton size="small" onClick={handleCancelEditingConfigName}>
+                        <CloseIcon />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography className="configName">
+                      {configName || 'New Configuration'}
+                    </Typography>
+                    {configName && (
+                      <IconButton
+                        size="small"
+                        onClick={handleStartEditingConfigName}
+                        sx={{ color: 'text.secondary' }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Box>
+                )}
                 {hasUnsavedChanges ? (
                   <div className="statusRow">
                     <Typography className="unsavedChanges">
@@ -639,7 +701,7 @@ export default function RedTeamSetupPage() {
                       variant="outlined"
                       color="warning"
                       onClick={handleSaveConfig}
-                      disabled={!(configName || config.description)}
+                      disabled={!configName}
                     >
                       Save now
                     </Button>
@@ -776,6 +838,8 @@ export default function RedTeamSetupPage() {
             onClose={closeSetupModal}
             highlightConfigName={highlightConfigName}
             setHighlightConfigName={setHighlightConfigName}
+            configName={configName}
+            setConfigName={setConfigName}
           />
         ) : null}
         <PylonChat />
@@ -810,7 +874,7 @@ export default function RedTeamSetupPage() {
                   variant="contained"
                   startIcon={<SaveIcon />}
                   onClick={handleSaveConfig}
-                  disabled={!(configName || config.description)}
+                  disabled={!configName}
                   fullWidth
                 >
                   Save

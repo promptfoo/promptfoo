@@ -55,7 +55,7 @@ export const DEFAULT_HTTP_TARGET: ProviderOptions = {
 };
 
 const defaultConfig: Config = {
-  description: '',
+  description: 'My Red Team Configuration',
   prompts: ['{{prompt}}'],
   target: DEFAULT_HTTP_TARGET,
   plugins: [],
