@@ -45,6 +45,8 @@ import ToolsDialog from './ToolsDialog';
 import './Report.css';
 
 import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import { categoryAliases, subCategoryDescriptions } from '@promptfoo/redteam/constants';
+import { type PluginCategoryStatsByPluginId } from './types';
 
 const App: React.FC = () => {
   const navigate = useNavigate();
@@ -195,37 +197,53 @@ const App: React.FC = () => {
       return {};
     }
 
-    return evalData.results.results.reduce(
-      (acc, row) => {
-        const pluginId = getPluginIdFromResult(row);
-        if (!pluginId) {
-          return acc;
-        }
+    return evalData.results.results.reduce((acc, row) => {
+      const pluginId = getPluginIdFromResult(row);
 
-        // Exclude results with errors from statistics
-        if (row.error && row.failureReason === ResultFailureReason.ERROR) {
-          return acc;
-        }
-
-        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
-        acc[pluginId].total++;
-
-        // Check if moderation tests failed but other tests passed - this indicates content was
-        // flagged by moderation but would have passed otherwise
-        const moderationPassed = row.gradingResult?.componentResults?.some(
-          (result) => result.assertion?.type === 'moderation' && !result.pass,
-        );
-
-        if (row.success) {
-          acc[pluginId].pass++;
-          acc[pluginId].passWithFilter++; // Both regular and filtered pass counts increment
-        } else if (moderationPassed) {
-          acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
-        }
+      if (!pluginId) {
         return acc;
-      },
-      {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
-    );
+      }
+
+      // Exclude results with errors from statistics
+      if (row.error && row.failureReason === ResultFailureReason.ERROR) {
+        return acc;
+      }
+
+      // Determine the description for the plugin based on its type
+      // TODO(Will): Ensure severity is set; see https://github.com/promptfoo/promptfoo/pull/5539.
+      let type = '';
+      let description = '';
+      if (pluginId.startsWith('PolicyViolation:')) {
+        type = row.metadata?.policyId
+          ? `Policy ${row.metadata?.policyId.split('-').pop()} Violation`
+          : 'Policy Violation';
+        description = `${row.metadata?.policy}`;
+      } else {
+        type = categoryAliases[pluginId as keyof typeof categoryAliases] || pluginId;
+        description =
+          subCategoryDescriptions[pluginId as keyof typeof subCategoryDescriptions] ?? '';
+      }
+
+      acc[pluginId] = acc[pluginId] || {
+        stats: { pass: 0, total: 0, passWithFilter: 0 },
+        metadata: { type, description },
+      };
+      acc[pluginId].stats.total++;
+
+      // Check if moderation tests failed but other tests passed - this indicates content was
+      // flagged by moderation but would have passed otherwise
+      const moderationPassed = row.gradingResult?.componentResults?.some(
+        (result) => result.assertion?.type === 'moderation' && !result.pass,
+      );
+
+      if (row.success) {
+        acc[pluginId].stats.pass++;
+        acc[pluginId].stats.passWithFilter++; // Both regular and filtered pass counts increment
+      } else if (moderationPassed) {
+        acc[pluginId].stats.passWithFilter++; // Only filtered pass count increments (partial success under moderation)
+      }
+      return acc;
+    }, {} as PluginCategoryStatsByPluginId);
   }, [evalData]);
 
   const strategyStats = React.useMemo(() => {

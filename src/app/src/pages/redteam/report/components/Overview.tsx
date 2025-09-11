@@ -16,8 +16,10 @@ import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
 
+import { type PluginCategoryStatsByPluginId } from './types';
+
 interface OverviewProps {
-  categoryStats: Record<PluginType, { pass: number; total: number }>;
+  categoryStats: PluginCategoryStatsByPluginId;
   plugins: RedteamPluginObject[];
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
@@ -69,7 +71,7 @@ const Overview: React.FC<OverviewProps> = ({
   const severityCounts = Object.values(Severity).reduce(
     (acc, severity) => {
       acc[severity] = Object.keys(categoryStats).reduce((count, category) => {
-        const stats = categoryStats[category as PluginType];
+        const { stats } = categoryStats[category as PluginType];
         const passRate = stats.pass / stats.total;
         if (
           getRiskCategorySeverityMap(plugins)[category as PluginType] === severity &&

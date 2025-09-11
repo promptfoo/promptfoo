@@ -18,21 +18,17 @@ import {
   GridToolbarDensitySelector,
   GridToolbarFilterButton,
 } from '@mui/x-data-grid';
-import {
-  categoryAliases,
-  displayNameOverrides,
-  type Plugin,
-  Severity,
-  subCategoryDescriptions,
-} from '@promptfoo/redteam/constants';
+import { displayNameOverrides, type Plugin, Severity } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
+import { type PluginCategoryStatsByPluginId } from './types';
+
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  categoryStats: PluginCategoryStatsByPluginId;
   plugins: RedteamPluginObject[];
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
   vulnerabilitiesDataGridFilterModel: GridFilterModel;
@@ -66,13 +62,12 @@ const TestSuites: React.FC<TestSuitesProps> = ({
 
   const rows = React.useMemo(() => {
     return Object.entries(categoryStats)
-      .filter(([_, stats]) => stats.total > 0)
-      .map(([pluginName, stats]) => ({
+      .filter(([_, { stats }]) => stats.total > 0)
+      .map(([pluginName, { stats, metadata }]) => ({
         id: pluginName,
         pluginName,
-        type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
-        description:
-          subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
+        type: metadata.type,
+        description: metadata.description,
         severity: getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown',
         passRate: (stats.pass / stats.total) * 100,
         passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
@@ -81,6 +76,8 @@ const TestSuites: React.FC<TestSuitesProps> = ({
         successfulAttacks: stats.total - stats.pass,
       }));
   }, [categoryStats, plugins]);
+
+  console.log('rows', rows);
 
   const exportToCSV = React.useCallback(() => {
     // Format data for CSV

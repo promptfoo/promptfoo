@@ -22,8 +22,10 @@ import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
 import './FrameworkCompliance.css';
 
+import { type PluginCategoryStatsByPluginId } from './types';
+
 interface FrameworkComplianceProps {
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  categoryStats: PluginCategoryStatsByPluginId;
   strategyStats: Record<string, { pass: number; total: number }>;
 }
 
@@ -60,7 +62,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
 
   const getPluginPassRate = React.useCallback(
     (plugin: string): { pass: number; total: number; rate: number } => {
-      const stats = categoryStats[plugin] || { pass: 0, total: 0 };
+      const { stats } = categoryStats[plugin] || { pass: 0, total: 0 };
       return {
         pass: stats.pass,
         total: stats.total,
@@ -130,14 +132,14 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
 
     // Filter for plugins that have test data
     const pluginsWithData = Array.from(allFrameworkPlugins).filter(
-      (plugin) => categoryStats[plugin] && categoryStats[plugin].total > 0,
+      (plugin) => categoryStats[plugin] && categoryStats[plugin].stats.total > 0,
     );
 
     // Count compliant plugins and calculate actual attack success rate
     let totalTests = 0;
     let totalFailedTests = 0;
     const compliantPlugins = pluginsWithData.filter((plugin) => {
-      const stats = categoryStats[plugin];
+      const { stats } = categoryStats[plugin];
       totalTests += stats.total;
       totalFailedTests += stats.total - stats.pass;
       return stats.pass / stats.total >= pluginPassRateThreshold;

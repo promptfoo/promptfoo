@@ -31,7 +31,11 @@ export function getStrategyIdFromTest(test: {
 }
 
 export function getPluginIdFromResult(result: EvaluateResult): string | null {
-  if (result.metadata?.pluginId) {
+  if (
+    result.metadata?.pluginId &&
+    // Policy plugins are handled separately
+    result.metadata.pluginId !== 'policy'
+  ) {
     return result.metadata.pluginId as string;
   }
 
@@ -46,6 +50,11 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
   for (const metric of metricNames) {
     if (!metric) {
       continue;
+    }
+
+    // Use the policy-specific metric name directly for policy violations
+    if (metric.startsWith(`PolicyViolation:`)) {
+      return metric;
     }
 
     const metricParts = metric.split('/');
