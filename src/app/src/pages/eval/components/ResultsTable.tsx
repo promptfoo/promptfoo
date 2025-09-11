@@ -50,6 +50,7 @@ import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { tryDecodeBase64, tryDecodeHex } from '@app/utils/encoding';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -641,38 +642,7 @@ function ResultsTable({
                   <TruncatedText text={value} maxLength={maxTextLength} />
                 );
 
-                // Helper decode functions
-                const tryDecodeBase64 = (str: string): string | null => {
-                  try {
-                    // Require typical base64 charset and length
-                    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(str) || str.length < 8) {
-                      return null;
-                    }
-                    // atob may throw if invalid
-                    const decoded = typeof atob !== 'undefined' ? atob(str) : Buffer.from(str, 'base64').toString('binary');
-                    // Heuristic: ensure result has printable characters
-                    const printable = decoded.replace(/[\x00-\x08\x0E-\x1F\x7F]/g, '');
-                    return printable.length > 0 ? decoded : null;
-                  } catch {
-                    return null;
-                  }
-                };
-                const tryDecodeHex = (str: string): string | null => {
-                  // Matches space-separated hex bytes like "68 65 6C 6C 6F"
-                  if (!/^(?:[0-9A-Fa-f]{2}(?:\s|$))+$/u.test(str)) {
-                    return null;
-                  }
-                  try {
-                    const bytes = str
-                      .trim()
-                      .split(/\s+/)
-                      .filter(Boolean)
-                      .map((b) => parseInt(b, 16));
-                    return String.fromCharCode(...bytes);
-                  } catch {
-                    return null;
-                  }
-                };
+                // Helper decode functions are imported from @app/utils/encoding
 
                 // Determine if we should show original text (decoded) even without redteamFinalPrompt
                 const testMetadata = (row as any)?.test?.metadata || {};
