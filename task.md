@@ -225,7 +225,7 @@ Current Python providers in promptfoo spawn a new Python process for each evalua
 
 ```yaml
 providers:
-  - id: 'file://provider.py'  # Persistent mode enabled automatically!
+  - id: 'file://provider.py' # Persistent mode enabled automatically!
     config:
       # Optional: Only specify if you need a custom Python executable
       pythonExecutable: /path/to/python
@@ -1187,7 +1187,7 @@ Configure how synchronous functions are executed:
 ```yaml
 providers:
   - id: my-python-provider
-    type: python  # Persistent mode enabled by default
+    type: python # Persistent mode enabled by default
     # No configuration needed!
 ```
 
@@ -1212,12 +1212,13 @@ Persistent Python providers work out of the box with **zero configuration**:
 ```yaml
 providers:
   - id: my-provider
-    type: python  # Persistent mode enabled by default!
+    type: python # Persistent mode enabled by default!
     config:
       pythonExecutable: /custom/python # Custom Python path (optional)
 ```
 
 **Advanced options** (for fine-tuning, rarely needed):
+
 - **Idle timeout**: 5 minutes (automatically shuts down idle processes)
 - **Max restarts**: 3 attempts (with exponential backoff)
 - **Error recovery**: Automatic fallback to traditional execution

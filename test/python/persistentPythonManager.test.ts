@@ -85,9 +85,13 @@ describe('PersistentPythonManager', () => {
 
   describe('configuration options', () => {
     it('should respect custom Python executable', () => {
-      const customManager = new PersistentPythonManager('/test/script.py', 'custom-python-provider', {
-        pythonExecutable: '/custom/python',
-      });
+      const customManager = new PersistentPythonManager(
+        '/test/script.py',
+        'custom-python-provider',
+        {
+          pythonExecutable: '/custom/python',
+        },
+      );
 
       expect(customManager).toBeDefined();
     });

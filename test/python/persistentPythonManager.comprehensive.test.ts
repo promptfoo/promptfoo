@@ -22,7 +22,10 @@ describe('PersistentPythonManager - Comprehensive Logic Tests', () => {
 
   describe('Configuration', () => {
     it('should apply default configuration correctly', () => {
-      const defaultManager = new PersistentPythonManager('/test/script.py', 'default-config-provider');
+      const defaultManager = new PersistentPythonManager(
+        '/test/script.py',
+        'default-config-provider',
+      );
       expect(defaultManager.stats).toEqual({
         isHealthy: false,
         isInitialized: false,
@@ -33,12 +36,16 @@ describe('PersistentPythonManager - Comprehensive Logic Tests', () => {
     });
 
     it('should apply custom configuration', () => {
-      const customManager = new PersistentPythonManager('/test/script.py', 'custom-config-provider', {
-        pythonExecutable: '/custom/python',
-        persistentIdleTimeout: 60000,
-        maxRestarts: 5,
-        concurrency: 'serial',
-      });
+      const customManager = new PersistentPythonManager(
+        '/test/script.py',
+        'custom-config-provider',
+        {
+          pythonExecutable: '/custom/python',
+          persistentIdleTimeout: 60000,
+          maxRestarts: 5,
+          concurrency: 'serial',
+        },
+      );
 
       expect(customManager).toBeDefined();
       customManager.shutdown();
