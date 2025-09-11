@@ -500,11 +500,7 @@ export default function Review({
             >
               <CheckIcon />
             </IconButton>
-            <IconButton
-              onClick={handleCancelEditingDescription}
-              color="default"
-              size="small"
-            >
+            <IconButton onClick={handleCancelEditingDescription} color="default" size="small">
               <CloseIcon />
             </IconButton>
           </Box>

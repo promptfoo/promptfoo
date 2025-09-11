@@ -624,7 +624,9 @@ export default function RedTeamSetupPage() {
             <InnerSidebarContainer>
               <StatusSection>
                 <Typography className="configName">
-                  {(configName || config.description) ? `Config: ${configName || config.description}` : 'New Configuration'}
+                  {configName || config.description
+                    ? `Config: ${configName || config.description}`
+                    : 'New Configuration'}
                 </Typography>
                 {hasUnsavedChanges ? (
                   <div className="statusRow">
