@@ -5,19 +5,28 @@ import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import { useTheme } from '@mui/material/styles';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 interface SetupProps {
   open: boolean;
   onClose: () => void;
+  highlightConfigName?: boolean;
+  setHighlightConfigName?: (highlight: boolean) => void;
 }
 
-export default function Setup({ open, onClose }: SetupProps) {
+export default function Setup({
+  open,
+  onClose,
+  highlightConfigName,
+  setHighlightConfigName,
+}: SetupProps) {
   const theme = useTheme();
+  const { config, updateConfig } = useRedTeamConfig();
 
   return (
     <Dialog
@@ -29,7 +38,7 @@ export default function Setup({ open, onClose }: SetupProps) {
       fullWidth
     >
       <DialogTitle id="setup-dialog-title">
-        LLM Red Team Configuration Setup
+        Name Your Configuration
         <IconButton
           onClick={onClose}
           sx={{
@@ -42,59 +51,59 @@ export default function Setup({ open, onClose }: SetupProps) {
         </IconButton>
       </DialogTitle>
       <DialogContent dividers>
-        <Typography variant="body1">
-          You are about to set up several components that define how your AI system will be tested:
+        <Typography variant="body1" sx={{ mb: 2 }}>
+          Enter a name for this red team configuration.
         </Typography>
-        <ul>
-          <li>
-            <strong>Application:</strong> Metadata used to tailor the adversarial inputs to your
-            application.
-          </li>
-          <li>
-            <strong>Targets:</strong> The specific endpoints, models, or components of your AI
-            system that will be tested.
-          </li>
-          <li>
-            <strong>Plugins:</strong> Modules that generate diverse adversarial inputs, simulating
-            various types of attacks or edge cases.
-          </li>
-          <li>
-            <strong>Strategies:</strong> Define how adversarial inputs are delivered to your system,
-            including techniques like jailbreaking and prompt injection.
-          </li>
-        </ul>
-        <Grid item xs={12}>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mt: 4,
-            }}
+        <TextField
+          fullWidth
+          label="Configuration Name"
+          placeholder="My Red Team Configuration"
+          value={config.description || ''}
+          onChange={(e) => updateConfig('description', e.target.value)}
+          autoFocus
+          error={Boolean(highlightConfigName && !config.description)}
+          helperText={
+            highlightConfigName && !config.description ? 'Configuration name is required' : ''
+          }
+          onFocus={() => setHighlightConfigName?.(false)}
+        />
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mt: 4,
+          }}
+        >
+          <Link
+            href="https://www.promptfoo.dev/docs/red-team/"
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{ textDecoration: 'none', color: theme.palette.primary.main }}
           >
-            <Link
-              href="https://www.promptfoo.dev/docs/red-team/"
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{ textDecoration: 'none', color: theme.palette.primary.main }}
-            >
-              Learn more about LLM red teaming
-            </Link>
-            <Button
-              variant="contained"
-              endIcon={<KeyboardArrowRightIcon />}
-              onClick={onClose}
-              sx={{
-                backgroundColor: theme.palette.primary.main,
-                '&:hover': { backgroundColor: theme.palette.primary.dark },
-                px: 4,
-                py: 1,
-              }}
-            >
-              Get Started
-            </Button>
-          </Box>
-        </Grid>
+            Learn more about LLM red teaming
+          </Link>
+          <Button
+            variant="contained"
+            endIcon={<KeyboardArrowRightIcon />}
+            onClick={() => {
+              if (!config.description) {
+                setHighlightConfigName?.(true);
+                return;
+              }
+              onClose();
+            }}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              '&:hover': { backgroundColor: theme.palette.primary.dark },
+              px: 4,
+              py: 1,
+            }}
+            disabled={!config.description}
+          >
+            Continue
+          </Button>
+        </Box>
       </DialogContent>
     </Dialog>
   );

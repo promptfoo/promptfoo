@@ -272,6 +272,7 @@ export default function RedTeamSetupPage() {
 
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
+  const [highlightConfigName, setHighlightConfigName] = useState(false);
   const { config, setFullConfig, resetConfig } = useRedTeamConfig();
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -374,6 +375,13 @@ export default function RedTeamSetupPage() {
   };
 
   const handleSaveConfig = async () => {
+    const effectiveConfigName = configName || config.description;
+    if (!effectiveConfigName) {
+      setHighlightConfigName(true);
+      setSetupModalOpen(true);
+      return;
+    }
+
     recordEvent('feature_used', {
       feature: 'redteam_config_save',
       numPlugins: config.plugins.length,
@@ -398,7 +406,7 @@ export default function RedTeamSetupPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: configName,
+          name: effectiveConfigName,
           type: 'redteam',
           config,
         }),
@@ -413,7 +421,7 @@ export default function RedTeamSetupPage() {
       setSaveDialogOpen(false);
       lastSavedConfig.current = JSON.stringify(config);
       setHasUnsavedChanges(false);
-      setConfigName(configName);
+      setConfigName(effectiveConfigName);
       setConfigDate(data.createdAt);
     } catch (error) {
       console.error('Failed to save configuration', error);
@@ -553,9 +561,17 @@ export default function RedTeamSetupPage() {
     event.target.value = '';
   };
 
+  // Sync configName with config.description
+  useEffect(() => {
+    if (config.description && config.description !== configName) {
+      setConfigName(config.description);
+    }
+  }, [config.description]);
+
   // Replace the existing effect with this one
   useEffect(() => {
-    if (!configName) {
+    const effectiveConfigName = configName || config.description;
+    if (!effectiveConfigName) {
       setHasUnsavedChanges(false);
       return;
     }
@@ -581,7 +597,7 @@ export default function RedTeamSetupPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${configName || 'redteam-config'}.yaml`;
+    link.download = `${configName || config.description || 'redteam-config'}.yaml`;
     link.click();
     URL.revokeObjectURL(url);
     recordEvent('feature_used', {
@@ -600,7 +616,7 @@ export default function RedTeamSetupPage() {
             <InnerSidebarContainer>
               <StatusSection>
                 <Typography className="configName">
-                  {configName ? `Config: ${configName}` : 'New Configuration'}
+                  {(configName || config.description) ? `Config: ${configName || config.description}` : 'New Configuration'}
                 </Typography>
                 {hasUnsavedChanges ? (
                   <div className="statusRow">
@@ -613,7 +629,7 @@ export default function RedTeamSetupPage() {
                       variant="outlined"
                       color="warning"
                       onClick={handleSaveConfig}
-                      disabled={!configName}
+                      disabled={!(configName || config.description)}
                     >
                       Save now
                     </Button>
@@ -744,7 +760,14 @@ export default function RedTeamSetupPage() {
           </TabContent>
         </Content>
 
-        {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
+        {setupModalOpen ? (
+          <Setup
+            open={setupModalOpen}
+            onClose={closeSetupModal}
+            highlightConfigName={highlightConfigName}
+            setHighlightConfigName={setHighlightConfigName}
+          />
+        ) : null}
         <PylonChat />
         {saveDialogOpen ? (
           <Dialog
@@ -777,7 +800,7 @@ export default function RedTeamSetupPage() {
                   variant="contained"
                   startIcon={<SaveIcon />}
                   onClick={handleSaveConfig}
-                  disabled={!configName}
+                  disabled={!(configName || config.description)}
                   fullWidth
                 >
                   Save
