@@ -695,7 +695,10 @@ export class CrescendoProvider implements ApiProvider {
     if (targetResponse.error) {
       throw new Error(`[Crescendo] Target returned an error: ${targetResponse.error}`);
     }
-    invariant(Object.prototype.hasOwnProperty.call(targetResponse, 'output'), '[Crescendo] Target did not return an output property');
+    invariant(
+      Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
+      '[Crescendo] Target did not return an output property',
+    );
     logger.debug(`[Crescendo] Received response from target: ${targetResponse.output}`);
 
     this.memory.addMessage(this.targetConversationId, {
