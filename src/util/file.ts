@@ -6,6 +6,8 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
+import { parseFileUrl } from './functions/loadFunction';
+import { isJavascriptFile } from './fileExtensions';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
@@ -59,15 +61,27 @@ export function maybeLoadFromExternalFile(filePath: string | object | Function |
   // Render the file path using Nunjucks
   const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
 
-  const pathWithoutProtocol = renderedFilePath.slice('file://'.length);
-  const resolvedPath = path.resolve(cliState.basePath || '', pathWithoutProtocol);
+  // Parse the file URL to extract file path and function name using existing utility
+  // This handles colon splitting correctly, including Windows drive letters (C:\path)
+  const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
+
+  // For Python/JS files with function names, return the original string unchanged
+  // to allow the assertion system to handle function loading at execution time.
+  // This prevents premature file existence checks that would fail for function references.
+  if (functionName && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+    return renderedFilePath;
+  }
+
+  // For non-Python/JS files, use the original path (ignore potential function name)
+  const pathToUse =
+    functionName && !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))
+      ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
+      : cleanPath;
+
+  const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
   // Check if the path contains glob patterns
-  if (
-    pathWithoutProtocol.includes('*') ||
-    pathWithoutProtocol.includes('?') ||
-    pathWithoutProtocol.includes('[')
-  ) {
+  if (pathToUse.includes('*') || pathToUse.includes('?') || pathToUse.includes('[')) {
     // Use globSync to expand the pattern
     const matchedFiles = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
