@@ -1452,6 +1452,34 @@ describe('loadTestsFromGlob', () => {
     expect(result[0].vars).toEqual(resolvedContent[0].vars);
     expect(result[0].assert).toEqual(resolvedContent[0].assert);
   });
+
+  it('should preserve Python assertion file references when loading YAML tests', async () => {
+    // This test verifies the fix for issue #5519
+    const yamlContentWithPythonAssertion = [
+      {
+        vars: { name: 'Should PASS' },
+        assert: [
+          {
+            type: 'python',
+            value: 'file://good_assertion.py',
+          },
+        ],
+      },
+    ];
+
+    jest.mocked(globSync).mockReturnValue(['tests.yaml']);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlContentWithPythonAssertion));
+
+    // Mock maybeLoadConfigFromExternalFile to preserve Python files in assertion contexts
+    const mockMaybeLoadConfig =
+      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+    mockMaybeLoadConfig.mockReturnValue(yamlContentWithPythonAssertion);
+
+    const result = await loadTestsFromGlob('tests.yaml');
+
+    expect(mockMaybeLoadConfig).toHaveBeenCalledWith(yamlContentWithPythonAssertion);
+    expect((result[0].assert![0] as any).value).toBe('file://good_assertion.py'); // Should remain as file reference
+  });
 });
 
 describe('CSV parsing with JSON fields', () => {

@@ -47,6 +47,7 @@ import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
+import type { RedteamRunOptions } from '@promptfoo/types';
 import { getEstimatedDuration } from './strategies/utils';
 import type { RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job } from '@promptfoo/types';
@@ -998,7 +999,7 @@ export default function Review({
                       delay: config.target.config.delay,
                     }}
                     updateConfig={updateConfig}
-                    updateRunOption={(key, value) => {
+                    updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
                       if (key === 'delay') {
                         updateConfig('target', {
                           ...config.target,

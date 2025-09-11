@@ -298,6 +298,13 @@ export const severityDisplayNames: Record<Severity, string> = {
   [Severity.Low]: 'Low',
 };
 
+export const severityRiskScores: Record<Severity, number> = {
+  [Severity.Critical]: 8.0,
+  [Severity.High]: 6.0,
+  [Severity.Medium]: 4.0,
+  [Severity.Low]: 2.0,
+};
+
 /*
  * Default severity values for each plugin.
  * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
