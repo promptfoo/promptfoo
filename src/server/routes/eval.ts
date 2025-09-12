@@ -277,9 +277,9 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 });
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
-  
   try {
+    const { id } = ApiSchemas.Eval.MetadataKeys.Params.parse(req.params);
+    
     const eval_ = await Eval.findById(id);
     if (!eval_) {
       res.status(404).json({ error: 'Eval not found' });
@@ -294,8 +294,15 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
       'Vary': 'Authorization', // Cache per user if auth is involved
     });
     
-    res.json({ keys });
+    const response = ApiSchemas.Eval.MetadataKeys.Response.parse({ keys });
+    res.json(response);
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).toString() });
+      return;
+    }
+    
+    const { id } = req.params;
     logger.error(`Error fetching metadata keys for eval ${id}: ${error instanceof Error ? error.message : String(error)}`);
     res.status(500).json({ error: 'Failed to fetch metadata keys' });
   }

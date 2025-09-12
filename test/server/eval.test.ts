@@ -232,6 +232,7 @@ describe('eval routes', () => {
       expect(res.body).toHaveProperty('keys');
       expect(res.body.keys).toEqual(expect.arrayContaining(['key1', 'key2', 'key3']));
       expect(res.headers['cache-control']).toContain('private, max-age=1800');
+      expect(res.headers['vary']).toContain('Authorization');
     });
 
     it('should return 404 for non-existent eval', async () => {
