@@ -71,6 +71,40 @@ describe('useTableStore', () => {
     vi.clearAllMocks();
   });
 
+  describe('extractUniqueStrategyIds', () => {
+    it('should handle strategies with special characters and long IDs', () => {
+      const strategies = [
+        'strategy-with-!@#$%^&*()_+=-`~[]\{}|;\':",./<>?characters',
+        's'.repeat(200),
+        { id: 'another-strategy-with-!@#$%^&*()_+=-`~[]\{}|;\':",./<>?characters' },
+        { id: 's'.repeat(200) },
+      ];
+
+      useTableStore.getState().setTableFromResultsFile({
+        version: 4,
+        config: {
+          redteam: {
+            strategies: strategies,
+          },
+        },
+        results: {
+          results: [],
+        },
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      } as any);
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual([
+        'strategy-with-!@#$%^&*()_+=-`~[]{}|;\':",./<>?characters',
+        's'.repeat(200),
+        'another-strategy-with-!@#$%^&*()_+=-`~[]{}|;\':",./<>?characters',
+        'basic',
+      ]);
+    });
+  });
+
   describe('filters', () => {
     it('should add a new filter to `filters.values` and increment `filters.appliedCount` when `addFilter` is called with a filter that has a value', () => {
       const mockFilterId = 'mock-uuid-1';
