@@ -5,12 +5,12 @@ prompts:
   - 'Output the color of {{item}}'
 
 providers:
-  - 'anthropic:claude-3-5-haiku-20241022'
+  - 'anthropic:claude-3-5-haiku-latest'
 
 defaultTest:
   options:
     provider:
-      embedding: 'voyage:voyage-2'
+      embedding: 'voyage:voyage-3-large'
 
 tests:
   - vars:

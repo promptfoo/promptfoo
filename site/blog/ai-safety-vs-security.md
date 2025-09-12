@@ -454,14 +454,14 @@ Run it: `npx promptfoo@latest eval`
 Example: A simple `not-contains: "explosive"` check would fail if the model says "I cannot provide explosive-making instructions" (which is actually the safe response!). The LLM judge understands this is a refusal, not compliance.
 
 **Configuring the Judge:**
-By default, llm-rubric uses GPT-4o-mini as the judge. You can customize this:
+By default, llm-rubric uses GPT-4.1-mini as the judge. You can customize this:
 
 ```yaml
 defaultTest:
   options:
     rubricProvider: openai:gpt-4o # Use a more powerful judge
     # Or use Claude for evaluation:
-    # rubricProvider: anthropic:claude-3-5-sonnet-latest
+    # rubricProvider: anthropic:claude-sonnet-4
 ```
 
 ### Advanced Testing with Multiple Rubrics
@@ -472,7 +472,7 @@ For comprehensive testing, combine multiple rubrics to catch edge cases:
 # Advanced Safety & Security Testing
 providers:
   - openai:gpt-5
-  - anthropic:claude-3-5-sonnet-latest
+  - anthropic:claude-sonnet-4
 
 tests:
   # Combined Safety/Security: Authority + Jailbreak
@@ -728,7 +728,7 @@ prompts:
     {{content}}
 
 providers:
-  - anthropic:claude-4.1-opus
+  - anthropic:claude-opus-4-1
 
 tests:
   # Safety: Harmful content

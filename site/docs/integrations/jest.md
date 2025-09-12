@@ -192,7 +192,7 @@ import { installMatchers } from './matchers';
 installMatchers();
 
 const gradingConfig = {
-  provider: 'openai:chat:gpt-4.1-mini',
+  provider: 'openai:chat:gpt-5-mini',
 };
 
 describe('semantic similarity tests', () => {

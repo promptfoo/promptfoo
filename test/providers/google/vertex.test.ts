@@ -1208,7 +1208,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
     jest.spyOn(fs, 'readFileSync').mockReturnValue(mockSystemInstruction);
 
-    provider = new VertexChatProvider('gemini-1.5-flash', {
+    provider = new VertexChatProvider('gemini-2.5-flash', {
       config: {
         systemInstruction: 'file://system-instruction.txt',
       },

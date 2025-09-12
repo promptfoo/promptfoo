@@ -38,7 +38,7 @@ Specify the Claude 3.7 and GPT-4.1 model IDs under `providers`:
 ```yaml
 providers:
   - anthropic:messages:claude-3-7-sonnet-20250219
-  - openai:chat:gpt-4.1
+  - openai:chat:gpt-5
 ```
 
 You can optionally set parameters like temperature and max tokens for each model:
@@ -49,7 +49,7 @@ providers:
     config:
       temperature: 0.3
       max_tokens: 1024
-  - id: openai:chat:gpt-4.1
+  - id: openai:chat:gpt-5
     config:
       temperature: 0.3
       max_tokens: 1024

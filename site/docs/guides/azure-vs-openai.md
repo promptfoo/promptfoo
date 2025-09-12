@@ -46,8 +46,8 @@ Edit your `promptfooconfig.yaml` to include both OpenAI and Azure OpenAI as prov
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1-mini
-  - id: azure:chat:my-gpt-4.1-mini-deployment
+  - id: openai:chat:gpt-5-mini
+  - id: azure:chat:my-gpt-5-mini-deployment
     config:
       apiHost: myazurehost.openai.azure.com
 ```
@@ -60,11 +60,11 @@ For each provider, you may configure additional parameters such as `temperature`
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5-mini
     config:
       temperature: 0
       max_tokens: 128
-  - id: azure:chat:my-gpt-4.1-mini-deployment
+  - id: azure:chat:my-gpt-5-mini-deployment
     config:
       apiHost: your_azure_openai_host
       temperature: 0

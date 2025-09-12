@@ -142,7 +142,7 @@ Compare different Gemini models:
 providers:
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
-  - google:gemini-1.5-flash
+  - google:gemini-2.5-flash
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -292,9 +292,9 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-lite` - Cost-efficient version of 2.0 Flash with 1M token context
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
-- `google:gemini-1.5-flash` - Fast and versatile multimodal model
-- `google:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
-- `google:gemini-1.5-pro` - Best performing model for complex reasoning tasks
+- `google:gemini-2.5-flash` - Fast and versatile multimodal model
+- `google:gemini-2.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
+- `google:gemini-2.5-pro` - Best performing model for complex reasoning tasks
 - `google:gemini-pro` - General purpose text and chat
 - `google:gemini-pro-vision` - Multimodal understanding (text + vision)
 
@@ -366,7 +366,7 @@ The provider supports various configuration options that can be used to customiz
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       temperature: 0.7 # Controls randomness (0.0 to 1.0)
       maxOutputTokens: 2048 # Maximum length of response
@@ -396,7 +396,7 @@ You can also specify a response schema for structured output:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         response_mime_type: application/json
@@ -469,7 +469,7 @@ providers:
       temperature: 0.7
 
   # For older Gemini versions - preserve 'assistant' role
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       useAssistantRole: true # Preserves 'assistant' role without mapping
       temperature: 0.7
@@ -602,7 +602,7 @@ Enable your model to interact with external systems through defined functions:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       tools:
         function_declarations:
@@ -633,7 +633,7 @@ You can constrain the model to output structured JSON responses in two ways:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         response_mime_type: 'application/json'
@@ -655,7 +655,7 @@ providers:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       # Can be inline schema or file path
       responseSchema: 'file://path/to/schema.json'

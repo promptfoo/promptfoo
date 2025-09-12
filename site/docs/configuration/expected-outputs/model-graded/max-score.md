@@ -34,7 +34,7 @@ prompts:
   - 'Write a well-documented function to {{task}}'
 
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 
 tests:
   - vars:
@@ -127,7 +127,7 @@ prompts:
   - 'Write a documented Python function to {{task}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-5-mini
 
 tests:
   - vars:

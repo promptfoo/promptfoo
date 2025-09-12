@@ -116,7 +116,7 @@ prompts:
   - 'Act as {{act}}. {{prompt}}'
 
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 
 tests: huggingface://datasets/fka/awesome-chatgpt-prompts?split=train
 ```
@@ -130,7 +130,7 @@ prompts:
   - 'Question: {{question}}\nContext: {{context}}\nAnswer:'
 
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 
 tests: huggingface://datasets/rajpurkar/squad?split=validation&limit=100
 
@@ -140,11 +140,11 @@ env:
 
 ## Example projects
 
-| Example                                                                                                    | Use Case          | Key Features         |
-| ---------------------------------------------------------------------------------------------------------- | ----------------- | -------------------- |
-| [Basic Setup](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-dataset)               | Simple evaluation | Default parameters   |
-| [MMLU Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-gpt-4.1-vs-gpt-4o-mmlu) | Query parameters  | Split, subset, limit |
-| [Red Team Safety](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-beavertails)           | Safety testing    | BeaverTails dataset  |
+| Example                                                                                                  | Use Case          | Key Features         |
+| -------------------------------------------------------------------------------------------------------- | ----------------- | -------------------- |
+| [Basic Setup](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-dataset)             | Simple evaluation | Default parameters   |
+| [MMLU Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-gpt-5-vs-gpt-4o-mmlu) | Query parameters  | Split, subset, limit |
+| [Red Team Safety](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-beavertails)         | Safety testing    | BeaverTails dataset  |
 
 ## Troubleshooting
 

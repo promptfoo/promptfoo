@@ -55,7 +55,7 @@ const result = await this.executeTool(toolCall); // Our JS code calls the MCP se
 // in the ReAct Agent loop - https://github.com/promptfoo/mcp-agent-provider/blob/main/src/react-agent.js#L104
 
 const completion = await this.openai.chat.completions.create({
-  model: 'gpt-4.1',
+  model: 'gpt-5',
   messages: messages,
   tools: tools.length > 0 ? tools : undefined,
   tool_choice: tools.length > 0 ? 'auto' : undefined,

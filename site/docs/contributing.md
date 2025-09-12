@@ -224,7 +224,7 @@ Here's a simple example:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openai:chat:gpt-4.1
+  - id: openai:chat:gpt-5
 prompts:
   - Translate "{{input}}" to {{language}}
 tests:

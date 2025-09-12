@@ -1,11 +1,11 @@
 ---
 sidebar_label: Choosing the best GPT model
-description: Compare GPT-4o vs GPT-4o-mini performance on your custom data with automated benchmarks to evaluate reasoning capabilities, costs, and response latency metrics
+description: Compare GPT-4o vs GPT-4.1-mini performance on your custom data with automated benchmarks to evaluate reasoning capabilities, costs, and response latency metrics
 ---
 
 # Choosing the best GPT model: benchmark on your own data
 
-This guide will walk you through how to compare OpenAI's GPT-4o and GPT-4o-mini, top contenders for the most powerful and effective GPT models. This testing framework will give you the chance to test the models' reasoning capabilities, cost, and latency.
+This guide will walk you through how to compare OpenAI's GPT-4o and GPT-4.1-mini, top contenders for the most powerful and effective GPT models. This testing framework will give you the chance to test the models' reasoning capabilities, cost, and latency.
 
 New model releases often score well on benchmarks. But generic benchmarks are for generic use cases. If you're building an LLM app, you should evaluate these models on your own data and make an informed decision based on your specific needs.
 
@@ -32,8 +32,8 @@ Edit `promptfooconfig.yaml` to include both models:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4
+  - openai:gpt-5-mini
+  - openai:gpt-5
 ```
 
 ## Step 2: Crafting the prompts
@@ -128,8 +128,8 @@ Finally, we'll use `defaultTest` to clean things up a bit and apply global `late
 
 ```yaml
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-4
+  - openai:gpt-5-mini
+  - openai:gpt-5
 
 prompts:
   - 'Solve this riddle: {{riddle}}'
@@ -171,7 +171,7 @@ In the end, you will see a result like this:
 
 ![gpt 4o-mini vs gpt 4o](/img/docs/gpt-4o-mini-vs-gpt-4o.png)
 
-In this particular eval, the models performed very similarly in terms of answers, but it looks like GPT-4o-mini exceeded our maximum latency. Notably, 4o was about 35x more expensive compared to 4o-mini.
+In this particular eval, the models performed very similarly in terms of answers, but it looks like GPT-4.1-mini exceeded our maximum latency. Notably, 4o was about 35x more expensive compared to gpt-5-mini.
 
 Of course, this is a limited example test set. The tradeoff between cost, latency, and accuracy is going to be tailored for each application. That's why it's important to run your own eval.
 

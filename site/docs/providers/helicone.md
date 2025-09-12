@@ -45,7 +45,7 @@ To route requests through your local Helicone AI Gateway:
 
 ```yaml
 providers:
-  - helicone:openai/gpt-4o-mini
+  - helicone:openai/gpt-5-mini
   - helicone:anthropic/claude-3-5-sonnet
   - helicone:groq/llama-3.1-8b-instant
 ```
@@ -102,7 +102,7 @@ The Helicone AI Gateway supports 100+ models from various providers. Some popula
 
 | Provider  | Example Models                                                    |
 | --------- | ----------------------------------------------------------------- |
-| OpenAI    | `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/o1-preview`        |
+| OpenAI    | `openai/gpt-4o`, `openai/gpt-5-mini`, `openai/o1-preview`         |
 | Anthropic | `anthropic/claude-3-5-sonnet`, `anthropic/claude-3-haiku`         |
 | Groq      | `groq/llama-3.1-8b-instant`, `groq/llama-3.1-70b-versatile`       |
 | Meta      | `meta-llama/Llama-3-8b-chat-hf`, `meta-llama/Llama-3-70b-chat-hf` |
@@ -137,7 +137,7 @@ Since the provider extends OpenAI's chat completion provider, all standard OpenA
 
 ```yaml
 providers:
-  - helicone:openai/gpt-4o-mini
+  - helicone:openai/gpt-5-mini
 
 prompts:
   - "Translate '{{text}}' to French"
