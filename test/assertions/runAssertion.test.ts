@@ -2010,6 +2010,50 @@ describe('runAssertion', () => {
         reason: 'Assertion passed',
       });
     });
+
+    it('should NOT throw error when threshold is 0', async () => {
+      const output = 'Expected output';
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'latency',
+          threshold: 0,
+        },
+        latencyMs: 0,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should fail when latency exceeds threshold=0', async () => {
+      const output = 'Expected output';
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'latency',
+          threshold: 0,
+        },
+        latencyMs: 1,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Latency 1ms is greater than threshold 0ms',
+      });
+    });
   });
 
   describe('perplexity assertion', () => {
@@ -2146,6 +2190,50 @@ describe('runAssertion', () => {
       expect(result).toMatchObject({
         pass: false,
         reason: 'Cost 0.0020 is greater than threshold 0.001',
+      });
+    });
+
+    it('should NOT throw error when threshold is 0', async () => {
+      const cost = 0;
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'cost',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should fail when cost exceeds threshold=0', async () => {
+      const cost = 0.01;
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'cost',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Cost 0.010 is greater than threshold 0',
       });
     });
   });

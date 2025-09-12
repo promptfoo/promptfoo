@@ -29,7 +29,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = await handleJavascript(params);
-      
+
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
     });
@@ -42,7 +42,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = await handleJavascript(params);
-      
+
       expect(result.pass).toBe(true);
       expect(result.score).toBe(0);
     });
@@ -55,7 +55,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = await handleJavascript(params);
-      
+
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
     });
@@ -68,7 +68,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = await handleJavascript(params);
-      
+
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1);
     });
@@ -81,7 +81,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = await handleJavascript(params);
-      
+
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1);
     });
@@ -97,7 +97,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = await handlePython(params);
-      
+
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
     });
@@ -111,7 +111,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = await handlePython(params);
-      
+
       expect(result.pass).toBe(true);
       expect(result.score).toBe(0);
     });
@@ -125,7 +125,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = await handlePython(params);
-      
+
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
     });
@@ -141,7 +141,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = handlePerplexity(params);
-      
+
       expect(result.pass).toBe(true); // No threshold = always pass
     });
 
@@ -154,7 +154,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = handlePerplexity(params);
-      
+
       // Perplexity will be > 0, so with threshold=0, should fail
       expect(result.pass).toBe(false);
     });
@@ -168,7 +168,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = handlePerplexityScore(params);
-      
+
       expect(result.pass).toBe(true); // No threshold = always pass
     });
 
@@ -181,7 +181,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       };
 
       const result = handlePerplexityScore(params);
-      
+
       // Perplexity score will be > 0, so should pass with threshold=0
       expect(result.pass).toBe(true);
     });
@@ -203,11 +203,11 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
 
       const resultWithoutThreshold = await handleJavascript(paramsWithoutThreshold);
       const resultWithZeroThreshold = await handleJavascript(paramsWithZeroThreshold);
-      
+
       // These should have different outcomes
-      expect(resultWithoutThreshold.pass).toBe(false);  // score > 0 check
-      expect(resultWithZeroThreshold.pass).toBe(true);   // score >= 0 check
-      
+      expect(resultWithoutThreshold.pass).toBe(false); // score > 0 check
+      expect(resultWithZeroThreshold.pass).toBe(true); // score >= 0 check
+
       // But same score
       expect(resultWithoutThreshold.score).toBe(0);
       expect(resultWithZeroThreshold.score).toBe(0);
@@ -218,7 +218,7 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
         { threshold: 0, expected: true, description: 'threshold=0' },
         { threshold: undefined, expected: false, description: 'threshold=undefined' },
         // Note: null, empty string, false are treated as valid thresholds and compared numerically
-        // null becomes 0 when compared: 0 >= null (which is 0) = true  
+        // null becomes 0 when compared: 0 >= null (which is 0) = true
         { threshold: null, expected: true, description: 'threshold=null (becomes 0)' },
         // Empty string becomes 0 when compared: 0 >= '' (which is 0) = true
         { threshold: '', expected: true, description: 'threshold="" (becomes 0)' },
@@ -229,16 +229,16 @@ describe('Threshold Edge Cases - Truthy vs Undefined', () => {
       for (const testCase of testCases) {
         const params: AssertionParams = {
           ...baseParams,
-          assertion: { 
-            type: 'javascript', 
-            value: 'return 0;', 
-            threshold: testCase.threshold as any
+          assertion: {
+            type: 'javascript',
+            value: 'return 0;',
+            threshold: testCase.threshold as any,
           },
           valueFromScript: 0,
         };
 
         const result = await handleJavascript(params);
-        
+
         expect(result.pass).toBe(testCase.expected);
         expect(result.score).toBe(0);
       }
