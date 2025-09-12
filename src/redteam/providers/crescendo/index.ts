@@ -4,7 +4,7 @@ import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
+import { extractFirstJsonObject, isValidJson, safeJsonStringify } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
@@ -15,6 +15,7 @@ import { getGoalRubric } from '../prompts';
 import {
   getLastMessageContent,
   getTargetResponse,
+  isValidChatMessageArray,
   messagesToRedteamHistory,
   redteamProviderManager,
   type TargetResponse,
@@ -683,7 +684,29 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const conversationHistory = this.memory.getConversation(this.targetConversationId);
-    const targetPrompt = this.stateful ? renderedPrompt : JSON.stringify(conversationHistory);
+    let targetPrompt: string;
+
+    if (this.stateful) {
+      targetPrompt = renderedPrompt;
+    } else {
+      // Check if renderedPrompt is already a JSON chat structure
+      if (isValidJson(renderedPrompt)) {
+        const parsed = JSON.parse(renderedPrompt);
+        if (isValidChatMessageArray(parsed)) {
+          // It's already a structured chat array, use it directly
+          targetPrompt = renderedPrompt;
+          logger.debug('[Crescendo] Using rendered chat template instead of conversation history');
+        } else {
+          // It's not a chat structure, use conversation history
+          targetPrompt = JSON.stringify(conversationHistory);
+          logger.debug('[Crescendo] Using conversation history (not a chat template)');
+        }
+      } else {
+        // Not valid JSON, use conversation history
+        targetPrompt = JSON.stringify(conversationHistory);
+        logger.debug('[Crescendo] Using conversation history (invalid JSON)');
+      }
+    }
 
     logger.debug(
       `[Crescendo] Sending to target chat (${this.stateful ? 1 : conversationHistory.length} messages):`,
@@ -695,7 +718,10 @@ export class CrescendoProvider implements ApiProvider {
     if (targetResponse.error) {
       throw new Error(`[Crescendo] Target returned an error: ${targetResponse.error}`);
     }
-    invariant(targetResponse.output, '[Crescendo] Target did not return an output');
+    invariant(
+      Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
+      '[Crescendo] Target did not return an output property',
+    );
     logger.debug(`[Crescendo] Received response from target: ${targetResponse.output}`);
 
     this.memory.addMessage(this.targetConversationId, {
