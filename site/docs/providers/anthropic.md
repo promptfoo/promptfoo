@@ -144,6 +144,94 @@ providers:
               - location
 ```
 
+#### Web Search and Web Fetch Tools
+
+Anthropic provides specialized tools for web search and web fetching capabilities:
+
+##### Web Fetch Tool
+
+The web fetch tool allows Claude to retrieve full content from web pages and PDF documents. This is useful when you want Claude to access and analyze specific web content.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-sonnet-4-20250514
+    config:
+      tools:
+        - type: web_fetch_20250910
+          name: web_fetch
+          max_uses: 5
+          allowed_domains:
+            - docs.example.com
+            - help.example.com
+          citations:
+            enabled: true
+          max_content_tokens: 50000
+```
+
+**Web Fetch Tool Configuration Options:**
+
+| Parameter            | Type     | Description                                                                                  |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `type`               | string   | Must be `web_fetch_20250910`                                                                 |
+| `name`               | string   | Must be `web_fetch`                                                                          |
+| `max_uses`           | number   | Maximum number of web fetches per request (optional)                                         |
+| `allowed_domains`    | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`) |
+| `blocked_domains`    | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`) |
+| `citations`          | object   | Enable citations with `{ enabled: true }` (optional)                                         |
+| `max_content_tokens` | number   | Maximum tokens for web content (optional)                                                    |
+
+##### Web Search Tool
+
+The web search tool allows Claude to search the internet for information:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-sonnet-4-20250514
+    config:
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 3
+```
+
+**Web Search Tool Configuration Options:**
+
+| Parameter  | Type   | Description                                       |
+| ---------- | ------ | ------------------------------------------------- |
+| `type`     | string | Must be `web_search_20250305`                     |
+| `name`     | string | Must be `web_search`                              |
+| `max_uses` | number | Maximum number of searches per request (optional) |
+
+##### Combined Web Search and Web Fetch
+
+You can use both tools together for comprehensive web information gathering:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-sonnet-4-20250514
+    config:
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 3
+        - type: web_fetch_20250910
+          name: web_fetch
+          max_uses: 5
+          citations:
+            enabled: true
+```
+
+This configuration allows the model to first search for relevant information, then fetch full content from the most promising results.
+
+**Important Security Notes:**
+
+- The web fetch tool requires trusted environments due to potential data exfiltration risks
+- The model cannot dynamically construct URLs - only URLs provided by users or from search results can be fetched
+- Use domain filtering to restrict access to specific sites:
+  - Use `allowed_domains` to whitelist trusted domains (recommended)
+  - Use `blocked_domains` to blacklist specific domains
+  - **Note:** Only one of `allowed_domains` or `blocked_domains` can be specified, not both
+
 See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use).
 
 ### Images / Vision
