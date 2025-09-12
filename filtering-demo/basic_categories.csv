@@ -1,5 +1,0 @@
-question,expected_answer,__metadata:category
-"What is 2+2?","contains: 4","math"
-"What color is the sky?","contains: blue","science"
-"Who wrote Romeo and Juliet?","contains: Shakespeare","literature"
-"What is the capital of France?","contains: Paris","geography"
