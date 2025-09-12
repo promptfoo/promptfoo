@@ -3610,7 +3610,7 @@ describe('evaluator defaultTest merging', () => {
         },
       },
     });
-  }, 30000);
+  });
 
   it('should allow test case options to override defaultTest options', async () => {
     const mockProvider: ApiProvider = {

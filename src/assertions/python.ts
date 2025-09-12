@@ -118,7 +118,7 @@ ${
         );
       }
       const pythonGradingResult = mappedObj as Omit<GradingResult, 'assertion'>;
-      if (assertion.threshold && pythonGradingResult.score < assertion.threshold) {
+      if (assertion.threshold !== undefined && pythonGradingResult.score < assertion.threshold) {
         pythonGradingResult.pass = false;
         const scoreMessage = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;
         pythonGradingResult.reason = pythonGradingResult.reason
