@@ -14,12 +14,7 @@ interface SettingsSectionProps {
   description?: string;
 }
 
-const SettingsSection: React.FC<SettingsSectionProps> = ({
-  title,
-  children,
-  icon,
-  description,
-}) => {
+const SettingsSection = ({ title, children, icon, description }: SettingsSectionProps) => {
   const theme = useTheme();
   const sectionId = `section-${title.replace(/\s+/g, '-').toLowerCase()}`;
 

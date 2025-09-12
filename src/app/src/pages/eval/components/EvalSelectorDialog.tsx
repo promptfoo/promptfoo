@@ -17,7 +17,7 @@ type Props = {
   onOpenFocusSearch?: boolean;
 };
 
-const EvalSelectorDialog: React.FC<Props> = ({
+const EvalSelectorDialog = ({
   open,
   onClose,
   onEvalSelected,
@@ -26,7 +26,7 @@ const EvalSelectorDialog: React.FC<Props> = ({
   focusedEvalId,
   filterByDatasetId,
   onOpenFocusSearch = false,
-}) => {
+}: Props) => {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       {title ? <DialogTitle>{title}</DialogTitle> : null}

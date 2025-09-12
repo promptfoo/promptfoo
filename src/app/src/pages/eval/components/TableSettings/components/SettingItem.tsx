@@ -23,7 +23,7 @@ interface SettingItemProps {
   component?: 'checkbox' | 'switch';
 }
 
-const SettingItem: React.FC<SettingItemProps> = ({
+const SettingItem = ({
   label,
   checked,
   onChange,
@@ -31,7 +31,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
   tooltipText,
   disabled = false,
   component = 'checkbox',
-}) => {
+}: SettingItemProps) => {
   const theme = useTheme();
   const labelId = `setting-${label.replace(/\s+/g, '-').toLowerCase()}`;
 

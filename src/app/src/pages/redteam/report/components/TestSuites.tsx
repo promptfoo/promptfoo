@@ -73,7 +73,7 @@ const getRiskScoreColor = (riskScore: number, theme: any): string => {
   }
 };
 
-const TestSuites: React.FC<TestSuitesProps> = ({
+const TestSuites = ({
   evalId,
   categoryStats,
   plugins,
@@ -82,7 +82,7 @@ const TestSuites: React.FC<TestSuitesProps> = ({
   vulnerabilitiesDataGridRef,
   vulnerabilitiesDataGridFilterModel,
   setVulnerabilitiesDataGridFilterModel,
-}) => {
+}: TestSuitesProps) => {
   const navigate = useNavigate();
   const theme = useTheme();
   const { recordEvent } = useTelemetry();

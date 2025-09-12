@@ -644,7 +644,7 @@ interface ProviderSelectorProps {
   onChange: (providers: ProviderOptions[]) => void;
 }
 
-const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
+const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
   const { customProviders, addCustomProvider } = useProvidersStore();
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
   const [isAddLocalDialogOpen, setIsAddLocalDialogOpen] = React.useState(false);
