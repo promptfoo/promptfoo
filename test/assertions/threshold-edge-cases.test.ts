@@ -1,12 +1,12 @@
 import { handleJavascript } from '../../src/assertions/javascript';
 import { handlePython } from '../../src/assertions/python';
 import { handlePerplexity, handlePerplexityScore } from '../../src/assertions/perplexity';
-import type { AssertionParams } from '../../src/types';
+import type { AssertionParams, AssertionValueFunctionContext } from '../../src/types';
 
 describe('Threshold Edge Cases - Truthy vs Undefined', () => {
   const baseParams = {
     baseType: 'javascript' as const,
-    context: {},
+    context: {} as AssertionValueFunctionContext,
     cost: 0,
     inverse: false,
     logProbs: [0.1, 0.2, 0.3],
