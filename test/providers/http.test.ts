@@ -1477,8 +1477,8 @@ describe('HttpProvider', () => {
     );
   });
 
-  describe('Authentication header stripping', () => {
-    it('should strip authentication headers from metadata', async () => {
+  describe('Authentication header sanitization', () => {
+    it('should redact authentication headers in metadata', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           method: 'GET',
@@ -1503,20 +1503,18 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      // Check that auth headers are stripped but other headers remain
+      // Check that auth headers are redacted but other headers remain unchanged
       expect(result.metadata?.http?.headers).toEqual({
         'content-type': 'application/json',
+        authorization: '[REDACTED]',
+        'x-api-key': '[REDACTED]',
+        cookie: '[REDACTED]',
         'x-custom-header': 'should-remain',
         'cache-control': 'no-cache',
       });
-
-      // Verify sensitive headers are not present
-      expect(result.metadata?.http?.headers).not.toHaveProperty('authorization');
-      expect(result.metadata?.http?.headers).not.toHaveProperty('x-api-key');
-      expect(result.metadata?.http?.headers).not.toHaveProperty('cookie');
     });
 
-    it('should strip various authentication header patterns', async () => {
+    it('should redact various authentication header patterns', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           method: 'GET',
@@ -1550,8 +1548,20 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      // Only non-sensitive headers should remain
+      // Sensitive headers should be redacted, others remain unchanged
       expect(result.metadata?.http?.headers).toEqual({
+        Authorization: '[REDACTED]',
+        'X-API-KEY': '[REDACTED]',
+        'API-Key': '[REDACTED]',
+        'X-Auth-Token': '[REDACTED]',
+        'Access-Token': '[REDACTED]',
+        'X-Secret': '[REDACTED]',
+        Token: '[REDACTED]',
+        ApiKey: '[REDACTED]',
+        Password: '[REDACTED]',
+        Cookie: '[REDACTED]',
+        'X-CSRF-Token': '[REDACTED]',
+        'Session-Id': '[REDACTED]',
         'Content-Type': 'application/json',
         Accept: 'application/json',
         'User-Agent': 'test-agent',
@@ -1580,7 +1590,7 @@ describe('HttpProvider', () => {
       expect(result.metadata?.http?.headers).toEqual({});
     });
 
-    it('should strip auth headers in raw request mode with debug context', async () => {
+    it('should redact auth headers in raw request mode with debug context', async () => {
       const rawRequest = dedent`
         GET /api/data HTTP/1.1
         Host: example.com
@@ -1609,13 +1619,13 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test prompt', { debug: true });
 
-      // In debug mode, headers should still be stripped of auth info
+      // In debug mode, headers should still have auth info redacted
       expect(result.metadata?.headers).toEqual({
+        authorization: '[REDACTED]',
+        'x-api-key': '[REDACTED]',
         'content-type': 'application/json',
         etag: 'W/"123"',
       });
-      expect(result.metadata?.headers).not.toHaveProperty('authorization');
-      expect(result.metadata?.headers).not.toHaveProperty('x-api-key');
     });
 
     it('should handle case-insensitive header matching', async () => {
@@ -1641,14 +1651,16 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      // Auth headers should be stripped regardless of case
+      // Auth headers should be redacted regardless of case
       expect(result.metadata?.http?.headers).toEqual({
+        AUTHORIZATION: '[REDACTED]',
+        'x-ApI-kEy': '[REDACTED]',
         'Content-TYPE': 'application/json',
         'X-Request-ID': 'req-123',
       });
     });
 
-    it('should strip headers containing auth-related keywords', async () => {
+    it('should redact headers containing auth-related keywords', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           method: 'GET',
@@ -1673,8 +1685,12 @@ describe('HttpProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      // Headers containing auth keywords should be stripped
+      // Headers containing auth keywords should be redacted
       expect(result.metadata?.http?.headers).toEqual({
+        'X-Custom-Authorization-Header': '[REDACTED]',
+        'App-Token-Value': '[REDACTED]',
+        'Secret-Key': '[REDACTED]',
+        'X-Session-Data': '[REDACTED]',
         'X-Request-ID': 'req-456',
         'X-Rate-Limit': '100',
       });
