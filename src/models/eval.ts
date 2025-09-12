@@ -97,16 +97,19 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
   }
 
   static async getMetadataKeysFromEval(evalId: string): Promise<string[]> {
+    interface MetadataKeyResult {
+      key: string;
+    }
+
     const db = getDb();
-    const query = sql.raw(
-      `SELECT DISTINCT j.key FROM (
+    const query = sql`
+      SELECT DISTINCT j.key FROM (
         SELECT metadata FROM eval_results 
-        WHERE eval_id = '${evalId}' AND metadata IS NOT NULL AND metadata != '{}'
+        WHERE eval_id = ${evalId} AND metadata IS NOT NULL AND metadata != '{}'
       ) t, json_each(t.metadata) j
-      ORDER BY j.key`
-    );
-    // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+      ORDER BY j.key
+    `;
+    const results: MetadataKeyResult[] = await db.all(query);
     return results.map((r) => r.key);
   }
 }

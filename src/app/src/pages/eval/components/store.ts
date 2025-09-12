@@ -386,10 +386,29 @@ export const useTableStore = create<TableState>()((set, get) => ({
 
     const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
+    // Cancel any existing metadata keys request and reset state for new eval
+    const currentState = get();
+    if (currentState.currentMetadataKeysRequest) {
+      currentState.currentMetadataKeysRequest.abort();
+    }
+
     if (skipLoadingState) {
-      set({ shouldHighlightSearchText: false });
+      set({ 
+        shouldHighlightSearchText: false,
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        currentMetadataKeysRequest: null
+      });
     } else {
-      set({ isFetching: true, shouldHighlightSearchText: false });
+      set({ 
+        isFetching: true, 
+        shouldHighlightSearchText: false,
+        metadataKeys: [],
+        metadataKeysLoading: false,
+        metadataKeysError: false,
+        currentMetadataKeysRequest: null
+      });
     }
 
     try {
@@ -654,7 +673,14 @@ export const useTableStore = create<TableState>()((set, get) => ({
         throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
       }
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
+      if ((error as Error).name === 'AbortError') {
+        // Request was aborted - clean up state but don't show error
+        set({ 
+          metadataKeysLoading: false,
+          currentMetadataKeysRequest: null
+        });
+      } else {
+        // Actual error occurred
         console.error('Error fetching metadata keys:', error);
         set({ 
           metadataKeysError: true,

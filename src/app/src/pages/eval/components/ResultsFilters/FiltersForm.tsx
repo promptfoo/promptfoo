@@ -138,7 +138,15 @@ function Filter({
   onClose: () => void;
 }) {
   const theme = useTheme();
-  const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
+  const { 
+    filters, 
+    updateFilter, 
+    removeFilter, 
+    updateAllFilterLogicOperators,
+    metadataKeys,
+    metadataKeysLoading,
+    metadataKeysError
+  } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
   const selectedMetricValues = Object.values(filters.values)
@@ -330,59 +338,48 @@ function Filter({
           width={150}
         />
 
-        {value.type === 'metadata' &&
-          (() => {
-            const { metadataKeys, metadataKeysLoading, metadataKeysError } = useTableStore();
-            
-            // Show loading state initially to prevent flicker
-            if (metadataKeysLoading) {
-              return (
-                <TextField
-                  id={`${index}-field-loading`}
-                  label="Key"
-                  variant="outlined"
-                  size="small"
-                  value=""
-                  placeholder="Loading keys..."
-                  disabled
-                  sx={{ width: 180 }}
-                  InputProps={{
-                    endAdornment: <CircularProgress size={16} />
-                  }}
-                />
-              );
-            }
-            
+        {value.type === 'metadata' && (
+          // Show loading state initially to prevent flicker
+          metadataKeysLoading ? (
+            <TextField
+              id={`${index}-field-loading`}
+              label="Key"
+              variant="outlined"
+              size="small"
+              value=""
+              placeholder="Loading keys..."
+              disabled
+              sx={{ width: 180 }}
+              InputProps={{
+                endAdornment: <CircularProgress size={16} />
+              }}
+            />
+          ) : metadataKeys.length > 0 ? (
             // Show dropdown if keys are available
-            if (metadataKeys.length > 0) {
-              return (
-                <Dropdown
-                  id={`${index}-field-select`}
-                  label="Key"
-                  values={metadataKeys.map((key) => ({ label: key, value: key }))}
-                  value={value.field || ''}
-                  onChange={handleFieldChange}
-                  width={180}
-                />
-              );
-            }
-            
+            <Dropdown
+              id={`${index}-field-select`}
+              label="Key"
+              values={metadataKeys.map((key) => ({ label: key, value: key }))}
+              value={value.field || ''}
+              onChange={handleFieldChange}
+              width={180}
+            />
+          ) : (
             // Fallback to text input with error indication if needed
-            return (
-              <TextField
-                id={`${index}-field-input`}
-                label="Key"
-                variant="outlined"
-                size="small"
-                value={value.field || ''}
-                onChange={(e) => handleFieldChange(e.target.value)}
-                placeholder={metadataKeysError ? "Error loading keys - type manually" : "Enter metadata key"}
-                sx={{ width: 180 }}
-                error={metadataKeysError}
-                helperText={metadataKeysError ? "Failed to load available keys" : undefined}
-              />
-            );
-          })()}
+            <TextField
+              id={`${index}-field-input`}
+              label="Key"
+              variant="outlined"
+              size="small"
+              value={value.field || ''}
+              onChange={(e) => handleFieldChange(e.target.value)}
+              placeholder={metadataKeysError ? "Error loading keys - type manually" : "Enter metadata key"}
+              sx={{ width: 180 }}
+              error={metadataKeysError}
+              helperText={metadataKeysError ? "Failed to load available keys" : undefined}
+            />
+          )
+        )}
 
         <Dropdown
           id={`${index}-operator-select`}
