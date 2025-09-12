@@ -20,17 +20,11 @@ import {
   GridToolbarFilterButton,
 } from '@mui/x-data-grid';
 import {
-  categoryAliases,
   displayNameOverrides,
-  displayNameOverrides,
-  type Plugin,
-  Severity,
   Severity,
   severityDisplayNames,
   severityRiskScores,
-  subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
 import { getSeverityColor } from './FrameworkComplianceUtils';
 import { getStrategyIdFromTest } from './shared';
@@ -96,8 +90,8 @@ const TestSuites = ({
 
   const rows = React.useMemo(() => {
     return Object.entries(categoryStats)
-      .filter(([_, {stats}]) => stats.total > 0)
-      .map(([pluginName, {stats, metadata}]) => {
+      .filter(([_, { stats }]) => stats.total > 0)
+      .map(([pluginName, { stats, metadata }]) => {
         // Calculate risk score with details
         const riskDetails = (() => {
           // Prepare test results using the helper function
@@ -118,7 +112,11 @@ const TestSuites = ({
           }
 
           // Calculate risk score once and extract values
-          const riskScoreResult = calculatePluginRiskScore(pluginName, metadata.severity, testResults);
+          const riskScoreResult = calculatePluginRiskScore(
+            pluginName,
+            metadata.severity,
+            testResults,
+          );
           return {
             riskScore: riskScoreResult.score,
             complexityScore: riskScoreResult.complexityScore,
