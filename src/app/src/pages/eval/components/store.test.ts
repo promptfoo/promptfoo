@@ -259,7 +259,7 @@ describe('useTableStore', () => {
       expect(state.filters.values[mockFilterId].value).toBe('');
     });
 
-    it("should update `filters.options.strategy` with unique strategy IDs (from both strings and objects) and always include 'basic' when `fetchEvalData` receives a config with mixed strategy types", async () => {
+    it("should update `filters.options.strategy` with unique strategy IDs and include 'basic' when `fetchEvalData` receives redteam config with strategies", async () => {
       const mockEvalId = 'test-eval-id';
       const mockStrategies = ['strategy1', { id: 'strategy2' }, 'strategy1', { id: 'strategy3' }];
 
@@ -288,6 +288,139 @@ describe('useTableStore', () => {
         'strategy3',
         'basic',
       ]);
+    });
+
+    it('should not populate strategy options when no redteam config is present in fetchEvalData', async () => {
+      const mockEvalId = 'standard-eval-id';
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: {
+            // No redteam config
+            providers: [],
+          },
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual([]);
+      expect(state.filters.options.plugin).toEqual([]);
+      expect(state.filters.options.severity).toEqual([]);
+    });
+
+    it('should populate strategy options including basic when redteam config is present in fetchEvalData', async () => {
+      const mockEvalId = 'redteam-eval-id';
+      const mockStrategies = ['jailbreak', 'prompt-injection'];
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: {
+            redteam: {
+              strategies: mockStrategies,
+              plugins: [{ id: 'harmful-content' }],
+            },
+          },
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual(['jailbreak', 'prompt-injection', 'basic']);
+      expect(state.filters.options.plugin).toEqual(['harmful-content']);
+    });
+
+    it('should handle empty redteam config correctly in fetchEvalData', async () => {
+      const mockEvalId = 'empty-redteam-eval-id';
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: {
+            redteam: {
+              // Empty strategies and plugins
+              strategies: [],
+              plugins: [],
+            },
+          },
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      // Even with empty arrays, 'basic' is still added by extractUniqueStrategyIds
+      expect(state.filters.options.strategy).toEqual(['basic']);
+      expect(state.filters.options.plugin).toEqual([]);
+      expect(state.filters.options.severity).toEqual([]);
+    });
+
+    it('should not populate strategy options when setTableFromResultsFile receives non-redteam config', () => {
+      const mockResultsFile = {
+        version: 4,
+        config: {
+          providers: [],
+          // No redteam section
+        },
+        prompts: [],
+        results: {
+          results: [],
+        },
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual([]);
+    });
+
+    it('should populate strategy options when setTableFromResultsFile receives redteam config', () => {
+      const mockResultsFile = {
+        version: 4,
+        config: {
+          redteam: {
+            strategies: ['multilingual', 'retry'],
+            plugins: [{ id: 'pii' }, { id: 'bias' }],
+          },
+        },
+        prompts: [],
+        results: {
+          results: [],
+        },
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.strategy).toEqual(['multilingual', 'retry', 'basic']);
+      expect(state.filters.options.plugin).toEqual(['pii', 'bias']);
     });
   });
 

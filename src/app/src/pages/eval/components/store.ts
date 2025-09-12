@@ -323,7 +323,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metric: computeAvailableMetrics(table),
             metadata: [],
             plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-            strategy: extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies),
+            strategy: resultsFile.config?.redteam
+              ? extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies)
+              : [],
             severity: computeAvailableSeverities(resultsFile.config?.redteam?.plugins),
           },
         },
@@ -340,7 +342,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
             metric: computeAvailableMetrics(results.table),
             metadata: [],
             plugin: resultsFile.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-            strategy: extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies),
+            strategy: resultsFile.config?.redteam
+              ? extractUniqueStrategyIds(resultsFile.config?.redteam?.strategies)
+              : [],
             severity: computeAvailableSeverities(resultsFile.config?.redteam?.plugins),
           },
         },
@@ -443,7 +447,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
               metric: computeAvailableMetrics(data.table),
               metadata: [],
               plugin: data.config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
-              strategy: extractUniqueStrategyIds(data.config?.redteam?.strategies),
+              strategy: data.config?.redteam
+                ? extractUniqueStrategyIds(data.config?.redteam?.strategies)
+                : [],
               severity: computeAvailableSeverities(data.config?.redteam?.plugins),
             },
           },
