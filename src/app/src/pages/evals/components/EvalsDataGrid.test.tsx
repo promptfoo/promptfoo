@@ -166,7 +166,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -341,7 +341,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -623,7 +623,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -635,6 +635,8 @@ describe('EvalsDataGrid', () => {
 
     const deleteButton = await screen.findByTestId('delete-selected-button');
     fireEvent.click(deleteButton);
+    const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
+    fireEvent.click(confirmDelete);
 
     await waitFor(() => {
       expect(screen.queryByTestId('eval-eval-1')).toBeNull();
@@ -667,7 +669,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -683,6 +685,8 @@ describe('EvalsDataGrid', () => {
     expect(deleteButton).toHaveTextContent('Delete (2)');
 
     fireEvent.click(deleteButton);
+    const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
+    fireEvent.click(confirmDelete);
 
     await waitFor(() => {
       expect(screen.queryByTestId('eval-eval-1')).toBeNull();
@@ -711,7 +715,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -723,6 +727,8 @@ describe('EvalsDataGrid', () => {
 
     const deleteButton = await screen.findByTestId('delete-selected-button');
     fireEvent.click(deleteButton);
+    const cancelButton = await screen.findByRole('button', { name: 'Cancel' });
+    fireEvent.click(cancelButton);
 
     // Evals should still be present since deletion was cancelled
     expect(screen.getByTestId('eval-eval-1')).toBeInTheDocument();
@@ -757,7 +763,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -769,6 +775,8 @@ describe('EvalsDataGrid', () => {
 
     const deleteButton = await screen.findByTestId('delete-selected-button');
     fireEvent.click(deleteButton);
+    const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
+    fireEvent.click(confirmDelete);
 
     await waitFor(() => {
       expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to delete evals:', expect.any(Error));
@@ -792,7 +800,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -841,7 +849,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -853,6 +861,8 @@ describe('EvalsDataGrid', () => {
 
     const deleteButton = await screen.findByTestId('delete-selected-button');
     fireEvent.click(deleteButton);
+    const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
+    fireEvent.click(confirmDelete);
 
     await waitFor(() => {
       expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -890,7 +900,7 @@ describe('EvalsDataGrid', () => {
 
     render(
       <MemoryRouter>
-        <EvalsDataGrid onEvalSelected={vi.fn()} />
+        <EvalsDataGrid onEvalSelected={vi.fn()} deletionEnabled={true} />
       </MemoryRouter>,
     );
 
@@ -902,6 +912,8 @@ describe('EvalsDataGrid', () => {
 
     const deleteButton = await screen.findByTestId('delete-selected-button');
     fireEvent.click(deleteButton);
+    const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
+    fireEvent.click(confirmDelete);
 
     await waitFor(() => {
       expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to delete evals:', expect.any(Error));
