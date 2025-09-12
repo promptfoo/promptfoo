@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-import PylonChat from '@app/components/PylonChat';
 import ErrorBoundary from '@app/components/ErrorBoundary';
+import PylonChat from '@app/components/PylonChat';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
 import AppIcon from '@mui/icons-material/Apps';
 import DownloadIcon from '@mui/icons-material/Download';
 import PluginIcon from '@mui/icons-material/Extension';
@@ -32,6 +33,7 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import type { RedteamStrategy } from '@promptfoo/types';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -46,10 +48,9 @@ import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import { generateOrderedYaml } from './utils/yamlHelpers';
-import type { RedteamStrategy } from '@promptfoo/types';
 
-import type { Config, RedteamUITarget } from './types';
 import './page.css';
+import type { Config, RedteamUITarget } from './types';
 
 export const SIDEBAR_WIDTH = 240;
 
@@ -621,7 +622,7 @@ export default function RedTeamSetupPage() {
                 ) : (
                   configDate && (
                     <Typography className="dateText" color="text.secondary" variant="body2">
-                      {new Date(configDate).toLocaleString()}
+                      {formatDataGridDate(configDate)}
                     </Typography>
                   )
                 )}
@@ -840,7 +841,7 @@ export default function RedTeamSetupPage() {
                     >
                       <ListItemText
                         primary={config.name}
-                        secondary={new Date(config.updatedAt).toLocaleString()}
+                        secondary={formatDataGridDate(config.updatedAt)}
                       />
                     </ListItemButton>
                   ))}

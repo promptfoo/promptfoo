@@ -88,6 +88,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         REQUEST_TIMEOUT_MS,
         'json',
         context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
