@@ -1477,6 +1477,210 @@ describe('HttpProvider', () => {
     );
   });
 
+  describe('Authentication header stripping', () => {
+    it('should strip authentication headers from metadata', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer secret-token',
+          'x-api-key': 'api-key-12345',
+          cookie: 'session=abc123; other=value',
+          'x-custom-header': 'should-remain',
+          'cache-control': 'no-cache',
+        },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      // Check that auth headers are stripped but other headers remain
+      expect(result.metadata?.http?.headers).toEqual({
+        'content-type': 'application/json',
+        'x-custom-header': 'should-remain',
+        'cache-control': 'no-cache',
+      });
+
+      // Verify sensitive headers are not present
+      expect(result.metadata?.http?.headers).not.toHaveProperty('authorization');
+      expect(result.metadata?.http?.headers).not.toHaveProperty('x-api-key');
+      expect(result.metadata?.http?.headers).not.toHaveProperty('cookie');
+    });
+
+    it('should strip various authentication header patterns', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {
+          Authorization: 'Bearer token',
+          'X-API-KEY': 'key123',
+          'API-Key': 'key456',
+          'X-Auth-Token': 'auth789',
+          'Access-Token': 'access123',
+          'X-Secret': 'secret456',
+          Token: 'token789',
+          ApiKey: 'apikey123',
+          Password: 'pass456',
+          Cookie: 'session=xyz',
+          'X-CSRF-Token': 'csrf123',
+          'Session-Id': 'session456',
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'User-Agent': 'test-agent',
+        },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      // Only non-sensitive headers should remain
+      expect(result.metadata?.http?.headers).toEqual({
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'User-Agent': 'test-agent',
+      });
+    });
+
+    it('should handle missing or undefined headers gracefully', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: undefined,
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      // Should return empty object when headers are undefined
+      expect(result.metadata?.http?.headers).toEqual({});
+    });
+
+    it('should strip auth headers in raw request mode with debug context', async () => {
+      const rawRequest = dedent`
+        GET /api/data HTTP/1.1
+        Host: example.com
+        User-Agent: TestAgent/1.0
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          authorization: 'Bearer token',
+          'x-api-key': 'secret',
+          'content-type': 'application/json',
+          etag: 'W/"123"',
+        },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt', { debug: true });
+
+      // In debug mode, headers should still be stripped of auth info
+      expect(result.metadata?.headers).toEqual({
+        'content-type': 'application/json',
+        etag: 'W/"123"',
+      });
+      expect(result.metadata?.headers).not.toHaveProperty('authorization');
+      expect(result.metadata?.headers).not.toHaveProperty('x-api-key');
+    });
+
+    it('should handle case-insensitive header matching', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {
+          AUTHORIZATION: 'Bearer TOKEN',
+          'x-ApI-kEy': 'KEY',
+          'Content-TYPE': 'application/json',
+          'X-Request-ID': 'req-123',
+        },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      // Auth headers should be stripped regardless of case
+      expect(result.metadata?.http?.headers).toEqual({
+        'Content-TYPE': 'application/json',
+        'X-Request-ID': 'req-123',
+      });
+    });
+
+    it('should strip headers containing auth-related keywords', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'GET',
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {
+          'X-Custom-Authorization-Header': 'auth-value',
+          'App-Token-Value': 'token123',
+          'Secret-Key': 'secret',
+          'X-Session-Data': 'session123',
+          'X-Request-ID': 'req-456',
+          'X-Rate-Limit': '100',
+        },
+      };
+      jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test prompt');
+
+      // Headers containing auth keywords should be stripped
+      expect(result.metadata?.http?.headers).toEqual({
+        'X-Request-ID': 'req-456',
+        'X-Rate-Limit': '100',
+      });
+    });
+  });
+
   describe('Content-Type and body handling', () => {
     it('should render string body when content-type is not set', async () => {
       const provider = new HttpProvider(mockUrl, {

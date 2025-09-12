@@ -167,6 +167,48 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
 }
 
 /**
+ * Strips authentication-related headers from response headers before saving to metadata.
+ * This prevents sensitive auth tokens from being stored in evaluation results.
+ */
+function stripAuthHeaders(headers: Record<string, string> | undefined): Record<string, string> {
+  if (!headers || typeof headers !== 'object') {
+    return headers || {};
+  }
+
+  const stripped: Record<string, string> = {};
+  const sensitivePatterns = [
+    'authorization',
+    'x-api-key',
+    'api-key',
+    'x-auth-token',
+    'auth-token',
+    'x-access-token',
+    'access-token',
+    'x-secret',
+    'secret',
+    'token',
+    'apikey',
+    'password',
+    'cookie',
+    'x-csrf-token',
+    'csrf-token',
+    'session',
+  ];
+
+  for (const [key, value] of Object.entries(headers)) {
+    const lowerKey = key.toLowerCase();
+    // Check if the header name contains any sensitive patterns
+    const isSensitive = sensitivePatterns.some((pattern) => lowerKey.includes(pattern));
+
+    if (!isSensitive) {
+      stripped[key] = value;
+    }
+  }
+
+  return stripped;
+}
+
+/**
  * Sanitizes configuration objects by redacting sensitive fields before logging.
  * Prevents passwords and other secrets from appearing in debug logs.
  */
@@ -1824,7 +1866,7 @@ export class HttpProvider implements ApiProvider {
       http: {
         status: response.status,
         statusText: response.statusText,
-        headers: response.headers || {},
+        headers: stripAuthHeaders(response.headers),
       },
     };
 
@@ -1936,7 +1978,7 @@ export class HttpProvider implements ApiProvider {
     if (context?.debug) {
       ret.raw = response.data;
       ret.metadata = {
-        headers: response.headers,
+        headers: stripAuthHeaders(response.headers),
       };
     }
 
