@@ -166,8 +166,27 @@ export async function getTargetResponse(
 }
 
 export interface Message {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'developer';
   content: string;
+}
+
+/**
+ * Validates if a parsed JSON object is a valid chat message array
+ */
+export function isValidChatMessageArray(parsed: unknown): parsed is Message[] {
+  return (
+    Array.isArray(parsed) &&
+    parsed.every(
+      (msg) =>
+        msg &&
+        typeof msg === 'object' &&
+        'role' in msg &&
+        'content' in msg &&
+        typeof msg.role === 'string' &&
+        typeof msg.content === 'string' &&
+        ['user', 'assistant', 'system', 'developer'].includes(msg.role),
+    )
+  );
 }
 
 export const getLastMessageContent = (
