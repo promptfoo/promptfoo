@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+//import { jest } from '@jest/globals';
 import { runAssertion } from '../../src/assertions';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
@@ -20,20 +21,28 @@ jest.mock('../../src/redteam/remoteGeneration', () => ({
 }));
 
 // Causes a SIGSEGV in github actions.
-jest.mock('better-sqlite3');
+//jest.mock('better-sqlite3');
+// jest.unstable_mockModule('better-sqlite3', () => ({
+//   default: jest.fn().mockReturnValue({
+//     prepare: jest.fn(),
+//     transaction: jest.fn(),
+//     exec: jest.fn(),
+//     close: jest.fn(),
+//   }),
+// }));
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('node:module', () => {
-  const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
-  } as unknown as NodeJS.Require;
-  return {
-    createRequire: jest.fn().mockReturnValue(mockRequire),
-  };
-});
+// jest.mock('node:module', () => {
+//   const mockRequire: NodeJS.Require = {
+//     resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+//   } as unknown as NodeJS.Require;
+//   return {
+//     createRequire: jest.fn().mockReturnValue(mockRequire),
+//   };
+// });
 
 jest.mock('../../src/util/fetch/index.ts', () => {
   const actual = jest.requireActual('../../src/util/fetch/index.ts');
