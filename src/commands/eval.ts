@@ -50,6 +50,8 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
+  // Allow --resume or --resume <id>
+  resume: z.union([z.string(), z.boolean()]).optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -150,12 +152,43 @@ export async function doEval(
       }
     }
 
-    ({
-      config,
-      testSuite,
-      basePath: _basePath,
-      commandLineOptions,
-    } = await resolveConfigs(cmdObj, defaultConfig));
+    // If resuming, load config from existing eval and avoid CLI filters that could change indices
+    let resumeEval: Eval | undefined;
+    const resumeRaw = (cmdObj as any).resume as string | boolean | undefined;
+    const resumeId = resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
+    if (resumeRaw) {
+      resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
+      if (!resumeEval) {
+        logger.error(`Could not find evaluation to resume: ${resumeId}`);
+        process.exitCode = 1;
+        return new Eval({}, { persisted: false });
+      }
+      logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
+      // Use the saved config as our base to ensure identical test ordering
+      ({
+        config,
+        testSuite,
+        basePath: _basePath,
+        commandLineOptions,
+      } = await resolveConfigs({}, resumeEval.config));
+      // Ensure prompts exactly match the previous run to preserve IDs and content
+      if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
+        testSuite.prompts = resumeEval.prompts.map((p) => ({
+          raw: p.raw,
+          label: p.label,
+          config: p.config,
+        } as any));
+      }
+      // Mark resume mode so evaluator can skip completed work
+      process.env.PROMPTFOO_RESUME = 'true';
+    } else {
+      ({
+        config,
+        testSuite,
+        basePath: _basePath,
+        commandLineOptions,
+      } = await resolveConfigs(cmdObj, defaultConfig));
+    }
 
     // Phase 2: Load environment from config files if not already set via CLI
     if (!cmdObj.envPath && commandLineOptions?.envPath) {
@@ -225,16 +258,18 @@ export async function doEval(
       );
     }
 
-    const filterOptions: FilterOptions = {
-      failing: cmdObj.filterFailing,
-      errorsOnly: cmdObj.filterErrorsOnly,
-      firstN: cmdObj.filterFirstN,
-      metadata: cmdObj.filterMetadata,
-      pattern: cmdObj.filterPattern,
-      sample: cmdObj.filterSample,
-    };
-
-    testSuite.tests = await filterTests(testSuite, filterOptions);
+    // Apply filtering only when not resuming, to preserve test indices
+    if (!resumeRaw) {
+      const filterOptions: FilterOptions = {
+        failing: cmdObj.filterFailing,
+        errorsOnly: cmdObj.filterErrorsOnly,
+        firstN: cmdObj.filterFirstN,
+        metadata: cmdObj.filterMetadata,
+        pattern: cmdObj.filterPattern,
+        sample: cmdObj.filterSample,
+      };
+      testSuite.tests = await filterTests(testSuite, filterOptions);
+    }
 
     if (
       config.redteam &&
@@ -313,9 +348,34 @@ export async function doEval(
       );
     }
 
-    const evalRecord = cmdObj.write
-      ? await Eval.create(config, testSuite.prompts)
-      : new Eval(config);
+    // Create or load eval record
+    const evalRecord = resumeEval
+      ? resumeEval
+      : cmdObj.write
+        ? await Eval.create(config, testSuite.prompts)
+        : new Eval(config);
+
+    // Graceful pause support via Ctrl+C
+    const abortController = new AbortController();
+    const previousAbortSignal = evaluateOptions.abortSignal;
+    evaluateOptions.abortSignal = previousAbortSignal
+      ? AbortSignal.any([previousAbortSignal, abortController.signal])
+      : abortController.signal;
+    let sigintHandler: ((...args: any[]) => void) | undefined;
+    let paused = false;
+    sigintHandler = () => {
+      if (paused) {
+        // Second Ctrl+C: force exit
+        logger.warn('Force exiting...');
+        process.exit(130);
+      }
+      paused = true;
+      logger.info(
+        chalk.yellow('Pausing evaluation... Saving progress. Press Ctrl+C again to force exit.'),
+      );
+      abortController.abort();
+    };
+    process.once('SIGINT', sigintHandler);
 
     // Run the evaluation!!!!!!
     const ret = await evaluate(testSuite, evalRecord, {
@@ -324,6 +384,20 @@ export async function doEval(
       abortSignal: evaluateOptions.abortSignal,
       isRedteam: Boolean(config.redteam),
     });
+
+    // Cleanup signal handler
+    if (sigintHandler) {
+      process.removeListener('SIGINT', sigintHandler);
+    }
+
+    // If paused, print minimal guidance and skip the rest of the reporting
+    if (paused) {
+      printBorder();
+      logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
+      logger.info(`» Resume with: ${chalk.greenBright.bold('promptfoo eval --resume ' + evalRecord.id)}`);
+      printBorder();
+      return ret;
+    }
 
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
@@ -576,7 +650,7 @@ export async function doEval(
       isRedteam,
     });
 
-    if (cmdObj.watch) {
+    if (cmdObj.watch && !resumeRaw) {
       if (initialization) {
         const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
         if (!configPaths.length) {
@@ -798,6 +872,7 @@ export function evalCommand(
     )
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
     .option('--no-share', 'Do not share, this overrides the config file')
+    .option('--resume [evalId]', 'Resume a paused/incomplete evaluation. Defaults to latest when omitted')
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',

@@ -1044,6 +1044,40 @@ class Evaluator {
         }
       }
     }
+    // Pre-mark comparison rows before any filtering (used by resume logic)
+    for (const evalOption of runEvalOptions) {
+      if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
+        rowsWithSelectBestAssertion.add(evalOption.testIdx);
+      }
+      if (evalOption.test.assert?.some((a) => a.type === 'max-score')) {
+        rowsWithMaxScoreAssertion.add(evalOption.testIdx);
+      }
+    }
+
+    // Resume support: if PROMPTFOO_RESUME is set, skip already-completed (testIdx,promptIdx) pairs
+    if (process.env.PROMPTFOO_RESUME === 'true' && this.evalRecord.persisted) {
+      try {
+        const { default: EvalResult } = await import('./models/evalResult');
+        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);
+        const originalCount = runEvalOptions.length;
+        // Filter out steps that already exist in DB
+        for (let i = runEvalOptions.length - 1; i >= 0; i--) {
+          const step = runEvalOptions[i];
+          if (completedPairs.has(`${step.testIdx}:${step.promptIdx}`)) {
+            runEvalOptions.splice(i, 1);
+          }
+        }
+        const skipped = originalCount - runEvalOptions.length;
+        if (skipped > 0) {
+          logger.info(`Resuming: skipping ${skipped} previously completed cases`);
+        }
+      } catch (err) {
+        logger.warn(
+          `Resume: failed to load completed results. Running full evaluation. ${String(err)}`,
+        );
+      }
+    }
+
     // Determine run parameters
 
     if (concurrency > 1) {
@@ -1416,13 +1450,18 @@ class Evaluator {
         await this.evalRecord.addPrompts(prompts);
       });
     } catch (err) {
-      if (ciProgressReporter) {
-        ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
-      }
       if (options.abortSignal?.aborted) {
+        // User interruption or max duration timeout
         evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
-        logger.warn(`Evaluation aborted: ${String(err)}`);
+        if (evalTimedOut) {
+          logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+        } else {
+          logger.info('Evaluation interrupted by user; saving progress...');
+        }
       } else {
+        if (ciProgressReporter) {
+          ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
+        }
         throw err;
       }
     }
