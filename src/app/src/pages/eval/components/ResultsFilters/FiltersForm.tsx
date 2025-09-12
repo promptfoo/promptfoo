@@ -6,6 +6,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import {
   Box,
   Button,
+  CircularProgress,
   Divider,
   FormControl,
   IconButton,
@@ -137,7 +138,15 @@ function Filter({
   onClose: () => void;
 }) {
   const theme = useTheme();
-  const { filters, updateFilter, removeFilter, updateAllFilterLogicOperators } = useTableStore();
+  const {
+    filters,
+    updateFilter,
+    removeFilter,
+    updateAllFilterLogicOperators,
+    metadataKeys,
+    metadataKeysLoading,
+    metadataKeysError,
+  } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
   const selectedMetricValues = Object.values(filters.values)
@@ -329,18 +338,49 @@ function Filter({
           width={150}
         />
 
-        {value.type === 'metadata' && (
-          <DebouncedTextField
-            id={`${index}-field-input`}
-            label="Key"
-            variant="outlined"
-            size="small"
-            value={value.field || ''}
-            onChange={handleFieldChange}
-            placeholder="Enter metadata key"
-            sx={{ width: 180 }}
-          />
-        )}
+        {value.type === 'metadata' &&
+          // Show loading state initially to prevent flicker
+          (metadataKeysLoading ? (
+            <TextField
+              id={`${index}-field-loading`}
+              label="Key"
+              variant="outlined"
+              size="small"
+              value=""
+              placeholder="Loading keys..."
+              disabled
+              sx={{ width: 180 }}
+              InputProps={{
+                endAdornment: <CircularProgress size={16} />,
+              }}
+            />
+          ) : metadataKeys && metadataKeys.length > 0 ? (
+            // Show dropdown if keys are available
+            <Dropdown
+              id={`${index}-field-select`}
+              label="Key"
+              values={(metadataKeys || []).map((key) => ({ label: key, value: key }))}
+              value={value.field || ''}
+              onChange={handleFieldChange}
+              width={180}
+            />
+          ) : (
+            // Fallback to text input with error indication if needed
+            <TextField
+              id={`${index}-field-input`}
+              label="Key"
+              variant="outlined"
+              size="small"
+              value={value.field || ''}
+              onChange={(e) => handleFieldChange(e.target.value)}
+              placeholder={
+                metadataKeysError ? 'Error loading keys - type manually' : 'Enter metadata key'
+              }
+              sx={{ width: 180 }}
+              error={metadataKeysError}
+              helperText={metadataKeysError ? 'Failed to load available keys' : undefined}
+            />
+          ))}
 
         <Dropdown
           id={`${index}-operator-select`}
