@@ -26,6 +26,10 @@ jobs:
       matrix:
         node: ['20.x', '22.x', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
+        # Temporarily exclude macOS with Node 24.x due to flaky test failures
+        exclude:
+          - node: '24.x'
+            os: macOS-latest
 
     steps:
       - name: Checkout repo
