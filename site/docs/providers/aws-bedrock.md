@@ -29,7 +29,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -85,7 +85,7 @@ Specify AWS access keys directly in your configuration. **For security, use envi
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       accessKeyId: '${AWS_ACCESS_KEY_ID}'
       secretAccessKey: '${AWS_SECRET_ACCESS_KEY}'
@@ -158,7 +158,7 @@ Use a named profile from your AWS configuration, which is especially useful for 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       profile: 'YOUR_SSO_PROFILE'
       region: 'us-east-1' # Optional, defaults to us-east-1
@@ -201,7 +201,7 @@ Let AWS SDK automatically resolve credentials using the standard credential chai
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1' # Only region specified
 ```
@@ -310,17 +310,17 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
-  - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -794,13 +794,13 @@ This usually means you need to use the region-specific model ID. Update your pro
 ```yaml
 providers:
   # Instead of this:
-  - id: bedrock:anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
   # Use this:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0 # US region
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0 # US region
   # or
-  - id: bedrock:eu.anthropic.claude-sonnet-4-20250514-v1:0 # EU region
+  - id: bedrock:eu.anthropic.claude-3-5-sonnet-20241022-v2:0 # EU region
   # or
-  - id: bedrock:apac.anthropic.claude-sonnet-4-20250514-v1:0 # APAC region
+  - id: bedrock:apac.anthropic.claude-3-5-sonnet-20241022-v2:0 # APAC region
 ```
 
 Make sure to:
