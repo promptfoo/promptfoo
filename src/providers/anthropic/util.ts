@@ -220,13 +220,19 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
 /**
  * Processes tools configuration to handle web fetch and web search tools
  */
-export function processAnthropicTools(
-  tools: (Anthropic.Tool | AnthropicToolConfig)[] = []
-): {
-  processedTools: (Anthropic.Tool | Anthropic.Beta.Messages.BetaWebFetchTool20250910 | Anthropic.Beta.Messages.BetaWebSearchTool20250305)[];
+export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConfig)[] = []): {
+  processedTools: (
+    | Anthropic.Tool
+    | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+  )[];
   requiredBetaFeatures: string[];
 } {
-  const processedTools: (Anthropic.Tool | Anthropic.Beta.Messages.BetaWebFetchTool20250910 | Anthropic.Beta.Messages.BetaWebSearchTool20250305)[] = [];
+  const processedTools: (
+    | Anthropic.Tool
+    | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+  )[] = [];
   const requiredBetaFeatures: string[] = [];
 
   for (const tool of tools) {
@@ -256,7 +262,9 @@ export function processAnthropicTools(
 /**
  * Transform web fetch tool config to Anthropic beta tool format
  */
-function transformWebFetchTool(config: WebFetchToolConfig): Anthropic.Beta.Messages.BetaWebFetchTool20250910 {
+function transformWebFetchTool(
+  config: WebFetchToolConfig,
+): Anthropic.Beta.Messages.BetaWebFetchTool20250910 {
   const tool: Anthropic.Beta.Messages.BetaWebFetchTool20250910 = {
     type: 'web_fetch_20250910',
     name: 'web_fetch',
@@ -287,7 +295,9 @@ function transformWebFetchTool(config: WebFetchToolConfig): Anthropic.Beta.Messa
 /**
  * Transform web search tool config to Anthropic beta tool format
  */
-function transformWebSearchTool(config: WebSearchToolConfig): Anthropic.Beta.Messages.BetaWebSearchTool20250305 {
+function transformWebSearchTool(
+  config: WebSearchToolConfig,
+): Anthropic.Beta.Messages.BetaWebSearchTool20250305 {
   const tool: Anthropic.Beta.Messages.BetaWebSearchTool20250305 = {
     type: 'web_search_20250305',
     name: 'web_search',

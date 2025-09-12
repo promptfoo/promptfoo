@@ -6,7 +6,10 @@ import {
   processAnthropicTools,
 } from '../../../src/providers/anthropic/util';
 import type Anthropic from '@anthropic-ai/sdk';
-import type { WebFetchToolConfig, WebSearchToolConfig } from '../../../src/providers/anthropic/types';
+import type {
+  WebFetchToolConfig,
+  WebSearchToolConfig,
+} from '../../../src/providers/anthropic/types';
 
 describe('Anthropic utilities', () => {
   describe('calculateAnthropicCost', () => {
@@ -667,7 +670,7 @@ describe('Anthropic utilities', () => {
   describe('processAnthropicTools', () => {
     it('should handle empty tools array', () => {
       const { processedTools, requiredBetaFeatures } = processAnthropicTools([]);
-      
+
       expect(processedTools).toEqual([]);
       expect(requiredBetaFeatures).toEqual([]);
     });
@@ -686,7 +689,7 @@ describe('Anthropic utilities', () => {
       };
 
       const { processedTools, requiredBetaFeatures } = processAnthropicTools([standardTool]);
-      
+
       expect(processedTools).toEqual([standardTool]);
       expect(requiredBetaFeatures).toEqual([]);
     });
@@ -701,7 +704,7 @@ describe('Anthropic utilities', () => {
       };
 
       const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
-      
+
       expect(processedTools).toHaveLength(1);
       expect(processedTools[0]).toMatchObject({
         type: 'web_fetch_20250910',
@@ -721,7 +724,7 @@ describe('Anthropic utilities', () => {
       };
 
       const { processedTools, requiredBetaFeatures } = processAnthropicTools([webSearchTool]);
-      
+
       expect(processedTools).toHaveLength(1);
       expect(processedTools[0]).toMatchObject({
         type: 'web_search_20250305',
@@ -760,7 +763,7 @@ describe('Anthropic utilities', () => {
         webFetchTool,
         webSearchTool,
       ]);
-      
+
       expect(processedTools).toHaveLength(3);
       expect(processedTools[0]).toEqual(standardTool);
       expect(processedTools[1]).toMatchObject({
@@ -789,7 +792,7 @@ describe('Anthropic utilities', () => {
       };
 
       const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
-      
+
       expect(processedTools).toHaveLength(1);
       expect(processedTools[0]).toMatchObject({
         type: 'web_fetch_20250910',
@@ -811,7 +814,7 @@ describe('Anthropic utilities', () => {
       };
 
       const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
-      
+
       expect(processedTools).toHaveLength(1);
       expect(processedTools[0]).toMatchObject({
         type: 'web_fetch_20250910',
@@ -837,7 +840,7 @@ describe('Anthropic utilities', () => {
         webFetchTool1,
         webFetchTool2,
       ]);
-      
+
       expect(processedTools).toHaveLength(2);
       expect(requiredBetaFeatures).toEqual(['web-fetch-2025-09-10']);
     });

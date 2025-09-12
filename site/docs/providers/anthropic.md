@@ -170,15 +170,15 @@ providers:
 
 **Web Fetch Tool Configuration Options:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `type` | string | Must be `web_fetch_20250910` |
-| `name` | string | Must be `web_fetch` |
-| `max_uses` | number | Maximum number of web fetches per request (optional) |
-| `allowed_domains` | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`) |
-| `blocked_domains` | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`) |
-| `citations` | object | Enable citations with `{ enabled: true }` (optional) |
-| `max_content_tokens` | number | Maximum tokens for web content (optional) |
+| Parameter            | Type     | Description                                                                                  |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `type`               | string   | Must be `web_fetch_20250910`                                                                 |
+| `name`               | string   | Must be `web_fetch`                                                                          |
+| `max_uses`           | number   | Maximum number of web fetches per request (optional)                                         |
+| `allowed_domains`    | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`) |
+| `blocked_domains`    | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`) |
+| `citations`          | object   | Enable citations with `{ enabled: true }` (optional)                                         |
+| `max_content_tokens` | number   | Maximum tokens for web content (optional)                                                    |
 
 ##### Web Search Tool
 
@@ -196,10 +196,10 @@ providers:
 
 **Web Search Tool Configuration Options:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `type` | string | Must be `web_search_20250305` |
-| `name` | string | Must be `web_search` |
+| Parameter  | Type   | Description                                       |
+| ---------- | ------ | ------------------------------------------------- |
+| `type`     | string | Must be `web_search_20250305`                     |
+| `name`     | string | Must be `web_search`                              |
 | `max_uses` | number | Maximum number of searches per request (optional) |
 
 ##### Combined Web Search and Web Fetch

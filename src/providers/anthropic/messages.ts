@@ -97,11 +97,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     if (this.mcpClient) {
       mcpTools = transformMCPToolsToAnthropic(this.mcpClient.getAllTools());
     }
-    
+
     // Load and process tools from config (handles both external files and inline tool definitions)
     const configTools = maybeLoadToolsFromExternalFile(config.tools) || [];
-    const { processedTools: processedConfigTools, requiredBetaFeatures } = processAnthropicTools(configTools);
-    
+    const { processedTools: processedConfigTools, requiredBetaFeatures } =
+      processAnthropicTools(configTools);
+
     // Combine all tools
     const allTools = [...mcpTools, ...processedConfigTools];
 

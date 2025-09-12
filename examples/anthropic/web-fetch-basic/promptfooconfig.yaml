@@ -1,0 +1,41 @@
+description: 'Basic Anthropic Web Fetch - fetch and analyze web content'
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-20250514
+    config:
+      temperature: 0
+      max_tokens: 1500
+      tools:
+        - type: web_fetch_20250910
+          name: web_fetch
+          max_uses: 2
+          allowed_domains:
+            - docs.anthropic.com
+            - github.com
+          citations:
+            enabled: true
+          max_content_tokens: 8000
+
+prompts:
+  - |
+    Please fetch and summarize the content from this URL: {{url}}
+    
+    Focus on the key points and main concepts.
+
+tests:
+  - vars:
+      url: 'https://docs.anthropic.com/en/docs/build-with-claude/tool-use'
+    assert:
+      - type: contains-any
+        value: ['tool', 'function', 'API', 'capabilities']
+        reason: 'Should mention tool-related concepts'
+      - type: llm-rubric
+        value: 'Provides a clear, structured summary of the web page content'
+
+  - vars:
+      url: 'https://github.com/anthropics/anthropic-sdk-typescript'
+    assert:
+      - type: contains
+        value: 'TypeScript'
+      - type: llm-rubric
+        value: 'Describes the TypeScript SDK and its purpose'

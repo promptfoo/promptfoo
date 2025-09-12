@@ -1,0 +1,59 @@
+description: 'Advanced Anthropic Web Research - combine search and fetch for comprehensive analysis'
+
+providers:
+  - id: anthropic:messages:claude-opus-4-1-20250805
+    config:
+      temperature: 0.1
+      max_tokens: 3000
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 2
+        - type: web_fetch_20250910
+          name: web_fetch
+          max_uses: 3
+          allowed_domains:
+            - docs.anthropic.com
+            - github.com
+            - openai.com
+            - arxiv.org
+          citations:
+            enabled: true
+          max_content_tokens: 15000
+
+prompts:
+  - |
+    Research "{{topic}}" and provide a comprehensive analysis.
+    
+    Process:
+    1. Search for recent information about the topic
+    2. Fetch detailed content from the most authoritative sources  
+    3. Synthesize findings into a structured report
+    
+    Your report should include:
+    - Overview of the topic
+    - Key capabilities or features
+    - Recent developments
+    - Sources used
+
+tests:
+  - vars:
+      topic: 'Claude 4 AI model capabilities and improvements'
+    assert:
+      - type: contains-any
+        value: ['Claude 4', 'claude-4', 'capabilities', 'model']
+        reason: 'Should discuss Claude 4 specifically'
+      - type: llm-rubric
+        value: 'Provides a comprehensive research-based analysis with multiple information sources'
+      - type: contains-any
+        value: ['search', 'found', 'according', 'research', 'sources']
+        reason: 'Should indicate research methodology was used'
+
+  - vars:
+      topic: 'web fetch tool security considerations'
+    assert:
+      - type: contains-any
+        value: ['security', 'domain', 'filtering', 'risk']
+        reason: 'Should address security aspects'
+      - type: llm-rubric  
+        value: 'Discusses security considerations and best practices for web fetching'
