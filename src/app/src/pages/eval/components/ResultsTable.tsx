@@ -50,7 +50,7 @@ import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
-import { tryDecodeBase64, tryDecodeHex } from '@app/utils/encoding';
+import { isEncodingStrategy, tryDecodeTextBase64, tryDecodeHex } from '@app/utils/encoding';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -545,7 +545,7 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 let value: string | object = info.getValue();
-                const originalValue = value; // Store original value for tooltip
+                const _originalValue = value; // Store original value for tooltip
                 const row = info.row.original;
 
                 // For red team evals, show the final injected prompt for the configured inject variable
@@ -645,29 +645,24 @@ function ResultsTable({
                   typeof testMetadata.originalText === 'string'
                     ? testMetadata.originalText
                     : undefined;
-                const heuristicDecodedFromValue =
-                  typeof value === 'string' ? tryDecodeBase64(value) || tryDecodeHex(value) : null;
-                const valuesDiffer =
-                  typeof metadataOriginal === 'string' && typeof value === 'string'
-                    ? metadataOriginal !== value
-                    : Boolean(metadataOriginal);
-                const shouldShowOriginal =
-                  varName === injectVarName && (valuesDiffer || Boolean(heuristicDecodedFromValue));
+                const strategyId = testMetadata.strategyId;
 
-                // If injected or an encoding strategy is detected, show original (decoded) text as well
+                // First try metadata-based approach (fast, reliable)
+                let shouldShowOriginal =
+                  varName === injectVarName &&
+                  isEncodingStrategy(strategyId) &&
+                  Boolean(metadataOriginal);
+
+                // Fallback: lightweight heuristic for attacks without proper metadata
+                let fallbackDecoded: string | null = null;
+                if (!shouldShowOriginal && varName === injectVarName && typeof value === 'string') {
+                  fallbackDecoded = tryDecodeTextBase64(value) || tryDecodeHex(value);
+                  shouldShowOriginal = Boolean(fallbackDecoded);
+                }
+
+                // Show original text for encoding strategies
                 if (shouldShowOriginal) {
-                  const heuristicDecoded =
-                    metadataOriginal ||
-                    (typeof originalValue === 'string'
-                      ? tryDecodeBase64(originalValue) || tryDecodeHex(originalValue)
-                      : null) ||
-                    heuristicDecodedFromValue ||
-                    undefined;
-                  const originalForDisplay =
-                    heuristicDecoded ||
-                    metadataOriginal ||
-                    (typeof originalValue === 'string' ? originalValue : undefined) ||
-                    '';
+                  const originalForDisplay = metadataOriginal || fallbackDecoded || '';
                   return (
                     <div className="cell" data-capture="true">
                       {cellContent}

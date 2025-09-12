@@ -1,11 +1,50 @@
-// Decoding helpers for common encodings used in red team strategies
+// Strategy-based decoding helpers for red team strategies
 
 /**
- * Attempts to decode a base64 string. Returns null if it looks invalid or decoding fails.
+ * Set of strategy IDs that represent encoding transformations where originalText should be shown
  */
-export function tryDecodeBase64(str: string): string | null {
+const ENCODING_STRATEGIES = new Set([
+  'base64',
+  'hex',
+  'rot13',
+  'leetspeak',
+  'homoglyph',
+  'morse',
+  'atbash',
+  'pigLatin',
+  'reverse',
+  'binary',
+  'octal',
+  'audio',
+  'image',
+  'video',
+]);
+
+/**
+ * Determines if a strategy represents an encoding where we should show the original text
+ */
+export function isEncodingStrategy(strategyId: string | undefined): boolean {
+  return strategyId ? ENCODING_STRATEGIES.has(strategyId) : false;
+}
+
+/**
+ * Lightweight check to avoid decoding large binary content like audio/images
+ */
+function isLikelyBinaryContent(str: string): boolean {
+  return (
+    str.startsWith('data:audio/') ||
+    str.startsWith('data:image/') ||
+    str.startsWith('data:video/') ||
+    str.length > 5000
+  ); // Large base64 is likely binary
+}
+
+/**
+ * Attempts to decode text-based base64, avoiding expensive binary content
+ */
+export function tryDecodeTextBase64(str: string): string | null {
   try {
-    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(str) || str.length < 8) {
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(str) || str.length < 8 || isLikelyBinaryContent(str)) {
       return null;
     }
     const decoded =
@@ -18,7 +57,7 @@ export function tryDecodeBase64(str: string): string | null {
 }
 
 /**
- * Attempts to decode space-separated hex bytes (e.g. "68 65 6C 6C 6F"). Returns null if invalid.
+ * Attempts to decode space-separated hex bytes
  */
 export function tryDecodeHex(str: string): string | null {
   if (!/^(?:[0-9A-Fa-f]{2}(?:\s+|$))+$/u.test(str)) {
