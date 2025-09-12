@@ -1,6 +1,6 @@
 ---
 sidebar_position: 2
-description: "Deploy Anthropic's Claude models including Opus, Sonnet, and Haiku for advanced reasoning and conversational AI applications"
+description: "Deploy Anthropic's Claude models including Opus, Sonnet, and Haiku for reasoning and text generation applications"
 ---
 
 # Anthropic
@@ -221,12 +221,12 @@ providers:
             enabled: true
 ```
 
-This configuration allows Claude to first search for relevant information, then fetch full content from the most promising results.
+This configuration allows the model to first search for relevant information, then fetch full content from the most promising results.
 
 **Important Security Notes:**
 
 - The web fetch tool requires trusted environments due to potential data exfiltration risks
-- Claude cannot dynamically construct URLs - only URLs provided by users or from search results can be fetched
+- The model cannot dynamically construct URLs - only URLs provided by users or from search results can be fetched
 - Use domain filtering to restrict access to specific sites:
   - Use `allowed_domains` to whitelist trusted domains (recommended)
   - Use `blocked_domains` to blacklist specific domains
