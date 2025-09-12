@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -314,7 +315,7 @@ export default function EvalsDataGrid({
           valueGetter: (value: Eval['createdAt'], row: Eval) => {
             return new Date(value);
           },
-          valueFormatter: (value: Eval['createdAt']) => new Date(value).toLocaleString(),
+          valueFormatter: (value: Eval['createdAt']) => formatDataGridDate(value),
         },
         // Only show the redteam column if there are redteam evals.
         ...(hasRedteamEvals

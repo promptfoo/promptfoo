@@ -1,5 +1,3 @@
-import React from 'react';
-
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import Box from '@mui/material/Box';
@@ -12,7 +10,7 @@ interface EvalIdChipProps {
   onCopy: () => void;
 }
 
-export const EvalIdChip: React.FC<EvalIdChipProps> = ({ evalId, onCopy }) => {
+export const EvalIdChip = ({ evalId, onCopy }: EvalIdChipProps) => {
   const handleCopy = () => {
     onCopy();
   };

@@ -1,5 +1,3 @@
-import React from 'react';
-
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
@@ -22,11 +20,11 @@ const BASE_OPTIONS = [
   { value: 'highlights', label: 'Show highlights only' },
 ];
 
-export const FilterModeSelector: React.FC<FilterModeSelectorProps> = ({
+export const FilterModeSelector = ({
   filterMode,
   onChange,
   showDifferentOption = true,
-}) => {
+}: FilterModeSelectorProps) => {
   const options = showDifferentOption
     ? BASE_OPTIONS
     : BASE_OPTIONS.filter((o) => o.value !== 'different');

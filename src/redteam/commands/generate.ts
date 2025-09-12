@@ -28,7 +28,7 @@ import {
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
-import { getCustomPolicyTexts } from '../../util/generation';
+import { getCustomPolicies } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import { synthesize } from '../';
@@ -321,12 +321,21 @@ export async function doGenerateRedteam(
       (options?.liveRedteamConfig?.metadata as Record<string, unknown>)?.teamId ??
       (await getDefaultTeam()).id;
 
-    const texts = await getCustomPolicyTexts(policyPluginsWithRefs, teamId);
+    const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
 
-    // Assign, in-place, the policy texts to the plugins
+    // Assign, in-place, the policy texts and severities to the plugins
     for (const policyPlugin of policyPluginsWithRefs) {
       const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
-      policyPlugin.config!.policy = { id: policyId, text: texts[policyId] } as PolicyObject;
+      const policyData = policiesById.get(policyId);
+      if (policyData) {
+        // Set the policy details
+        policyPlugin.config!.policy = { id: policyId, text: policyData.text } as PolicyObject;
+        // Set the plugin severity if it hasn't been set already; this allows the user to override the severity
+        // on a per-config basis if necessary.
+        if (policyPlugin.severity == null) {
+          policyPlugin.severity = policyData.severity;
+        }
+      }
     }
   }
 
