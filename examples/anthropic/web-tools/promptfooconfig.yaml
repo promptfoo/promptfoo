@@ -1,7 +1,12 @@
-description: 'Anthropic Web Tools - search and fetch web content'
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Web search and fetch tools'
+
+prompts:
+  - |
+    {{task}}
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
     config:
       temperature: 0
       max_tokens: 2500
@@ -20,10 +25,6 @@ providers:
           citations:
             enabled: true
           max_content_tokens: 12000
-
-prompts:
-  - |
-    {{task}}
 
 tests:
   # Basic web fetch test

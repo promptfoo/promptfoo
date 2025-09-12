@@ -1,6 +1,6 @@
 ---
 sidebar_position: 2
-description: "Deploy Anthropic's Claude models including Opus, Sonnet, and Haiku for reasoning and text generation applications"
+description: "Deploy Anthropic's Claude models including Opus, Sonnet, and Haiku for advanced reasoning and conversational AI applications"
 ---
 
 # Anthropic

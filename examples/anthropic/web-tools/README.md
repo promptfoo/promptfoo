@@ -1,6 +1,12 @@
-# Anthropic Web Tools Example
+# web-tools
 
 This example demonstrates Anthropic's web search and web fetch tools, showing both basic URL fetching and comprehensive research workflows.
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example web-tools
+```
 
 ## Features Demonstrated
 
@@ -13,23 +19,42 @@ This example demonstrates Anthropic's web search and web fetch tools, showing bo
 ## Configuration Highlights
 
 ```yaml
-tools:
-  - type: web_search_20250305 # Search the web
-    name: web_search
-    max_uses: 2
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Web search and fetch tools'
 
-  - type: web_fetch_20250910 # Fetch specific URLs
-    name: web_fetch
-    max_uses: 3
-    allowed_domains: # Restrict to trusted domains
-      - docs.anthropic.com
-      - github.com
-      - openai.com
-      - arxiv.org
-    citations:
-      enabled: true # Enable source citations
-    max_content_tokens: 12000 # Content size limit
+prompts:
+  - |
+    {{task}}
+
+providers:
+  - id: anthropic:messages:claude-3-7-sonnet-20250219
+    config:
+      temperature: 0
+      max_tokens: 2500
+      tools:
+        - type: web_search_20250305 # Search the web
+          name: web_search
+          max_uses: 2
+        - type: web_fetch_20250910 # Fetch specific URLs
+          name: web_fetch
+          max_uses: 3
+          allowed_domains: # Restrict to trusted domains
+            - docs.anthropic.com
+            - github.com
+            - openai.com
+            - arxiv.org
+          citations:
+            enabled: true # Enable source citations
+          max_content_tokens: 12000 # Content size limit
 ```
+
+## Required Environment Variables
+
+This example requires the following environment variables:
+
+- `ANTHROPIC_API_KEY` - Your Anthropic API key from [console.anthropic.com](https://console.anthropic.com/settings/keys)
+
+You can set these in a `.env` file or directly in your environment.
 
 ## Running the Example
 
