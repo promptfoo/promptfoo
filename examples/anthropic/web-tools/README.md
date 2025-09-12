@@ -14,21 +14,21 @@ This example demonstrates Anthropic's web search and web fetch tools, showing bo
 
 ```yaml
 tools:
-  - type: web_search_20250305     # Search the web
+  - type: web_search_20250305 # Search the web
     name: web_search
     max_uses: 2
-    
-  - type: web_fetch_20250910      # Fetch specific URLs
+
+  - type: web_fetch_20250910 # Fetch specific URLs
     name: web_fetch
     max_uses: 3
-    allowed_domains:              # Restrict to trusted domains
+    allowed_domains: # Restrict to trusted domains
       - docs.anthropic.com
       - github.com
       - openai.com
       - arxiv.org
     citations:
-      enabled: true               # Enable source citations
-    max_content_tokens: 12000     # Content size limit
+      enabled: true # Enable source citations
+    max_content_tokens: 12000 # Content size limit
 ```
 
 ## Running the Example
@@ -48,6 +48,7 @@ promptfoo eval
 ## Use Cases
 
 Perfect for:
+
 - Documentation analysis
 - Competitive research
 - Technical investigation

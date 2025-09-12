@@ -49,12 +49,12 @@ tests:
   - vars:
       task: |
         Research "Claude 4 AI model capabilities" and provide a comprehensive analysis.
-        
+
         Process:
         1. Search for recent information about the topic
         2. Fetch detailed content from the most authoritative sources  
         3. Synthesize findings into a structured report
-        
+
         Your report should include:
         - Overview of the topic
         - Key capabilities or features
@@ -77,5 +77,5 @@ tests:
       - type: contains-any
         value: ['security', 'domain', 'filtering', 'risk']
         reason: 'Should address security aspects'
-      - type: llm-rubric  
+      - type: llm-rubric
         value: 'Discusses security considerations and best practices for web fetching'
