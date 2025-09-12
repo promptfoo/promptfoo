@@ -1280,6 +1280,7 @@
                           "toxicity",
                           "unsafebench",
                           "unverifiable-claims",
+                          "vlguard",
                           "xstest"
                         ]
                       },
@@ -1473,6 +1474,7 @@
                               "toxicity",
                               "unsafebench",
                               "unverifiable-claims",
+                              "vlguard",
                               "xstest"
                             ]
                           },
