@@ -87,7 +87,7 @@ export async function checkServerFeatureSupport(
 }
 
 export async function checkServerRunning(port = getDefaultPort()): Promise<boolean> {
-  logger.info(`Checking for existing server on port ${port}...`);
+  logger.debug(`Checking for existing server on port ${port}...`);
   try {
     const response = await fetchWithProxy(`http://localhost:${port}/health`);
     const data = await response.json();
