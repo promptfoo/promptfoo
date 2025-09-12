@@ -138,14 +138,14 @@ function Filter({
   onClose: () => void;
 }) {
   const theme = useTheme();
-  const { 
-    filters, 
-    updateFilter, 
-    removeFilter, 
+  const {
+    filters,
+    updateFilter,
+    removeFilter,
     updateAllFilterLogicOperators,
     metadataKeys,
     metadataKeysLoading,
-    metadataKeysError
+    metadataKeysError,
   } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
@@ -338,9 +338,9 @@ function Filter({
           width={150}
         />
 
-        {value.type === 'metadata' && (
+        {value.type === 'metadata' &&
           // Show loading state initially to prevent flicker
-          metadataKeysLoading ? (
+          (metadataKeysLoading ? (
             <TextField
               id={`${index}-field-loading`}
               label="Key"
@@ -351,15 +351,15 @@ function Filter({
               disabled
               sx={{ width: 180 }}
               InputProps={{
-                endAdornment: <CircularProgress size={16} />
+                endAdornment: <CircularProgress size={16} />,
               }}
             />
-          ) : metadataKeys.length > 0 ? (
+          ) : metadataKeys && metadataKeys.length > 0 ? (
             // Show dropdown if keys are available
             <Dropdown
               id={`${index}-field-select`}
               label="Key"
-              values={metadataKeys.map((key) => ({ label: key, value: key }))}
+              values={(metadataKeys || []).map((key) => ({ label: key, value: key }))}
               value={value.field || ''}
               onChange={handleFieldChange}
               width={180}
@@ -373,13 +373,14 @@ function Filter({
               size="small"
               value={value.field || ''}
               onChange={(e) => handleFieldChange(e.target.value)}
-              placeholder={metadataKeysError ? "Error loading keys - type manually" : "Enter metadata key"}
+              placeholder={
+                metadataKeysError ? 'Error loading keys - type manually' : 'Enter metadata key'
+              }
               sx={{ width: 180 }}
               error={metadataKeysError}
-              helperText={metadataKeysError ? "Failed to load available keys" : undefined}
+              helperText={metadataKeysError ? 'Failed to load available keys' : undefined}
             />
-          )
-        )}
+          ))}
 
         <Dropdown
           id={`${index}-operator-select`}

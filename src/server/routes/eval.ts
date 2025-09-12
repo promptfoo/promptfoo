@@ -279,7 +279,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = ApiSchemas.Eval.MetadataKeys.Params.parse(req.params);
-    
+
     const eval_ = await Eval.findById(id);
     if (!eval_) {
       res.status(404).json({ error: 'Eval not found' });
@@ -287,13 +287,13 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
     }
 
     const keys = await EvalQueries.getMetadataKeysFromEval(id);
-    
+
     // Set targeted caching headers - only affects this specific endpoint
     res.set({
       'Cache-Control': 'private, max-age=1800', // 30 minute cache, private to user
-      'Vary': 'Authorization', // Cache per user if auth is involved
+      Vary: 'Authorization', // Cache per user if auth is involved
     });
-    
+
     const response = ApiSchemas.Eval.MetadataKeys.Response.parse({ keys });
     res.json(response);
   } catch (error) {
@@ -301,9 +301,11 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
       res.status(400).json({ error: fromZodError(error).toString() });
       return;
     }
-    
+
     const { id } = req.params;
-    logger.error(`Error fetching metadata keys for eval ${id}: ${error instanceof Error ? error.message : String(error)}`);
+    logger.error(
+      `Error fetching metadata keys for eval ${id}: ${error instanceof Error ? error.message : String(error)}`,
+    );
     res.status(500).json({ error: 'Failed to fetch metadata keys' });
   }
 });

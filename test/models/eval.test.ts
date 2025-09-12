@@ -575,7 +575,7 @@ describe('evaluator', () => {
   describe('EvalQueries.getMetadataKeysFromEval', () => {
     it('should return unique metadata keys from all eval results', async () => {
       const eval_ = await EvalFactory.create();
-      
+
       // Add eval results with different metadata
       const db = getDb();
       await db.run(
@@ -585,7 +585,7 @@ describe('evaluator', () => {
         ) VALUES 
         ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{"key1": "value1", "key2": "value2"}'),
         ('result2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}'),
-        ('result3', '${eval_.id}', 0, 2, '{}', '{}', '{}', 1, 1.0, '{"key1": "value5", "key4": "value6"}')`
+        ('result3', '${eval_.id}', 0, 2, '{}', '{}', '{}', 1, 1.0, '{"key1": "value5", "key4": "value6"}')`,
       );
 
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
@@ -595,7 +595,7 @@ describe('evaluator', () => {
 
     it('should return empty array for eval with no metadata', async () => {
       const eval_ = await EvalFactory.create();
-      
+
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
 
       expect(keys).toEqual([]);
@@ -603,7 +603,7 @@ describe('evaluator', () => {
 
     it('should handle empty metadata objects gracefully', async () => {
       const eval_ = await EvalFactory.create();
-      
+
       // Add eval result with empty metadata
       const db = getDb();
       await db.run(
@@ -611,7 +611,7 @@ describe('evaluator', () => {
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
           success, score, metadata
         ) VALUES 
-        ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{}')`
+        ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{}')`,
       );
 
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);

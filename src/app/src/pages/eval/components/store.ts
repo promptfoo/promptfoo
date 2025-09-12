@@ -42,7 +42,6 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   return Array.from(metrics).sort();
 }
 
-
 function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
   const strategyIds =
     strategies?.map((strategy) => (typeof strategy === 'string' ? strategy : strategy.id)) ?? [];
@@ -393,21 +392,21 @@ export const useTableStore = create<TableState>()((set, get) => ({
     }
 
     if (skipLoadingState) {
-      set({ 
+      set({
         shouldHighlightSearchText: false,
         metadataKeys: [],
         metadataKeysLoading: false,
         metadataKeysError: false,
-        currentMetadataKeysRequest: null
+        currentMetadataKeysRequest: null,
       });
     } else {
-      set({ 
-        isFetching: true, 
+      set({
+        isFetching: true,
         shouldHighlightSearchText: false,
         metadataKeys: [],
         metadataKeysLoading: false,
         metadataKeysError: false,
-        currentMetadataKeysRequest: null
+        currentMetadataKeysRequest: null,
       });
     }
 
@@ -650,23 +649,23 @@ export const useTableStore = create<TableState>()((set, get) => ({
     }
 
     const abortController = new AbortController();
-    set({ 
+    set({
       currentMetadataKeysRequest: abortController,
       metadataKeysLoading: true,
-      metadataKeysError: false 
+      metadataKeysError: false,
     });
 
     try {
       const resp = await callApi(`/eval/${id}/metadata-keys`, {
-        signal: abortController.signal
+        signal: abortController.signal,
       });
-      
+
       if (resp.ok) {
         const data = await resp.json();
-        set({ 
+        set({
           metadataKeys: data.keys,
           metadataKeysLoading: false,
-          currentMetadataKeysRequest: null
+          currentMetadataKeysRequest: null,
         });
         return data.keys;
       } else {
@@ -675,17 +674,17 @@ export const useTableStore = create<TableState>()((set, get) => ({
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         // Request was aborted - clean up state but don't show error
-        set({ 
+        set({
           metadataKeysLoading: false,
-          currentMetadataKeysRequest: null
+          currentMetadataKeysRequest: null,
         });
       } else {
         // Actual error occurred
         console.error('Error fetching metadata keys:', error);
-        set({ 
+        set({
           metadataKeysError: true,
           metadataKeysLoading: false,
-          currentMetadataKeysRequest: null
+          currentMetadataKeysRequest: null,
         });
       }
     }

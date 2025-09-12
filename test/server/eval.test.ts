@@ -223,7 +223,7 @@ describe('eval routes', () => {
           success, score, metadata
         ) VALUES 
         ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{"key1": "value1", "key2": "value2"}'),
-        ('result2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}')`
+        ('result2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}')`,
       );
 
       const res = await request(app).get(`/api/eval/${eval_.id}/metadata-keys`);
