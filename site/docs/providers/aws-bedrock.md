@@ -1,7 +1,8 @@
 ---
+title: AWS Bedrock
 sidebar_label: AWS Bedrock
 sidebar_position: 3
-description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
+description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, and Mistral models using AWS-managed infrastructure
 ---
 
 # Bedrock
@@ -53,7 +54,7 @@ Amazon Bedrock supports multiple authentication methods, including the new API k
 
 ### Credential Resolution Order
 
-promptfoo resolves AWS credentials in the following priority order (highest to lowest):
+Promptfoo resolves AWS credentials in the following priority order (highest to lowest):
 
 1. **Explicit credentials in config** (highest priority)
    - Directly specified `accessKeyId` and `secretAccessKey` in your promptfoo configuration
@@ -75,7 +76,7 @@ promptfoo resolves AWS credentials in the following priority order (highest to l
    - Use when running on AWS infrastructure or using AWS CLI
    - Common for local development or AWS-hosted applications
 
-promptfoo will automatically use the first available credential method in this order.
+Promptfoo will automatically use the first available credential method in this order.
 
 ### Authentication Options
 
@@ -166,13 +167,15 @@ providers:
 
 **Prerequisites for SSO profiles:**
 
-1. **Configure AWS SSO**: Set up AWS SSO using the AWS CLI:
+1. **Install AWS CLI v2**: Ensure AWS CLI v2 is installed and on your PATH.
+
+2. **Configure AWS SSO**: Set up AWS SSO using the AWS CLI:
 
    ```bash
    aws configure sso
    ```
 
-2. **Profile configuration**: Your `~/.aws/config` should contain the profile:
+3. **Profile configuration**: Your `~/.aws/config` should contain the profile:
 
    ```ini
    [profile YOUR_SSO_PROFILE]
@@ -183,7 +186,7 @@ providers:
    region = us-east-1
    ```
 
-3. **Active SSO session**: Ensure you have an active SSO session:
+4. **Active SSO session**: Ensure you have an active SSO session:
    ```bash
    aws sso login --profile YOUR_SSO_PROFILE
    ```
@@ -237,7 +240,7 @@ export AWS_DEFAULT_REGION="us-east-1"
 
 #### "Unable to locate credentials" Error
 
-```
+```text
 Error: Unable to locate credentials. You can configure credentials by running "aws configure".
 ```
 
@@ -275,7 +278,7 @@ Enable debug logging to see which credentials are being used:
 
 ```bash
 export AWS_SDK_JS_LOG=1
-promptfoo eval
+npx promptfoo eval
 ```
 
 This will show detailed AWS SDK logs including credential resolution.
