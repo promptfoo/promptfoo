@@ -587,6 +587,5 @@ describe('FiltersForm', () => {
         value: '',
       });
     });
-
   });
 });
