@@ -1617,7 +1617,11 @@ describe('HttpProvider', () => {
       };
       jest.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      const result = await provider.callApi('test prompt', { debug: true });
+      const result = await provider.callApi('test prompt', {
+        debug: true,
+        vars: {},
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
 
       // In debug mode, headers should still have auth info redacted
       expect(result.metadata?.headers).toEqual({
