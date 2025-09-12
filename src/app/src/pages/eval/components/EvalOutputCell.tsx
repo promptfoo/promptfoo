@@ -122,11 +122,16 @@ function EvalOutputCell({
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
-  // Handle failure messages by splitting the text at '---'
-  if (!output.pass && text && text.includes('---')) {
-    failReasons = (output.gradingResult?.componentResults || [])
+  // Extract failure reasons from component results
+  if (output.gradingResult?.componentResults) {
+    failReasons = output.gradingResult.componentResults
       .filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason);
+      .map((result) => result.reason)
+      .filter((reason) => reason); // Filter out empty/undefined reasons
+  }
+
+  // Handle failure messages by splitting the text at '---' if present
+  if (text && text.includes('---')) {
     text = text.split('---').slice(1).join('---');
   }
 
@@ -641,7 +646,7 @@ function EvalOutputCell({
             {providerOverride}
           </div>
           <CustomMetrics lookup={output.namedScores} onMetricFilter={onMetricFilter} />
-          {!output.pass && (
+          {failReasons.length > 0 && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />
             </span>
