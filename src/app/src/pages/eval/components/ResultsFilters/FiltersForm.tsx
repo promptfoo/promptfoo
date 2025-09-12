@@ -6,6 +6,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import {
   Box,
   Button,
+  CircularProgress,
   Divider,
   FormControl,
   IconButton,
@@ -329,18 +330,59 @@ function Filter({
           width={150}
         />
 
-        {value.type === 'metadata' && (
-          <DebouncedTextField
-            id={`${index}-field-input`}
-            label="Key"
-            variant="outlined"
-            size="small"
-            value={value.field || ''}
-            onChange={handleFieldChange}
-            placeholder="Enter metadata key"
-            sx={{ width: 180 }}
-          />
-        )}
+        {value.type === 'metadata' &&
+          (() => {
+            const { metadataKeys, metadataKeysLoading, metadataKeysError } = useTableStore();
+            
+            // Show loading state initially to prevent flicker
+            if (metadataKeysLoading) {
+              return (
+                <TextField
+                  id={`${index}-field-loading`}
+                  label="Key"
+                  variant="outlined"
+                  size="small"
+                  value=""
+                  placeholder="Loading keys..."
+                  disabled
+                  sx={{ width: 180 }}
+                  InputProps={{
+                    endAdornment: <CircularProgress size={16} />
+                  }}
+                />
+              );
+            }
+            
+            // Show dropdown if keys are available
+            if (metadataKeys.length > 0) {
+              return (
+                <Dropdown
+                  id={`${index}-field-select`}
+                  label="Key"
+                  values={metadataKeys.map((key) => ({ label: key, value: key }))}
+                  value={value.field || ''}
+                  onChange={handleFieldChange}
+                  width={180}
+                />
+              );
+            }
+            
+            // Fallback to text input with error indication if needed
+            return (
+              <TextField
+                id={`${index}-field-input`}
+                label="Key"
+                variant="outlined"
+                size="small"
+                value={value.field || ''}
+                onChange={(e) => handleFieldChange(e.target.value)}
+                placeholder={metadataKeysError ? "Error loading keys - type manually" : "Enter metadata key"}
+                sx={{ width: 180 }}
+                error={metadataKeysError}
+                helperText={metadataKeysError ? "Failed to load available keys" : undefined}
+              />
+            );
+          })()}
 
         <Dropdown
           id={`${index}-operator-select`}

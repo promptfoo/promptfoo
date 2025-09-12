@@ -42,6 +42,7 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   return Array.from(metrics).sort();
 }
 
+
 function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
   const strategyIds =
     strategies?.map((strategy) => (typeof strategy === 'string' ? strategy : strategy.id)) ?? [];
@@ -206,6 +207,15 @@ interface TableState {
       [key in ResultsFilterType]: string[];
     };
   };
+
+  /**
+   * Metadata keys for dropdown population
+   */
+  metadataKeys: string[];
+  metadataKeysLoading: boolean;
+  metadataKeysError: boolean;
+  fetchMetadataKeys: (id: string) => Promise<string[]>;
+  currentMetadataKeysRequest: AbortController | null;
 }
 
 interface SettingsState {
@@ -449,6 +459,9 @@ export const useTableStore = create<TableState>()((set, get) => ({
           },
         }));
 
+        // Fetch metadata keys separately for dropdown population
+        get().fetchMetadataKeys(id);
+
         return data;
       }
 
@@ -602,5 +615,54 @@ export const useTableStore = create<TableState>()((set, get) => ({
         },
       };
     });
+  },
+
+  // Metadata keys implementation
+  metadataKeys: [],
+  metadataKeysLoading: false,
+  metadataKeysError: false,
+  currentMetadataKeysRequest: null,
+
+  fetchMetadataKeys: async (id: string) => {
+    // Cancel any existing request to prevent race conditions
+    const currentState = get();
+    if (currentState.currentMetadataKeysRequest) {
+      currentState.currentMetadataKeysRequest.abort();
+    }
+
+    const abortController = new AbortController();
+    set({ 
+      currentMetadataKeysRequest: abortController,
+      metadataKeysLoading: true,
+      metadataKeysError: false 
+    });
+
+    try {
+      const resp = await callApi(`/eval/${id}/metadata-keys`, {
+        signal: abortController.signal
+      });
+      
+      if (resp.ok) {
+        const data = await resp.json();
+        set({ 
+          metadataKeys: data.keys,
+          metadataKeysLoading: false,
+          currentMetadataKeysRequest: null
+        });
+        return data.keys;
+      } else {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      }
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') {
+        console.error('Error fetching metadata keys:', error);
+        set({ 
+          metadataKeysError: true,
+          metadataKeysLoading: false,
+          currentMetadataKeysRequest: null
+        });
+      }
+    }
+    return [];
   },
 }));

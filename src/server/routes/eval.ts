@@ -6,7 +6,7 @@ import { fromZodError } from 'zod-validation-error';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import promptfoo from '../../index';
 import logger from '../../logger';
-import Eval from '../../models/eval';
+import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { EvalResultsFilterMode } from '../../types';
 import { deleteEval, updateResult, writeResultsToDatabase } from '../../util/database';
@@ -274,6 +274,31 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     author: eval_.author || null,
     version: eval_.version(),
   } as EvalTableDTO);
+});
+
+evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  
+  try {
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    const keys = await EvalQueries.getMetadataKeysFromEval(id);
+    
+    // Set targeted caching headers - only affects this specific endpoint
+    res.set({
+      'Cache-Control': 'private, max-age=1800', // 30 minute cache, private to user
+      'Vary': 'Authorization', // Cache per user if auth is involved
+    });
+    
+    res.json({ keys });
+  } catch (error) {
+    logger.error(`Error fetching metadata keys for eval ${id}: ${error}`);
+    res.status(500).json({ error: 'Failed to fetch metadata keys' });
+  }
 });
 
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {
