@@ -43,6 +43,7 @@ type Eval = {
 declare module '@mui/x-data-grid' {
   interface ToolbarPropsOverrides {
     showUtilityButtons: boolean;
+    deletionEnabled: boolean;
     focusQuickFilterOnMount: boolean;
     selectedCount: number;
     onDeleteSelected: () => void;
@@ -247,11 +248,13 @@ export default function EvalsDataGrid({
         rowSelectionModel.length === 1 ? '' : 's'
       }?`,
     );
+
     if (!confirm) {
       return;
     }
 
     try {
+      setIsLoading(true);
       const res = await callApi(`/eval`, {
         method: 'DELETE',
         headers: {
@@ -269,6 +272,8 @@ export default function EvalsDataGrid({
     } catch (error) {
       console.error('Failed to delete evals:', error);
       alert('Failed to delete evals');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -414,23 +419,6 @@ export default function EvalsDataGrid({
         checkboxSelection={deletionEnabled}
         slots={{
           toolbar: CustomToolbar,
-          loadingOverlay: () => (
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                gap: 2,
-              }}
-            >
-              <CircularProgress />
-              <Typography variant="body2" color="text.secondary">
-                Loading evaluations...
-              </Typography>
-            </Box>
-          ),
           noRowsOverlay: () => (
             <Box
               sx={{
@@ -476,6 +464,9 @@ export default function EvalsDataGrid({
             selectedCount: rowSelectionModel.length,
             onDeleteSelected: handleDeleteSelected,
           },
+          loadingOverlay: {
+            variant: 'linear-progress',
+          },
         }}
         onCellClick={(params) => {
           if (params.id !== focusedEvalId && params.field !== '__check__') {
@@ -483,39 +474,39 @@ export default function EvalsDataGrid({
           }
         }}
         getRowClassName={(params) => (params.id === focusedEvalId ? 'focused-row' : '')}
-        sx={{
-          border: 'none',
-          '& .MuiDataGrid-row': {
-            cursor: 'pointer',
-            transition: 'background-color 0.2s ease',
-            '&:hover': {
-              backgroundColor: 'action.hover',
-            },
-          },
-          '& .MuiDataGrid-row--disabled': {
-            cursor: 'default',
-            opacity: 0.7,
-            pointerEvents: 'none',
-          },
-          '& .focused-row': {
-            backgroundColor: 'action.selected',
-            cursor: 'default',
-            '&:hover': {
-              backgroundColor: 'action.selected',
-            },
-          },
-          '& .MuiDataGrid-cell': {
-            borderColor: 'divider',
-          },
-          '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: 'background.default',
-            borderColor: 'divider',
-          },
-          '& .MuiDataGrid-selectedRow': {
-            backgroundColor: 'action.selected',
-          },
-          '--DataGrid-overlayHeight': '300px',
-        }}
+        // sx={{
+        //   border: 'none',
+        //   '& .MuiDataGrid-row': {
+        //     cursor: 'pointer',
+        //     transition: 'background-color 0.2s ease',
+        //     '&:hover': {
+        //       backgroundColor: 'action.hover',
+        //     },
+        //   },
+        //   '& .MuiDataGrid-row--disabled': {
+        //     cursor: 'default',
+        //     opacity: 0.7,
+        //     pointerEvents: 'none',
+        //   },
+        //   '& .focused-row': {
+        //     backgroundColor: 'action.selected',
+        //     cursor: 'default',
+        //     '&:hover': {
+        //       backgroundColor: 'action.selected',
+        //     },
+        //   },
+        //   '& .MuiDataGrid-cell': {
+        //     borderColor: 'divider',
+        //   },
+        //   '& .MuiDataGrid-columnHeaders': {
+        //     backgroundColor: 'background.default',
+        //     borderColor: 'divider',
+        //   },
+        //   '& .MuiDataGrid-selectedRow': {
+        //     backgroundColor: 'action.selected',
+        //   },
+        //   '--DataGrid-overlayHeight': '300px',
+        // }}
         onRowSelectionModelChange={setRowSelectionModel}
         rowSelectionModel={rowSelectionModel}
         initialState={{
