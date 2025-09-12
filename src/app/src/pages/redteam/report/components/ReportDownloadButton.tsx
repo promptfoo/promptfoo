@@ -15,10 +15,7 @@ interface ReportDownloadButtonProps {
   evalData: ResultsFile;
 }
 
-const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
-  evalDescription,
-  evalData,
-}) => {
+const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButtonProps) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);

@@ -59,12 +59,12 @@ const DARK_MODE_SECONDARY_TEXT_COLORS = {
   [Severity.Low]: '#00e676',
 };
 
-const Overview: React.FC<OverviewProps> = ({
+const Overview = ({
   categoryStats,
   plugins,
   vulnerabilitiesDataGridRef,
   setVulnerabilitiesDataGridFilterModel,
-}) => {
+}: OverviewProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const severityCounts = Object.values(Severity).reduce(

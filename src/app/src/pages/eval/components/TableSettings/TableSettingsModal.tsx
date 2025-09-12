@@ -23,7 +23,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-const TableSettingsModal: React.FC<SettingsModalProps> = ({ open, onClose }) => {
+const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
