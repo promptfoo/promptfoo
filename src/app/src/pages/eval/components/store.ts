@@ -67,7 +67,7 @@ function buildRedteamFilterOptions(config?: Partial<UnifiedConfig> | null): {
   severity: string[];
 } {
   const isRedteam = isRedteamEvaluation(config);
-  
+
   if (!isRedteam) {
     return {
       plugin: [],
@@ -75,7 +75,7 @@ function buildRedteamFilterOptions(config?: Partial<UnifiedConfig> | null): {
       severity: [],
     };
   }
-  
+
   return {
     plugin: config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
     strategy: extractUniqueStrategyIds(config?.redteam?.strategies, isRedteam),
