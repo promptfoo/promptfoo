@@ -1439,7 +1439,7 @@ export async function selectMaxScore(
   }
 
   // Apply threshold if specified
-  const meetsThreshold = !options.threshold || maxScore >= options.threshold;
+  const meetsThreshold = options.threshold === undefined || maxScore >= options.threshold;
 
   // Return results for each output
   return scores.map(({ index, score, componentCount, totalWeight }) => {
