@@ -25,7 +25,7 @@ export default function TraceView({
   useEffect(() => {
     let isActive = true;
     const controller = new AbortController();
-    
+
     const fetchTraces = async () => {
       if (!evaluationId) {
         setLoading(false);
@@ -63,7 +63,7 @@ export default function TraceView({
     };
 
     fetchTraces();
-    
+
     return () => {
       isActive = false;
       controller.abort();

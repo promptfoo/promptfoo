@@ -1,0 +1,9 @@
+question,expected_answer,__metadata:category,__metadata:difficulty
+"What is 2+2?","contains: 4","math","easy"
+"What color is the sky?","contains: blue","science","easy"
+"Who wrote Romeo and Juliet?","contains: Shakespeare","literature","medium"
+"What is the capital of France?","contains: Paris","geography","easy"
+"Solve: x² + 5x + 6 = 0","contains: -2","math","hard"
+"Explain photosynthesis process","contains: chlorophyll","science","medium"
+"Analyze Hamlet's character development","contains: tragedy","literature","hard"
+"Name the longest river in Asia","contains: Yangtze","geography","medium"
