@@ -10,9 +10,14 @@ import TraceTimeline from './TraceTimeline';
 interface TraceViewProps {
   evaluationId?: string;
   testCaseId?: string;
+  onVisibilityChange?: (shouldShow: boolean) => void;
 }
 
-export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) {
+export default function TraceView({
+  evaluationId,
+  testCaseId,
+  onVisibilityChange,
+}: TraceViewProps) {
   const [traces, setTraces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +50,13 @@ export default function TraceView({ evaluationId, testCaseId }: TraceViewProps) 
 
     fetchTraces();
   }, [evaluationId]);
+
+  useEffect(() => {
+    if (onVisibilityChange) {
+      const shouldShow = !!evaluationId && (loading || !!error || traces.length > 0);
+      onVisibilityChange(shouldShow);
+    }
+  }, [evaluationId, loading, error, traces, onVisibilityChange]);
 
   if (!evaluationId) {
     return null;
