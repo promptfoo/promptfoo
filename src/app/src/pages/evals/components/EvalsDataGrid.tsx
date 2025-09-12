@@ -75,11 +75,13 @@ QuickFilter.displayName = 'QuickFilter';
 
 function CustomToolbar({
   showUtilityButtons,
+  deletionEnabled,
   focusQuickFilterOnMount,
   selectedCount,
   onDeleteSelected,
 }: {
   showUtilityButtons: boolean;
+  deletionEnabled: boolean;
   focusQuickFilterOnMount: boolean;
   selectedCount: number;
   onDeleteSelected: () => void;
@@ -105,7 +107,7 @@ function CustomToolbar({
               <GridToolbarExport />
             </>
           )}
-          {selectedCount > 0 && (
+          {deletionEnabled && selectedCount > 0 && (
             <Button
               color="error"
               variant="outlined"
@@ -140,12 +142,14 @@ export default function EvalsDataGrid({
   showUtilityButtons = false,
   filterByDatasetId = false,
   focusQuickFilterOnMount = false,
+  deletionEnabled = false,
 }: {
   onEvalSelected: (evalId: string) => void;
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
   filterByDatasetId?: boolean;
   focusQuickFilterOnMount?: boolean;
+  deletionEnabled?: boolean;
 }) {
   if (filterByDatasetId) {
     invariant(focusedEvalId, 'focusedEvalId is required when filterByDatasetId is true');
@@ -407,7 +411,7 @@ export default function EvalsDataGrid({
         columns={columns}
         loading={isLoading}
         getRowId={(row) => row.evalId}
-        checkboxSelection
+        checkboxSelection={deletionEnabled}
         slots={{
           toolbar: CustomToolbar,
           loadingOverlay: () => (
@@ -467,6 +471,7 @@ export default function EvalsDataGrid({
         slotProps={{
           toolbar: {
             showUtilityButtons,
+            deletionEnabled,
             focusQuickFilterOnMount,
             selectedCount: rowSelectionModel.length,
             onDeleteSelected: handleDeleteSelected,
