@@ -366,6 +366,10 @@ export default function EvalOutputPromptDialog({
     setReplayError(null);
   }, [prompt]);
 
+  useEffect(() => {
+    setShowTraceSection(true);
+  }, [evaluationId]);
+
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
     setCopied(true);
@@ -592,8 +596,8 @@ export default function EvalOutputPromptDialog({
         )}
         <AssertionResults gradingResults={gradingResults} />
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
-        {evaluationId && showTraceSection && (
-          <Box mt={2}>
+        {evaluationId && (
+          <Box mt={2} sx={{ display: showTraceSection ? 'block' : 'none' }}>
             <Typography variant="subtitle1" sx={subtitleTypographySx}>
               Trace Timeline
             </Typography>

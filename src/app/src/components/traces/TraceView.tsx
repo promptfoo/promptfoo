@@ -23,6 +23,9 @@ export default function TraceView({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let isActive = true;
+    const controller = new AbortController();
+    
     const fetchTraces = async () => {
       if (!evaluationId) {
         setLoading(false);
@@ -32,23 +35,39 @@ export default function TraceView({
       try {
         setLoading(true);
         setError(null);
-        const response = await callApi(`/traces/evaluation/${evaluationId}`);
+        const response = await callApi(`/traces/evaluation/${evaluationId}`, {
+          signal: controller.signal,
+        });
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
-        setTraces(data.traces || []);
+        if (!isActive) {
+          return;
+        }
+        setTraces(Array.isArray(data.traces) ? data.traces : []);
       } catch (err) {
         console.error('Error fetching traces:', err);
+        if (!isActive) {
+          return;
+        }
         setError(err instanceof Error ? err.message : 'Failed to fetch traces');
       } finally {
+        if (!isActive) {
+          return;
+        }
         setLoading(false);
       }
     };
 
     fetchTraces();
+    
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
   }, [evaluationId]);
 
   useEffect(() => {

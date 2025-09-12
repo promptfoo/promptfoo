@@ -217,15 +217,17 @@ describe('TraceView', () => {
   });
 
   describe('Visibility Callback', () => {
-    it('should call onVisibilityChange with false when no evaluationId is provided', () => {
+    it('should call onVisibilityChange with false when no evaluationId is provided', async () => {
       const onVisibilityChange = vi.fn();
 
       render(<TraceView onVisibilityChange={onVisibilityChange} />);
 
-      expect(onVisibilityChange).toHaveBeenCalledWith(false);
+      await waitFor(() => {
+        expect(onVisibilityChange).toHaveBeenCalledWith(false);
+      });
     });
 
-    it('should call onVisibilityChange with true when loading', () => {
+    it('should call onVisibilityChange with true when loading', async () => {
       const onVisibilityChange = vi.fn();
 
       vi.mocked(callApi).mockImplementation(
@@ -234,7 +236,9 @@ describe('TraceView', () => {
 
       render(<TraceView evaluationId="eval-123" onVisibilityChange={onVisibilityChange} />);
 
-      expect(onVisibilityChange).toHaveBeenCalledWith(true);
+      await waitFor(() => {
+        expect(onVisibilityChange).toHaveBeenCalledWith(true);
+      });
     });
 
     it('should call onVisibilityChange with true when there is an error', async () => {
