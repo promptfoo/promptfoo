@@ -1456,7 +1456,7 @@ class Evaluator {
         if (evalTimedOut) {
           logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
         } else {
-          logger.info('Evaluation interrupted by user; saving progress...');
+          logger.info('Evaluation interrupted, saving progress...');
         }
       } else {
         if (ciProgressReporter) {

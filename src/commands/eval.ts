@@ -155,7 +155,8 @@ export async function doEval(
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
     let resumeEval: Eval | undefined;
     const resumeRaw = (cmdObj as any).resume as string | boolean | undefined;
-    const resumeId = resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
+    const resumeId =
+      resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
     if (resumeRaw) {
       resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
       if (!resumeEval) {
@@ -173,11 +174,14 @@ export async function doEval(
       } = await resolveConfigs({}, resumeEval.config));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map((p) => ({
-          raw: p.raw,
-          label: p.label,
-          config: p.config,
-        } as any));
+        testSuite.prompts = resumeEval.prompts.map(
+          (p) =>
+            ({
+              raw: p.raw,
+              label: p.label,
+              config: p.config,
+            }) as any,
+        );
       }
       // Mark resume mode so evaluator can skip completed work
       process.env.PROMPTFOO_RESUME = 'true';
@@ -235,21 +239,37 @@ export async function doEval(
       };
     }
 
-    // Misc settings with proper CLI vs config priority
-    // CLI values explicitly provided by user should override config, but defaults should not
-    const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
-    const repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
-
-    const cache = cmdObj.cache ?? evaluateOptions.cache;
+    // Resolve runtime options. If resuming, prefer persisted options stored with the eval.
+    let repeat: number;
+    let cache: boolean | undefined;
+    let maxConcurrency: number;
+    let delay: number;
+    if (resumeRaw) {
+      const persisted = (resumeEval?.runtimeOptions ||
+        config.evaluateOptions ||
+        {}) as EvaluateOptions;
+      repeat =
+        Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
+          ? (persisted.repeat as number)
+          : 1;
+      cache = persisted.cache;
+      maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
+      delay = (persisted.delay as number | undefined) ?? 0;
+    } else {
+      // Misc settings with proper CLI vs config priority
+      // CLI values explicitly provided by user should override config, but defaults should not
+      const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
+      repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
+      cache = cmdObj.cache ?? evaluateOptions.cache;
+      maxConcurrency =
+        cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
+      delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
+    }
 
     if (!cache || repeat > 1) {
       logger.info('Cache is disabled.');
       disableCache();
     }
-
-    let maxConcurrency =
-      cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-    const delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
 
     if (delay > 0) {
       maxConcurrency = 1;
@@ -282,10 +302,12 @@ export async function doEval(
       await checkEmailStatusOrExit();
     }
 
-    testSuite.providers = filterProviders(
-      testSuite.providers,
-      cmdObj.filterProviders || cmdObj.filterTargets,
-    );
+    if (!resumeRaw) {
+      testSuite.providers = filterProviders(
+        testSuite.providers,
+        cmdObj.filterProviders || cmdObj.filterTargets,
+      );
+    }
 
     await checkCloudPermissions(config as UnifiedConfig);
 
@@ -305,7 +327,7 @@ export async function doEval(
       cache,
     };
 
-    if (cmdObj.grader) {
+    if (!resumeRaw && cmdObj.grader) {
       if (typeof testSuite.defaultTest === 'string') {
         testSuite.defaultTest = {};
       }
@@ -313,14 +335,14 @@ export async function doEval(
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
     }
-    if (cmdObj.var) {
+    if (!resumeRaw && cmdObj.var) {
       if (typeof testSuite.defaultTest === 'string') {
         testSuite.defaultTest = {};
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (cmdObj.generateSuggestions) {
+    if (!resumeRaw && cmdObj.generateSuggestions) {
       options.generateSuggestions = true;
     }
     // load scenarios or tests from an external file
@@ -352,8 +374,8 @@ export async function doEval(
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts)
-        : new Eval(config);
+        ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
+        : new Eval(config, { runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C
     const abortController = new AbortController();
@@ -394,7 +416,9 @@ export async function doEval(
     if (paused) {
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
-      logger.info(`» Resume with: ${chalk.greenBright.bold('promptfoo eval --resume ' + evalRecord.id)}`);
+      logger.info(
+        `» Resume with: ${chalk.greenBright.bold('promptfoo eval --resume ' + evalRecord.id)}`,
+      );
       printBorder();
       return ret;
     }
@@ -872,7 +896,10 @@ export function evalCommand(
     )
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
     .option('--no-share', 'Do not share, this overrides the config file')
-    .option('--resume [evalId]', 'Resume a paused/incomplete evaluation. Defaults to latest when omitted')
+    .option(
+      '--resume [evalId]',
+      'Resume a paused/incomplete evaluation. Defaults to latest when omitted',
+    )
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',
