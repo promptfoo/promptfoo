@@ -395,7 +395,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
       set({
         shouldHighlightSearchText: false,
         metadataKeys: [],
-        metadataKeysLoading: false,
+        metadataKeysLoading: true,
         metadataKeysError: false,
         currentMetadataKeysRequest: null,
       });
@@ -404,7 +404,7 @@ export const useTableStore = create<TableState>()((set, get) => ({
         isFetching: true,
         shouldHighlightSearchText: false,
         metadataKeys: [],
-        metadataKeysLoading: false,
+        metadataKeysLoading: true,
         metadataKeysError: false,
         currentMetadataKeysRequest: null,
       });
@@ -490,9 +490,18 @@ export const useTableStore = create<TableState>()((set, get) => ({
     } catch (error) {
       console.error('Error fetching eval data:', error);
       if (skipLoadingState) {
-        set({ isStreaming: false });
+        set({ 
+          isStreaming: false, 
+          metadataKeysLoading: false, 
+          currentMetadataKeysRequest: null 
+        });
       } else {
-        set({ isFetching: false, isStreaming: false });
+        set({ 
+          isFetching: false, 
+          isStreaming: false, 
+          metadataKeysLoading: false, 
+          currentMetadataKeysRequest: null 
+        });
       }
       return null;
     }
