@@ -296,11 +296,19 @@ export async function runRedteamConversation({
       );
       continue;
     }
-    if (!targetResponse.output) {
+    if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
       logger.info(
-        `[Iterative] ${i + 1}/${numIterations} - Empty target response. Full response: ${JSON.stringify(targetResponse)}`,
+        `[Iterative] ${i + 1}/${numIterations} - Malformed target response - missing output property. Full response: ${JSON.stringify(targetResponse)}`,
       );
       continue;
+    }
+
+    // Handle empty string responses - don't skip the iteration
+    if (targetResponse.output === '') {
+      logger.info(
+        `[Iterative] ${i + 1}/${numIterations} - Target returned empty string response. Treating as potential refusal.`,
+      );
+      // Continue processing - don't skip the iteration
     }
 
     const responseSessionId = targetResponse.sessionId;

@@ -2,6 +2,7 @@ import { getGraderById } from '../../../../src/redteam/graders';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
 
@@ -28,6 +29,11 @@ jest.mock('../../../../src/redteam/graders', () => ({
 
 jest.mock('../../../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn(() => false),
+}));
+
+jest.mock('../../../../src/evaluatorHelpers', () => ({
+  ...jest.requireActual('../../../../src/evaluatorHelpers'),
+  renderPrompt: jest.fn(),
 }));
 
 describe('MemorySystem', () => {
@@ -1585,5 +1591,338 @@ describe('CrescendoProvider', () => {
       expect(result.tokenUsage?.prompt).toBeDefined();
       expect(result.tokenUsage?.completion).toBeDefined();
     });
+  });
+});
+
+describe('CrescendoProvider - Chat Template Support', () => {
+  let crescendoProvider: CrescendoProvider;
+  let mockRedTeamProvider: any;
+  let mockScoringProvider: any;
+  let mockTargetProvider: any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockRedTeamProvider = {
+      id: () => 'mock-redteam',
+      callApi: jest.fn(),
+      delay: 0,
+    };
+    mockScoringProvider = {
+      id: () => 'mock-scoring',
+      callApi: jest.fn(),
+      delay: 0,
+    };
+    mockTargetProvider = {
+      id: () => 'mock-target',
+      callApi: jest.fn(),
+    };
+
+    crescendoProvider = new CrescendoProvider({
+      injectVar: 'user_input',
+      maxTurns: 3,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false, // Key: test with stateful=false to trigger the bug
+    });
+
+    jest.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async (options) => {
+      if (options.provider && typeof options.provider === 'object') {
+        return options.jsonOnly ? options.provider : mockScoringProvider;
+      }
+      return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    });
+
+    jest.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    jest.mocked(getGraderById).mockReturnValue({
+      getResult: jest.fn(async () => ({
+        grade: { pass: true },
+      })),
+    } as any);
+    jest.mocked(tryUnblocking).mockResolvedValue({ success: false });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should reject invalid chat structures with invalid roles', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      stateful: false,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    // Mock renderPrompt to return JSON with invalid roles
+    const invalidChatStructure = JSON.stringify([
+      { role: 'system', content: 'You are a helpful assistant' },
+      { role: 'invalid_role', content: 'This has an invalid role' },
+    ]);
+    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(invalidChatStructure);
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ value: false, metadata: 50 }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    // Should fall back to conversation history because structure is invalid
+    // The first call should be the stringified conversation history sent directly as prompt
+    const firstCall = mockTargetProvider.callApi.mock.calls[0];
+    const firstCallPrompt = firstCall[0];
+
+    // Should be wrapped in a single user message containing the entire invalid structure as a string
+    expect(firstCallPrompt).toContain('"role":"user"');
+    expect(firstCallPrompt).toContain('"content":');
+    expect(firstCallPrompt).toContain('invalid_role'); // The invalid structure should be in content as a string
+  });
+
+  it('should reject non-array JSON structures', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      stateful: false,
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    // Mock renderPrompt to return JSON object (not array)
+    const nonArrayJson = JSON.stringify({ role: 'user', content: 'not an array' });
+    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(nonArrayJson);
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({ value: false, metadata: 50 }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    // Should fall back to conversation history because it's not an array
+    // The first call should be the stringified conversation history sent directly as prompt
+    const firstCall = mockTargetProvider.callApi.mock.calls[0];
+    const firstCallPrompt = firstCall[0];
+
+    // Should be wrapped in a single user message containing the entire non-array structure as a string
+    expect(firstCallPrompt).toContain('"role":"user"');
+    expect(firstCallPrompt).toContain('"content":');
+    expect(firstCallPrompt).toContain('not an array'); // The non-array structure should be in content as a string
+  });
+
+  it('should use rendered chat template instead of conversation history when template contains structured JSON', async () => {
+    // Simulate a chat template that renders to structured JSON (like _conversation templates)
+    const chatTemplatePrompt = `[
+  {
+    "role": "system",
+    "content": "You are a helpful assistant"
+  },
+  {
+    "role": "user", 
+    "content": "{{ user_input }}"
+  }
+]`;
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { user_input: 'test input' },
+      prompt: { raw: chatTemplatePrompt, label: 'chat-template' },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test attack',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    // Mock renderPrompt to return structured JSON (simulating _conversation template)
+    jest.mocked(evaluatorHelpers.renderPrompt).mockResolvedValueOnce(
+      JSON.stringify([
+        { role: 'system', content: 'You are a helpful assistant' },
+        { role: 'user', content: 'test attack' },
+      ]),
+    );
+
+    // Mock target provider to verify it receives structured JSON, not stringified conversation
+    mockTargetProvider.callApi.mockImplementation((prompt: string) => {
+      // Verify that the prompt is structured JSON, not a JSON string
+      try {
+        const parsed = JSON.parse(prompt);
+        expect(Array.isArray(parsed)).toBe(true);
+        expect(parsed[0]).toMatchObject({ role: 'system', content: expect.any(String) });
+        expect(parsed[1]).toMatchObject({ role: 'user', content: expect.any(String) });
+      } catch (_e) {
+        throw new Error('Expected structured JSON array, got invalid JSON or string');
+      }
+
+      return Promise.resolve({
+        output: 'target response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1, cached: 0 },
+      });
+    });
+
+    // Mock scoring provider for refusal check (not a refusal) and internal evaluator (success)
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          value: false, // Not a refusal
+          metadata: 0,
+          rationale: 'Not a refusal',
+        }),
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          value: true, // Internal evaluator success
+          metadata: 100,
+          rationale: 'Successful jailbreak',
+        }),
+      });
+
+    const result = await crescendoProvider.callApi(chatTemplatePrompt, context);
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalled();
+    expect(result.metadata?.stopReason).toBe('Internal evaluator success');
+  });
+
+  it('should fall back to conversation history for non-chat templates when stateful=false', async () => {
+    const textPrompt = 'Please respond to: {{ user_input }}';
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { user_input: 'test input' },
+      prompt: { raw: textPrompt, label: 'text-template' },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test attack',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    // Mock renderPrompt to return plain text (non-chat template)
+    jest
+      .mocked(evaluatorHelpers.renderPrompt)
+      .mockResolvedValueOnce('Please respond to: test attack');
+
+    // Mock target provider to verify it receives JSON stringified conversation history
+    mockTargetProvider.callApi.mockImplementation((prompt: string) => {
+      // For non-chat templates with stateful=false, should receive stringified conversation
+      expect(typeof prompt).toBe('string');
+
+      // Should be JSON string of conversation array, not structured JSON
+      try {
+        const parsed = JSON.parse(prompt);
+        expect(Array.isArray(parsed)).toBe(true);
+        // Should be conversation history format
+        expect(parsed[0]).toMatchObject({ role: 'user', content: expect.any(String) });
+      } catch (_e) {
+        // If it's not JSON, that's also acceptable for text templates
+      }
+
+      return Promise.resolve({
+        output: 'target response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1, cached: 0 },
+      });
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 50,
+        rationale: 'Not successful',
+      }),
+    });
+
+    await crescendoProvider.callApi(textPrompt, context);
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalled();
+  });
+
+  it('should always use rendered prompt when stateful=true regardless of template type', async () => {
+    const statefulProvider = new CrescendoProvider({
+      injectVar: 'user_input',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true, // Key: test stateful=true path
+    });
+
+    const chatTemplatePrompt = `[{"role": "user", "content": "{{ user_input }}"}]`;
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { user_input: 'test input' },
+      prompt: { raw: chatTemplatePrompt, label: 'chat-template' },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test attack',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+
+    // Mock renderPrompt to return structured JSON
+    jest
+      .mocked(evaluatorHelpers.renderPrompt)
+      .mockResolvedValueOnce('[{"role": "user", "content": "test attack"}]');
+
+    mockTargetProvider.callApi.mockImplementation((prompt: string) => {
+      // With stateful=true, should always receive rendered prompt directly
+      expect(prompt).toBe('[{"role": "user", "content": "test attack"}]');
+
+      return Promise.resolve({
+        output: 'target response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1, cached: 0 },
+      });
+    });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: true,
+        metadata: 100,
+        rationale: 'Success',
+      }),
+    });
+
+    await statefulProvider.callApi(chatTemplatePrompt, context);
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalled();
   });
 });
