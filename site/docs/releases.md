@@ -10,6 +10,85 @@ keywords: [Promptfoo releases, changelog, updates, features, monthly summaries]
 
 Full release history for Promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
 
+## August 2025 Release Highlights {#august-2025}
+
+This month we added support for **new models**, **model audit cloud sharing**, and **performance improvements**.
+
+### Evals
+
+#### New Models / Providers {#august-2025-providers}
+
+##### New Model Support
+
+- **[GPT-5](/docs/providers/openai/)** - Added support for OpenAI's GPT-5 model with advanced reasoning capabilities
+- **[Claude Opus 4.1](/docs/providers/anthropic/)** - Support for Anthropic's latest Claude model
+- **[xAI Grok Code Fast](/docs/providers/xai/)** - Added xAI's Grok Code Fast model for coding tasks
+
+##### Provider Updates
+
+- **[Enhanced Vertex AI](/docs/providers/vertex/)** - Improved credential management and authentication
+- **[Google AI Studio](/docs/providers/google/)** - Added default provider configurations for Google AI Studio models
+
+#### Model Audit Cloud Integration {#august-2025-model-audit}
+
+##### Model Audit Cloud Sharing
+
+Model audit results can now be shared to the cloud for team collaboration:
+
+- **Persistent audit history** - Track security scans over time
+- **Team sharing** - Share audit results across teams
+- **Centralized storage** - Store audit reports in the cloud
+- **Path management** - Remove recent scan paths from history
+
+##### Enhanced Authentication
+
+Added support for advanced authentication methods:
+
+- **Certificate storage** - Store client certificates for mTLS authentication
+- **Signature authentication** - Support for uploaded signature-based authentication
+- **Credential sanitization** - Prevent credential exposure in debug logs
+
+#### Enhanced Configuration and Usability {#august-2025-usability}
+
+##### AI-Powered HTTP Configuration
+
+Added auto-fill capabilities for HTTP provider setup to reduce configuration time and errors.
+
+#### Performance and Reliability Improvements {#august-2025-performance}
+
+##### Performance Improvements
+
+- **HuggingFace dataset fetching** - Improved speed and reliability for large datasets
+- **Error handling** - Better diagnostic messages and retry suggestions
+- **UI improvements** - Streamlined interfaces and progress indicators
+
+### Red Teaming
+
+#### Healthcare AI Safety {#august-2025-healthcare}
+
+##### Medical Off-Label Use Plugin
+
+Added **[Medical Off-Label Use Detection](/docs/red-team/plugins/medical/)** plugin to identify inappropriate pharmaceutical recommendations that could endanger patients.
+
+#### Enhanced Attack Detection {#august-2025-strategies}
+
+##### Unverifiable Claims Plugin
+
+Added **[Unverifiable Claims Detection](/docs/red-team/plugins/)** plugin to test AI systems' susceptibility to generating fabricated but plausible-sounding claims.
+
+##### MCP Agent Testing
+
+Added **[MCP Agent example](/docs/red-team/mcp-security-testing/)** for red team testing with tool call results, demonstrating how to test AI systems that use Model Context Protocol.
+
+### See Also {#august-2025-see-also}
+
+- [GitHub Releases](https://github.com/promptfoo/promptfoo/releases)
+- [Model Audit](/docs/model-audit/)
+- [Red Team Plugins](/docs/red-team/plugins/)
+- [Provider Configuration](/docs/providers/)
+
+---
+
 ## July 2025 Release Highlights {#july-2025}
 
 This month we focused on expanding **provider support**, enhancing **evaluation capabilities**, and strengthening **enterprise features** to help you build more reliable and secure AI applications.
