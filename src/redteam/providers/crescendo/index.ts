@@ -15,6 +15,7 @@ import { getGoalRubric } from '../prompts';
 import {
   getLastMessageContent,
   getTargetResponse,
+  isValidChatMessageArray,
   messagesToRedteamHistory,
   redteamProviderManager,
   type TargetResponse,
@@ -39,25 +40,6 @@ import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
-
-/**
- * Validates if a parsed JSON object is a valid chat message array
- */
-function isValidChatMessageArray(parsed: unknown): parsed is Message[] {
-  return (
-    Array.isArray(parsed) &&
-    parsed.every(
-      (msg) =>
-        msg &&
-        typeof msg === 'object' &&
-        'role' in msg &&
-        'content' in msg &&
-        typeof msg.role === 'string' &&
-        typeof msg.content === 'string' &&
-        ['user', 'assistant', 'system'].includes(msg.role),
-    )
-  );
-}
 
 /**
  * Represents metadata for the Crescendo conversation process.
