@@ -889,6 +889,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
   RAG: 'Recommended plugins plus tests for RAG-specific scenarios like access control',
   Recommended: 'A broad set of plugins recommended by Promptfoo',
+  MCP: 'A set of plugins for testing MCP-based systems',
 } as const;
 
 export const DEFAULT_OUTPUT_PATH = 'redteam.yaml';
