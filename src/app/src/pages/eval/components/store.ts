@@ -44,10 +44,10 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
 
 function extractUniqueStrategyIds(
   strategies?: Array<string | { id: string }> | null,
-  hasRedteamConfig?: boolean,
+  isRedteam?: boolean,
 ): string[] {
-  // If no redteam config, return empty array (no strategy options should be shown)
-  if (!hasRedteamConfig) {
+  // If not a redteam evaluation, return empty array (no strategy options should be shown)
+  if (!isRedteam) {
     return [];
   }
 
