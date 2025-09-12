@@ -368,9 +368,7 @@ const TestSuites = ({
         value: severity,
         label: severityDisplayNames[severity],
       })),
-      renderCell: (params: GridRenderCellParams) => (
-        <Box className={`vuln-${params.value.toLowerCase()} vuln`}>{params.value}</Box>
-      ),
+      cellClassName: (params) => `vuln-${params.value.toLowerCase()} vuln`,
       sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
