@@ -23,9 +23,16 @@ describe('TestSuites Component', () => {
     evalId: 'test-eval-123',
     categoryStats: {
       'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
+        stats: {
+          pass: 8,
+          total: 10,
+          passWithFilter: 9,
+        },
+        metadata: {
+          type: 'harmful:hate',
+          description: 'Tests handling of hate speech and discriminatory content',
+          severity: 'critical' as any,
+        },
       },
     },
     plugins: [],
@@ -93,14 +100,20 @@ describe('TestSuites Component', () => {
       ...defaultProps,
       categoryStats: {
         'harmful:hate': {
-          pass: 8,
-          total: 10,
-          passWithFilter: 9,
+          stats: { pass: 8, total: 10, passWithFilter: 9 },
+          metadata: {
+            type: 'harmful:hate',
+            description: 'Tests handling of hate speech and discriminatory content',
+            severity: 'critical' as any,
+          },
         },
         'plugin-with-unknown-severity': {
-          pass: 5,
-          total: 10,
-          passWithFilter: 5,
+          stats: { pass: 5, total: 10, passWithFilter: 5 },
+          metadata: {
+            type: 'plugin-with-unknown-severity',
+            description: 'Unknown plugin',
+            severity: 'unknown' as any,
+          },
         },
       },
     };
@@ -134,14 +147,20 @@ describe('TestSuites Component Navigation', () => {
     evalId: 'test-eval-123',
     categoryStats: {
       'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
+        stats: { pass: 8, total: 10, passWithFilter: 9 },
+        metadata: {
+          type: 'harmful:hate',
+          description: 'Tests handling of hate speech and discriminatory content',
+          severity: 'critical' as any,
+        },
       },
       'harmful:cybercrime': {
-        pass: 5,
-        total: 10,
-        passWithFilter: 5,
+        stats: { pass: 5, total: 10, passWithFilter: 5 },
+        metadata: {
+          type: 'harmful:cybercrime',
+          description: 'Tests handling of cybercrime-related content',
+          severity: 'low' as any,
+        },
       },
     },
     plugins: [],
@@ -227,9 +246,12 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
     evalId: 'test-eval-123',
     categoryStats: {
       'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
+        stats: { pass: 8, total: 10, passWithFilter: 9 },
+        metadata: {
+          type: 'harmful:hate',
+          description: 'Tests handling of hate speech and discriminatory content',
+          severity: 'critical' as any,
+        },
       },
     },
     plugins: [],
@@ -270,14 +292,20 @@ describe('TestSuites Component Filtering', () => {
     evalId: 'test-eval-123',
     categoryStats: {
       'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
+        stats: { pass: 8, total: 10, passWithFilter: 9 },
+        metadata: {
+          type: 'harmful:hate',
+          description: 'Tests handling of hate speech and discriminatory content',
+          severity: 'critical' as any,
+        },
       },
       'pii:direct': {
-        pass: 0,
-        total: 0, // This will be filtered out
-        passWithFilter: 0,
+        stats: { pass: 0, total: 0, passWithFilter: 0 }, // This will be filtered out
+        metadata: {
+          type: 'pii:direct',
+          description: 'Tests for direct PII exposure vulnerabilities',
+          severity: 'high' as any,
+        },
       },
     },
     plugins: [],
@@ -315,9 +343,12 @@ describe('TestSuites Component CSV Export', () => {
     evalId: 'test-eval-123',
     categoryStats: {
       'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
+        stats: { pass: 8, total: 10, passWithFilter: 9 },
+        metadata: {
+          type: 'harmful:hate',
+          description: 'Tests handling of hate speech and discriminatory content',
+          severity: 'critical' as any,
+        },
       },
     },
     plugins: [],
@@ -357,14 +388,20 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
     evalId: 'test-eval-123',
     categoryStats: {
       'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
+        stats: { pass: 8, total: 10, passWithFilter: 9 },
+        metadata: {
+          type: 'harmful:hate',
+          description: 'Tests handling of hate speech and discriminatory content',
+          severity: 'critical' as any,
+        },
       },
       hallucination: {
-        pass: 10,
-        total: 10,
-        passWithFilter: 10,
+        stats: { pass: 10, total: 10, passWithFilter: 10 },
+        metadata: {
+          type: 'hallucination',
+          description: 'Tests for fabrication of false or misleading information',
+          severity: 'medium' as any,
+        },
       },
     },
     plugins: [],
@@ -413,10 +450,12 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
 
     const categoryStatsWithSpecialChars = {
       'harmful:hate': {
-        pass: 8,
-        total: 10,
-        passWithFilter: 9,
-        description: specialDescription,
+        stats: { pass: 8, total: 10, passWithFilter: 9 },
+        metadata: {
+          type: 'harmful:hate',
+          description: specialDescription,
+          severity: 'critical' as any,
+        },
       },
     };
 
