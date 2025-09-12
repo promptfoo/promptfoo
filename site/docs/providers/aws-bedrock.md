@@ -234,54 +234,6 @@ export AWS_SECRET_ACCESS_KEY="your_secret_key"
 export AWS_DEFAULT_REGION="us-east-1"
 ```
 
-### Authentication Troubleshooting
-
-**Common authentication issues and solutions:**
-
-#### "Unable to locate credentials" Error
-
-```text
-Error: Unable to locate credentials. You can configure credentials by running "aws configure".
-```
-
-**Solutions:**
-
-1. **Check credential priority**: Ensure credentials are available in the expected priority order
-2. **Verify AWS CLI setup**: Run `aws configure list` to see active credentials
-3. **SSO session expired**: Run `aws sso login --profile YOUR_PROFILE`
-4. **Environment variables**: Verify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set
-
-#### "AccessDenied" or "UnauthorizedOperation" Errors
-
-**Solutions:**
-
-1. **Check IAM permissions**: Ensure your credentials have `bedrock:InvokeModel` permission
-2. **Model access**: Enable model access in the AWS Bedrock console
-3. **Region mismatch**: Verify the region in your config matches where you enabled model access
-
-#### SSO-Specific Issues
-
-**"SSO session has expired":**
-
-```bash
-aws sso login --profile YOUR_PROFILE
-```
-
-**"Profile not found":**
-
-- Check `~/.aws/config` contains the profile
-- Verify profile name matches exactly (case-sensitive)
-
-#### Debugging Authentication
-
-Enable debug logging to see which credentials are being used:
-
-```bash
-export AWS_SDK_JS_LOG=1
-npx promptfoo eval
-```
-
-This will show detailed AWS SDK logs including credential resolution.
 
 ## Example
 
@@ -313,7 +265,7 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -323,12 +275,12 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-opus-20240229-v1:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -784,7 +736,56 @@ These environment variables can be overridden by the configuration specified in 
 
 ## Troubleshooting
 
-### ValidationException: On-demand throughput isn't supported
+### Authentication Issues
+
+#### "Unable to locate credentials" Error
+
+```text
+Error: Unable to locate credentials. You can configure credentials by running "aws configure".
+```
+
+**Solutions:**
+
+1. **Check credential priority**: Ensure credentials are available in the expected priority order
+2. **Verify AWS CLI setup**: Run `aws configure list` to see active credentials
+3. **SSO session expired**: Run `aws sso login --profile YOUR_PROFILE`
+4. **Environment variables**: Verify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set
+
+#### "AccessDenied" or "UnauthorizedOperation" Errors
+
+**Solutions:**
+
+1. **Check IAM permissions**: Ensure your credentials have `bedrock:InvokeModel` permission
+2. **Model access**: Enable model access in the AWS Bedrock console
+3. **Region mismatch**: Verify the region in your config matches where you enabled model access
+
+#### SSO-Specific Issues
+
+**"SSO session has expired":**
+
+```bash
+aws sso login --profile YOUR_PROFILE
+```
+
+**"Profile not found":**
+
+- Check `~/.aws/config` contains the profile
+- Verify profile name matches exactly (case-sensitive)
+
+#### Debugging Authentication
+
+Enable debug logging to see which credentials are being used:
+
+```bash
+export AWS_SDK_JS_LOG=1
+npx promptfoo eval
+```
+
+This will show detailed AWS SDK logs including credential resolution.
+
+### Model Configuration Issues
+
+#### ValidationException: On-demand throughput isn't supported
 
 If you see this error:
 
