@@ -1,5 +1,5 @@
 import { Editor } from '@monaco-editor/react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import Box from '@mui/material/Box';
