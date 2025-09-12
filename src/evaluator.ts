@@ -1054,8 +1054,8 @@ class Evaluator {
       }
     }
 
-    // Resume support: if PROMPTFOO_RESUME is set, skip already-completed (testIdx,promptIdx) pairs
-    if (process.env.PROMPTFOO_RESUME === 'true' && this.evalRecord.persisted) {
+    // Resume support: if CLI is in resume mode, skip already-completed (testIdx,promptIdx) pairs
+    if (cliState.resume && this.evalRecord.persisted) {
       try {
         const { default: EvalResult } = await import('./models/evalResult');
         const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);

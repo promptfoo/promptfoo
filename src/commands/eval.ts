@@ -183,8 +183,8 @@ export async function doEval(
             }) as any,
         );
       }
-      // Mark resume mode so evaluator can skip completed work
-      process.env.PROMPTFOO_RESUME = 'true';
+      // Mark resume mode in CLI state so evaluator can skip completed work
+      cliState.resume = true;
     } else {
       ({
         config,
@@ -411,6 +411,8 @@ export async function doEval(
     if (sigintHandler) {
       process.removeListener('SIGINT', sigintHandler);
     }
+    // Clear resume flag after run completes
+    cliState.resume = false;
 
     // If paused, print minimal guidance and skip the rest of the reporting
     if (paused) {
