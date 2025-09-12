@@ -54,7 +54,7 @@ function isValidTestCase(obj: any): obj is TestCase {
   return true;
 }
 
-const TestCasesSection: React.FC<TestCasesSectionProps> = ({ varsList }) => {
+const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
   const { config, updateConfig } = useStore();
   const testCases = (config.tests || []) as TestCase[];
   const setTestCases = (cases: TestCase[]) => updateConfig({ tests: cases });

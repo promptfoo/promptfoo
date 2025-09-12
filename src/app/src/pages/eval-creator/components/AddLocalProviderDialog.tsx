@@ -16,11 +16,7 @@ interface AddLocalProviderDialogProps {
   onAdd: (provider: ProviderOptions) => void;
 }
 
-const AddLocalProviderDialog: React.FC<AddLocalProviderDialogProps> = ({
-  open,
-  onClose,
-  onAdd,
-}) => {
+const AddLocalProviderDialog = ({ open, onClose, onAdd }: AddLocalProviderDialogProps) => {
   const [path, setPath] = React.useState('');
   const [error, setError] = React.useState('');
 

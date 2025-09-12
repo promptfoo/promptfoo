@@ -9,7 +9,7 @@ export type PluginCategoryStats = {
   metadata: {
     type: string;
     description: string;
-    severity?: Severity;
+    severity: Severity;
   };
 };
 

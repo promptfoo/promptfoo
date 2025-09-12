@@ -286,6 +286,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         timeout,
         'json',
         context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       ));
 
       if (status < 200 || status >= 300) {

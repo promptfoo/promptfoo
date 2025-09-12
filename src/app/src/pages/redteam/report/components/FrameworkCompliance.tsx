@@ -29,10 +29,7 @@ interface FrameworkComplianceProps {
   strategyStats: Record<string, { pass: number; total: number }>;
 }
 
-const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
-  categoryStats,
-  strategyStats,
-}) => {
+const FrameworkCompliance = ({ categoryStats, strategyStats }: FrameworkComplianceProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const getNonCompliantPlugins = React.useCallback(
