@@ -33,9 +33,9 @@ import './TestSuites.css';
 
 import {
   calculatePluginRiskScore,
+  type PluginCategoryStatsByPluginId,
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
-import { type PluginCategoryStatsByPluginId } from './types';
 
 interface TestSuitesProps {
   evalId: string;

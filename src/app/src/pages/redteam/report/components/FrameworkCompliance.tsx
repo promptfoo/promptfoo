@@ -22,7 +22,7 @@ import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
 import './FrameworkCompliance.css';
 
-import { type PluginCategoryStatsByPluginId } from './types';
+import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 
 interface FrameworkComplianceProps {
   categoryStats: PluginCategoryStatsByPluginId;

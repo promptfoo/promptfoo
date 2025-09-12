@@ -9,12 +9,12 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
+import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 import {
   categorizePlugins,
   expandPluginCollections,
   getPluginDisplayName,
 } from './FrameworkComplianceUtils';
-import { type PluginCategoryStatsByPluginId } from './types';
 
 interface CSVExporterProps {
   categoryStats: PluginCategoryStatsByPluginId;

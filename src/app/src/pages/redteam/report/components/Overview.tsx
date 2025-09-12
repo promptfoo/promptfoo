@@ -15,7 +15,7 @@ import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
 
 import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
-import { type PluginCategoryStatsByPluginId } from './types';
+import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 
 interface OverviewProps {
   categoryStats: PluginCategoryStatsByPluginId;

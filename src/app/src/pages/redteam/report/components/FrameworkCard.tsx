@@ -21,6 +21,7 @@ import {
   Severity,
 } from '@promptfoo/redteam/constants';
 import { POLICY_METRIC_PREFIX } from '@promptfoo/redteam/plugins/policy/constants';
+import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 import {
   categorizePlugins,
   expandPluginCollections,
@@ -28,7 +29,6 @@ import {
   getPluginDisplayName,
   getSeverityColor,
 } from './FrameworkComplianceUtils';
-import { type PluginCategoryStatsByPluginId } from './types';
 
 interface FrameworkCardProps {
   framework: string;

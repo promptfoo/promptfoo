@@ -1,8 +1,8 @@
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
+import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 import RiskCard from './RiskCard';
-import { type PluginCategoryStatsByPluginId } from './types';
 import type { TopLevelCategory } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';
 

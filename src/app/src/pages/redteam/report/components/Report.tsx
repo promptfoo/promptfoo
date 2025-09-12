@@ -39,14 +39,6 @@ import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import './Report.css';
 
-import ReportDownloadButton from './ReportDownloadButton';
-import ReportSettingsDialogButton from './ReportSettingsDialogButton';
-import RiskCategories from './RiskCategories';
-import StrategyStats from './StrategyStats';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
-import TestSuites from './TestSuites';
-import ToolsDialog from './ToolsDialog';
-
 import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import {
   categoryAliases,
@@ -55,7 +47,14 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { POLICY_METRIC_PREFIX } from '@promptfoo/redteam/plugins/policy/constants';
-import { type PluginCategoryStatsByPluginId } from './types';
+import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
+import ReportDownloadButton from './ReportDownloadButton';
+import ReportSettingsDialogButton from './ReportSettingsDialogButton';
+import RiskCategories from './RiskCategories';
+import StrategyStats from './StrategyStats';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import TestSuites from './TestSuites';
+import ToolsDialog from './ToolsDialog';
 
 const App = () => {
   const navigate = useNavigate();

@@ -1,5 +1,5 @@
 import { categoryAliases, displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
-import { type PluginCategoryStatsByPluginId } from './types';
+import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 import type { Theme } from '@mui/material/styles';
 
 // Types for utility functions
