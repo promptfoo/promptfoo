@@ -29,7 +29,7 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -794,13 +794,13 @@ This usually means you need to use the region-specific model ID. Update your pro
 ```yaml
 providers:
   # Instead of this:
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:anthropic.claude-opus-4-1-20250805-v1:0
   # Use this:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0 # US region
+  - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0 # US region
   # or
-  - id: bedrock:eu.anthropic.claude-3-5-sonnet-20241022-v2:0 # EU region
+  - id: bedrock:eu.anthropic.claude-opus-4-1-20250805-v1:0 # EU region
   # or
-  - id: bedrock:apac.anthropic.claude-3-5-sonnet-20241022-v2:0 # APAC region
+  - id: bedrock:apac.anthropic.claude-opus-4-1-20250805-v1:0 # APAC region
 ```
 
 Make sure to:
