@@ -1,10 +1,10 @@
 import dedent from 'dedent';
-import { sha256 } from '../../util/createHash';
-import invariant from '../../util/invariant';
-import { type Policy, type PolicyObject, PolicyObjectSchema } from '../types';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
-import { POLICY_METRIC_PREFIX } from './policy/constants';
-import { constructMetricId } from './policy/utils';
+import { sha256 } from '../../../util/createHash';
+import invariant from '../../../util/invariant';
+import { type Policy, type PolicyObject, PolicyObjectSchema } from '../../types';
+import { RedteamGraderBase, RedteamPluginBase } from '../base';
+import { POLICY_METRIC_PREFIX } from './constants';
+import { constructMetricId } from './utils';
 
 import type {
   ApiProvider,
@@ -13,7 +13,7 @@ import type {
   GradingResult,
   PluginConfig,
   TestCase,
-} from '../../types';
+} from '../../../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 
