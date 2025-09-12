@@ -1,5 +1,8 @@
 import React, { memo, useCallback, useEffect, useState } from 'react';
 
+import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -13,6 +16,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useDebounce } from 'use-debounce';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { TestCaseDialog, TestCaseGenerateButton } from '../TestCaseDialog';
 
 interface PolicyInstance {
   id: string;
@@ -58,7 +62,16 @@ PolicyInput.displayName = 'PolicyInput';
 
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
+  const { recordEvent } = useTelemetry();
+  const toast = useToast();
   const [isInitialMount, setIsInitialMount] = useState(true);
+  const [testCaseDialogOpen, setTestCaseDialogOpen] = useState(false);
+  const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
+  const [generatedTestCase, setGeneratedTestCase] = useState<{
+    prompt: string;
+    context?: string;
+  } | null>(null);
+  const [generatingTestCase, setGeneratingTestCase] = useState(false);
   const [policies, setPolicies] = useState<PolicyInstance[]>(() => {
     // Initialize from existing config or create a default empty policy
     const existingPolicies = config.plugins
@@ -141,6 +154,70 @@ export const CustomPoliciesSection = () => {
     setPolicies([...policies, newPolicy]);
   };
 
+  const handleGenerateTestCase = async (policyId: string) => {
+    const policy = policies.find((p) => p.id === policyId);
+    if (!policy || !policy.policy.trim()) {
+      toast.showToast('Please enter a policy before generating a test case', 'warning');
+      return;
+    }
+
+    setGeneratingPolicyId(policyId);
+    setGeneratedTestCase(null);
+    setGeneratingTestCase(true);
+    setTestCaseDialogOpen(true);
+
+    try {
+      recordEvent('feature_used', {
+        feature: 'redteam_policy_generate_test_case',
+        plugin: 'policy',
+      });
+
+      const response = await callApi('/redteam/generate-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pluginId: 'policy',
+          config: {
+            policy: policy.policy,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate test case');
+      }
+
+      const data = await response.json();
+      setGeneratedTestCase({
+        prompt: data.prompt || '',
+        context: data.context || policy.policy,
+        metadata: {
+          policy: policy.policy,
+          policyName: policy.name,
+        },
+      });
+    } catch (error) {
+      console.error('Error generating test case:', error);
+      toast.showToast(
+        `Failed to generate test case: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+      setTestCaseDialogOpen(false);
+    } finally {
+      setGeneratingTestCase(false);
+    }
+  };
+
+  const handleCloseTestCaseDialog = () => {
+    setTestCaseDialogOpen(false);
+    setGeneratingPolicyId(null);
+    setGeneratedTestCase(null);
+    setGeneratingTestCase(false);
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography variant="body2" color="text.secondary">
@@ -189,6 +266,11 @@ export const CustomPoliciesSection = () => {
                 size="small"
                 fullWidth
               />
+              <TestCaseGenerateButton
+                onClick={() => handleGenerateTestCase(policy.id)}
+                disabled={generatingTestCase && generatingPolicyId === policy.id}
+                isGenerating={generatingTestCase && generatingPolicyId === policy.id}
+              />
               <IconButton
                 onClick={() => {
                   setPolicies((prev) =>
@@ -214,6 +296,15 @@ export const CustomPoliciesSection = () => {
           </Box>
         ))}
       </Stack>
+
+      <TestCaseDialog
+        open={testCaseDialogOpen}
+        onClose={handleCloseTestCaseDialog}
+        plugin="policy"
+        isGenerating={generatingTestCase}
+        generatedTestCase={generatedTestCase}
+        mode="result"
+      />
     </Box>
   );
 };
