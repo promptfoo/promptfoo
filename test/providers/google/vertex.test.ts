@@ -128,6 +128,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(response).toEqual({
       cached: false,
+      cost: 0.00002,
       output: 'response text',
       tokenUsage: {
         total: 10,
@@ -293,6 +294,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(response).toEqual({
       cached: false,
+      cost: 0.00003,
       output: [
         {
           functionCall: {
@@ -390,6 +392,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(response).toEqual({
       cached: false,
+      cost: 0.00002,
       output: 'response with tools',
       tokenUsage: {
         total: 10,

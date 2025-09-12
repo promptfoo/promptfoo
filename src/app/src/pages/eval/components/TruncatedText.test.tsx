@@ -439,4 +439,77 @@ describe('TruncatedText', () => {
     // Content should be empty or minimal
     expect(mainDiv?.textContent || '').toBe('');
   });
+
+  it('should display the full markdown image string containing base64 image data without truncation or ellipsis, even if its length exceeds maxLength', () => {
+    const base64ImageData =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFdgJc2ZWHLwAAAABJRU5ErkJggg==';
+    const markdownImage = `![My Image](${base64ImageData})`;
+    const maxLength = 10;
+
+    const { container } = render(<TruncatedText text={markdownImage} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    expect(mainDiv).toHaveTextContent(markdownImage);
+    expect(mainDiv).toHaveStyle('cursor: pointer');
+  });
+
+  it('should not truncate markdown images with uncommon MIME types like image/svg+xml;base64', () => {
+    const base64Data =
+      'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+PGNpcmNsZSBjeD0iMjUiIGN5PSIyNSIgcj0iMjAiIGZpbGw9ImJsdWUiLz48L3N2Zz4=';
+    const markdownImage = `![SVG Image](data:image/svg+xml;base64,${base64Data})`;
+    const maxLength = 50;
+
+    render(<TruncatedText text={markdownImage} maxLength={maxLength} />);
+
+    const mainDiv = screen.getByText(markdownImage);
+    expect(mainDiv).toBeInTheDocument();
+  });
+
+  it('should display a malformed markdown image string containing base64 pattern with truncation and ellipsis, when its length exceeds maxLength', () => {
+    const malformedMarkdownImage =
+      '![Incomplete markdown(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFdgJc2ZWHLwAAAABJRU5ErkJggg==';
+    const maxLength = 20;
+
+    const { container } = render(
+      <TruncatedText text={malformedMarkdownImage} maxLength={maxLength} />,
+    );
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    const truncatedText = malformedMarkdownImage.slice(0, maxLength) + '...';
+    expect(mainDiv).toHaveTextContent(truncatedText);
+
+    expect(screen.queryByText('...')).toBeInTheDocument();
+  });
+
+  it('should display the full markdown image string without truncation when alt text contains brackets', () => {
+    const markdownImage =
+      '![Complex [nested] brackets](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFdgJc2ZWHLwAAAABJRU5ErkJggg==)';
+    const maxLength = 20;
+
+    const { container } = render(<TruncatedText text={markdownImage} maxLength={maxLength} />);
+
+    const mainDiv = container.querySelector('#eval-output-cell-text');
+    expect(mainDiv).toBeInTheDocument();
+
+    expect(mainDiv).toHaveTextContent(markdownImage);
+    expect(screen.queryByText('...')).not.toBeInTheDocument();
+  });
+
+  it('should display the full markdown image string containing base64 data within a React element without truncation', () => {
+    const base64Image =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFdgJc2ZWHLwAAAABJRU5ErkJggg==';
+    const markdownImage = `![Image](${base64Image})`;
+    const element = React.createElement('span', {}, markdownImage);
+    const maxLength = 10;
+
+    render(<TruncatedText text={element} maxLength={maxLength} />);
+
+    const mainDiv = screen.getByText(markdownImage);
+    expect(mainDiv).toBeInTheDocument();
+    expect(screen.queryByText('...')).not.toBeInTheDocument();
+  });
 });
