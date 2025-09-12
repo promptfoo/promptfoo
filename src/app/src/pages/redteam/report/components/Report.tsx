@@ -4,6 +4,7 @@ import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import PrintIcon from '@mui/icons-material/Print';
 import WarningIcon from '@mui/icons-material/Warning';
@@ -35,6 +36,8 @@ import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable
 import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
+import './Report.css';
+
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -42,7 +45,6 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import './Report.css';
 
 import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 
@@ -390,11 +392,7 @@ const App: React.FC = () => {
             {evalData.config.description && `: ${evalData.config.description}`}
           </Typography>
           <Typography variant="subtitle1" mb={2}>
-            {new Date(evalData.createdAt).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
+            {formatDataGridDate(evalData.createdAt)}
           </Typography>
           <Box className="report-details">
             {selectedPrompt && (
@@ -481,6 +479,8 @@ const App: React.FC = () => {
           evalId={evalId}
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
           vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
           vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
           setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}

@@ -345,6 +345,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         REQUEST_TIMEOUT_MS,
         'json',
         context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       ));
 
       if (status < 200 || status >= 300) {

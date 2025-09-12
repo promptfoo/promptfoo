@@ -35,6 +35,10 @@ const redTeamSidebar = [
     id: 'red-team/owasp-llm-top-10',
   },
   {
+    type: 'doc',
+    id: 'red-team/risk-scoring',
+  },
+  {
     type: 'category',
     label: 'Plugins',
     collapsed: true,
@@ -103,6 +107,7 @@ const redTeamSidebar = [
           'red-team/plugins/religion',
           'red-team/plugins/toxic-chat',
           'red-team/plugins/unsafebench',
+          'red-team/plugins/vlguard',
           'red-team/plugins/xstest',
         ],
       },

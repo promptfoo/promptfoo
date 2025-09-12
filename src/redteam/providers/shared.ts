@@ -130,7 +130,7 @@ export async function getTargetResponse(
     await sleep(targetProvider.delay);
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
-  if (targetRespRaw?.output) {
+  if (targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output')) {
     const output = (
       typeof targetRespRaw.output === 'string'
         ? targetRespRaw.output
@@ -156,16 +156,37 @@ export async function getTargetResponse(
 
   throw new Error(
     `
-    Target returned malformed response: expected either \`output\` or \`error\` to be set.
+    Target returned malformed response: expected either \`output\` or \`error\` property to be set.
 
     Instead got: ${safeJsonStringify(targetRespRaw)}
+    
+    Note: Empty strings are valid output values.
     `,
   );
 }
 
 export interface Message {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'developer';
   content: string;
+}
+
+/**
+ * Validates if a parsed JSON object is a valid chat message array
+ */
+export function isValidChatMessageArray(parsed: unknown): parsed is Message[] {
+  return (
+    Array.isArray(parsed) &&
+    parsed.every(
+      (msg) =>
+        msg &&
+        typeof msg === 'object' &&
+        'role' in msg &&
+        'content' in msg &&
+        typeof msg.role === 'string' &&
+        typeof msg.content === 'string' &&
+        ['user', 'assistant', 'system', 'developer'].includes(msg.role),
+    )
+  );
 }
 
 export const getLastMessageContent = (
