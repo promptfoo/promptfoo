@@ -98,7 +98,7 @@ vi.mock('@promptfoo/redteam/constants', () => ({
   AGENTIC_EXEMPT_PLUGINS: [],
   DATASET_EXEMPT_PLUGINS: [],
   PLUGINS_REQUIRING_CONFIG: ['indirect-prompt-injection'],
-  HUGGINGFACE_GATED_PLUGINS: ['beavertails', 'unsafebench', 'aegis'],
+  HUGGINGFACE_GATED_PLUGINS: [],
   REDTEAM_DEFAULTS: {
     MAX_CONCURRENCY: 4,
     NUM_TESTS: 10,
@@ -330,5 +330,40 @@ describe('Plugins', () => {
     await waitFor(() => {
       expect(nextButton).toBeEnabled();
     });
+  });
+
+  it('should handle an empty HUGGINGFACE_GATED_PLUGINS array without errors', () => {
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    expect(screen.getByRole('heading', { name: /Plugins/i, level: 4 })).toBeInTheDocument();
+
+    expect(screen.queryByText('🤗 API key required')).toBeNull();
+  });
+
+  it('should display the HuggingFace API key requirement indicator for plugins with complex config objects', async () => {
+    const constants = await import('@promptfoo/redteam/constants');
+    Object.defineProperty(constants, 'HUGGINGFACE_GATED_PLUGINS', {
+      value: ['beavertails'],
+    });
+
+    const complexPlugin = {
+      id: 'beavertails',
+      config: {
+        param1: 'value1',
+        param2: 'value2',
+      },
+    };
+
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [complexPlugin],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const apiKeyRequiredElement = screen.getByText(/API key required/i);
+    expect(apiKeyRequiredElement).toBeInTheDocument();
   });
 });
