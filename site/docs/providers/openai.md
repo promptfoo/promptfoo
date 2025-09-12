@@ -1336,6 +1336,23 @@ providers:
       tool_choice: 'auto'
 ```
 
+### Using with Azure
+
+The Responses API can also be used with Azure OpenAI endpoints by configuring the `apiHost`:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      apiKey: '${AZURE_API_KEY}'
+      temperature: 0.7
+      instructions: 'You are a helpful assistant.'
+      response_format: file://./response-schema.json
+```
+
+For comprehensive Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
+
 ### Complete Example
 
 For a complete working example, see the [OpenAI Responses API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-responses) or initialize it with:
