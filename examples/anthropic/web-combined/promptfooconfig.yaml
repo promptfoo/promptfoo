@@ -37,4 +37,7 @@ tests:
         value: ['Claude 4', 'claude-4', 'capabilities', 'improvements']
         reason: 'Response should mention Claude 4 and its features'
       - type: llm-rubric
-        value: 'The response should provide a comprehensive summary with citations'
+        value: 'The response should provide a comprehensive research summary based on multiple sources'
+      - type: contains-any
+        value: ['search', 'found', 'according', 'based on', 'research', 'sources']
+        reason: 'Response should indicate research was performed'
