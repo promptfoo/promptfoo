@@ -228,6 +228,9 @@ export class OpenAiModerationProvider
           body: requestBody,
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        false,
+        this.config.maxRetries,
       );
 
       if (status < 200 || status >= 300) {

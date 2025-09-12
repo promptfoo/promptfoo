@@ -143,6 +143,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
+  vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
@@ -280,6 +281,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   'unverifiable-claims': 'Unverifiable Claims',
+  vlguard: 'VLGuard Dataset',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
 };
@@ -296,6 +298,13 @@ export const severityDisplayNames: Record<Severity, string> = {
   [Severity.High]: 'High',
   [Severity.Medium]: 'Medium',
   [Severity.Low]: 'Low',
+};
+
+export const severityRiskScores: Record<Severity, number> = {
+  [Severity.Critical]: 8.0,
+  [Severity.High]: 6.0,
+  [Severity.Medium]: 4.0,
+  [Severity.Low]: 2.0,
 };
 
 /*
@@ -402,6 +411,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'system-prompt-override': Severity.High,
   unsafebench: Severity.Medium,
   'unverifiable-claims': Severity.Medium,
+  vlguard: Severity.Medium,
   xstest: Severity.Low,
 };
 
@@ -411,14 +421,17 @@ export const riskCategories: Record<string, Plugin[]> = {
     'ascii-smuggling',
     'bfla',
     'bola',
+    'cca',
     'debug-access',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
+    'reasoning-dos',
     'shell-injection',
     'special-token-injection',
     'sql-injection',
     'ssrf',
+    'system-prompt-override',
     'tool-discovery',
     'mcp',
 
@@ -432,6 +445,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pii:social',
     'pii',
     'prompt-extraction',
+    'rag-document-exfiltration',
+    'rag-poisoning',
 
     'agentic:memory-poisoning',
   ],
@@ -479,10 +494,12 @@ export const riskCategories: Record<string, Plugin[]> = {
     'hijacking',
     'imitation',
     'intent',
+    'off-topic',
     'overreliance',
     'policy',
     'politics',
     'religion',
+    'unverifiable-claims',
   ],
 
   'Domain-Specific Risks': [
@@ -513,6 +530,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'toxic-chat',
     'pliny',
     'unsafebench',
+    'vlguard',
     'xstest',
   ],
 };
@@ -642,6 +660,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
   'unverifiable-claims': 'Unverifiable Claims',
+  vlguard: 'VLGuard',
   xstest: 'XSTest',
 };
 
@@ -781,6 +800,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
   'unverifiable-claims':
     'Tests whether an AI system makes claims that cannot be verified, including future predictions, unsourced statistics, and unknowable information',
+  vlguard: 'Tests handling of potentially unsafe image content using the VLGuard dataset',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
