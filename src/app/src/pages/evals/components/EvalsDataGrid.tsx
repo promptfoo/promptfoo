@@ -5,7 +5,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
 import { alpha, useTheme } from '@mui/material/styles';
@@ -159,6 +162,7 @@ export default function EvalsDataGrid({
   const [evals, setEvals] = useState<Eval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
     focusedEvalId ? [focusedEvalId] : [],
@@ -238,21 +242,14 @@ export default function EvalsDataGrid({
    * Handles the deletion of selected evals.
    * @returns A promise that resolves when the evals are deleted.
    */
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = () => {
     if (rowSelectionModel.length === 0) {
       return;
     }
+    setConfirmDeleteOpen(true);
+  };
 
-    const confirm = window.confirm(
-      `Are you sure you want to delete ${rowSelectionModel.length} eval${
-        rowSelectionModel.length === 1 ? '' : 's'
-      }?`,
-    );
-
-    if (!confirm) {
-      return;
-    }
-
+  const handleConfirmDelete = async () => {
     try {
       setIsLoading(true);
       const res = await callApi(`/eval`, {
@@ -269,12 +266,17 @@ export default function EvalsDataGrid({
 
       setEvals((prev) => prev.filter((e) => !rowSelectionModel.includes(e.evalId)));
       setRowSelectionModel([]);
+      setConfirmDeleteOpen(false);
     } catch (error) {
       console.error('Failed to delete evals:', error);
       alert('Failed to delete evals');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCancelDelete = () => {
+    setConfirmDeleteOpen(false);
   };
 
   const columns: GridColDef<Eval>[] = useMemo(
@@ -410,116 +412,143 @@ export default function EvalsDataGrid({
   );
 
   return (
-    <Paper elevation={2} sx={{ height: '100%' }}>
-      <DataGrid
-        rows={rows}
-        columns={columns}
-        loading={isLoading}
-        getRowId={(row) => row.evalId}
-        checkboxSelection={deletionEnabled}
-        slots={{
-          toolbar: CustomToolbar,
-          noRowsOverlay: () => (
-            <Box
-              sx={{
-                textAlign: 'center',
-                color: 'text.secondary',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                p: 3,
-              }}
-            >
-              {error ? (
-                <>
-                  <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
-                  <Typography variant="h6" gutterBottom color="error">
-                    Error loading evals
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {error.message}
-                  </Typography>
-                </>
-              ) : (
-                <>
-                  <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
-                  <Typography variant="h6" gutterBottom>
-                    No evals found
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Try adjusting your search or create a new evaluation
-                  </Typography>
-                </>
-              )}
-            </Box>
-          ),
-        }}
-        slotProps={{
-          toolbar: {
-            showUtilityButtons,
-            deletionEnabled,
-            focusQuickFilterOnMount,
-            selectedCount: rowSelectionModel.length,
-            onDeleteSelected: handleDeleteSelected,
-          },
-          loadingOverlay: {
-            variant: 'linear-progress',
-          },
-        }}
-        onCellClick={(params) => {
-          if (params.id !== focusedEvalId && params.field !== '__check__') {
-            handleCellClick(params);
-          }
-        }}
-        getRowClassName={(params) => (params.id === focusedEvalId ? 'focused-row' : '')}
-        // sx={{
-        //   border: 'none',
-        //   '& .MuiDataGrid-row': {
-        //     cursor: 'pointer',
-        //     transition: 'background-color 0.2s ease',
-        //     '&:hover': {
-        //       backgroundColor: 'action.hover',
-        //     },
-        //   },
-        //   '& .MuiDataGrid-row--disabled': {
-        //     cursor: 'default',
-        //     opacity: 0.7,
-        //     pointerEvents: 'none',
-        //   },
-        //   '& .focused-row': {
-        //     backgroundColor: 'action.selected',
-        //     cursor: 'default',
-        //     '&:hover': {
-        //       backgroundColor: 'action.selected',
-        //     },
-        //   },
-        //   '& .MuiDataGrid-cell': {
-        //     borderColor: 'divider',
-        //   },
-        //   '& .MuiDataGrid-columnHeaders': {
-        //     backgroundColor: 'background.default',
-        //     borderColor: 'divider',
-        //   },
-        //   '& .MuiDataGrid-selectedRow': {
-        //     backgroundColor: 'action.selected',
-        //   },
-        //   '--DataGrid-overlayHeight': '300px',
-        // }}
-        onRowSelectionModelChange={setRowSelectionModel}
-        rowSelectionModel={rowSelectionModel}
-        initialState={{
-          sorting: {
-            sortModel: [{ field: 'createdAt', sort: 'desc' }],
-          },
-          pagination: {
-            paginationModel: { pageSize: 50 },
-          },
-        }}
-        pageSizeOptions={[10, 25, 50, 100]}
-        isRowSelectable={(params) => params.id !== focusedEvalId}
-      />
-    </Paper>
+    <>
+      {/* Evals data grid */}
+      <Paper elevation={2} sx={{ height: '100%' }}>
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          loading={isLoading}
+          getRowId={(row) => row.evalId}
+          checkboxSelection={deletionEnabled}
+          slots={{
+            toolbar: CustomToolbar,
+            noRowsOverlay: () => (
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  color: 'text.secondary',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  p: 3,
+                }}
+              >
+                {error ? (
+                  <>
+                    <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
+                    <Typography variant="h6" gutterBottom color="error">
+                      Error loading evals
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {error.message}
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
+                    <Typography variant="h6" gutterBottom>
+                      No evals found
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Try adjusting your search or create a new evaluation
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            ),
+          }}
+          slotProps={{
+            toolbar: {
+              showUtilityButtons,
+              deletionEnabled,
+              focusQuickFilterOnMount,
+              selectedCount: rowSelectionModel.length,
+              onDeleteSelected: handleDeleteSelected,
+            },
+            loadingOverlay: {
+              variant: 'linear-progress',
+            },
+          }}
+          onCellClick={(params) => {
+            if (params.id !== focusedEvalId && params.field !== '__check__') {
+              handleCellClick(params);
+            }
+          }}
+          getRowClassName={(params) => (params.id === focusedEvalId ? 'focused-row' : '')}
+          sx={{
+            border: 'none',
+            '& .MuiDataGrid-row': {
+              cursor: 'pointer',
+              transition: 'background-color 0.2s ease',
+              '&:hover': {
+                backgroundColor: 'action.hover',
+              },
+            },
+            '& .MuiDataGrid-row--disabled': {
+              cursor: 'default',
+              opacity: 0.7,
+              pointerEvents: 'none',
+            },
+            '& .focused-row': {
+              backgroundColor: 'action.selected',
+              cursor: 'default',
+              '&:hover': {
+                backgroundColor: 'action.selected',
+              },
+            },
+            '& .MuiDataGrid-cell': {
+              borderColor: 'divider',
+            },
+            '& .MuiDataGrid-columnHeaders': {
+              backgroundColor: 'background.default',
+              borderColor: 'divider',
+            },
+            '& .MuiDataGrid-selectedRow': {
+              backgroundColor: 'action.selected',
+            },
+            '--DataGrid-overlayHeight': '300px',
+          }}
+          onRowSelectionModelChange={setRowSelectionModel}
+          rowSelectionModel={rowSelectionModel}
+          initialState={{
+            sorting: {
+              sortModel: [{ field: 'createdAt', sort: 'desc' }],
+            },
+            pagination: {
+              paginationModel: { pageSize: 50 },
+            },
+          }}
+          pageSizeOptions={[10, 25, 50, 100]}
+          isRowSelectable={(params) => params.id !== focusedEvalId}
+        />
+      </Paper>
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={confirmDeleteOpen}
+        onClose={handleCancelDelete}
+        maxWidth={false}
+        fullWidth={false}
+        slotProps={{ paper: { sx: { minWidth: 350 } } }}
+      >
+        <DialogTitle>
+          {`Delete ${rowSelectionModel.length} eval${rowSelectionModel.length === 1 ? '' : 's'}?`}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelDelete}>Cancel</Button>
+          <Button onClick={handleConfirmDelete} variant="contained" color="error">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
