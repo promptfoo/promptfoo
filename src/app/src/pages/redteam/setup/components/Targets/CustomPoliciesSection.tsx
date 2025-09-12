@@ -272,6 +272,12 @@ export const CustomPoliciesSection = () => {
                 isGenerating={generatingTestCase && generatingPolicyId === policy.id}
               />
               <IconButton
+                onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}
+                color="error"
+              >
+                <DeleteIcon />
+              </IconButton>
+              <IconButton
                 onClick={() => {
                   setPolicies((prev) =>
                     prev.map((p) => (p.id === policy.id ? { ...p, isExpanded: !p.isExpanded } : p)),
@@ -279,12 +285,6 @@ export const CustomPoliciesSection = () => {
                 }}
               >
                 {policy.isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              </IconButton>
-              <IconButton
-                onClick={() => setPolicies((prev) => prev.filter((p) => p.id !== policy.id))}
-                color="error"
-              >
-                <DeleteIcon />
               </IconButton>
             </Box>
 
