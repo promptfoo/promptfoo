@@ -130,7 +130,7 @@ export async function getTargetResponse(
     await sleep(targetProvider.delay);
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
-  if (targetRespRaw?.output) {
+  if (targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output')) {
     const output = (
       typeof targetRespRaw.output === 'string'
         ? targetRespRaw.output
@@ -156,9 +156,11 @@ export async function getTargetResponse(
 
   throw new Error(
     `
-    Target returned malformed response: expected either \`output\` or \`error\` to be set.
+    Target returned malformed response: expected either \`output\` or \`error\` property to be set.
 
     Instead got: ${safeJsonStringify(targetRespRaw)}
+    
+    Note: Empty strings are valid output values.
     `,
   );
 }
