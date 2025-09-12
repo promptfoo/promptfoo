@@ -107,6 +107,7 @@ const redTeamSidebar = [
           'red-team/plugins/religion',
           'red-team/plugins/toxic-chat',
           'red-team/plugins/unsafebench',
+          'red-team/plugins/vlguard',
           'red-team/plugins/xstest',
         ],
       },
