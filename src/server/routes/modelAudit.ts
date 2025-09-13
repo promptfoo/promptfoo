@@ -9,6 +9,15 @@ import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
+import {
+  ZCheckPathRequest,
+  ZCheckPathResponse,
+  ZScanRequest,
+  ZScansQuery,
+  ZScansResponse,
+  ZDeleteResponse,
+  ZCheckInstalledResponse,
+} from './modelAudit.schemas';
 import type { Request, Response } from 'express';
 
 import type { ModelAuditScanResults } from '../../types/modelAudit';
@@ -18,23 +27,37 @@ export const modelAuditRouter = Router();
 // Check if modelaudit is installed
 modelAuditRouter.get('/check-installed', async (req: Request, res: Response): Promise<void> => {
   try {
+    // Track the check installation action
+    telemetry.record('webui_api', {
+      event: 'model_audit_check_installed',
+    });
+
     // First try to check if the modelaudit CLI is available
     const installed = await checkModelAuditInstalled();
-    res.json({ installed, cwd: process.cwd() });
+    const response = ZCheckInstalledResponse.parse({ installed, cwd: process.cwd() });
+    res.json(response);
   } catch {
-    res.json({ installed: false, cwd: process.cwd() });
+    const response = ZCheckInstalledResponse.parse({ installed: false, cwd: process.cwd() });
+    res.json(response);
   }
 });
 
 // Check path type
 modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { path: inputPath } = req.body;
+    // Track the check path action
+    telemetry.record('webui_api', {
+      event: 'model_audit_check_path',
+    });
 
-    if (!inputPath) {
-      res.status(400).json({ error: 'No path provided' });
+    // Validate request body
+    const bodyResult = ZCheckPathRequest.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({ error: 'Invalid request body', details: bodyResult.error.errors });
       return;
     }
+
+    const { path: inputPath } = bodyResult.data;
 
     // Handle home directory expansion
     let expandedPath = inputPath;
@@ -48,7 +71,8 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 
     // Check if path exists
     if (!fs.existsSync(absolutePath)) {
-      res.json({ exists: false, type: null });
+      const response = ZCheckPathResponse.parse({ exists: false, type: 'unknown' });
+      res.json(response);
       return;
     }
 
@@ -56,12 +80,13 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
     const stats = fs.statSync(absolutePath);
     const type = stats.isDirectory() ? 'directory' : 'file';
 
-    res.json({
+    const response = ZCheckPathResponse.parse({
       exists: true,
       type,
-      absolutePath,
       name: path.basename(absolutePath),
     });
+
+    res.json(response);
   } catch (error) {
     logger.error(`Error checking path: ${error}`);
     res.status(500).json({ error: String(error) });
@@ -71,12 +96,14 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 // Run model scan
 modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { paths, options } = req.body;
-
-    if (!paths || !Array.isArray(paths) || paths.length === 0) {
-      res.status(400).json({ error: 'No paths provided' });
+    // Validate request body
+    const bodyResult = ZScanRequest.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({ error: 'Invalid request body', details: bodyResult.error.errors });
       return;
     }
+
+    const { paths, options } = bodyResult.data;
 
     // Check if modelaudit is installed
     const installed = await checkModelAuditInstalled();
@@ -144,7 +171,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       pathCount: paths.length,
       hasBlacklist: options.blacklist?.length > 0,
       timeout: options.timeout,
-      verbose: options.verbose,
+      verbose: options.verbose ?? false,
       persist,
     });
 
@@ -344,7 +371,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           try {
             const audit = await ModelAudit.create({
               name: options.name || `API scan ${new Date().toISOString()}`,
-              author: options.author || null,
+              author: options.author || undefined,
               modelPath: resolvedPaths.join(', '),
               results: {
                 ...scanResults,
@@ -356,8 +383,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 options: {
                   blacklist: options.blacklist,
                   timeout: options.timeout,
-                  maxFileSize: options.maxFileSize,
-                  maxTotalSize: options.maxTotalSize,
+                  maxSize: options.maxSize,
                   verbose: options.verbose,
                 },
               },
@@ -394,15 +420,94 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
 // Get all model scans
 modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
   try {
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
-    const audits = await ModelAudit.getMany(limit);
-
-    res.json({
-      scans: audits.map((audit) => audit.toJSON()),
-      total: audits.length,
+    // Track the list scans action
+    telemetry.record('webui_api', {
+      event: 'model_audit_list_scans',
     });
+
+    // Parse and validate query parameters
+    const queryResult = ZScansQuery.safeParse(req.query);
+    if (!queryResult.success) {
+      res.status(400).json({ error: 'Invalid query parameters', details: queryResult.error.errors });
+      return;
+    }
+
+    const { limit, offset, search, sort, order } = queryResult.data;
+
+    // For now, use basic implementation until ModelAudit supports server-side features
+    const audits = await ModelAudit.getMany(limit + offset);
+
+    // Apply client-side filtering for search (temporary until server-side implementation)
+    let filteredAudits = audits;
+    if (search) {
+      filteredAudits = audits.filter(audit =>
+        audit.id.toLowerCase().includes(search.toLowerCase()) ||
+        (audit.name && audit.name.toLowerCase().includes(search.toLowerCase())) ||
+        audit.modelPath.toLowerCase().includes(search.toLowerCase()) ||
+        (audit.author && audit.author.toLowerCase().includes(search.toLowerCase()))
+      );
+    }
+
+    // Apply client-side sorting (temporary until server-side implementation)
+    filteredAudits.sort((a, b) => {
+      let aVal: any, bVal: any;
+      switch (sort) {
+        case 'name':
+          aVal = a.name || '';
+          bVal = b.name || '';
+          break;
+        case 'status':
+          aVal = a.hasErrors ? 'error' : 'clean';
+          bVal = b.hasErrors ? 'error' : 'clean';
+          break;
+        case 'createdAt':
+        default:
+          aVal = a.createdAt;
+          bVal = b.createdAt;
+          break;
+      }
+
+      if (order === 'asc') {
+        return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      } else {
+        return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
+      }
+    });
+
+    // Apply pagination
+    const paginatedAudits = filteredAudits.slice(offset, offset + limit);
+
+    const response = ZScansResponse.parse({
+      scans: paginatedAudits.map((audit) => audit.toJSON()),
+      total: filteredAudits.length,
+    });
+
+    res.json(response);
   } catch (error) {
     logger.error(`Error fetching model audits: ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get latest model scan
+modelAuditRouter.get('/scans/latest', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Track the get latest scan action
+    telemetry.record('webui_api', {
+      event: 'model_audit_get_latest',
+    });
+
+    const latest = await ModelAudit.latest();
+
+    if (!latest) {
+      // Return 204 No Content when no scans exist
+      res.status(204).send();
+      return;
+    }
+
+    res.json(latest.toJSON());
+  } catch (error) {
+    logger.error(`Error fetching latest model audit: ${error}`);
     res.status(500).json({ error: String(error) });
   }
 });
@@ -410,6 +515,12 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
 // Get specific model scan by ID
 modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
+    // Track the get scan by ID action
+    telemetry.record('webui_api', {
+      event: 'model_audit_get_scan',
+      scanId: req.params.id,
+    });
+
     const audit = await ModelAudit.findById(req.params.id);
 
     if (!audit) {
@@ -427,6 +538,12 @@ modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<
 // Delete model scan
 modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
+    // Track the delete scan action
+    telemetry.record('webui_api', {
+      event: 'model_audit_delete_scan',
+      scanId: req.params.id,
+    });
+
     const audit = await ModelAudit.findById(req.params.id);
 
     if (!audit) {
@@ -435,7 +552,13 @@ modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promi
     }
 
     await audit.delete();
-    res.json({ success: true, message: 'Model scan deleted successfully' });
+
+    const response = ZDeleteResponse.parse({
+      success: true,
+      message: 'Model scan deleted successfully',
+    });
+
+    res.json(response);
   } catch (error) {
     logger.error(`Error deleting model audit: ${error}`);
     res.status(500).json({ error: String(error) });

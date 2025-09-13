@@ -301,6 +301,191 @@ Deprecation plan:
 5) Implement `/scans/latest` endpoint; update latest results page to use it.
 6) Expand tests per plan; remove/adjust legacy tests (tab-based flow, preflight expectations).
 
+---
+
+## Additional Gaps Identified (Audit)
+
+- `ModelAudit.toJSON()` omits `author`, `checks`, and `issues` fields present in `ModelAuditRecord`. This can lead to missing metadata in API responses consumed by the UI.
+  - Task: Include `author`, `checks`, and `issues` in `toJSON()` or document why they are intentionally excluded (and ensure the UI doesn’t rely on them).
+
+- `/check-path` response uses `type: null` when not found, while proposed schema uses `'unknown'`.
+  - Task: Standardize on `type: 'unknown'` or update schema/clients to accept `null`. Prefer `'unknown'` for consistent typing.
+
+- No `GET /scans/latest` endpoint yet.
+  - Task: Implement endpoint using `ModelAudit.latest()` and return 200 with `toJSON()` when exists; 204 when none.
+
+- Share URL mismatch:
+  - `getShareableModelAuditUrl` builds URLs like `/model-audit/scan/:id`. New routing uses `/model-audit/:id` or `/model-audit/history/:id`.
+  - Task: Update share URL to `/model-audit/:id` and ensure redirects exist for legacy paths. Update remote app mapping accordingly.
+
+- History API pagination/search/sort unimplemented.
+  - Task: Add server-side pagination/sort/search as specified in Zod `ZScansQuery` contract.
+
+- Result page fetch lacks AbortController.
+  - Task: Add abort/cancellation to avoid state updates on unmounted components.
+
+- Tests drift:
+  - Task: Update `ModelAudit.test.tsx` to remove check-path preflight assumption or reintroduce preflight; fix `ModelAuditHistory.test.tsx` error expectation to align with overlay messaging.
+
+- Documentation (docs site):
+  - Task: Update Model Audit docs for new routes (`/model-audit/setup`, `/model-audit`, `/model-audit/:id`) with screenshots and flows. Update the “Install ModelAudit” guidance, history capabilities (DataGrid features), and sharing links.
+
+- Telemetry:
+  - Task: Add telemetry events for history row click, export, delete, and result view.
+
+---
+
+## From TODO.md (Consolidated Tasks)
+
+1) State Management
+- Centralize History state in `useModelAuditHistoryStore` (or remove store if local-only), instead of `useState` in `ModelAuditHistory.tsx`.
+- Ensure `useModelAuditConfigStore` and `useModelAuditHistoryStore` are used effectively; avoid unnecessary local state.
+
+2) Type Safety
+- Replace `any` in `ModelAuditResult.tsx` `results` with the shared `ScanResult` type derived from Zod schemas.
+
+3) Error Handling
+- Prefer specific error messages based on API error shape instead of generic ones across UI components.
+
+4) Code Duplication
+- Extract reusable fetch logic (e.g., a hook) for scans list and latest scan to avoid repetition between pages.
+
+5) Component Decomposition
+- Extract DataGrid configuration from `ModelAuditHistory.tsx` into a standalone component for readability and reuse.
+
+## Cloud Storage Integration (Enterprise)
+
+Scope: Enable scans against remote resources supported by modelaudit without inventing new backends. Gate the UI controls behind the existing Enterprise flag (no new API for validation).
+
+Supported resources (initial):
+- Local filesystem paths.
+- Storage buckets (to the extent supported by modelaudit):
+  - s3://bucket/path (AWS). Requires server env: standard AWS credential chain (e.g., AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or IAM role), and region.
+  - gs://bucket/path (GCP). Requires ADC (Application Default Credentials) or explicit service account vars.
+  - az://container/path or azure:// (Azure Blob). Requires Azure storage credentials/connection string.
+- JFrog Artifactory registries via env vars: JFROG_URL, and JFROG_API_TOKEN or JFROG_ACCESS_TOKEN.
+- Hugging Face models via env var: HF_TOKEN (and accept hf:// or huggingface:// URIs if modelaudit supports; otherwise allow standard hub identifiers).
+
+Out of scope:
+- Building new connectors; we only pass URIs through to modelaudit.
+
+UX tasks:
+- Setup page: allow scheme URIs (file://, s3://, gs://, az://, jfrog:// or HTTPS Artifactory endpoints, hf://). When Enterprise is off, disable non-local schemes with a tooltip “Enterprise only”.
+- Helper text lists supported backends and env vars required on the server. If envs are missing (see server capability check below), show a warning banner.
+- Remove the previously proposed validate-remote API. Rely on scan start errors and a brief preflight capability check instead (see below).
+
+Server tasks:
+- Capability probe on boot (or on first request): compute and cache which backends appear available from env/config (e.g., detect AWS creds presence, HF_TOKEN, JFROG_URL). Expose via existing installation/status route or a small extension of `/api/model-audit/check-installed` response, e.g., `{ installed, cwd, capabilities: { s3: bool, gcs: bool, azure: bool, jfrog: bool, hf: bool } }`.
+- Enforce allowlist of host patterns for remote URIs (configurable), redact secrets in logs, and keep timeouts/concurrency caps as noted.
+
+Acceptance criteria:
+- Enterprise-enabled UI permits non-local URIs with clear guidance; non-Enterprise disables them.
+- `/check-installed` (or equivalent) surfaces capability booleans to inform UI.
+- Scans against supported remotes work when env is configured; errors are actionable when not.
+
+---
+
+## Scan Progress and Intermediate Feedback
+
+Goal: Provide useful, non-blocking progress signals during scans.
+
+Server design:
+- Add SSE endpoint: `POST /api/model-audit/scan/stream`
+  - Starts the scan process and streams events: `{ type: 'stage'|'progress'|'log'|'error'|'complete', ... }`.
+  - Use `--progress` option when invoking modelaudit. Forward any structured progress lines if present. Otherwise, heuristically forward stderr lines as `{ type: 'log' }` and stage transitions.
+  - On completion, emit `{ type: 'complete', result, auditId, persisted }`.
+- Fallback: If SSE connection drops, the UI can poll `/api/model-audit/scans/latest` to detect completion.
+
+Client design:
+- Setup page: when user starts a scan, open an EventSource to the SSE endpoint.
+- Show a stepper with stages: “Enumerating files”, “Downloading dependencies”, “Scanning”, “Saving results”.
+- If `{ type: 'progress', percent }` is available, render determinate progress. Otherwise, show indeterminate bar + recent `{ type: 'log' }` lines.
+- On `{ type: 'complete' }`, navigate to `/model-audit/:id` if persisted or show inline summary if not.
+
+Resilience:
+- Debounce log updates to avoid UI jank.
+- Provide a “Continue in background” option that closes the EventSource and relies on History/Latest pages.
+- Ensure server kills the process if the client cancels and no other consumers remain.
+
+Acceptance criteria:
+- Users see stage-based progress at minimum; determinate progress when modelaudit emits it.
+- No unbounded memory growth on server (stream lines, cap buffers).
+- Graceful cancellation and error messages with suggestions (reuse existing error mapping).
+
+---
+
+## Additional Refactors & Consistency
+
+- Align metadata keys with current CLI options:
+  - Replace `maxFileSize`/`maxTotalSize` in stored metadata with `maxSize` to match parser and avoid confusion.
+- Standardize timestamps as epoch milliseconds across API.
+- Normalize routes: prefer `/model-audit/:id` in new links; keep `/model-audit/history/:id` for back-compat and add redirect.
+- Unify history fetch caching to `{ cache: 'no-store' }` in all code paths to avoid stale lists.
+- Add a single source of truth for model audit types in `src/shared/types/modelAudit.ts` (generated from Zod schemas) and use them in both server and UI.
+
+---
+
+## UI Styling QA (Light/Dark + Responsive)
+
+Objective: Ensure all Model Audit pages look polished in light/dark mode across XS–XL viewports with accessible contrast and sensible spacing.
+
+Pages to verify
+- ModelAuditSetupPage (`/model-audit/setup`)
+  - Use Container `maxWidth="lg"`; set `disableGutters` on XS and re-add padding via `sx={{ px: { xs: 2, sm: 3 } }}`.
+  - Primary actions remain visible on small screens (optional sticky footer with `position: sticky; bottom: 0`).
+  - Respect theme backgrounds: `bgcolor: dark ? background.default : grey[50]`.
+  - Inputs and buttons: confirm 44px minimum hit area; stack controls on XS (`direction={{ xs: 'column', sm: 'row' }}`).
+
+- ModelAuditHistoryPage (`/model-audit/history`)
+  - Container: add `paddingBottom: 'env(safe-area-inset-bottom)'` for devices with notches.
+  - Paper margins: replace `mx: 4` with `{ mx: { xs: 0, sm: 2, md: 4 } }`.
+  - DataGrid
+    - Ensure no horizontal scroll on XS; use responsive `columnVisibilityModel` and set `minWidth` on key columns.
+    - Toolbar: on XS show QuickFilter; collapse utility buttons into a kebab menu.
+    - Add `aria-label` to QuickFilter; verify focus ring is visible in both themes.
+    - Verify `Chip` contrast in dark mode; hover/selected row colors distinct in both themes.
+
+- ModelAuditResultPage (`/model-audit/:id` and `/model-audit/history/:id`)
+  - Breadcrumbs wrap or truncate gracefully on XS; tooltip full text on hover.
+  - Action buttons: ensure `aria-label`s (present) and spacing `spacing={{ xs: 0.5, sm: 1 }}`.
+  - Long paths: keep `wordBreak: 'break-all'` and add tooltip with full path.
+  - ResultsViewer: respect theme tokens for code/links; prevent horizontal overflow.
+
+- ModelAuditResultLatestPage (`/model-audit`)
+  - Empty state: centered content with clear CTA to Setup; confirm contrast in dark mode.
+
+- Navigation (Create dropdown + Model Audit NavLink)
+  - Dropdown usable on mobile (click-to-open, not only hover); keyboard navigation and visible focus outlines.
+  - Active state highlights for `/model-audit` and `/model-audit/:id`.
+
+Global checks
+- Focus rings visible on all interactive elements in both themes.
+- Text contrast meets AA in chips, muted text, and toolbar.
+- No horizontal overflow on XS viewports.
+
+Acceptance criteria
+- No horizontal overflow on XS; primary actions have ≥44px touch targets on XS.
+- Breadcrumbs and long text wrap or truncate with tooltips.
+- Toolbar adapts on XS (QuickFilter visible; utilities collapsed); chip and row states readable in both themes.
+
+Tasks
+- Replace hard-coded margins on History Paper with responsive `mx`.
+- Add responsive column visibility and `minWidth`s; verify no horizontal scroll.
+- Add tooltips for truncated paths and breadcrumbs.
+- Ensure QuickFilter has `aria-label` and visible focus ring.
+- Verify ResultsViewer theming and overflow control.
+- Add safe-area padding.
+
+## Progress Tracker: API Contracts & Typing
+
+- [ ] Create `src/server/routes/modelAudit.schemas.ts` with Zod schemas and export inferred TS types.
+- [ ] Validate request/response on all endpoints using Zod.
+- [ ] Implement `GET /api/model-audit/scans/latest` (200 or 204).
+- [ ] Extend `GET /api/model-audit/scans` with `limit`, `offset`, `search`, `sort`, `order`.
+- [ ] Add unit tests for validators and integration tests for response shapes.
+- [ ] Export types to `src/shared/types/modelAudit.ts` (optional) and consume on frontend.
+
+
 ## Current State Analysis
 
 ### Existing Architecture
@@ -721,111 +906,57 @@ The five-week implementation timeline is realistic and allows for proper testing
 
 ---
 
-## Implementation Progress Tracker
+## Consolidated Progress Tracker
 
-### Phase 1: Foundation
-- [x] Set up new routing structure and pages
-- [x] Basic page layouts
-- [ ] Create new Zustand stores (split configuration and history)
+- Stores
+  - [ ] Split config vs history stores; remove history from monolithic store
 
-### Phase 2: DataGrid Implementation
-- [x] Create ModelAuditHistoryDataGrid component
-- [x] Implement DataGrid features (client-side)
-- [ ] Plan and add server-side pagination/sort/search (API + UI)
-- [x] Handle scan viewing
+- Routes & Navigation
+  - [ ] Add `/model-audit/setup` (creation-only)
+  - [ ] Implement `/model-audit` (latest result view)
+  - [ ] Add alias `/model-audit/:id` and keep `/model-audit/history/:id`
+  - [ ] Update nav: Create dropdown entry; optional `NavLink` to `/model-audit`
 
-### Phase 3: Scan Detail View
-- [x] Create ModelAuditScanDetailView component
-- [x] Implement scan detail page
-- [x] Enhanced scan details (download, delete; re-run pending)
+- API & Typing (Zod)
+  - [ ] Add `GET /api/model-audit/scans/latest` (200/204)
+  - [ ] Extend `GET /api/model-audit/scans` with `limit`, `offset`, `search`, `sort`, `order`
+  - [ ] Validate all endpoints with Zod; export shared types
 
-### Phase 4: Configuration Page Cleanup
-- [x] Remove History tab from main page
-- [x] Add "View History" integration
-- [x] Navigation discoverability (dropdown with History link)
+- History DataGrid
+  - [x] Client-side features (search, sort, pagination, export)
+  - [ ] Wire server-side pagination/sort/search
+  - [ ] Expand tests: toolbar, quick filter, CSV export, selection, navigation
 
-### Phase 5: Polish & Testing
-- [ ] Comprehensive testing
-- [ ] Performance optimization
-- [ ] UX enhancements
+- Result Pages
+  - [x] Detail page in place
+  - [ ] Add AbortController handling
+  - [ ] Use Blob + `URL.createObjectURL` for downloads
 
----
+- Cloud Integration (Enterprise)
+  - [ ] UI gating for non-local schemes; helper text
+  - [ ] Capability flags from `/check-installed`
+  - [ ] Allowlist + timeouts on server
 
-## Next Actions and Guidance for Agents
+- Scan Progress
+  - [ ] Add SSE endpoint `/api/model-audit/scan/stream`
+  - [ ] UI stepper + progress handling
+  - [ ] Fallback polling via `/scans/latest`
 
-- Split stores: Extract history concerns from `src/app/src/pages/model-audit/store.ts` into a dedicated `useModelAuditHistoryStore`. Keep configuration/scan state in `useModelAuditConfigStore`. Update components accordingly and remove unused state.
-- Server-side data (optional but recommended): Extend `GET /api/model-audit/scans` to accept `limit`, `offset`, `search`, `sort`, `order`; wire DataGrid to these for large datasets. Keep client page size default at 50 and debounce quick filter.
-- Tests to add/update: Unit tests for `ModelAuditHistory` (loading, error, empty, navigation on click, quick filter, CSV export), `ModelAuditResult` (fetch success/error, delete, download, breadcrumbs), and the new stores. Remove or adjust any tests referencing the removed History tab.
-- Navigation/discoverability: Current top nav includes “Model Audit”; history is accessible via in-page CTA and breadcrumbs. Add a separate “Model Audit History” nav item only if it improves discoverability without cluttering mobile.
-- Accessibility polish: Ensure IconButtons on the Result page have `aria-label`s; verify DataGrid link cells are accessible and meet contrast guidelines; consider loading skeletons.
+- Styling QA (Light/Dark + Responsive)
+  - [ ] Responsive margins and safe-area padding
+  - [ ] DataGrid column visibility/minWidths; no overflow on XS
+  - [ ] Toolbar adapts on XS; QuickFilter a11y
+  - [ ] Tooltips for long paths and breadcrumbs
+  - [ ] ResultsViewer theming and overflow control
 
-Suggested split of work while collaborating:
-- Agent A: Store split + component wiring + store tests.
-- Agent B: Server-side pagination/search (API + UI) + component tests + accessibility polish.
+- Docs & Telemetry
+  - [ ] Update docs for routes/flows and Enterprise storage support
+  - [ ] Add telemetry for history/result interactions
 
----
-
-### Implementation Status
-
-## ✅ FULLY IMPLEMENTED
-
-All phases of the Model Audit UI redesign have been successfully completed:
-
-### Phase 1: Foundation ✅
-- [x] Set up new routing structure and pages
-- [x] Basic page layouts
-- [x] Updated Navigation component with Model Audit dropdown
-
-### Phase 2: DataGrid Implementation ✅
-- [x] Create ModelAuditHistoryDataGrid component (sophisticated, following EvalsDataGrid patterns)
-- [x] Implement DataGrid features (search, sort, pagination, export)
-- [x] Handle scan viewing with proper navigation
-
-### Phase 3: Scan Detail View ✅
-- [x] Create ModelAuditScanDetailView component (enhanced with metadata, actions)
-- [x] Implement scan detail page with breadcrumbs and actions
-- [x] Enhanced scan details (download JSON, delete, refresh functionality)
-
-### Phase 4: Configuration Page Cleanup ✅
-- [x] Remove History tab from main page
-- [x] Add "View History" integration with success alerts
-- [x] Navigation discoverability through dropdown menu
-
-### Phase 5: Polish & Testing ✅
-- [x] Add comprehensive tests (Vitest-based for app components)
-- [x] UX enhancements (loading states, error handling, breadcrumbs)
-- [x] Accessibility improvements (aria-labels on all interactive elements)
-- [x] TypeScript compliance and linting
-
-## Summary of Changes
-
-**New Files Created:**
-- `src/app/src/pages/model-audit-history/ModelAuditHistory.tsx` - Professional DataGrid component
-- `src/app/src/pages/model-audit-history/page.tsx` - History page wrapper
-- `src/app/src/pages/model-audit-result/ModelAuditResult.tsx` - Enhanced scan detail view
-- `src/app/src/pages/model-audit-result/page.tsx` - Result page wrapper
-- Comprehensive test files for all new components
-
-**Modified Files:**
-- `src/app/src/App.tsx` - Added new routes for history and scan details
-- `src/app/src/components/Navigation.tsx` - Added Model Audit dropdown menu
-- `src/app/src/pages/model-audit/ModelAudit.tsx` - Removed History tab, added success messaging
-
-**Deleted Files:**
-- `src/app/src/pages/model-audit/components/HistoryTab.tsx` - Replaced with dedicated page
-- `src/app/src/pages/model-audit/components/HistoryTab.test.tsx` - Tests moved to new structure
-
-## Key Features Implemented
-
-1. **Professional DataGrid**: Full-featured history view with search, sort, pagination, and CSV export
-2. **Direct Navigation**: Deep linking to individual scans via `/model-audit/history/:id`
-3. **Enhanced UX**: Loading states, error handling, breadcrumb navigation
-4. **Action-Rich Detail View**: Download results, delete scans, refresh data
-5. **Accessible Design**: Proper ARIA labels and keyboard navigation
-6. **Mobile Responsive**: Optimized layouts for all screen sizes
-7. **Consistent Styling**: Matches existing application design patterns
-
-The implementation successfully transforms the Model Audit feature from a basic single-page tab interface to a sophisticated, scalable multi-page application that matches the quality and patterns of other data-heavy features in the codebase.
+- Tests
+  - [ ] Update ModelAudit tests (preflight assumptions, success alert link)
+  - [ ] Fix History error expectations
+  - [ ] Add nav dropdown tests; latest view tests
 
 ### Current Work Status
-**Currently Working On:** Creating separate Zustand stores
+**Currently Working On:** Store split + route restructure (setup/latest/by-id)
