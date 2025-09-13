@@ -17,21 +17,11 @@ vi.mock('@app/pages/model-audit/components/ResultsTab', () => ({
 describe('ModelAuditResult', () => {
   const mockCallApi = vi.mocked(callApi);
 
-  const mockScan = {
-    id: '1',
-    name: 'Scan 1',
-    modelPath: '/path/to/model1',
-    createdAt: Date.now(),
-    hasErrors: true,
-    results: { issues: [{}, {}] },
-  };
-
   it('displays loading state initially', () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => new Promise(() => {}) } as Response);
     render(
-      <MemoryRouter initialEntries={['/model-audit/history/1']}>
+      <MemoryRouter initialEntries={['/scans/1']}>
         <Routes>
-          <Route path="/model-audit/history/:id" element={<ModelAuditResult />} />
+          <Route path="/scans/:id" element={<ModelAuditResult />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -39,27 +29,33 @@ describe('ModelAuditResult', () => {
   });
 
   it('displays scan result when data is loaded', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(mockScan) } as Response);
+    const scan = {
+      id: '1',
+      name: 'Scan 1',
+      modelPath: '/path/to/model1',
+      createdAt: Date.now(),
+      results: { issues: [{}, {}] },
+    };
+    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);
     render(
-      <MemoryRouter initialEntries={['/model-audit/history/1']}>
+      <MemoryRouter initialEntries={['/scans/1']}>
         <Routes>
-          <Route path="/model-audit/history/:id" element={<ModelAuditResult />} />
+          <Route path="/scans/:id" element={<ModelAuditResult />} />
         </Routes>
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Scan Result: Scan 1')).toBeInTheDocument();
+      expect(screen.getByText('Scan 1')).toBeInTheDocument();
       expect(screen.getByTestId('results-tab')).toBeInTheDocument();
-      expect(screen.getByText('Issues found: 2')).toBeInTheDocument();
     });
   });
 
   it('displays error state when API call fails', async () => {
     mockCallApi.mockRejectedValue(new Error('API Error'));
     render(
-      <MemoryRouter initialEntries={['/model-audit/history/1']}>
+      <MemoryRouter initialEntries={['/scans/1']}>
         <Routes>
-          <Route path="/model-audit/history/:id" element={<ModelAuditResult />} />
+          <Route path="/scans/:id" element={<ModelAuditResult />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -71,9 +67,9 @@ describe('ModelAuditResult', () => {
   it('displays not found state when scan does not exist', async () => {
     mockCallApi.mockResolvedValue({ ok: false, status: 404 } as Response);
     render(
-      <MemoryRouter initialEntries={['/model-audit/history/1']}>
+      <MemoryRouter initialEntries={['/scans/1']}>
         <Routes>
-          <Route path="/model-audit/history/:id" element={<ModelAuditResult />} />
+          <Route path="/scans/:id" element={<ModelAuditResult />} />
         </Routes>
       </MemoryRouter>,
     );

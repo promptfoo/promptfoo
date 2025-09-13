@@ -35,6 +35,177 @@
 - Accessibility: Ensure IconButtons (download, delete, back, refresh) have `aria-label`s and DataGrid link cells are accessible.
 - Telemetry (optional): Consider explicit events for history/result interactions (row click, delete, export) beyond page views.
 
+---
+
+## Critical Diff Audit Findings vs main
+
+Because `origin/main` is temporarily unavailable as a Git ref, this audit compares the working tree against prior observed main behavior and current files. The user-visible and structural changes are sound, but a few inconsistencies and gaps need attention.
+
+- Tests out of sync with implementation:
+  - `src/app/src/pages/model-audit/ModelAudit.test.tsx` still expects a preflight `callApi('/model-audit/check-path', ...)` before scanning. Current `ModelAudit.tsx` no longer performs this call. Action: either reintroduce the preflight check (if required by backend) or update tests to match current flow (scan without preflight).
+  - `src/app/src/pages/model-audit-history/ModelAuditHistory.test.tsx` expects the error text `Failed to fetch scans`, but the component displays the caught error’s message under an “Error loading scans” heading. Action: update test expectations to assert the overlay heading and/or the dynamic error message, or standardize the component to emit a stable generic message.
+
+- Store design inconsistency and dead code risk:
+  - History state/actions live in `useModelAuditStore` while the new History page maintains its own local fetch/state. Action: either (A) create `useModelAuditHistoryStore` and wire the History page to it, or (B) remove history fields/actions from the monolithic store. Avoid dual sources of truth.
+
+- Routing and navigation:
+  - Implemented route is `/model-audit/history/:id` (not `/model-audit/scan/:id` as early plan examples suggested). Ensure plan, docs, and breadcrumbs consistently reflect the implemented route. Breadcrumbs already do.
+  - Navigation now exposes a “Model Audit” dropdown with “New Scan” and “Scan History”. Action: add tests to assert presence/behavior of this dropdown (including keyboard navigation, active highlighting when on child routes).
+
+- Result page robustness:
+  - `ModelAuditResult` fetch does not use an AbortController; navigating away mid-fetch can set state on unmounted component. Action: add abort/cancellation to avoid potential warnings/leaks.
+  - Download uses a data URI for JSON; large payloads can be memory-heavy. Action: consider `Blob` + `URL.createObjectURL` pattern (tests already mock `createObjectURL`). Also add `aria-label` to IconButtons (back, delete, download) if missing.
+
+- DataGrid and API alignment:
+  - History grid uses client-side pagination with default page size 50, while the server `GET /api/model-audit/scans` uses a fixed default `limit` of 100 and no paging params. Action: add `limit`, `offset`, `search`, `sort`, `order` to the API and wire to DataGrid’s server-side mode. Enforce an upper bound (e.g., 200). Debounce quick filter when using server search.
+  - Consistency: the History page calls `callApi('/model-audit/scans', { cache: 'no-store' })` while store-based fetch (if used) does not. Action: unify to no-store for History fetches to avoid stale lists.
+
+- Type safety and DX:
+  - `ModelAuditResult` types `results` as `any`. Action: import and use the shared `ScanResult` type. Add a minimal type for issues array in History grid where needed.
+
+- UX and accessibility:
+  - Ensure all IconButtons have `aria-label`s and that DataGrid link cells have accessible names. Add skeletons where spinners feel jarring.
+
+---
+
+## Action Items (High Priority)
+
+- Update out-of-sync tests:
+  - Fix `ModelAudit.test.tsx` to match current scan flow (or reintroduce check-path if required). Add an assertion for the success alert and deep link when `persisted` is true.
+  - Fix `ModelAuditHistory.test.tsx` error expectation to align with the component’s overlay and dynamic message.
+
+- Decide and implement store direction:
+  - EITHER implement `useModelAuditHistoryStore` and connect `ModelAuditHistory` to it, OR remove history-related state/actions from `useModelAuditStore` to eliminate drift.
+
+- Plan and implement server-side data for History:
+  - Extend `GET /api/model-audit/scans` with `limit`, `offset`, `search`, `sort`, `order`. Default `limit` to 50, cap at 200.
+  - Wire DataGrid to server-side mode with debounced quick filter.
+
+- Result page robustness and a11y:
+  - Add fetch abort/cancellation in `ModelAuditResult` and ensure back/delete/download IconButtons have proper `aria-label`s. Prefer Blob download API.
+
+- Navigation tests:
+  - Add tests for the Model Audit dropdown presence, keyboard operability, and link navigation to `/model-audit` and `/model-audit/history`.
+
+---
+
+## Progress Tracker Updates
+
+- Phase 2: DataGrid Implementation
+  - [ ] Expand History tests (toolbar, quick filter, CSV export, selection constraints, navigation).
+  - [ ] Implement server-side pagination/sort/search (API + UI) and cap limits.
+
+- Phase 3: Scan Detail View
+  - [ ] Add fetch abort handling and a11y labels; consider Blob-based download.
+
+- Phase 4: Configuration Page Cleanup
+  - [ ] Align tests with implementation and remove legacy references (e.g., HistoryTab expectations, check-path preflight if not used).
+
+---
+
+## Restructure: Create vs Results (Model Audit)
+
+Goal: Move Model Audit “create” into the shared Create flow (alongside Eval and Red Team) and separate results viewing like Evals (latest view and by-id view).
+
+### New Routes and Behaviors
+- Creation
+  - `/model-audit/setup` → ModelAuditSetupPage: dedicated creation/configuration page (extracted from current `ModelAudit.tsx` Configuration tab). No Results tab.
+- Results
+  - `/model-audit` → ModelAuditResultLatestPage: displays the most recent persisted scan result (mirrors `/eval` behavior when no ID is provided). If none exist, shows a helpful empty state with a CTA to “Start a scan” linking to `/model-audit/setup`.
+  - `/model-audit/:id` (alias for existing `/model-audit/history/:id`) → ModelAuditResultPage: displays a specific scan result. Keep `/model-audit/history/:id` for backward compatibility.
+- History
+  - Keep `/model-audit/history` as-is, powered by DataGrid.
+
+Acceptance criteria:
+- `/model-audit/setup` renders only configuration UI (no Results tab), supports scanning, and on persisted success navigates to the new result route.
+- `/model-audit` shows latest result or a well-designed empty state with a CTA to Setup.
+- `/model-audit/:id` and `/model-audit/history/:id` both open the same result view; deep links from History use either path.
+- Old combined page is no longer reachable via navigation (explicit redirects or deprecation banner if still routable).
+
+### Navigation Updates
+- Create dropdown: add “Model Audit” entry that links to `/model-audit/setup` with description “Configure and run a model security scan”.
+- Remove the standalone “Model Audit” dropdown from top bar to reduce duplication; add a top-level `NavLink` to `/model-audit` (latest results) if we want a persistent destination, or rely on History + Create only. Recommended: keep a `NavLink` to `/model-audit` for parity with Eval.
+- Breadcrumbs: ensure consistent breadcrumbs across Setup → History → Result pages.
+
+Acceptance criteria:
+- Create dropdown contains a “Model Audit” option pointing to `/model-audit/setup`.
+- If a top-level `NavLink` to `/model-audit` is kept, it highlights on `/model-audit` and `/model-audit/:id`.
+- No redundant Model Audit dropdowns remain.
+
+### Flow Changes
+- After a successful persisted scan from `/model-audit/setup`, navigate to the result page instead of switching tabs. Prefer `/model-audit/:id` (new alias) or keep `/model-audit/history/:id` for back-compat.
+- Keep “View in History” links visible on result pages for discoverability.
+
+Acceptance criteria:
+- After scan, if `{ persisted: true, auditId }` is returned, redirect to `/model-audit/:id` (or `/model-audit/history/:id` until alias lands), and show a success indicator.
+- If not persisted, remain on Setup with a non-persisted results summary and offer a CTA to run again or configure persistence.
+
+### State Management
+- Split the store definitively:
+  - `useModelAuditConfigStore`: paths, options, and scanning state for Setup.
+  - `useModelAuditHistoryStore` (or local fetch): for DataGrid history and its paging/filter/sort state.
+  - Results pages fetch by ID or via “latest” API; avoid coupling results state to the config store.
+- Remove history-related state/actions from the monolithic store after migration to avoid drift.
+
+Acceptance criteria:
+- Config store has only config/scan state; results pages do not rely on config store values.
+- History store (if used) maintains DataGrid UI state (page, pageSize, sortModel, filter/search) and query params for API calls.
+
+### API Changes (Recommended)
+- Add `GET /api/model-audit/scans/latest` to return the latest persisted scan. This simplifies `/model-audit` route and reduces data transfer.
+- Extend `GET /api/model-audit/scans` with `limit`, `offset`, `search`, `sort`, `order` for server-side DataGrid features.
+
+Contract details:
+- `GET /api/model-audit/scans/latest` → 200 with the latest scan JSON; 204 when no scans exist (client shows empty state and CTA); avoid 404 here.
+- `GET /api/model-audit/scans` accepts:
+  - `limit` (int, default 50, max 200), `offset` (int, default 0)
+  - `search` (string; matches id, name, path, author)
+  - `sort` (field name: createdAt, name, status), `order` (asc|desc)
+  - Returns `{ scans: Scan[], total: number }` where `total` is total across all pages.
+
+### Component Refactors
+- Extract a `ResultsViewer` component from `ResultsTab` so result pages can render without the creation UI context.
+- Create `ModelAuditSetupPage` from Configuration pieces of `ModelAudit.tsx` and remove the Results tab from Setup.
+- `ModelAuditResultLatestPage`: thin wrapper that calls `/scans/latest` (fallback to `/scans?limit=1` sorted by createdAt desc if latest is not yet available) and renders `ResultsViewer`.
+
+Acceptance criteria:
+- ResultsViewer accepts a strongly typed `ScanResult` and renders identically in by-id and latest pages.
+- Download uses Blob + URL.createObjectURL and includes `aria-label` on the button.
+
+### Testing Plan Adjustments
+- Setup page tests: form interactions, scan start, error handling, redirect to result on success.
+- Results latest tests: happy path, empty state (no scans), error handling, breadcrumb correctness.
+- Result by-id tests: keep current coverage; add abort/cancellation handling.
+- Navigation tests: Create dropdown contains “Model Audit”; `NavLink` to `/model-audit` activates on both `/model-audit` and `/model-audit/:id`.
+- History page tests: expand coverage as previously listed.
+
+Acceptance criteria:
+- All new routes covered: `/model-audit/setup`, `/model-audit`, `/model-audit/:id`.
+- Navigation tests assert Create dropdown contains Model Audit, and `/model-audit` NavLink activation state.
+- History tests cover toolbar, quick filter, CSV export, selection constraints, navigation on click, and overlays.
+
+### Migration and Backward Compatibility
+- Redirects:
+  - Change `/model-audit` to show latest results; add a temporary banner explaining the new Setup location.
+  - Keep `/model-audit/history/:id` working; add `/model-audit/:id` alias.
+- Documentation: update guides/screenshots for the new Create flow and results viewing.
+
+Deprecation plan:
+- Keep `/model-audit/history/:id` indefinitely for back-compat; add `/model-audit/:id` now and prefer it in new links.
+- Change `/model-audit` to latest view; if the old combined page route remains, show a banner linking to `/model-audit/setup` and `/model-audit/history` and plan removal after one release.
+
+### Risks and Mitigations
+- User confusion due to route changes: add in-app notices, clear breadcrumbs, and prominent Create/History entry points.
+- Technical debt during transition: land store split first, then route changes, then API enhancements with tight PR scope.
+
+### Sequenced Tasks
+1) Store split (Config vs History) and remove dead history fields from monolithic store.
+2) Introduce `/model-audit/setup` and extract Setup page; adjust success flow to navigate to result.
+3) Add `/model-audit/:id` alias and implement `/model-audit` as latest results view (temporary: fetch first scan while awaiting `/scans/latest`).
+4) Update Navigation: add Create dropdown item; remove standalone Model Audit dropdown; optionally add `NavLink` to `/model-audit`.
+5) Implement `/scans/latest` endpoint; update latest results page to use it.
+6) Expand tests per plan; remove/adjust legacy tests (tab-based flow, preflight expectations).
+
 ## Current State Analysis
 
 ### Existing Architecture

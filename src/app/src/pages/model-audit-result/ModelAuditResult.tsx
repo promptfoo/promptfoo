@@ -50,24 +50,37 @@ export default function ModelAuditResult() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchScan = async () => {
       try {
-        const response = await callApi(`/model-audit/scans/${id}`);
+        const response = await callApi(`/model-audit/scans/${id}`, { signal: abortController.signal });
         if (!response.ok) {
           throw new Error('Failed to fetch scan details');
         }
         const data = await response.json();
         setScan(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        // Don't set error state if the request was aborted
+        if ((err as Error).name !== 'AbortError') {
+          setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        }
       } finally {
-        setLoading(false);
+        // Don't set loading to false if the request was aborted
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
     if (id) {
       fetchScan();
     }
+
+    // Cleanup: abort request when component unmounts or id changes
+    return () => {
+      abortController.abort();
+    };
   }, [id]);
 
   const handleDelete = async () => {
@@ -101,14 +114,18 @@ export default function ModelAuditResult() {
 
     try {
       const dataStr = JSON.stringify(scan, null, 2);
-      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
 
       const exportFileDefaultName = `model-audit-${scan.id}.json`;
 
       const linkElement = document.createElement('a');
-      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('href', url);
       linkElement.setAttribute('download', exportFileDefaultName);
       linkElement.click();
+
+      // Clean up the object URL to free memory
+      URL.revokeObjectURL(url);
     } catch (_err) {
       setError('Failed to download scan results');
     }

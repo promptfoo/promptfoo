@@ -119,7 +119,7 @@ function CustomToolbar({
 export default function ModelAuditHistory({
   onScanSelected,
   focusedScanId,
-  showUtilityButtons = false,
+  showUtilityButtons = true,
   focusQuickFilterOnMount = false,
 }: {
   onScanSelected?: (scanId: string) => void;
