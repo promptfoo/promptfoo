@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import { globSync } from 'glob';
 import logger from '../logger';
 import { parsePathOrGlob } from '../util';
@@ -5,6 +6,7 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';
+import { processExecutableFile } from './processors/executable';
 import { processJsFile } from './processors/javascript';
 import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
@@ -105,6 +107,12 @@ async function processPrompt(
     return [prompt as Prompt];
   }
 
+  // Handle exec: prefix for executable prompts
+  if (prompt.raw.startsWith('exec:')) {
+    const execPath = prompt.raw.substring(5); // Remove 'exec:' prefix
+    return processExecutableFile(execPath, prompt);
+  }
+
   if (!maybeFilePath(prompt.raw)) {
     return processString(prompt);
   }
@@ -174,6 +182,23 @@ async function processPrompt(
   }
   if (extension && ['.yml', '.yaml'].includes(extension)) {
     return processYamlFile(filePath, prompt);
+  }
+  // Handle common executable extensions
+  if (
+    extension &&
+    ['.sh', '.bash', '.exe', '.bat', '.cmd', '.ps1', '.rb', '.pl'].includes(extension)
+  ) {
+    return processExecutableFile(filePath, prompt, functionName);
+  }
+  // If no extension matched but file exists and is executable, treat it as an executable
+  try {
+    const stats = fs.statSync(filePath);
+    if (stats.isFile() && (stats.mode & 0o111) !== 0) {
+      // File is executable
+      return processExecutableFile(filePath, prompt, functionName);
+    }
+  } catch (_e) {
+    // File doesn't exist or can't be accessed, fall through
   }
   return [];
 }
