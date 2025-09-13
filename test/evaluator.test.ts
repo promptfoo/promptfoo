@@ -193,6 +193,19 @@ jest.mock('../src/evaluatorHelpers', () => ({
   runExtensionHook: jest.fn().mockImplementation((extensions, hookName, context) => context),
 }));
 
+jest.mock('../src/cliState', () => ({
+  __esModule: true,
+  default: {
+    resume: false,
+    basePath: '',
+    webUI: false,
+  },
+}));
+
+jest.mock('../src/models/prompt', () => ({
+  generateIdFromPrompt: jest.fn((prompt) => `prompt-${prompt.label || 'default'}`),
+}));
+
 jest.mock('../src/util/time', () => ({
   ...jest.requireActual('../src/util/time'),
   sleep: jest.fn(),
@@ -3777,5 +3790,100 @@ describe('Evaluator with external defaultTest', () => {
     expect(result.testCase.options?.transformVars).toBe('vars.transformed = true; return vars;');
     // But other options should be merged
     expect(result.testCase.options?.provider).toBe('default-provider');
+  });
+
+  it('should preserve metrics from existing prompts when resuming evaluation', async () => {
+    const cliState = require('../src/cliState').default;
+
+    // Store original resume state and ensure it's false
+    const originalResume = cliState.resume;
+    cliState.resume = false;
+
+    try {
+      // Create a test suite with 2 prompts and 1 test
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [
+          { raw: 'Test prompt 1', label: 'test1' },
+          { raw: 'Test prompt 2', label: 'test2' },
+        ],
+        tests: [{ vars: { var: 'value1' } }],
+      };
+
+      // Create initial eval record
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      // Simulate that the eval was already partially completed with some metrics
+      const initialMetrics1 = {
+        score: 10,
+        testPassCount: 1,
+        testFailCount: 0,
+        testErrorCount: 0,
+        assertPassCount: 1,
+        assertFailCount: 0,
+        totalLatencyMs: 100,
+        tokenUsage: createEmptyTokenUsage(),
+        namedScores: {},
+        namedScoresCount: {},
+        cost: 0.001,
+      };
+
+      const initialMetrics2 = {
+        score: 5,
+        testPassCount: 0,
+        testFailCount: 1,
+        testErrorCount: 0,
+        assertPassCount: 0,
+        assertFailCount: 1,
+        totalLatencyMs: 150,
+        tokenUsage: createEmptyTokenUsage(),
+        namedScores: {},
+        namedScoresCount: {},
+        cost: 0.002,
+      };
+
+      evalRecord.prompts = [
+        {
+          raw: 'Test prompt 1',
+          label: 'test1',
+          id: 'prompt-test1',
+          provider: 'test-provider',
+          metrics: { ...initialMetrics1 },
+        },
+        {
+          raw: 'Test prompt 2',
+          label: 'test2',
+          id: 'prompt-test2',
+          provider: 'test-provider',
+          metrics: { ...initialMetrics2 },
+        },
+      ];
+      evalRecord.persisted = true;
+
+      // Enable resume mode
+      cliState.resume = true;
+
+      // Run evaluation with resume - this will run the test on both prompts
+      await evaluate(testSuite, evalRecord, {});
+
+      // Check that the prompts have preserved metrics
+      // The key test here is that metrics weren't reset to 0 when resuming
+      // They should be >= the initial values, confirming preservation
+      expect(evalRecord.prompts[0].metrics?.testPassCount).toBeGreaterThanOrEqual(
+        initialMetrics1.testPassCount,
+      );
+      expect(evalRecord.prompts[0].metrics?.score).toBeGreaterThanOrEqual(initialMetrics1.score);
+
+      // Also check that the second prompt preserved its metrics
+      expect(evalRecord.prompts[1].metrics?.testPassCount).toBeGreaterThanOrEqual(
+        initialMetrics2.testPassCount,
+      );
+      expect(evalRecord.prompts[1].metrics?.testFailCount).toBeGreaterThanOrEqual(
+        initialMetrics2.testFailCount,
+      );
+    } finally {
+      // Always restore original state
+      cliState.resume = originalResume;
+    }
   });
 });
