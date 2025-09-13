@@ -1,5 +1,3 @@
-import React from 'react';
-
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoIcon from '@mui/icons-material/Info';
 import Accordion from '@mui/material/Accordion';
@@ -28,12 +26,12 @@ interface TestTargetConfigurationProps {
   testResult: any;
 }
 
-const TestTargetConfiguration: React.FC<TestTargetConfigurationProps> = ({
+const TestTargetConfiguration = ({
   testingTarget,
   handleTestTarget,
   selectedTarget,
   testResult,
-}) => {
+}: TestTargetConfigurationProps) => {
   const theme = useTheme();
 
   const getTestButtonTooltip = () => {

@@ -70,7 +70,6 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.passthrough || {}),
     };
 
-    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
     let data,
       cached = false;
     try {
@@ -89,6 +88,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         REQUEST_TIMEOUT_MS,
         'json',
         context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
@@ -96,7 +96,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tOpenAI completions API response: ${JSON.stringify(data)}`);
+
     if (data.error) {
       return {
         error: formatOpenAiError(data),

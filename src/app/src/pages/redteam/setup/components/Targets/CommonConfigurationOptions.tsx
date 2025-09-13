@@ -19,13 +19,13 @@ interface CommonConfigurationOptionsProps {
   onExtensionsChange?: (extensions: string[]) => void;
 }
 
-const CommonConfigurationOptions: React.FC<CommonConfigurationOptionsProps> = ({
+const CommonConfigurationOptions = ({
   selectedTarget,
   updateCustomTarget,
   onValidationChange,
   extensions = [],
   onExtensionsChange,
-}) => {
+}: CommonConfigurationOptionsProps) => {
   const handleExtensionsChange = React.useCallback(
     (newExtensions: string[]) => {
       onExtensionsChange?.(newExtensions);

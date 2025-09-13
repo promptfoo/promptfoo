@@ -213,7 +213,7 @@ describe('combineConfigs', () => {
         (
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
+        ) => {
           if (typeof path === 'string' && path === 'config1.json') {
             return JSON.stringify(config1);
           } else if (typeof path === 'string' && path === 'config2.json') {
@@ -300,7 +300,7 @@ describe('combineConfigs', () => {
       outputPath: [],
       commandLineOptions: { verbose: false },
       metadata: {},
-      sharing: true,
+      sharing: false,
     });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
@@ -442,7 +442,7 @@ describe('combineConfigs', () => {
         (
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
+        ) => {
           if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
               description: 'test1',
@@ -498,7 +498,7 @@ describe('combineConfigs', () => {
         (
           path: fs.PathOrFileDescriptor,
           options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ): string | Buffer => {
+        ) => {
           if (typeof path === 'string' && path.endsWith('config1.json')) {
             return JSON.stringify({
               description: 'test1',
@@ -978,6 +978,26 @@ describe('combineConfigs', () => {
       apiBaseUrl: 'http://localhost',
       appBaseUrl: 'http://localhost',
     });
+  });
+
+  it('should default sharing to false when not defined', async () => {
+    const config = {
+      description: 'test config',
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      tests: ['test1'],
+      // No sharing property defined
+    };
+
+    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    const result = await combineConfigs(['config.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config.json'),
+      expect.anything(),
+    );
+
+    expect(result.sharing).toBe(false);
   });
 
   it('should load defaultTest from external file when string starts with file://', async () => {

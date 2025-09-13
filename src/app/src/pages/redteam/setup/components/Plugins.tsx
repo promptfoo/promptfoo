@@ -42,6 +42,7 @@ import {
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  MCP_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
   OWASP_API_TOP_10_MAPPING,
@@ -340,6 +341,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'Guardrails Evaluation',
       plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
+    },
+    {
+      name: 'MCP',
+      plugins: new Set(MCP_PLUGINS),
     },
     {
       name: 'Harmful',
@@ -818,23 +823,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 <Paper
                   key={plugin}
                   variant="outlined"
-                  onClick={(e) => {
-                    // Don't toggle if clicking on checkbox, buttons, or other interactive elements
-                    if (
-                      e.target instanceof Element &&
-                      (e.target.closest('input[type="checkbox"]') ||
-                        e.target.closest('button') ||
-                        e.target.closest('[role="checkbox"]'))
-                    ) {
-                      return;
-                    }
-                    handlePluginToggle(plugin);
-                  }}
+                  onClick={() => handlePluginToggle(plugin)}
                   sx={{
-                    border: '2px solid',
+                    border: '1px solid',
                     borderColor: (() => {
                       if (selectedPlugins.has(plugin)) {
-                        // Show red border if plugin is selected but missing required config
+                        // Show red border if missing required config
                         if (
                           PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
                           !isPluginConfigured(plugin)
@@ -843,9 +837,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         }
                         return 'primary.main';
                       }
-                      return 'divider';
+                      return theme.palette.divider;
                     })(),
-                    borderRadius: 2,
+                    borderRadius: 1,
+                    cursor: 'pointer',
                     bgcolor: (() => {
                       if (selectedPlugins.has(plugin)) {
                         // Show red background if plugin is selected but missing required config
@@ -907,6 +902,9 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       onChange={(e) => {
                         e.stopPropagation();
                         handlePluginToggle(plugin);
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
                       }}
                       color="primary"
                       size="small"
@@ -1432,18 +1430,16 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       Generating test case...
                     </Typography>
                   </Box>
-                ) : generatedTestCase ? (
-                  <Box>
-                    {/* Context first as an alert */}
-                    {generatedTestCase.context && (
-                      <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
-                        {generatedTestCase.context}
-                      </Alert>
-                    )}
-
-                    {/* Generated Prompt */}
-                    <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-                      Generated Prompt:
+                ) : generatedTestCase && testCaseDialogMode === 'result' ? (
+                  <Box sx={{ pt: 2 }}>
+                    <Alert severity="info" sx={{ mb: 3, alignItems: 'center' }}>
+                      <Typography variant="body2">
+                        This is a sample test case generated for the <code>{generatingPlugin}</code>{' '}
+                        plugin. Fine tune it by adjusting your application details.
+                      </Typography>
+                    </Alert>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Test Case:
                     </Typography>
                     <Box
                       sx={{
@@ -1462,10 +1458,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     </Box>
                   </Box>
                 ) : null}
-
-                {/* Documentation link */}
+              </DialogContent>
+              <DialogActions>
+                {/* Documentation link in footer */}
                 {generatingPlugin && hasSpecificPluginDocumentation(generatingPlugin) && (
-                  <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                  <Box sx={{ flex: 1, mr: 2 }}>
                     <Link
                       href={getPluginDocumentationUrl(generatingPlugin)}
                       target="_blank"
@@ -1479,21 +1476,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         '&:hover': {
                           textDecoration: 'underline',
                         },
+                        paddingLeft: 2,
                       }}
                     >
-                      Learn more about the{' '}
+                      Learn more about{' '}
                       {displayNameOverrides[generatingPlugin] ||
                         categoryAliases[generatingPlugin] ||
-                        generatingPlugin}{' '}
-                      plugin
+                        generatingPlugin}
                       <Box component="span" sx={{ fontSize: '0.75rem' }}>
                         ↗
                       </Box>
                     </Link>
                   </Box>
                 )}
-              </DialogContent>
-              <DialogActions>
                 <Button
                   onClick={() => {
                     setTestCaseDialogOpen(false);

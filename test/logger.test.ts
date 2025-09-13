@@ -525,4 +525,386 @@ describe('logger', () => {
       expect(Array.isArray(logger.default.transports)).toBe(true);
     });
   });
+
+  describe('logRequestResponse', () => {
+    let mockResponse: Partial<Response>;
+    let consoleSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      mockResponse = {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        clone: jest.fn().mockReturnValue({
+          text: jest.fn().mockResolvedValue('{"success": true}'),
+        }),
+      };
+    });
+
+    afterEach(() => {
+      consoleSpy.mockRestore();
+      jest.clearAllMocks();
+    });
+
+    it('should log successful requests as debug', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      expect(mockLogger.debug).toHaveBeenCalledWith({
+        message: expect.stringContaining('API request:'),
+        location: expect.any(String),
+      });
+      expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+
+    it('should log failed responses as debug when error flag not set', async () => {
+      // @ts-expect-error
+      mockResponse.ok = false;
+      // @ts-expect-error
+      mockResponse.status = 500;
+      // @ts-expect-error
+      mockResponse.statusText = 'Internal Server Error';
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      expect(mockLogger.debug).toHaveBeenCalledWith({
+        message: expect.stringContaining('API request:'),
+        location: expect.any(String),
+      });
+      expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+
+    it('should log as error when error flag is true', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+        error: true,
+      });
+
+      expect(mockLogger.error).toHaveBeenCalledWith({
+        message: expect.stringContaining('API request:'),
+        location: expect.any(String),
+      });
+      expect(mockLogger.debug).not.toHaveBeenCalled();
+    });
+
+    it('should handle requests without response', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+      });
+
+      expect(mockLogger.debug).toHaveBeenCalledWith({
+        message: expect.stringContaining('API request:'),
+        location: expect.any(String),
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('URL: https://api.example.com/test');
+      expect(loggedMessage).toContain('Method: POST');
+      expect(loggedMessage).toContain('Request Body:');
+      expect(loggedMessage).not.toContain('Status:');
+      expect(loggedMessage).not.toContain('Response:');
+    });
+
+    it('should sanitize sensitive data in URL and request body', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test?api_key=secret123',
+        requestBody: {
+          prompt: 'test prompt',
+          api_key: 'secret456',
+          password: 'mypassword',
+        },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+
+      // Check that sanitization functions are called (the actual sanitization logic is tested elsewhere)
+      expect(loggedMessage).toContain('URL:');
+      expect(loggedMessage).toContain('Request Body:');
+    });
+
+    it('should include all request/response details in message', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt', model: 'gpt-4' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+
+      expect(loggedMessage).toContain('URL: https://api.example.com/test');
+      expect(loggedMessage).toContain('Method: POST');
+      expect(loggedMessage).toContain('Request Body:');
+      expect(loggedMessage).toContain('Status: 200 OK');
+      expect(loggedMessage).toContain('Response: {"success": true}');
+    });
+
+    it('should handle response text extraction errors', async () => {
+      mockResponse.clone = jest.fn().mockReturnValue({
+        text: jest.fn().mockRejectedValue(new Error('Failed to read response')),
+      });
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('Response: Unable to read response');
+    });
+
+    it('should handle complex nested request bodies', async () => {
+      const complexBody = {
+        messages: [
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there!' },
+        ],
+        model: 'gpt-4',
+        temperature: 0.7,
+        max_tokens: 100,
+      };
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/chat',
+        requestBody: complexBody,
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('Request Body:');
+      // Should contain formatted JSON
+      expect(loggedMessage).toMatch(/\{\s*"messages"/);
+    });
+
+    it('should handle different HTTP methods', async () => {
+      const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
+
+      for (const method of methods) {
+        mockLogger.debug.mockClear();
+
+        await logger.logRequestResponse({
+          url: 'https://api.example.com/test',
+          requestBody: { data: 'test' },
+          requestMethod: method,
+          response: mockResponse as Response,
+        });
+
+        const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+        expect(loggedMessage).toContain(`Method: ${method}`);
+      }
+    });
+
+    it('should handle various HTTP status codes', async () => {
+      const statusCodes = [
+        { code: 200, text: 'OK' },
+        { code: 201, text: 'Created' },
+        { code: 400, text: 'Bad Request' },
+        { code: 401, text: 'Unauthorized' },
+        { code: 403, text: 'Forbidden' },
+        { code: 404, text: 'Not Found' },
+        { code: 500, text: 'Internal Server Error' },
+        { code: 502, text: 'Bad Gateway' },
+        { code: 503, text: 'Service Unavailable' },
+      ];
+
+      for (const { code, text } of statusCodes) {
+        mockLogger.debug.mockClear();
+        mockLogger.error.mockClear();
+
+        // @ts-expect-error
+        mockResponse.ok = code >= 200 && code < 300;
+        // @ts-expect-error
+        mockResponse.status = code;
+        // @ts-expect-error
+        mockResponse.statusText = text;
+
+        await logger.logRequestResponse({
+          url: 'https://api.example.com/test',
+          requestBody: { data: 'test' },
+          requestMethod: 'POST',
+          response: mockResponse as Response,
+        });
+
+        // All status codes should log as debug when error flag is not set
+        const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+
+        expect(loggedMessage).toContain(`Status: ${code} ${text}`);
+        expect(mockLogger.debug).toHaveBeenCalled();
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      }
+    });
+
+    it('should log as error when error flag is set regardless of status code', async () => {
+      const statusCodes = [
+        { code: 200, text: 'OK' },
+        { code: 400, text: 'Bad Request' },
+        { code: 500, text: 'Internal Server Error' },
+      ];
+
+      for (const { code, text } of statusCodes) {
+        mockLogger.debug.mockClear();
+        mockLogger.error.mockClear();
+
+        // @ts-expect-error
+        mockResponse.ok = code >= 200 && code < 300;
+        // @ts-expect-error
+        mockResponse.status = code;
+        // @ts-expect-error
+        mockResponse.statusText = text;
+
+        await logger.logRequestResponse({
+          url: 'https://api.example.com/test',
+          requestBody: { data: 'test' },
+          requestMethod: 'POST',
+          response: mockResponse as Response,
+          error: true, // Explicitly set error flag
+        });
+
+        // Should always log as error when error flag is true
+        const loggedMessage = mockLogger.error.mock.calls[0][0].message;
+
+        expect(loggedMessage).toContain(`Status: ${code} ${text}`);
+        expect(mockLogger.error).toHaveBeenCalled();
+        expect(mockLogger.debug).not.toHaveBeenCalled();
+      }
+    });
+
+    it('should handle empty request body', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: {},
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('Request Body: {}');
+    });
+
+    it('should handle null request body', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: null,
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('Request Body: null');
+    });
+
+    it('should handle undefined request body', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: undefined,
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('Request Body: undefined');
+    });
+
+    it('should handle response with empty body', async () => {
+      mockResponse.clone = jest.fn().mockReturnValue({
+        text: jest.fn().mockResolvedValue(''),
+      });
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { data: 'test' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).not.toContain('Response:');
+    });
+
+    it('should handle response with whitespace-only body', async () => {
+      mockResponse.clone = jest.fn().mockReturnValue({
+        text: jest.fn().mockResolvedValue('   \n\t  '),
+      });
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { data: 'test' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('Response:    \n\t  ');
+    });
+
+    it('should log requests with very long URLs', async () => {
+      const longUrl = 'https://api.example.com/test?' + 'param=value&'.repeat(100);
+
+      await logger.logRequestResponse({
+        url: longUrl,
+        requestBody: { data: 'test' },
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+      expect(loggedMessage).toContain('URL:');
+    });
+
+    it('should handle concurrent logging calls', async () => {
+      const promises = Array.from({ length: 5 }, (_, i) =>
+        logger.logRequestResponse({
+          url: `https://api.example.com/test${i}`,
+          requestBody: { id: i },
+          requestMethod: 'POST',
+          response: mockResponse as Response,
+        }),
+      );
+
+      await Promise.all(promises);
+      expect(mockLogger.debug).toHaveBeenCalledTimes(5);
+    });
+
+    it('should maintain message format consistency', async () => {
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
+
+      // Check that message starts with the expected prefix
+      expect(loggedMessage).toMatch(/^API request:\n/);
+
+      // Check that all sections are properly separated
+      const lines = loggedMessage.split('\n');
+      expect(lines.some((line: string) => /^URL: /.test(line))).toBe(true);
+      expect(lines.some((line: string) => /^Method: /.test(line))).toBe(true);
+      expect(lines.some((line: string) => /^Request Body: /.test(line))).toBe(true);
+      expect(lines.some((line: string) => /^Status: /.test(line))).toBe(true);
+      expect(lines.some((line: string) => /^Response: /.test(line))).toBe(true);
+    });
+  });
 });

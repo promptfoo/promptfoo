@@ -6,7 +6,12 @@ import type { TokenUsage } from '../../types';
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 4 models - Latest generation
-  ...['claude-opus-4-20250514', 'claude-opus-4-0', 'claude-opus-4-latest'].map((model) => ({
+  ...[
+    'claude-opus-4-1-20250805',
+    'claude-opus-4-20250514',
+    'claude-opus-4-0',
+    'claude-opus-4-latest',
+  ].map((model) => ({
     id: model,
     cost: {
       input: 15 / 1e6, // $15 / MTok
@@ -53,8 +58,8 @@ export const ANTHROPIC_MODELS = [
   ...['claude-3-5-haiku-20241022', 'claude-3-5-haiku-latest'].map((model) => ({
     id: model,
     cost: {
-      input: 1 / 1e6,
-      output: 5 / 1e6,
+      input: 0.8 / 1e6,
+      output: 4 / 1e6,
     },
   })),
   ...[

@@ -1,12 +1,10 @@
+import { randomUUID } from 'crypto';
+import * as path from 'path';
+
 import async from 'async';
 import chalk from 'chalk';
-import type { SingleBar } from 'cli-progress';
 import cliProgress from 'cli-progress';
-import { randomUUID } from 'crypto';
 import { globSync } from 'glob';
-import * as path from 'path';
-import type winston from 'winston';
-
 import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
 import { getCache } from './cache';
 import cliState from './cliState';
@@ -16,20 +14,18 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { selectMaxScore } from './matchers';
-import type Eval from './models/eval';
 import { generateIdFromPrompt } from './models/prompt';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { isPandamoniumProvider } from './redteam/providers/pandamonium';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
+import { CIProgressReporter } from './progress/ciProgressReporter';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
-import type { EvalConversations, EvalRegisters, ScoringFunction, TokenUsage, Vars } from './types';
 import {
   type Assertion,
   type AssertionType,
@@ -52,12 +48,24 @@ import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
-  createEmptyTokenUsage,
-  createEmptyAssertions,
   accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
+  createEmptyAssertions,
+  createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { transform, type TransformContext, TransformInputType } from './util/transform';
+import { type TransformContext, TransformInputType, transform } from './util/transform';
+import type { SingleBar } from 'cli-progress';
+import type winston from 'winston';
+
+import type Eval from './models/eval';
+import type {
+  EvalConversations,
+  EvalRegisters,
+  ProviderOptions,
+  ScoringFunction,
+  TokenUsage,
+  Vars,
+} from './types';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -324,16 +332,6 @@ export async function runEval({
 
     if (test.providerOutput) {
       response.output = test.providerOutput;
-    } else if (
-      typeof test.provider === 'object' &&
-      typeof test.provider.id === 'function' &&
-      test.provider.id() === 'promptfoo:redteam:pandamonium'
-    ) {
-      if (!isPandamoniumProvider(test.provider)) {
-        throw new Error('Provider identified as pandamonium but does not have required methods');
-      }
-
-      return await test.provider.runPandamonium(provider, test, allTests || [], concurrency);
     } else {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       logger.debug(`Provider type: ${activeProvider.id()}`);
@@ -471,17 +469,25 @@ export async function runEval({
     } else {
       // Create a copy of response so we can potentially mutate it.
       const processedResponse = { ...response };
-      const transforms: string[] = [
-        provider.transform, // Apply provider transform first
-        // NOTE: postprocess is deprecated. Use the first defined transform.
-        [test.options?.transform, test.options?.postprocess].find((s) => s),
-      ]
-        .flat()
-        .filter((s): s is string => typeof s === 'string');
-      for (const t of transforms) {
-        processedResponse.output = await transform(t, processedResponse.output, {
+
+      // Apply provider transform first (if exists)
+      if (provider.transform) {
+        processedResponse.output = await transform(provider.transform, processedResponse.output, {
           vars,
           prompt,
+        });
+      }
+
+      // Store the provider-transformed output for assertions (contextTransform)
+      const providerTransformedOutput = processedResponse.output;
+
+      // Apply test transform (if exists)
+      const testTransform = test.options?.transform || test.options?.postprocess;
+      if (testTransform) {
+        processedResponse.output = await transform(testTransform, processedResponse.output, {
+          vars,
+          prompt,
+          ...(response && response.metadata && { metadata: response.metadata }),
         });
       }
 
@@ -497,10 +503,15 @@ export async function runEval({
         }
       }
 
+      // Pass providerTransformedOutput for contextTransform to use
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
-        providerResponse: processedResponse,
+        providerResponse: {
+          ...processedResponse,
+          // Add provider-transformed output for contextTransform
+          providerTransformedOutput,
+        },
         test,
         latencyMs: response.cached ? undefined : latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
@@ -679,6 +690,10 @@ class Evaluator {
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
+    // Progress reporters declared here for cleanup in finally block
+    let ciProgressReporter: CIProgressReporter | null = null;
+    let progressBarManager: ProgressBarManager | null = null;
+
     if (maxEvalTimeMs > 0) {
       globalAbortController = new AbortController();
       options.abortSignal = options.abortSignal
@@ -746,6 +761,17 @@ class Evaluator {
 
     // Split prompts by provider
     // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
+
+    // Create a map of existing prompts for resume support
+    const existingPromptsMap = new Map<string, CompletedPrompt>();
+    if (cliState.resume && this.evalRecord.persisted && this.evalRecord.prompts.length > 0) {
+      logger.debug('Resuming evaluation: preserving metrics from previous run');
+      for (const existingPrompt of this.evalRecord.prompts) {
+        const key = `${existingPrompt.provider}:${existingPrompt.id}`;
+        existingPromptsMap.set(key, existingPrompt);
+      }
+    }
+
     for (const provider of testSuite.providers) {
       for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
@@ -753,12 +779,17 @@ class Evaluator {
         if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
           continue;
         }
+
+        const promptId = generateIdFromPrompt(prompt);
+        const existingPromptKey = `${providerKey}:${promptId}`;
+        const existingPrompt = existingPromptsMap.get(existingPromptKey);
+
         const completedPrompt = {
           ...prompt,
-          id: generateIdFromPrompt(prompt),
+          id: promptId,
           provider: providerKey,
           label: prompt.label,
-          metrics: {
+          metrics: existingPrompt?.metrics || {
             score: 0,
             testPassCount: 0,
             testFailCount: 0,
@@ -916,9 +947,29 @@ class Evaluator {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
         ...testCase.metadata,
       };
-      testCase.provider =
-        testCase.provider ||
-        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.provider : undefined);
+      // If the test case doesn't have a provider, use the one from defaultTest
+      // Note: defaultTest.provider may be a raw config object that needs to be loaded
+      if (
+        !testCase.provider &&
+        typeof testSuite.defaultTest === 'object' &&
+        testSuite.defaultTest?.provider
+      ) {
+        const defaultProvider = testSuite.defaultTest.provider;
+        if (isApiProvider(defaultProvider)) {
+          // Already loaded
+          testCase.provider = defaultProvider;
+        } else if (typeof defaultProvider === 'object' && defaultProvider.id) {
+          // Raw config object - load it
+          const { loadApiProvider } = await import('./providers');
+          const providerId =
+            typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
+          testCase.provider = await loadApiProvider(providerId, {
+            options: defaultProvider as ProviderOptions,
+          });
+        } else {
+          testCase.provider = defaultProvider;
+        }
+      }
       testCase.assertScoringFunction =
         testCase.assertScoringFunction ||
         (typeof testSuite.defaultTest === 'object'
@@ -1009,6 +1060,40 @@ class Evaluator {
         }
       }
     }
+    // Pre-mark comparison rows before any filtering (used by resume logic)
+    for (const evalOption of runEvalOptions) {
+      if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
+        rowsWithSelectBestAssertion.add(evalOption.testIdx);
+      }
+      if (evalOption.test.assert?.some((a) => a.type === 'max-score')) {
+        rowsWithMaxScoreAssertion.add(evalOption.testIdx);
+      }
+    }
+
+    // Resume support: if CLI is in resume mode, skip already-completed (testIdx,promptIdx) pairs
+    if (cliState.resume && this.evalRecord.persisted) {
+      try {
+        const { default: EvalResult } = await import('./models/evalResult');
+        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);
+        const originalCount = runEvalOptions.length;
+        // Filter out steps that already exist in DB
+        for (let i = runEvalOptions.length - 1; i >= 0; i--) {
+          const step = runEvalOptions[i];
+          if (completedPairs.has(`${step.testIdx}:${step.promptIdx}`)) {
+            runEvalOptions.splice(i, 1);
+          }
+        }
+        const skipped = originalCount - runEvalOptions.length;
+        if (skipped > 0) {
+          logger.info(`Resuming: skipping ${skipped} previously completed cases`);
+        }
+      } catch (err) {
+        logger.warn(
+          `Resume: failed to load completed results. Running full evaluation. ${String(err)}`,
+        );
+      }
+    }
+
     // Determine run parameters
 
     if (concurrency > 1) {
@@ -1290,12 +1375,20 @@ class Evaluator {
     // Set up progress tracking
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
-    const progressBarManager = new ProgressBarManager(isWebUI);
 
-    // Initialize progress bar manager if needed
+    // Choose appropriate progress reporter
     logger.debug(
       `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
     );
+
+    if (isCI() && !isWebUI) {
+      // Use CI-friendly progress reporter
+      ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
+      ciProgressReporter.start();
+    } else if (this.options.showProgressBar && process.stdout.isTTY) {
+      // Use visual progress bars
+      progressBarManager = new ProgressBarManager(isWebUI);
+    }
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
@@ -1306,10 +1399,13 @@ class Evaluator {
         const provider = evalStep.provider.label || evalStep.provider.id();
         const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
-      } else if (this.options.showProgressBar) {
+      } else if (progressBarManager) {
         // Progress bar update is handled by the manager
         const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
         progressBarManager.updateProgress(index, evalStep, phase);
+      } else if (ciProgressReporter) {
+        // CI progress reporter update
+        ciProgressReporter.update(numComplete);
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
       }
@@ -1338,7 +1434,7 @@ class Evaluator {
     }
 
     // Now start the progress bar after info messages
-    if (this.options.showProgressBar) {
+    if (this.options.showProgressBar && progressBarManager) {
       await progressBarManager.initialize(runEvalOptions, concurrency, 0);
     }
 
@@ -1358,7 +1454,7 @@ class Evaluator {
           processedIndices.add(idx);
         }
 
-        // Serial phase complete - no specific action needed with single bar
+        // Serial phase complete - progress is tracked automatically by updateProgress
       }
 
       // Then run concurrent evaluations
@@ -1371,9 +1467,17 @@ class Evaluator {
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
+        // User interruption or max duration timeout
         evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
-        logger.warn(`Evaluation aborted: ${String(err)}`);
+        if (evalTimedOut) {
+          logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+        } else {
+          logger.info('Evaluation interrupted, saving progress...');
+        }
       } else {
+        if (ciProgressReporter) {
+          ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
+        }
         throw err;
       }
     }
@@ -1381,9 +1485,14 @@ class Evaluator {
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
 
-    // Update total count now that we know comparison count
-    if (this.options.showProgressBar && compareRowsCount > 0) {
-      progressBarManager.updateTotalCount(compareRowsCount);
+    // Update progress reporters based on comparison count
+    if (progressBarManager) {
+      if (compareRowsCount > 0) {
+        progressBarManager.updateTotalCount(compareRowsCount);
+      }
+    } else if (ciProgressReporter && compareRowsCount > 0) {
+      // Update total tests to include comparison tests for CI reporter
+      ciProgressReporter.updateTotalTests(runEvalOptions.length + compareRowsCount);
     }
 
     let compareCount = 0;
@@ -1470,8 +1579,10 @@ class Evaluator {
             await result.save();
           }
         }
-        if (this.options.showProgressBar) {
+        if (progressBarManager) {
           progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+        } else if (ciProgressReporter) {
+          ciProgressReporter.update(runEvalOptions.length + compareCount);
         } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
@@ -1508,8 +1619,12 @@ class Evaluator {
           );
 
           // Update progress bar
-          if (this.options.showProgressBar) {
+          if (progressBarManager) {
             progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+          } else if (ciProgressReporter) {
+            // For max-score assertions, we're still in the comparison phase
+            // so we add to the total completed count
+            ciProgressReporter.update(runEvalOptions.length + compareCount);
           } else if (!isWebUI) {
             logger.debug(`Max-score assertion for test #${testIdx} complete`);
           }
@@ -1552,10 +1667,16 @@ class Evaluator {
 
     await this.evalRecord.addPrompts(prompts);
 
-    // Finish up
-    if (this.options.showProgressBar) {
-      progressBarManager.complete();
-      progressBarManager.stop();
+    // Clean up progress reporters and timers
+    try {
+      if (progressBarManager) {
+        progressBarManager.complete();
+        progressBarManager.stop();
+      } else if (ciProgressReporter) {
+        ciProgressReporter.finish();
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during progress reporter cleanup: ${cleanupErr}`);
     }
 
     if (globalTimeout) {
@@ -1677,6 +1798,8 @@ class Evaluator {
       // Basic metrics
       numPrompts: prompts.length,
       numTests: this.stats.successes + this.stats.failures + this.stats.errors,
+      numRequests: this.stats.tokenUsage.numRequests || 0,
+      numResults: this.evalRecord.results.length,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
@@ -1699,6 +1822,8 @@ class Evaluator {
 
       // Token and cost metrics
       totalTokens,
+      promptTokens: this.stats.tokenUsage.prompt,
+      completionTokens: this.stats.tokenUsage.completion,
       cachedTokens,
       totalCost,
       totalRequests,

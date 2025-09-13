@@ -20,6 +20,8 @@ import {
   type UnifiedConfig,
 } from '../types';
 
+import type { ModelAuditScanResults } from '../types/modelAudit';
+
 // ------------ Prompts ------------
 
 export const promptsTable = sqliteTable(
@@ -62,10 +64,15 @@ export const evalsTable = sqliteTable(
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
     vars: text('vars', { mode: 'json' }).$type<string[]>(),
+    runtimeOptions: text('runtime_options', { mode: 'json' }).$type<
+      Partial<import('../types').EvaluateOptions>
+    >(),
+    isRedteam: integer('is_redteam', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
     authorIdx: index('evals_author_idx').on(table.author),
+    isRedteamIdx: index('evals_is_redteam_idx').on(table.isRedteam),
   }),
 );
 
@@ -326,6 +333,45 @@ export const llmOutputsRelations = relations(llmOutputs, ({ one }) => ({
   }),
 }));
 */
+
+// ------------ Model Audits ------------
+
+export const modelAuditsTable = sqliteTable(
+  'model_audits',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+
+    // Basic audit information
+    name: text('name'), // Optional name/identifier for the audit
+    author: text('author'), // Optional author/user who ran the audit
+    modelPath: text('model_path').notNull(), // Path to the model/file being audited
+    modelType: text('model_type'), // Optional: type of model (e.g., 'pytorch', 'tensorflow', etc.)
+
+    // Audit results as JSON blob
+    results: text('results', { mode: 'json' }).$type<ModelAuditScanResults>().notNull(),
+
+    // Extracted checks and issues from results for easier querying
+    checks: text('checks', { mode: 'json' }).$type<ModelAuditScanResults['checks']>(),
+    issues: text('issues', { mode: 'json' }).$type<ModelAuditScanResults['issues']>(),
+
+    // Summary fields for quick filtering/querying
+    hasErrors: integer('has_errors', { mode: 'boolean' }).notNull(),
+    totalChecks: integer('total_checks'),
+    passedChecks: integer('passed_checks'),
+    failedChecks: integer('failed_checks'),
+
+    // Optional metadata
+    metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>(),
+  },
+  (table) => ({
+    createdAtIdx: index('model_audits_created_at_idx').on(table.createdAt),
+    modelPathIdx: index('model_audits_model_path_idx').on(table.modelPath),
+    hasErrorsIdx: index('model_audits_has_errors_idx').on(table.hasErrors),
+    modelTypeIdx: index('model_audits_model_type_idx').on(table.modelType),
+  }),
+);
 
 // ------------ Traces ------------
 

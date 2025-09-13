@@ -1,10 +1,10 @@
 import { callApi } from '@app/utils/api';
+import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
 import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
-
-import type { EvaluateTable, PromptMetrics, ResultsFile } from './types';
+import type { EvaluateTable, PromptMetrics, ResultsFile } from '@promptfoo/types';
 
 vi.mock('uuid', () => ({
   v4: vi.fn(),
@@ -12,6 +12,9 @@ vi.mock('uuid', () => ({
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 const baseMetrics: Omit<PromptMetrics, 'namedScores'> = {
@@ -58,6 +61,7 @@ describe('useTableStore', () => {
             metadata: [],
             plugin: [],
             strategy: [],
+            severity: [],
           },
         },
         shouldHighlightSearchText: false,
@@ -76,6 +80,36 @@ describe('useTableStore', () => {
         type: 'metric' as const,
         operator: 'equals' as const,
         value: 'test-metric-value',
+      };
+
+      act(() => {
+        useTableStore.getState().addFilter(newFilter);
+      });
+
+      const state = useTableStore.getState();
+
+      expect(state.filters.appliedCount).toBe(1);
+
+      expect(Object.keys(state.filters.values)).toHaveLength(1);
+      const addedFilter = state.filters.values[mockFilterId];
+      expect(addedFilter).toBeDefined();
+
+      expect(addedFilter).toEqual({
+        ...newFilter,
+        id: mockFilterId,
+        logicOperator: 'and',
+        sortIndex: 0,
+      });
+    });
+
+    it('should add a new severity filter to `filters.values` and increment `filters.appliedCount` when `addFilter` is called with a severity filter that has a value', () => {
+      const mockFilterId = 'mock-uuid-2';
+      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+
+      const newFilter = {
+        type: 'severity' as const,
+        operator: 'equals' as const,
+        value: 'critical',
       };
 
       act(() => {
@@ -154,6 +188,46 @@ describe('useTableStore', () => {
         type: 'metric' as const,
         operator: 'equals' as const,
         value: 'test-metric-value',
+        logicOperator: 'and' as const,
+        sortIndex: 0,
+      };
+
+      act(() => {
+        useTableStore.setState((prevState) => ({
+          filters: {
+            ...prevState.filters,
+            values: {
+              [mockFilterId]: initialFilter,
+            },
+            appliedCount: 1,
+          },
+        }));
+      });
+
+      const updatedFilter: ResultsFilter = {
+        ...initialFilter,
+        value: '',
+        sortIndex: 0,
+      };
+
+      act(() => {
+        useTableStore.getState().updateFilter(updatedFilter);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.appliedCount).toBe(0);
+      expect(state.filters.values[mockFilterId].value).toBe('');
+    });
+
+    it('should decrement `filters.appliedCount` when `updateFilter` is called with a severity filter that changes from having a value to having an empty value', () => {
+      const mockFilterId = 'mock-uuid-1';
+      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+
+      const initialFilter = {
+        id: mockFilterId,
+        type: 'severity' as const,
+        operator: 'equals' as const,
+        value: 'High',
         logicOperator: 'and' as const,
         sortIndex: 0,
       };
@@ -466,6 +540,67 @@ describe('useTableStore', () => {
       expect(state.isFetching).toBe(true);
     });
 
+    it('should update `filters.options.severity` with the correct severities in order when `fetchEvalData` receives a config with redteam plugins with defined severities', async () => {
+      const mockEvalId = 'test-eval-id';
+      const mockPlugins = [
+        { id: 'plugin1', severity: Severity.High },
+        { id: 'plugin2', severity: Severity.Low },
+        { id: 'plugin3', severity: Severity.Critical },
+        { id: 'plugin4', severity: Severity.Medium },
+      ];
+
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: {
+            redteam: {
+              plugins: mockPlugins,
+            },
+          },
+          version: 4,
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.severity).toEqual([
+        Severity.Critical,
+        Severity.High,
+        Severity.Medium,
+        Severity.Low,
+      ]);
+    });
+
+    it('should set `filters.options.severity` to an empty array when `fetchEvalData` receives a config with no redteam plugins', async () => {
+      const mockEvalId = 'test-eval-id';
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: {
+            redteam: {
+              plugins: [],
+            },
+          },
+        }),
+      } as any);
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.severity).toEqual([]);
+    });
+
     describe('shouldHighlightSearchText', () => {
       it('should keep `shouldHighlightSearchText` as `false` after data is loaded if `searchText` is empty', async () => {
         const mockEvalId = 'test-eval-id';
@@ -680,7 +815,6 @@ describe('useTableStore', () => {
       expect(state.isFetching).toBe(false);
     });
 
-    // [Tusk] FAILING TEST
     it('should reset isStreaming to false when an error occurs during a streaming update', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockRejectedValue(new Error('API error'));
@@ -700,7 +834,6 @@ describe('useTableStore', () => {
       expect(useTableStore.getState().isStreaming).toBe(false);
     });
 
-    // [Tusk] FAILING TEST
     it('should allow isStreaming and isFetching to be true simultaneously when fetchEvalData is called without skipLoadingState and isStreaming is already true', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
@@ -788,6 +921,75 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual(['strategy1', 'strategy2', 'basic']);
     });
+
+    it('should populate `filters.options.severity` with the correct severities in order when `setTableFromResultsFile` is called with a resultsFile containing redteam plugins with defined severities', () => {
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: {
+          redteam: {
+            plugins: [
+              { id: 'plugin1', severity: Severity.Critical },
+              { id: 'plugin2', severity: Severity.High },
+              { id: 'plugin3', severity: Severity.Medium },
+              { id: 'plugin4', severity: Severity.Low },
+            ],
+          },
+        },
+        results: {
+          results: [],
+        } as any,
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.severity).toEqual([
+        Severity.Critical,
+        Severity.High,
+        Severity.Medium,
+        Severity.Low,
+      ]);
+    });
+
+    it('should correctly populate severity options when handling a results file with version < 4 that contains redteam plugins with severities', () => {
+      const mockResultsFile: ResultsFile = {
+        version: 3,
+        config: {
+          redteam: {
+            plugins: [
+              { id: 'plugin1', severity: Severity.Critical },
+              { id: 'plugin2', severity: Severity.High },
+              { id: 'plugin3', severity: Severity.Medium },
+              { id: 'plugin4', severity: Severity.Low },
+            ],
+          },
+        },
+        results: {
+          table: {
+            head: { prompts: [], vars: [] },
+            body: [],
+          },
+        } as any,
+        prompts: [],
+      } as any;
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.severity).toEqual([
+        Severity.Critical,
+        Severity.High,
+        Severity.Medium,
+        Severity.Low,
+      ]);
+    });
   });
 
   describe('computeAvailableMetrics', () => {
@@ -850,6 +1052,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              severity: [],
             },
           },
         });
@@ -898,6 +1101,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              severity: [],
             },
           },
         });
@@ -960,6 +1164,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              severity: [],
             },
           },
         });
@@ -1004,6 +1209,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              severity: [],
             },
           },
         });
@@ -1043,6 +1249,7 @@ describe('useTableStore', () => {
               metadata: [],
               plugin: [],
               strategy: [],
+              severity: [],
             },
           },
         });
@@ -1050,6 +1257,96 @@ describe('useTableStore', () => {
 
       const availableMetrics = useTableStore.getState().filters.options.metric;
       expect(availableMetrics).toEqual([]);
+    });
+  });
+
+  describe('computeAvailableSeverities', () => {
+    beforeEach(() => {
+      act(() => {
+        useTableStore.setState(useTableStore.getInitialState(), true);
+      });
+    });
+
+    it('should return a sorted array of unique severity values when plugins have defined severities', () => {
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: {
+          redteam: {
+            plugins: [
+              { id: 'plugin-medium', severity: Severity.Medium },
+              { id: 'plugin-critical', severity: Severity.Critical },
+              { id: 'plugin-low', severity: Severity.Low },
+              { id: 'plugin-high', severity: Severity.High },
+              { id: 'plugin-critical-duplicate', severity: Severity.Critical },
+            ],
+          },
+        },
+        results: {
+          results: [],
+        } as any,
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      const state = useTableStore.getState();
+      const expectedSeverities = [Severity.Critical, Severity.High, Severity.Medium, Severity.Low];
+
+      expect(state.filters.options.severity).toEqual(expectedSeverities);
+    });
+
+    it('should return the correct severities based on the default riskCategorySeverityMap when given an array of plugin IDs (strings) without explicit severity overrides', () => {
+      const pluginIds = ['pii', 'jailbreak', 'prompt-injection'];
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: {
+          redteam: {
+            plugins: pluginIds.map((id) => ({ id })),
+          },
+        },
+        results: {
+          results: [],
+        } as any,
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      const state = useTableStore.getState();
+      const expectedSeverities = [Severity.Critical, Severity.High, Severity.Medium, Severity.Low];
+      expect(state.filters.options.severity).toEqual(expectedSeverities);
+    });
+
+    it('should handle case-insensitive severity values correctly', () => {
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: {
+          redteam: {
+            plugins: [{ id: 'plugin-critical', severity: Severity.Critical }],
+          },
+        },
+        results: {
+          results: [],
+        } as any,
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      };
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      const state = useTableStore.getState();
+      expect(state.filters.options.severity).toContain(Severity.Critical);
     });
   });
 });

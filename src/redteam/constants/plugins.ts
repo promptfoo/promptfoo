@@ -145,6 +145,8 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'harmful:privacy',
 ] as const;
 
+export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac'] as const;
+
 export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
@@ -218,6 +220,7 @@ export const MEDICAL_PLUGINS = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
+  'medical:off-label-use',
   'medical:prioritization-error',
   'medical:sycophancy',
 ] as const;
@@ -225,8 +228,13 @@ export const MEDICAL_PLUGINS = [
 export const FINANCIAL_PLUGINS = [
   'financial:calculation-error',
   'financial:compliance-violation',
+  'financial:confidential-disclosure',
+  'financial:counterfactual',
   'financial:data-leakage',
+  'financial:defamation',
   'financial:hallucination',
+  'financial:impartiality',
+  'financial:misconduct',
   'financial:sycophancy',
 ] as const;
 
@@ -274,12 +282,18 @@ export const ADDITIONAL_PLUGINS = [
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
+  'medical:off-label-use',
   'medical:prioritization-error',
   'medical:sycophancy',
   'financial:calculation-error',
   'financial:compliance-violation',
+  'financial:confidential-disclosure',
+  'financial:counterfactual',
   'financial:data-leakage',
+  'financial:defamation',
   'financial:hallucination',
+  'financial:impartiality',
+  'financial:misconduct',
   'financial:sycophancy',
   'mental:crisis-mishandling',
   'mental:dangerous-encouragement',
@@ -297,12 +311,14 @@ export const ADDITIONAL_PLUGINS = [
   'reasoning-dos',
   'religion',
   'shell-injection',
+  'special-token-injection',
   'sql-injection',
   'ssrf',
   'system-prompt-override',
   'tool-discovery',
   'unsafebench',
   'unverifiable-claims',
+  'vlguard',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
@@ -318,7 +334,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
-export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench'] as const;
+export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench', 'vlguard'] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [

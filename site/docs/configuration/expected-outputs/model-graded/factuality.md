@@ -18,6 +18,8 @@ assert:
     value: The Earth orbits around the Sun
 ```
 
+For non-English evaluation output, see the [multilingual evaluation guide](/docs/configuration/expected-outputs/model-graded#non-english-evaluation).
+
 ## How it works
 
 The factuality checker evaluates whether completion A (the LLM output) and reference B (the value) are factually consistent. It categorizes the relationship as one of:

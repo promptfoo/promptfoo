@@ -252,6 +252,58 @@ describe('util', () => {
       });
     });
 
+    it('should map assistant role to model role by default', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'model', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant mapped to model
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should preserve assistant role when useAssistantRole is true', () => {
+      const input = [
+        { role: 'user', content: 'What is the capital of France?' },
+        { role: 'assistant', content: 'The capital of France is Paris.' },
+        { role: 'user', content: 'What is its population?' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'What is the capital of France?' }] },
+          { role: 'assistant', parts: [{ text: 'The capital of France is Paris.' }] }, // assistant preserved
+          { role: 'user', parts: [{ text: 'What is its population?' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should map assistant to model when useAssistantRole is false', () => {
+      const input = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(result).toEqual({
+        contents: [
+          { role: 'user', parts: [{ text: 'Hello' }] },
+          { role: 'model', parts: [{ text: 'Hi there' }] },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
     it('should handle OpenAI chat format with array content', () => {
       const input = [
         {
@@ -270,6 +322,21 @@ describe('util', () => {
         coerced: true,
         systemInstruction: undefined,
       });
+    });
+
+    it('should respect useAssistantRole flag with array content', () => {
+      const input = [
+        { role: 'user', content: [{ type: 'text', text: 'Question' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'Answer' }] },
+      ];
+
+      // Test with useAssistantRole: true
+      const resultWithAssistant = maybeCoerceToGeminiFormat(input, { useAssistantRole: true });
+      expect(resultWithAssistant.contents[1].role).toBe('assistant');
+
+      // Test with useAssistantRole: false (default)
+      const resultWithModel = maybeCoerceToGeminiFormat(input, { useAssistantRole: false });
+      expect(resultWithModel.contents[1].role).toBe('model');
     });
 
     it('should handle OpenAI chat format with object content', () => {
@@ -510,6 +577,34 @@ describe('util', () => {
         systemInstruction: {
           parts: [{ text: 'You are a helpful assistant.' }],
         },
+      });
+    });
+
+    it('should convert system-only prompts to user messages', () => {
+      const input = [{ role: 'system', content: 'You are a helpful assistant.' }];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [{ role: 'user', parts: [{ text: 'You are a helpful assistant.' }] }],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should convert multiple system-only messages to single user message', () => {
+      const input = [
+        { role: 'system', content: 'First instruction.' },
+        { role: 'system', content: 'Second instruction.' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'First instruction.' }, { text: 'Second instruction.' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
       });
     });
 
@@ -1440,6 +1535,59 @@ describe('util', () => {
       const tools: any[] = [];
       const normalized = normalizeTools(tools);
       expect(normalized).toEqual([]);
+    });
+  });
+
+  describe('resolveProjectId', () => {
+    const mockProjectId = 'google-auth-project';
+
+    beforeEach(async () => {
+      // Reset modules to clear cached auth
+      jest.resetModules();
+
+      // Re-mock google-auth-library after module reset
+      const mockAuth = {
+        getClient: jest.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+      };
+      jest.doMock('google-auth-library', () => ({
+        GoogleAuth: jest.fn().mockImplementation(() => mockAuth as any),
+      }));
+    });
+
+    afterEach(() => {
+      jest.dontMock('google-auth-library');
+    });
+
+    it('should prioritize explicit config over environment variables', async () => {
+      // Import resolveProject after mocking in beforeEach
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = { projectId: 'explicit-project' };
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+    });
+
+    it('should use environment variables when no explicit config', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('env-project');
+    });
+
+    it('should fall back to Google Auth Library when no config or env vars', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe(mockProjectId);
     });
   });
 });

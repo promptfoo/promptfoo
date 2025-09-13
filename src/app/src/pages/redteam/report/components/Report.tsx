@@ -4,12 +4,14 @@ import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import PrintIcon from '@mui/icons-material/Print';
 import WarningIcon from '@mui/icons-material/Warning';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
@@ -34,6 +36,8 @@ import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable
 import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
+import './Report.css';
+
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -41,9 +45,10 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import './Report.css';
 
-const App: React.FC = () => {
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+
+const App = () => {
   const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
@@ -51,6 +56,14 @@ const App: React.FC = () => {
   const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
   const { recordEvent } = useTelemetry();
+
+  // Vulnerabilities DataGrid
+  const vulnerabilitiesDataGridRef = React.useRef<HTMLDivElement>(null);
+  const [vulnerabilitiesDataGridFilterModel, setVulnerabilitiesDataGridFilterModel] =
+    React.useState<GridFilterModel>({
+      items: [],
+      logicOperator: GridLogicOperator.Or,
+    });
 
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
@@ -260,7 +273,21 @@ const App: React.FC = () => {
   });
 
   if (!evalData || !evalId) {
-    return <Box sx={{ width: '100%', textAlign: 'center' }}>Loading...</Box>;
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '9rem',
+        }}
+      >
+        <CircularProgress size={22} />
+        <Box>Waiting for report data</Box>
+      </Box>
+    );
   }
 
   if (!evalData.config.redteam) {
@@ -365,11 +392,7 @@ const App: React.FC = () => {
             {evalData.config.description && `: ${evalData.config.description}`}
           </Typography>
           <Typography variant="subtitle1" mb={2}>
-            {new Date(evalData.createdAt).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
+            {formatDataGridDate(evalData.createdAt)}
           </Typography>
           <Box className="report-details">
             {selectedPrompt && (
@@ -434,7 +457,12 @@ const App: React.FC = () => {
             )}
           </Box>
         </Card>
-        <Overview categoryStats={categoryStats} plugins={evalData.config.redteam.plugins || []} />
+        <Overview
+          categoryStats={categoryStats}
+          plugins={evalData.config.redteam.plugins || []}
+          vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
+          setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
+        />
         <StrategyStats
           strategyStats={strategyStats}
           failuresByPlugin={failuresByPlugin}
@@ -451,6 +479,11 @@ const App: React.FC = () => {
           evalId={evalId}
           categoryStats={categoryStats}
           plugins={evalData.config.redteam.plugins || []}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+          vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
+          vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
+          setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
         />
         <FrameworkCompliance categoryStats={categoryStats} strategyStats={strategyStats} />
       </Stack>
