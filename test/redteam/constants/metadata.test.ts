@@ -17,6 +17,15 @@ import {
   subCategoryDescriptions,
 } from '../../../src/redteam/constants/metadata';
 
+import {
+  ADDITIONAL_PLUGINS,
+  BASE_PLUGINS,
+  BIAS_PLUGINS,
+  FINANCIAL_PLUGINS,
+  HARM_PLUGINS,
+  MEDICAL_PLUGINS,
+  PII_PLUGINS,
+} from '../../../src/redteam/constants/plugins';
 import type { Plugin } from '../../../src/redteam/constants/plugins';
 import type { Strategy } from '../../../src/redteam/constants/strategies';
 
@@ -71,6 +80,60 @@ describe('metadata constants', () => {
         const uniquePlugins = new Set(plugins);
         expect(uniquePlugins.size).toBe(plugins.length);
       });
+    });
+
+    it('should include all defined plugins in risk categories', () => {
+      // Get all plugins from risk categories
+      const riskCategoryPlugins = new Set<Plugin>();
+      Object.values(riskCategories).forEach((plugins) => {
+        plugins.forEach((plugin) => {
+          riskCategoryPlugins.add(plugin);
+        });
+      });
+
+      // Get all defined plugins from constants
+      const allDefinedPlugins = new Set<Plugin>();
+
+      // Add plugins from various constant arrays
+      [...BASE_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...ADDITIONAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...BIAS_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...PII_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...MEDICAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+      [...FINANCIAL_PLUGINS].forEach((plugin) => allDefinedPlugins.add(plugin));
+
+      // Add plugins from HARM_PLUGINS object
+      Object.keys(HARM_PLUGINS).forEach((plugin) => {
+        allDefinedPlugins.add(plugin as Plugin);
+      });
+
+      // Special plugins that shouldn't be in risk categories (collections and custom plugins)
+      const excludedPlugins = new Set([
+        'intent', // Custom intent plugin handled separately in UI
+        'policy', // Custom policy plugin handled separately in UI
+        'default', // Collection
+        'foundation', // Collection
+        'harmful', // Collection
+        'bias', // Collection
+        'pii', // Collection
+        'medical', // Collection
+        'guardrails-eval', // Collection
+      ]);
+
+      // Find plugins that are defined but missing from risk categories
+      const missingPlugins = Array.from(allDefinedPlugins).filter(
+        (plugin) => !riskCategoryPlugins.has(plugin) && !excludedPlugins.has(plugin),
+      );
+
+      if (missingPlugins.length > 0) {
+        fail(
+          `The following plugins are defined but missing from risk categories: ${missingPlugins.join(
+            ', ',
+          )}. Please add them to the appropriate category in riskCategories object in metadata.ts`,
+        );
+      }
+
+      expect(missingPlugins).toEqual([]);
     });
   });
 
