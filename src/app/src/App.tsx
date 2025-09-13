@@ -22,6 +22,8 @@ import LoginPage from './pages/login';
 import ModelAuditPage from './pages/model-audit/page';
 import ModelAuditHistoryPage from './pages/model-audit-history/page';
 import ModelAuditResultPage from './pages/model-audit-result/page';
+import ModelAuditSetupPage from './pages/model-audit-setup/page';
+import ModelAuditLatestPage from './pages/model-audit-latest/page';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
@@ -66,9 +68,16 @@ const router = createBrowserRouter(
           <Route path="/history" element={<HistoryPage />} />
 
           <Route path="/prompts" element={<PromptsPage />} />
-          <Route path="/model-audit" element={<ModelAuditPage />} />
+
+          {/* Model Audit Routes - New structure */}
+          <Route path="/model-audit" element={<ModelAuditLatestPage />} />
+          <Route path="/model-audit/setup" element={<ModelAuditSetupPage />} />
           <Route path="/model-audit/history" element={<ModelAuditHistoryPage />} />
           <Route path="/model-audit/history/:id" element={<ModelAuditResultPage />} />
+          <Route path="/model-audit/:id" element={<ModelAuditResultPage />} />
+
+          {/* Legacy Model Audit route - redirect to latest */}
+          <Route path="/model-audit-legacy" element={<ModelAuditPage />} />
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />
 

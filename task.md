@@ -155,6 +155,101 @@ Acceptance criteria:
 - Add `GET /api/model-audit/scans/latest` to return the latest persisted scan. This simplifies `/model-audit` route and reduces data transfer.
 - Extend `GET /api/model-audit/scans` with `limit`, `offset`, `search`, `sort`, `order` for server-side DataGrid features.
 
+### API Contracts and Typing (Zod)
+
+Add Zod schemas and TypeScript types for all Model Audit endpoints. Validate requests with `z.parse` and return typed responses. Prefer placing schemas in `src/server/routes/modelAudit.schemas.ts` (server-only), and optionally export TypeScript types to a shared file `src/shared/types/modelAudit.ts` for frontend consumption.
+
+Endpoints (all are under `/api/model-audit`):
+- `GET /check-installed`
+  - Response: `{ installed: boolean; cwd: string | null }`
+
+- `POST /check-path`
+  - Request body: `{ path: string }`
+  - Response: `{ exists: boolean; type: 'file' | 'directory' | 'unknown'; name?: string }`
+
+- `POST /scan`
+  - Request body: `{ paths: string[]; options: { blacklist: string[]; timeout: number; verbose?: boolean; /* extend as needed */ } }`
+  - Response: `ScanResult & { rawOutput: string; auditId?: string; persisted?: boolean }`
+
+- `GET /scans`
+  - Query: `{ limit?: number; offset?: number; search?: string; sort?: 'createdAt'|'name'|'status'; order?: 'asc'|'desc' }`
+  - Response: `{ scans: ScanSummary[]; total: number }`
+
+- `GET /scans/latest`
+  - Response: `ScanRecord` (200) or empty body (204) when none exist
+
+- `GET /scans/:id`
+  - Params: `{ id: string }`
+  - Response: `ScanRecord`
+
+- `DELETE /scans/:id`
+  - Params: `{ id: string }`
+  - Response: `{ success: true; message: string }`
+
+Schema definitions (Zod):
+- `ZScanIssue = z.object({
+  severity: z.enum(['critical', 'error', 'warning', 'info', 'debug']),
+  message: z.string(),
+  location: z.string().optional(),
+  timestamp: z.number().optional(),
+  details: z.record(z.any()).optional(),
+})`
+- `ZScanResult = z.object({
+  path: z.string(),
+  issues: z.array(ZScanIssue),
+  success: z.boolean(),
+  scannedFiles: z.number().optional(),
+  totalFiles: z.number().optional(),
+  duration: z.number().optional(),
+  scannedFilesList: z.array(z.string()).optional(),
+})`
+- `ZScanSummary = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  author: z.string().nullable().optional(),
+  modelPath: z.string(),
+  modelType: z.string().nullable().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number().optional(),
+  hasErrors: z.boolean(),
+  totalChecks: z.number().nullable().optional(),
+  passedChecks: z.number().nullable().optional(),
+  failedChecks: z.number().nullable().optional(),
+  results: z.object({ issues: z.array(ZScanIssue).optional() }).optional(),
+  metadata: z.record(z.any()).nullable().optional(),
+})`
+- `ZScanRecord = ZScanSummary.extend({ results: ZScanResult })`
+- `ZScansResponse = z.object({ scans: z.array(ZScanSummary), total: z.number() })`
+- `ZCheckInstalledResponse = z.object({ installed: z.boolean(), cwd: z.string().nullable() })`
+- `ZCheckPathRequest = z.object({ path: z.string().min(1) })`
+- `ZCheckPathResponse = z.object({ exists: z.boolean(), type: z.enum(['file','directory','unknown']), name: z.string().optional() })`
+- `ZScanRequest = z.object({
+  paths: z.array(z.string().min(1)).min(1),
+  options: z.object({
+    blacklist: z.array(z.string()),
+    timeout: z.number().int().positive().max(24 * 3600),
+    verbose: z.boolean().optional(),
+  }),
+})`
+- `ZScanResponse = ZScanResult.extend({ rawOutput: z.string(), auditId: z.string().optional(), persisted: z.boolean().optional() })`
+- `ZScansQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  search: z.string().optional(),
+  sort: z.enum(['createdAt','name','status']).optional().default('createdAt'),
+  order: z.enum(['asc','desc']).optional().default('desc'),
+})`
+
+Typing Tasks:
+- Create `modelAudit.schemas.ts` with the Zod schemas above; export inferred types: `type ScanIssue = z.infer<typeof ZScanIssue>`, etc.
+- Update each route handler in `src/server/routes/modelAudit.ts` to:
+  - Parse and validate request bodies/queries/params via Zod.
+  - Return responses conforming to Zod output types.
+  - Use 204 (No Content) for `/scans/latest` when no scans exist.
+- Add a shared type export to `src/shared/types/modelAudit.ts` if the frontend needs to consume the shapes (alternatively import server types where allowed).
+- Add unit tests for validators (happy path and invalid input) and integration tests for response shapes.
+- Ensure timestamps are epoch milliseconds (number) consistently; document any deviations.
+
 Contract details:
 - `GET /api/model-audit/scans/latest` → 200 with the latest scan JSON; 204 when no scans exist (client shows empty state and CTA); avoid 404 here.
 - `GET /api/model-audit/scans` accepts:

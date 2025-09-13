@@ -8,8 +8,9 @@ import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import PathSelector from './PathSelector';
+import ResultsTab from './ResultsTab';
 
-import type { ScanPath } from '../ModelAudit.types';
+import type { ScanPath, ScanResult } from '../ModelAudit.types';
 
 interface ConfigurationTabProps {
   paths: ScanPath[];
@@ -25,6 +26,8 @@ interface ConfigurationTabProps {
     checking: boolean;
     installed: boolean | null;
   };
+  scanResults?: ScanResult | null;
+  onShowFilesDialog?: () => void;
 }
 
 export default function ConfigurationTab({
@@ -38,6 +41,8 @@ export default function ConfigurationTab({
   onClearError,
   currentWorkingDir,
   installationStatus,
+  scanResults,
+  onShowFilesDialog,
 }: ConfigurationTabProps) {
   const isCheckingInstallation = installationStatus?.checking ?? false;
   const isNotInstalled = installationStatus?.installed === false;
@@ -125,6 +130,19 @@ export default function ConfigurationTab({
           </Alert>
         )}
       </Box>
+
+      {/* Display non-persisted scan results inline */}
+      {scanResults && !scanResults.persisted && (
+        <Box sx={{ mt: 4 }}>
+          <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
+            Scan Results
+          </Typography>
+          <ResultsTab
+            scanResults={scanResults}
+            onShowFilesDialog={onShowFilesDialog || (() => {})}
+          />
+        </Box>
+      )}
     </Box>
   );
 }
