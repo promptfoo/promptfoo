@@ -96,9 +96,9 @@ function TableHeader({
       {expandedText && (
         <>
           <Tooltip title="View prompt">
-            <span className="action" onClick={handlePromptOpen}>
+            <button className="action" onClick={handlePromptOpen}>
               🔎
-            </span>
+            </button>
           </Tooltip>
           {promptOpen && (
             <EvalOutputPromptDialog
@@ -197,6 +197,7 @@ function ResultsTableHeader({
               return (
                 <th
                   key={header.id}
+                  tabIndex={0}
                   colSpan={header.colSpan}
                   style={{
                     width: header.getSize(),
@@ -1319,6 +1320,7 @@ function ResultsTable({
 
                     return (
                       <td
+                        tabIndex={0}
                         key={cell.id}
                         style={{
                           width: cell.column.getSize(),
