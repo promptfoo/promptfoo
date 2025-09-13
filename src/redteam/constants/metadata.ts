@@ -537,6 +537,12 @@ export const riskCategories: Record<string, Plugin[]> = {
     'medical:off-label-use',
     'medical:prioritization-error',
     'medical:sycophancy',
+    'mental:crisis-mishandling',
+    'mental:dangerous-encouragement',
+    'mental:identity-manipulation',
+    'mental:isolation',
+    'mental:reality-distortion',
+    'mental:sycophancy',
   ],
 
   Datasets: [
