@@ -158,6 +158,16 @@ export async function doEval(
     const resumeId =
       resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
     if (resumeRaw) {
+      // Check if --no-write is set with --resume
+      if (cmdObj.write === false) {
+        logger.error(
+          chalk.red(
+            'Cannot use --resume with --no-write. Resume functionality requires database persistence.',
+          ),
+        );
+        process.exitCode = 1;
+        return new Eval({}, { persisted: false });
+      }
       resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
       if (!resumeEval) {
         logger.error(`Could not find evaluation to resume: ${resumeId}`);
@@ -377,7 +387,7 @@ export async function doEval(
         ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
         : new Eval(config, { runtimeOptions: options });
 
-    // Graceful pause support via Ctrl+C
+    // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
     const previousAbortSignal = evaluateOptions.abortSignal;
     evaluateOptions.abortSignal = previousAbortSignal
@@ -385,19 +395,23 @@ export async function doEval(
       : abortController.signal;
     let sigintHandler: ((...args: any[]) => void) | undefined;
     let paused = false;
-    sigintHandler = () => {
-      if (paused) {
-        // Second Ctrl+C: force exit
-        logger.warn('Force exiting...');
-        process.exit(130);
-      }
-      paused = true;
-      logger.info(
-        chalk.yellow('Pausing evaluation... Saving progress. Press Ctrl+C again to force exit.'),
-      );
-      abortController.abort();
-    };
-    process.once('SIGINT', sigintHandler);
+
+    // Only set up pause/resume handler when writing to database
+    if (cmdObj.write !== false) {
+      sigintHandler = () => {
+        if (paused) {
+          // Second Ctrl+C: force exit
+          logger.warn('Force exiting...');
+          process.exit(130);
+        }
+        paused = true;
+        logger.info(
+          chalk.yellow('Pausing evaluation... Saving progress. Press Ctrl+C again to force exit.'),
+        );
+        abortController.abort();
+      };
+      process.once('SIGINT', sigintHandler);
+    }
 
     // Run the evaluation!!!!!!
     const ret = await evaluate(testSuite, evalRecord, {
@@ -415,7 +429,7 @@ export async function doEval(
     cliState.resume = false;
 
     // If paused, print minimal guidance and skip the rest of the reporting
-    if (paused) {
+    if (paused && cmdObj.write !== false) {
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
       logger.info(
