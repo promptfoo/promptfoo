@@ -1,6 +1,4 @@
 import fs from 'fs';
-import { Readable, Writable } from 'stream';
-import type { ChildProcess } from 'child_process';
 
 // Mock util before any imports that use it - define the mock inline
 jest.mock('util', () => {
@@ -61,6 +59,10 @@ describe('Python Utils', () => {
 
   describe('getSysExecutable', () => {
     it('should return Python executable path from sys.executable', async () => {
+      // Mock for Unix-like systems (not Windows)
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+
       mockExecFileAsync.mockResolvedValue({
         stdout: '/usr/bin/python3.8\n',
         stderr: '',
@@ -73,6 +75,9 @@ describe('Python Utils', () => {
         '-c',
         'import sys; print(sys.executable)',
       ]);
+
+      // Restore original platform
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
 
     it('should use Windows where command first on Windows', async () => {
