@@ -6,7 +6,10 @@ import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
-import { execAsync } from './execAsync';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import type { Options as PythonShellOptions } from 'python-shell';
 
 export const state: {
@@ -22,7 +25,7 @@ export const state: {
  */
 async function tryWindowsWhere(): Promise<string | null> {
   try {
-    const result = await execAsync('where python');
+    const result = await execFileAsync('where', ['python']);
     const output = result.stdout.trim();
 
     // Handle empty output
@@ -65,7 +68,7 @@ async function tryWindowsWhere(): Promise<string | null> {
 async function tryPythonCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
     try {
-      const result = await execAsync(`${cmd} -c "import sys; print(sys.executable)"`);
+      const result = await execFileAsync(cmd, ['-c', 'import sys; print(sys.executable)']);
       const executablePath = result.stdout.trim();
       if (executablePath && executablePath !== 'None') {
         // On Windows, ensure .exe suffix if missing (but only for Windows-style paths)
@@ -160,9 +163,8 @@ export async function tryPath(path: string): Promise<string | null> {
       timeoutId = setTimeout(() => reject(new Error('Command timed out')), 2500);
     });
 
-    const result = await Promise.race([execAsync(path + ' --version'), timeoutPromise]);
+    const result = await Promise.race([execFileAsync(path, ['--version']), timeoutPromise]);
 
-    // Clear the timeout to prevent open handle
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
@@ -173,7 +175,6 @@ export async function tryPath(path: string): Promise<string | null> {
     }
     return null;
   } catch {
-    // Clear the timeout to prevent open handle
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
