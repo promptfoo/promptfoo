@@ -50,7 +50,7 @@ import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
-import { isEncodingStrategy, tryDecodeTextBase64, tryDecodeHex } from '@app/utils/encoding';
+import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -646,23 +646,14 @@ function ResultsTable({
                     ? testMetadata.originalText
                     : undefined;
                 const strategyId = testMetadata.strategyId;
-
-                // First try metadata-based approach (fast, reliable)
-                let shouldShowOriginal =
+                const shouldShowOriginal =
                   varName === injectVarName &&
                   isEncodingStrategy(strategyId) &&
                   Boolean(metadataOriginal);
 
-                // Fallback: lightweight heuristic for attacks without proper metadata
-                let fallbackDecoded: string | null = null;
-                if (!shouldShowOriginal && varName === injectVarName && typeof value === 'string') {
-                  fallbackDecoded = tryDecodeTextBase64(value) || tryDecodeHex(value);
-                  shouldShowOriginal = Boolean(fallbackDecoded);
-                }
-
                 // Show original text for encoding strategies
                 if (shouldShowOriginal) {
-                  const originalForDisplay = metadataOriginal || fallbackDecoded || '';
+                  const originalForDisplay = metadataOriginal || '';
                   return (
                     <div className="cell" data-capture="true">
                       {cellContent}
