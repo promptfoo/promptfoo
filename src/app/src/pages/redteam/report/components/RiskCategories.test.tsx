@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import RiskCategories from './RiskCategories';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import RiskCategories from './RiskCategories';
 
 const mockRiskCardProps: any[] = [];
 vi.mock('./RiskCard', () => ({
@@ -46,10 +46,26 @@ describe('RiskCategories', () => {
   it('should render a RiskCard for each top-level risk category with correctly aggregated props', () => {
     const mockProps = createMockProps({
       categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-        rbac: { pass: 5, total: 5 },
-        contracts: { pass: 3, total: 4 },
-        'harmful:hate': { pass: 0, total: 2 },
+        'sql-injection': {
+          stats: { pass: 8, total: 10, passWithFilter: 8 },
+          metadata: { type: 'sql-injection', description: '', severity: 'high' as any },
+        },
+        rbac: {
+          stats: { pass: 5, total: 5, passWithFilter: 5 },
+          metadata: { type: 'rbac', description: '', severity: 'high' as any },
+        },
+        contracts: {
+          stats: { pass: 3, total: 4, passWithFilter: 3 },
+          metadata: { type: 'contracts', description: '', severity: 'medium' as any },
+        },
+        'harmful:hate': {
+          stats: { pass: 0, total: 2, passWithFilter: 0 },
+          metadata: {
+            type: 'harmful:hate',
+            description: 'Tests handling of hate speech and discriminatory content',
+            severity: 'critical' as any,
+          },
+        },
       },
       failuresByPlugin: {
         'sql-injection': [{ prompt: 'p1', output: 'o1' }],
@@ -109,8 +125,18 @@ describe('RiskCategories', () => {
   it('should render a RiskCard with zero numTestsPassed and numTestsFailed, and a testTypes array containing entries with zero numPassed and numFailed, for any category whose subcategories are missing from categoryStats', () => {
     const mockProps = createMockProps({
       categoryStats: {
-        contracts: { pass: 3, total: 4 },
-        'harmful:hate': { pass: 0, total: 2 },
+        contracts: {
+          stats: { pass: 3, total: 4, passWithFilter: 3 },
+          metadata: { type: 'contracts', description: '', severity: 'medium' as any },
+        },
+        'harmful:hate': {
+          stats: { pass: 0, total: 2, passWithFilter: 0 },
+          metadata: {
+            type: 'harmful:hate',
+            description: 'Tests handling of hate speech and discriminatory content',
+            severity: 'critical' as any,
+          },
+        },
       },
     });
 
@@ -140,9 +166,15 @@ describe('RiskCategories', () => {
       'strategy-x': { pass: 5, total: 10 },
     };
     const mockCategoryStats = {
-      'plugin-a': { pass: 1, total: 2 },
-      'plugin-b': { pass: 3, total: 4 },
-    };
+      'plugin-a': {
+        stats: { pass: 1, total: 2, passWithFilter: 1 },
+        metadata: { type: 'plugin-a', description: '', severity: 'low' as any },
+      },
+      'plugin-b': {
+        stats: { pass: 3, total: 4, passWithFilter: 3 },
+        metadata: { type: 'plugin-b', description: '', severity: 'low' as any },
+      },
+    } as any;
 
     const mockProps = createMockProps({
       evalId: mockEvalId,
@@ -169,7 +201,10 @@ describe('RiskCategories', () => {
     {
       name: 'missing subcategories',
       categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
+        'sql-injection': {
+          stats: { pass: 8, total: 10, passWithFilter: 8 },
+          metadata: { type: 'sql-injection', description: '', severity: 'high' as any },
+        },
       },
       expectedTestTypes: [
         { name: 'sql-injection', categoryPassed: false, numPassed: 8, numFailed: 2 },
@@ -180,8 +215,14 @@ describe('RiskCategories', () => {
     {
       name: 'subcategories with zero tests',
       categoryStats: {
-        'sql-injection': { pass: 5, total: 5 },
-        rbac: { pass: 0, total: 0 },
+        'sql-injection': {
+          stats: { pass: 5, total: 5, passWithFilter: 5 },
+          metadata: { type: 'sql-injection', description: '', severity: 'high' as any },
+        },
+        rbac: {
+          stats: { pass: 0, total: 0, passWithFilter: 0 },
+          metadata: { type: 'rbac', description: '', severity: 'high' as any },
+        },
       },
       expectedTestTypes: [
         { name: 'sql-injection', categoryPassed: true, numPassed: 5, numFailed: 0 },
@@ -195,9 +236,18 @@ describe('RiskCategories', () => {
     {
       name: 'all subcategories with zero tests',
       categoryStats: {
-        'sql-injection': { pass: 0, total: 0 },
-        rbac: { pass: 0, total: 0 },
-        bfla: { pass: 0, total: 0 },
+        'sql-injection': {
+          stats: { pass: 0, total: 0, passWithFilter: 0 },
+          metadata: { type: 'sql-injection', description: '', severity: 'high' as any },
+        },
+        rbac: {
+          stats: { pass: 0, total: 0, passWithFilter: 0 },
+          metadata: { type: 'rbac', description: '', severity: 'high' as any },
+        },
+        bfla: {
+          stats: { pass: 0, total: 0, passWithFilter: 0 },
+          metadata: { type: 'bfla', description: '', severity: 'high' as any },
+        },
       },
       expectedTestTypes: [
         { name: 'sql-injection', categoryPassed: false, numPassed: 0, numFailed: 0 },
@@ -211,8 +261,14 @@ describe('RiskCategories', () => {
     {
       name: 'negative values in categoryStats',
       categoryStats: {
-        'sql-injection': { pass: -5, total: 10 },
-        rbac: { pass: 5, total: -5 },
+        'sql-injection': {
+          stats: { pass: -5 as any, total: 10 as any, passWithFilter: -5 as any },
+          metadata: { type: 'sql-injection', description: '', severity: 'high' as any },
+        },
+        rbac: {
+          stats: { pass: 5 as any, total: -5 as any, passWithFilter: 5 as any },
+          metadata: { type: 'rbac', description: '', severity: 'high' as any },
+        },
       },
     },
   ])(
@@ -278,7 +334,10 @@ describe('RiskCategories', () => {
 
     const mockProps = createMockProps({
       categoryStats: {
-        [subCategory]: { pass: totalPasses, total: totalTests },
+        [subCategory]: {
+          stats: { pass: totalPasses, total: totalTests, passWithFilter: totalPasses },
+          metadata: { type: subCategory, description: '', severity: 'low' as any },
+        },
       },
     });
 

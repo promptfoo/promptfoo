@@ -20,14 +20,11 @@ import {
   GridToolbarFilterButton,
 } from '@mui/x-data-grid';
 import {
-  categoryAliases,
   displayNameOverrides,
-  type Plugin,
   Severity,
+  severityDisplayNames,
   severityRiskScores,
-  subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
 import { getSeverityColor } from './FrameworkComplianceUtils';
 import { getStrategyIdFromTest } from './shared';
@@ -36,12 +33,13 @@ import './TestSuites.css';
 
 import {
   calculatePluginRiskScore,
+  type PluginCategoryStatsByPluginId,
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
 
 interface TestSuitesProps {
   evalId: string;
-  categoryStats: Record<string, { pass: number; total: number; passWithFilter: number }>;
+  categoryStats: PluginCategoryStatsByPluginId;
   plugins: RedteamPluginObject[];
   failuresByPlugin?: Record<string, any[]>;
   passesByPlugin?: Record<string, any[]>;
@@ -92,10 +90,8 @@ const TestSuites = ({
 
   const rows = React.useMemo(() => {
     return Object.entries(categoryStats)
-      .filter(([_, stats]) => stats.total > 0)
-      .map(([pluginName, stats]) => {
-        const severity = getRiskCategorySeverityMap(plugins)[pluginName as Plugin] ?? 'Unknown';
-
+      .filter(([_, { stats }]) => stats.total > 0)
+      .map(([pluginName, { stats, metadata }]) => {
         // Calculate risk score with details
         const riskDetails = (() => {
           // Prepare test results using the helper function
@@ -116,7 +112,11 @@ const TestSuites = ({
           }
 
           // Calculate risk score once and extract values
-          const riskScoreResult = calculatePluginRiskScore(pluginName, severity, testResults);
+          const riskScoreResult = calculatePluginRiskScore(
+            pluginName,
+            metadata.severity,
+            testResults,
+          );
           return {
             riskScore: riskScoreResult.score,
             complexityScore: riskScoreResult.complexityScore,
@@ -127,10 +127,9 @@ const TestSuites = ({
         return {
           id: pluginName,
           pluginName,
-          type: categoryAliases[pluginName as keyof typeof categoryAliases] || pluginName,
-          description:
-            subCategoryDescriptions[pluginName as keyof typeof subCategoryDescriptions] ?? '',
-          severity,
+          type: metadata.type,
+          description: metadata.description,
+          severity: metadata.severity,
           passRate: (stats.pass / stats.total) * 100,
           passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
           attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
@@ -364,10 +363,12 @@ const TestSuites = ({
       headerName: 'Severity',
       type: 'singleSelect',
       flex: 0.5,
-      valueOptions: Object.values(Severity),
-      renderCell: (params: GridRenderCellParams) => (
-        <Box className={`vuln-${params.value.toLowerCase()} vuln`}>{params.value}</Box>
-      ),
+      valueFormatter: (value: Severity) => severityDisplayNames[value],
+      valueOptions: Object.values(Severity).map((severity) => ({
+        value: severity,
+        label: severityDisplayNames[severity],
+      })),
+      cellClassName: (params) => `vuln-${params.value.toLowerCase()} vuln`,
       sortComparator: (v1: Severity, v2: Severity) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,

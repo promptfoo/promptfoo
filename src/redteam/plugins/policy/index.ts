@@ -1,7 +1,10 @@
 import dedent from 'dedent';
-import invariant from '../../util/invariant';
-import { type Policy, type PolicyObject, PolicyObjectSchema } from '../types';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { sha256 } from '../../../util/createHash';
+import invariant from '../../../util/invariant';
+import { type Policy, type PolicyObject, PolicyObjectSchema } from '../../types';
+import { RedteamGraderBase, RedteamPluginBase } from '../base';
+import { POLICY_METRIC_PREFIX } from './constants';
+import { constructMetricId } from './utils';
 
 import type {
   ApiProvider,
@@ -10,7 +13,7 @@ import type {
   GradingResult,
   PluginConfig,
   TestCase,
-} from '../../types';
+} from '../../../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 
@@ -100,10 +103,16 @@ export class PolicyPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(prompt: string): Assertion[] {
+    const metricId = this.policyId
+      ? // If policyId is provided, use the last part of the policyId as the metric
+        constructMetricId(this.policyId)
+      : // Otherwise, hash the policy text to ensure duplicate policies counted as different metrics.
+        sha256(this.policy).slice(0, 8);
+
     return [
       {
         type: PLUGIN_ID,
-        metric: 'PolicyViolation',
+        metric: `${POLICY_METRIC_PREFIX}:${metricId}`,
       },
     ];
   }

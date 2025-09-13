@@ -22,6 +22,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { constructMetricId as constructPolicyMetricId } from '@promptfoo/redteam/plugins/policy/utils';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -38,6 +39,15 @@ import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import './Report.css';
 
+import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import {
+  categoryAliases,
+  riskCategorySeverityMap,
+  type Severity,
+  subCategoryDescriptions,
+} from '@promptfoo/redteam/constants';
+import { POLICY_METRIC_PREFIX } from '@promptfoo/redteam/plugins/policy/constants';
+import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -45,8 +55,6 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-
-import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 
 const App = () => {
   const navigate = useNavigate();
@@ -197,37 +205,59 @@ const App = () => {
       return {};
     }
 
-    return evalData.results.results.reduce(
-      (acc, row) => {
-        const pluginId = getPluginIdFromResult(row);
-        if (!pluginId) {
-          return acc;
-        }
+    return evalData.results.results.reduce((acc, row) => {
+      const pluginId = getPluginIdFromResult(row);
 
-        // Exclude results with errors from statistics
-        if (row.error && row.failureReason === ResultFailureReason.ERROR) {
-          return acc;
-        }
-
-        acc[pluginId] = acc[pluginId] || { pass: 0, total: 0, passWithFilter: 0 };
-        acc[pluginId].total++;
-
-        // Check if moderation tests failed but other tests passed - this indicates content was
-        // flagged by moderation but would have passed otherwise
-        const moderationPassed = row.gradingResult?.componentResults?.some(
-          (result) => result.assertion?.type === 'moderation' && !result.pass,
-        );
-
-        if (row.success) {
-          acc[pluginId].pass++;
-          acc[pluginId].passWithFilter++; // Both regular and filtered pass counts increment
-        } else if (moderationPassed) {
-          acc[pluginId].passWithFilter++; // Only filtered pass count increments (partial success under moderation)
-        }
+      if (!pluginId) {
         return acc;
-      },
-      {} as Record<string, { pass: number; total: number; passWithFilter: number }>,
-    );
+      }
+
+      // Exclude results with errors from statistics
+      if (row.error && row.failureReason === ResultFailureReason.ERROR) {
+        return acc;
+      }
+
+      // Determine the description for the plugin based on its type
+      let type = '';
+      let description = '';
+      let severity: Severity | undefined;
+
+      // Custom policy plugins require special handling:
+      if (pluginId.startsWith(`${POLICY_METRIC_PREFIX}:`)) {
+        type = row.metadata?.policyId
+          ? // Match the id used in the metric.
+            `Policy ${constructPolicyMetricId(row.metadata?.policyId)} Violation`
+          : 'Policy Violation';
+        description = `${row.metadata?.policy}`;
+        severity = row.metadata?.severity as Severity;
+      } else {
+        type = categoryAliases[pluginId as keyof typeof categoryAliases] || pluginId;
+        description =
+          subCategoryDescriptions[pluginId as keyof typeof subCategoryDescriptions] ?? '';
+        severity = riskCategorySeverityMap[pluginId as keyof typeof riskCategorySeverityMap];
+      }
+
+      acc[pluginId] = acc[pluginId] || {
+        // TODO: We're calculating pass rate in several places; do it once here!
+        stats: { pass: 0, total: 0, passWithFilter: 0 },
+        metadata: { type, description, severity },
+      };
+      acc[pluginId].stats.total++;
+
+      // Check if moderation tests failed but other tests passed - this indicates content was
+      // flagged by moderation but would have passed otherwise
+      const moderationPassed = row.gradingResult?.componentResults?.some(
+        (result) => result.assertion?.type === 'moderation' && !result.pass,
+      );
+
+      if (row.success) {
+        acc[pluginId].stats.pass++;
+        acc[pluginId].stats.passWithFilter++; // Both regular and filtered pass counts increment
+      } else if (moderationPassed) {
+        acc[pluginId].stats.passWithFilter++; // Only filtered pass count increments (partial success under moderation)
+      }
+      return acc;
+    }, {} as PluginCategoryStatsByPluginId);
   }, [evalData]);
 
   const strategyStats = React.useMemo(() => {

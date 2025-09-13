@@ -10,15 +10,15 @@ import {
   Severity,
   severityDisplayNames,
 } from '@promptfoo/redteam/constants';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
 
 import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import { type PluginCategoryStatsByPluginId } from '@promptfoo/redteam/riskScoring';
 
 interface OverviewProps {
-  categoryStats: Record<PluginType, { pass: number; total: number }>;
+  categoryStats: PluginCategoryStatsByPluginId;
   plugins: RedteamPluginObject[];
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement>;
   setVulnerabilitiesDataGridFilterModel: (filterModel: GridFilterModel) => void;
@@ -70,12 +70,9 @@ const Overview = ({
   const severityCounts = Object.values(Severity).reduce(
     (acc, severity) => {
       acc[severity] = Object.keys(categoryStats).reduce((count, category) => {
-        const stats = categoryStats[category as PluginType];
+        const { stats, metadata } = categoryStats[category as PluginType];
         const passRate = stats.pass / stats.total;
-        if (
-          getRiskCategorySeverityMap(plugins)[category as PluginType] === severity &&
-          passRate < pluginPassRateThreshold
-        ) {
+        if (metadata.severity === severity && passRate < pluginPassRateThreshold) {
           return count + 1;
         }
         return count;

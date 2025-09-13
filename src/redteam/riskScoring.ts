@@ -1,5 +1,20 @@
 import { Severity } from './constants';
 
+export type PluginCategoryStats = {
+  stats: {
+    pass: number;
+    total: number;
+    passWithFilter: number;
+  };
+  metadata: {
+    type: string;
+    description: string;
+    severity: Severity;
+  };
+};
+
+export type PluginCategoryStatsByPluginId = Record<string, PluginCategoryStats>;
+
 export interface StrategyMetadata {
   humanExploitable: boolean;
   humanComplexity: 'low' | 'medium' | 'high';
@@ -371,7 +386,7 @@ export function prepareTestResultsFromStats(
   failuresByPlugin: Record<string, any[]> | undefined,
   passesByPlugin: Record<string, any[]> | undefined,
   subCategory: string,
-  categoryStats: Record<string, { pass: number; total: number }>,
+  categoryStats: PluginCategoryStatsByPluginId,
   getStrategyId?: (test: any) => string,
 ): Array<{ strategy: string; results: TestResults }> {
   // Default strategy extraction function
@@ -432,7 +447,7 @@ export function prepareTestResultsFromStats(
   }
 
   // Fallback: create test results from basic stats
-  const stats = categoryStats[subCategory];
+  const { stats } = categoryStats[subCategory];
   if (!stats || stats.total === 0) {
     return [];
   }
