@@ -5,9 +5,13 @@ import { formatDataGridDate } from '@app/utils/date';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import Paper from '@mui/material/Paper';
-import { useTheme } from '@mui/material/styles';
+import { useMediaQuery, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
   DataGrid,
@@ -64,10 +68,20 @@ const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((p
     <GridToolbarQuickFilter
       {...props}
       inputRef={ref}
+      placeholder="Search scans..."
+      slotProps={{
+        input: {
+          'aria-label': 'Search model audit scans',
+        },
+      }}
       sx={{
         '& .MuiInputBase-root': {
           borderRadius: 2,
           backgroundColor: theme.palette.background.paper,
+          '&:focus-within': {
+            outline: `2px solid ${theme.palette.primary.main}`,
+            outlineOffset: 2,
+          },
         },
       }}
     />
@@ -84,7 +98,9 @@ function CustomToolbar({
   focusQuickFilterOnMount: boolean;
 }) {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const quickFilterRef = useRef<HTMLInputElement>(null);
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
 
   useEffect(() => {
     if (focusQuickFilterOnMount && quickFilterRef.current) {
@@ -92,16 +108,65 @@ function CustomToolbar({
     }
   }, [focusQuickFilterOnMount]);
 
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+  };
+
   return (
-    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      {showUtilityButtons && (
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <GridToolbarColumnsButton />
-          <GridToolbarFilterButton />
-          <GridToolbarDensitySelector />
-          <GridToolbarExport />
-        </Box>
-      )}
+    <GridToolbarContainer sx={{
+      p: 1,
+      borderBottom: `1px solid ${theme.palette.divider}`,
+      spacing: { xs: 0.5, sm: 1 },
+    }}>
+      {showUtilityButtons &&
+        (isMobile ? (
+            // Mobile: Show kebab menu with utility buttons
+            <>
+              <IconButton
+                onClick={handleMenuOpen}
+                size="small"
+                aria-label="Open table options menu"
+                sx={{ mr: 1 }}
+              >
+                <MoreVertIcon />
+              </IconButton>
+              <Menu
+                anchorEl={menuAnchorEl}
+                open={Boolean(menuAnchorEl)}
+                onClose={handleMenuClose}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'left',
+                }}
+              >
+                <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
+                  <GridToolbarColumnsButton sx={{ border: 'none', width: '100%', justifyContent: 'flex-start' }} />
+                </MenuItem>
+                <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
+                  <GridToolbarFilterButton sx={{ border: 'none', width: '100%', justifyContent: 'flex-start' }} />
+                </MenuItem>
+                <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
+                  <GridToolbarDensitySelector sx={{ border: 'none', width: '100%', justifyContent: 'flex-start' }} />
+                </MenuItem>
+                <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
+                  <GridToolbarExport />
+                </MenuItem>
+              </Menu>
+            </>
+          ) : (
+            // Desktop: Show buttons in a row
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <GridToolbarColumnsButton />
+              <GridToolbarFilterButton />
+              <GridToolbarDensitySelector />
+              <GridToolbarExport />
+            </Box>
+          ))
+      }
       <Box sx={{ flexGrow: 1 }} />
       <QuickFilter ref={quickFilterRef} />
     </GridToolbarContainer>
@@ -127,6 +192,10 @@ export default function ModelAuditHistory({
   showUtilityButtons?: boolean;
   focusQuickFilterOnMount?: boolean;
 }) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+
   const [scans, setScans] = useState<ModelAuditScan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -235,6 +304,7 @@ export default function ModelAuditHistory({
         field: 'createdAt',
         headerName: 'Created',
         flex: 0.9,
+        minWidth: 140,
         valueGetter: (value: ModelAuditScan['createdAt'], row: ModelAuditScan) => {
           return new Date(value);
         },
@@ -244,6 +314,7 @@ export default function ModelAuditHistory({
         field: 'name',
         headerName: 'Name',
         flex: 1.5,
+        minWidth: 150,
         valueGetter: (value: ModelAuditScan['name'], row: ModelAuditScan) =>
           value ?? `Scan ${row.id.slice(-8)}`,
       },
@@ -251,6 +322,7 @@ export default function ModelAuditHistory({
         field: 'modelPath',
         headerName: 'Model Path',
         flex: 2,
+        minWidth: 200,
         renderCell: (params: GridRenderCellParams<ModelAuditScan>) => (
           <Typography variant="body2" noWrap sx={{ maxWidth: '100%' }} title={params.value}>
             {params.value}
@@ -261,6 +333,7 @@ export default function ModelAuditHistory({
         field: 'status',
         headerName: 'Status',
         flex: 0.7,
+        minWidth: 110,
         renderCell: (params: GridRenderCellParams<ModelAuditScan>) => (
           <Chip
             label={params.row.hasErrors ? 'Issues Found' : 'Clean'}
@@ -278,6 +351,7 @@ export default function ModelAuditHistory({
         field: 'issues',
         headerName: 'Issues Found',
         flex: 1,
+        minWidth: 150,
         renderCell: (params: GridRenderCellParams<ModelAuditScan>) => {
           const issues = params.row.results?.issues;
           if (!issues || issues.length === 0) {
@@ -329,6 +403,7 @@ export default function ModelAuditHistory({
         field: 'checks',
         headerName: 'Checks',
         flex: 0.7,
+        minWidth: 100,
         renderCell: (params: GridRenderCellParams<ModelAuditScan>) => {
           if (params.row.totalChecks === null || params.row.totalChecks === undefined) {
             return (
@@ -354,6 +429,15 @@ export default function ModelAuditHistory({
     [focusedScanId, onScanSelected],
   );
 
+  // Responsive column visibility: hide less critical columns on smaller screens
+  const columnVisibilityModel = useMemo(() => ({
+    // On mobile (xs), only show ID, Name, and Status
+    createdAt: !isMobile,
+    modelPath: !isMobile,
+    issues: !isMobile,
+    checks: !isTablet, // Hide checks on mobile and tablet
+  }), [isMobile, isTablet]);
+
   return (
     <Box
       sx={{
@@ -361,9 +445,10 @@ export default function ModelAuditHistory({
         bgcolor: (theme) =>
           theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[50],
         py: 4,
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
-      <Paper elevation={2} sx={{ height: '100%', mx: 4 }}>
+      <Paper elevation={2} sx={{ height: '100%', mx: { xs: 0, sm: 2, md: 4 } }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -478,6 +563,9 @@ export default function ModelAuditHistory({
             },
             pagination: {
               paginationModel: { pageSize: 50 },
+            },
+            columns: {
+              columnVisibilityModel,
             },
           }}
           pageSizeOptions={[10, 25, 50, 100]}

@@ -13,7 +13,9 @@ import {
   Stack,
   Chip,
   IconButton,
-  Tooltip
+  Tooltip,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -42,6 +44,9 @@ interface ScanResult {
 }
 
 export default function ModelAuditResult() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [scan, setScan] = useState<ScanResult | null>(null);
@@ -194,52 +199,104 @@ export default function ModelAuditResult() {
         bgcolor: (theme) =>
           theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[50],
         py: 4,
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       <Container maxWidth="xl">
         <Paper elevation={0} sx={{ p: { xs: 3, md: 5 }, mb: 4 }}>
           {/* Breadcrumb Navigation */}
-          <Box sx={{ mb: 3 }}>
-            <Breadcrumbs aria-label="breadcrumb">
-              <Link component={RouterLink} to="/model-audit" underline="hover" color="inherit">
-                Model Audit
-              </Link>
-              <Link component={RouterLink} to="/model-audit/history" underline="hover" color="inherit">
-                History
-              </Link>
-              <Typography color="text.primary">
-                {scan.name || `Scan ${scan.id.slice(-8)}`}
-              </Typography>
+          <Box sx={{ mb: 3, overflow: 'hidden' }}>
+            <Breadcrumbs
+              aria-label="breadcrumb"
+              separator="›"
+              sx={{
+                '& .MuiBreadcrumbs-ol': {
+                  flexWrap: isMobile ? 'wrap' : 'nowrap',
+                }
+              }}
+            >
+              <Tooltip title="Go to Model Audit main page">
+                <Link component={RouterLink} to="/model-audit" underline="hover" color="inherit">
+                  Model Audit
+                </Link>
+              </Tooltip>
+              <Tooltip title="Go to scan history">
+                <Link component={RouterLink} to="/model-audit/history" underline="hover" color="inherit">
+                  History
+                </Link>
+              </Tooltip>
+              <Tooltip title={scan.name || `Scan ${scan.id}`}>
+                <Typography
+                  color="text.primary"
+                  sx={{
+                    maxWidth: isMobile ? '150px' : '300px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {scan.name || `Scan ${scan.id.slice(-8)}`}
+                </Typography>
+              </Tooltip>
             </Breadcrumbs>
           </Box>
 
           {/* Header with Actions */}
           <Box sx={{ mb: 4 }}>
-            <Stack direction="row" spacing={2} alignItems="flex-start" justifyContent="space-between">
-              <Box sx={{ flex: 1 }}>
-                <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-                  <IconButton
-                    component={RouterLink}
-                    to="/model-audit/history"
-                    size="small"
-                    sx={{ mr: 1 }}
-                    aria-label="Go back to scan history"
-                  >
-                    <ArrowBackIcon />
-                  </IconButton>
-                  <Typography variant="h4" fontWeight="bold">
-                    {scan.name || `Scan ${scan.id.slice(-8)}`}
-                  </Typography>
+            <Stack
+              direction={isMobile ? 'column' : 'row'}
+              spacing={2}
+              alignItems={isMobile ? 'flex-start' : 'flex-start'}
+              justifyContent="space-between"
+            >
+              <Box sx={{ flex: 1, width: '100%' }}>
+                <Stack
+                  direction={isMobile ? 'column' : 'row'}
+                  spacing={isMobile ? 1 : 2}
+                  alignItems={isMobile ? 'flex-start' : 'center'}
+                  sx={{ mb: 2 }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <IconButton
+                      component={RouterLink}
+                      to="/model-audit/history"
+                      size="small"
+                      sx={{ minWidth: 44, minHeight: 44 }}
+                      aria-label="Go back to scan history"
+                    >
+                      <ArrowBackIcon />
+                    </IconButton>
+                    <Typography
+                      variant={isMobile ? 'h5' : 'h4'}
+                      fontWeight="bold"
+                      sx={{
+                        wordBreak: 'break-word',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {scan.name || `Scan ${scan.id.slice(-8)}`}
+                    </Typography>
+                  </Box>
                   <Chip
                     label={scan.hasErrors ? 'Issues Found' : 'Clean'}
                     color={scan.hasErrors ? 'error' : 'success'}
                     variant="filled"
-                    sx={{ fontWeight: 500 }}
+                    sx={{ fontWeight: 500, alignSelf: isMobile ? 'flex-start' : 'center' }}
                   />
                 </Stack>
 
                 {/* Scan Metadata */}
-                <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
+                <Stack
+                  direction={isMobile ? 'column' : 'row'}
+                  spacing={isMobile ? 2 : 3}
+                  sx={{
+                    mb: 2,
+                    flexWrap: 'wrap',
+                    '& > *': {
+                      minWidth: isMobile ? 'unset' : '120px',
+                    }
+                  }}
+                >
                   <Box>
                     <Typography variant="body2" color="text.secondary">
                       Created
@@ -248,13 +305,26 @@ export default function ModelAuditResult() {
                       {formatDataGridDate(scan.createdAt)}
                     </Typography>
                   </Box>
-                  <Box>
+                  <Box sx={{ flex: isMobile ? 'unset' : 1, minWidth: 0 }}>
                     <Typography variant="body2" color="text.secondary">
                       Model Path
                     </Typography>
-                    <Typography variant="body2" fontWeight="medium" sx={{ wordBreak: 'break-all' }}>
-                      {scan.modelPath}
-                    </Typography>
+                    <Tooltip title={scan.modelPath} arrow>
+                      <Typography
+                        variant="body2"
+                        fontWeight="medium"
+                        sx={{
+                          wordBreak: 'break-all',
+                          cursor: 'help',
+                          maxWidth: isMobile ? 'none' : '300px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: isMobile ? 'normal' : 'nowrap',
+                        }}
+                      >
+                        {scan.modelPath}
+                      </Typography>
+                    </Tooltip>
                   </Box>
                   {scan.author && (
                     <Box>
@@ -284,11 +354,19 @@ export default function ModelAuditResult() {
               </Box>
 
               {/* Action Buttons */}
-              <Stack direction="row" spacing={1}>
+              <Stack
+                direction="row"
+                spacing={isMobile ? 0.5 : 1}
+                sx={{
+                  alignSelf: isMobile ? 'flex-start' : 'flex-end',
+                  mt: isMobile ? 2 : 0,
+                }}
+              >
                 <Tooltip title="Download Results">
                   <IconButton
                     onClick={handleDownload}
                     color="primary"
+                    sx={{ minWidth: 44, minHeight: 44 }}
                     aria-label="Download scan results as JSON"
                   >
                     <DownloadIcon />
@@ -298,6 +376,7 @@ export default function ModelAuditResult() {
                   <IconButton
                     onClick={() => window.location.reload()}
                     color="primary"
+                    sx={{ minWidth: 44, minHeight: 44 }}
                     aria-label="Refresh scan details"
                   >
                     <RefreshIcon />
@@ -308,6 +387,7 @@ export default function ModelAuditResult() {
                     onClick={handleDelete}
                     color="error"
                     disabled={isDeleting}
+                    sx={{ minWidth: 44, minHeight: 44 }}
                     aria-label={isDeleting ? "Deleting scan..." : "Delete scan permanently"}
                   >
                     {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}

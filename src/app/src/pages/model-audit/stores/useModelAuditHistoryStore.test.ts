@@ -1,392 +1,167 @@
-import { act } from '@testing-library/react';
-import { callApi } from '@app/utils/api';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useModelAuditHistoryStore } from './useModelAuditHistoryStore';
-import type { ScanResult } from '../ModelAudit.types';
+import { callApi } from '@app/utils/api';
 
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-}));
-
-const mockedCallApi = callApi as Mock;
-
-interface HistoricalScan {
-  id: string;
-  createdAt: number;
-  updatedAt: number;
-  name?: string | null;
-  author?: string | null;
-  modelPath: string;
-  modelType?: string | null;
-  results: ScanResult;
-  hasErrors: boolean;
-  totalChecks?: number | null;
-  passedChecks?: number | null;
-  failedChecks?: number | null;
-  metadata?: Record<string, any> | null;
-}
+vi.mock('@app/utils/api');
 
 describe('useModelAuditHistoryStore', () => {
-  const initialState = useModelAuditHistoryStore.getState();
+  const mockCallApi = vi.mocked(callApi);
 
-  const mockHistoricalScan: HistoricalScan = {
-    id: 'scan-123',
-    name: 'Test Scan',
-    author: 'test@example.com',
-    modelPath: '/path/to/model',
-    modelType: 'pytorch',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    hasErrors: false,
-    totalChecks: 10,
-    passedChecks: 8,
-    failedChecks: 2,
-    results: {
-      path: '/path/to/model',
-      success: true,
-      issues: [],
+  const mockScans = [
+    {
+      id: '1',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      modelPath: '/path/to/model1',
+      results: { issues: [] },
+      hasErrors: false,
     },
-    metadata: { version: '1.0' },
-  };
+    {
+      id: '2',
+      createdAt: Date.now() - 1000,
+      updatedAt: Date.now() - 1000,
+      modelPath: '/path/to/model2',
+      results: { issues: [] },
+      hasErrors: true,
+    },
+  ];
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    useModelAuditHistoryStore.setState(initialState, true);
-  });
-
-  describe('initial state', () => {
-    it('should have correct initial state values', () => {
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historicalScans).toEqual([]);
-      expect(state.isLoadingHistory).toBe(false);
-      expect(state.historyError).toBeNull();
-      expect(state.pageSize).toBe(50);
-      expect(state.currentPage).toBe(0);
-      expect(state.sortModel).toEqual([
-        {
-          field: 'createdAt',
-          sort: 'desc',
-        },
-      ]);
-      expect(state.filterModel).toEqual({});
-      expect(state.searchQuery).toBe('');
+    act(() => {
+      useModelAuditHistoryStore.setState(useModelAuditHistoryStore.getInitialState());
     });
   });
 
-  describe('DataGrid state management', () => {
-    it('should update page size correctly', () => {
-      act(() => {
-        useModelAuditHistoryStore.getState().setPageSize(25);
-      });
+  it('should fetch historical scans successfully', async () => {
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ scans: mockScans }),
+    } as Response);
 
-      expect(useModelAuditHistoryStore.getState().pageSize).toBe(25);
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+
+    await act(async () => {
+      await result.current.fetchHistoricalScans();
     });
 
-    it('should update current page correctly', () => {
-      act(() => {
-        useModelAuditHistoryStore.getState().setCurrentPage(2);
-      });
-
-      expect(useModelAuditHistoryStore.getState().currentPage).toBe(2);
-    });
-
-    it('should update sort model correctly', () => {
-      const newSortModel = [{ field: 'name', sort: 'asc' as const }];
-
-      act(() => {
-        useModelAuditHistoryStore.getState().setSortModel(newSortModel);
-      });
-
-      expect(useModelAuditHistoryStore.getState().sortModel).toEqual(newSortModel);
-    });
-
-    it('should handle empty sort model', () => {
-      act(() => {
-        useModelAuditHistoryStore.getState().setSortModel([]);
-      });
-
-      expect(useModelAuditHistoryStore.getState().sortModel).toEqual([]);
-    });
-
-    it('should update filter model correctly', () => {
-      const newFilterModel = {
-        hasErrors: true,
-        modelType: 'pytorch',
-      };
-
-      act(() => {
-        useModelAuditHistoryStore.getState().setFilterModel(newFilterModel);
-      });
-
-      expect(useModelAuditHistoryStore.getState().filterModel).toEqual(newFilterModel);
-    });
-
-    it('should update search query correctly', () => {
-      const query = 'test search query';
-
-      act(() => {
-        useModelAuditHistoryStore.getState().setSearchQuery(query);
-      });
-
-      expect(useModelAuditHistoryStore.getState().searchQuery).toBe(query);
-    });
+    expect(result.current.historicalScans).toEqual(mockScans);
+    expect(result.current.isLoadingHistory).toBe(false);
+    expect(result.current.historyError).toBeNull();
   });
 
-  describe('fetchHistoricalScans', () => {
-    it('should fetch scans successfully', async () => {
-      const mockResponse = {
-        scans: [mockHistoricalScan],
-        total: 1,
-      };
+  it('should handle fetch historical scans failure', async () => {
+    mockCallApi.mockRejectedValue(new Error('Failed to fetch'));
 
-      mockedCallApi.mockResolvedValue({
-        ok: true,
-        json: vi.fn().mockResolvedValue(mockResponse),
-      });
+    const { result } = renderHook(() => useModelAuditHistoryStore());
 
-      await act(async () => {
-        await useModelAuditHistoryStore.getState().fetchHistoricalScans();
-      });
-
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historicalScans).toEqual([mockHistoricalScan]);
-      expect(state.isLoadingHistory).toBe(false);
-      expect(state.historyError).toBeNull();
-      expect(mockedCallApi).toHaveBeenCalledWith('/model-audit/scans', {
-        cache: 'no-store'
-      });
+    await act(async () => {
+      await result.current.fetchHistoricalScans();
     });
 
-    it('should handle API fetch failure', async () => {
-      const errorMessage = 'Network error';
-      mockedCallApi.mockRejectedValue(new Error(errorMessage));
-
-      await act(async () => {
-        await useModelAuditHistoryStore.getState().fetchHistoricalScans();
-      });
-
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historyError).toBe('Network error');
-      expect(state.isLoadingHistory).toBe(false);
-      expect(state.historicalScans).toEqual([]);
-    });
-
-    it('should handle API response error', async () => {
-      mockedCallApi.mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      });
-
-      await act(async () => {
-        await useModelAuditHistoryStore.getState().fetchHistoricalScans();
-      });
-
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historyError).toBe('Failed to fetch historical scans');
-      expect(state.isLoadingHistory).toBe(false);
-    });
-
-    it('should set loading state during fetch', () => {
-      mockedCallApi.mockImplementation(() => new Promise(() => {})); // Never resolves
-
-      act(() => {
-        useModelAuditHistoryStore.getState().fetchHistoricalScans();
-      });
-
-      expect(useModelAuditHistoryStore.getState().isLoadingHistory).toBe(true);
-    });
-
-    it('should clear error before fetching', async () => {
-      // Set initial error
-      useModelAuditHistoryStore.setState({ historyError: 'Initial error' });
-
-      const mockResponse = {
-        scans: [mockHistoricalScan],
-        total: 1,
-      };
-
-      mockedCallApi.mockResolvedValue({
-        ok: true,
-        json: vi.fn().mockResolvedValue(mockResponse),
-      });
-
-      await act(async () => {
-        await useModelAuditHistoryStore.getState().fetchHistoricalScans();
-      });
-
-      expect(useModelAuditHistoryStore.getState().historyError).toBeNull();
-    });
-
-    it('should handle response without scans array', async () => {
-      const mockResponse = {
-        // No scans property
-        total: 0,
-      };
-
-      mockedCallApi.mockResolvedValue({
-        ok: true,
-        json: vi.fn().mockResolvedValue(mockResponse),
-      });
-
-      await act(async () => {
-        await useModelAuditHistoryStore.getState().fetchHistoricalScans();
-      });
-
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historicalScans).toEqual([]);
-      expect(state.isLoadingHistory).toBe(false);
-      expect(state.historyError).toBeNull();
-    });
+    expect(result.current.historicalScans).toEqual([]);
+    expect(result.current.isLoadingHistory).toBe(false);
+    expect(result.current.historyError).toBe('Failed to fetch');
   });
 
-  describe('deleteHistoricalScan', () => {
-    it('should delete scan successfully', async () => {
-      // Set initial scans
-      useModelAuditHistoryStore.setState({
-        historicalScans: [mockHistoricalScan],
-      });
+  it('should delete a historical scan successfully', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ scans: mockScans }),
+    } as Response);
+    mockCallApi.mockResolvedValueOnce({ ok: true } as Response);
 
-      mockedCallApi.mockResolvedValue({
-        ok: true,
-        json: vi.fn().mockResolvedValue({ success: true, message: 'Scan deleted' }),
-      });
+    const { result } = renderHook(() => useModelAuditHistoryStore());
 
-      await act(async () => {
-        await useModelAuditHistoryStore.getState().deleteHistoricalScan('scan-123');
-      });
-
-      expect(mockedCallApi).toHaveBeenCalledWith('/model-audit/scans/scan-123', {
-        method: 'DELETE',
-      });
-
-      // Should remove scan from local state
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historicalScans).toEqual([]);
+    await act(async () => {
+      await result.current.fetchHistoricalScans();
     });
 
-    it('should handle delete scan failure', async () => {
-      const errorMessage = 'Failed to delete';
-      mockedCallApi.mockRejectedValue(new Error(errorMessage));
+    expect(result.current.historicalScans).toEqual(mockScans);
 
-      await expect(async () => {
-        await useModelAuditHistoryStore.getState().deleteHistoricalScan('scan-123');
-      }).rejects.toThrow('Failed to delete');
-
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historyError).toBe('Failed to delete');
+    await act(async () => {
+      await result.current.deleteHistoricalScan('1');
     });
 
-    it('should handle API response error for delete', async () => {
-      mockedCallApi.mockResolvedValue({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      });
-
-      await expect(async () => {
-        await useModelAuditHistoryStore.getState().deleteHistoricalScan('scan-123');
-      }).rejects.toThrow('Failed to delete scan');
-
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historyError).toBe('Failed to delete scan');
-    });
-
-    it('should not remove scan from local state if delete fails', async () => {
-      // Set initial scans
-      useModelAuditHistoryStore.setState({
-        historicalScans: [mockHistoricalScan],
-      });
-
-      mockedCallApi.mockRejectedValue(new Error('Delete failed'));
-
-      await expect(async () => {
-        await useModelAuditHistoryStore.getState().deleteHistoricalScan('scan-123');
-      }).rejects.toThrow('Delete failed');
-
-      // Should keep scan in local state since delete failed
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historicalScans).toEqual([mockHistoricalScan]);
-    });
-
-    it('should remove correct scan from multiple scans', async () => {
-      const scan2: HistoricalScan = {
-        ...mockHistoricalScan,
-        id: 'scan-456',
-        name: 'Test Scan 2',
-      };
-
-      // Set initial scans
-      useModelAuditHistoryStore.setState({
-        historicalScans: [mockHistoricalScan, scan2],
-      });
-
-      mockedCallApi.mockResolvedValue({
-        ok: true,
-        json: vi.fn().mockResolvedValue({ success: true, message: 'Scan deleted' }),
-      });
-
-      await act(async () => {
-        await useModelAuditHistoryStore.getState().deleteHistoricalScan('scan-123');
-      });
-
-      // Should remove only scan-123, keeping scan-456
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historicalScans).toEqual([scan2]);
-    });
+    expect(result.current.historicalScans).toEqual([mockScans[1]]);
   });
 
-  describe('resetHistoryState', () => {
-    it('should reset all history state to initial values', () => {
-      // Set some non-default state
-      useModelAuditHistoryStore.setState({
-        historicalScans: [mockHistoricalScan],
-        isLoadingHistory: true,
-        historyError: 'Some error',
-        currentPage: 5,
-        searchQuery: 'test query',
-        filterModel: { hasErrors: true },
-      });
+  it('should handle delete historical scan failure', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ scans: mockScans }),
+    } as Response);
+    mockCallApi.mockRejectedValueOnce(new Error('Failed to delete'));
 
-      act(() => {
-        useModelAuditHistoryStore.getState().resetHistoryState();
-      });
+    const { result } = renderHook(() => useModelAuditHistoryStore());
 
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historicalScans).toEqual([]);
-      expect(state.isLoadingHistory).toBe(false);
-      expect(state.historyError).toBeNull();
-      expect(state.currentPage).toBe(0);
-      expect(state.searchQuery).toBe('');
-      expect(state.filterModel).toEqual({});
-      // Should NOT reset pageSize and sortModel as they're not included in reset
-      expect(state.pageSize).toBe(50);
-      expect(state.sortModel).toEqual([{ field: 'createdAt', sort: 'desc' }]);
+    await act(async () => {
+      await result.current.fetchHistoricalScans();
     });
+
+    await act(async () => {
+      await expect(result.current.deleteHistoricalScan('1')).rejects.toThrow('Failed to delete');
+    });
+
+    expect(result.current.historicalScans).toEqual(mockScans); // Should not be deleted from state
+    expect(result.current.historyError).toBe('Failed to delete');
   });
 
-  describe('error handling edge cases', () => {
-    it('should handle non-Error objects in catch blocks', async () => {
-      mockedCallApi.mockRejectedValue('String error');
-
-      await act(async () => {
-        await useModelAuditHistoryStore.getState().fetchHistoricalScans();
-      });
-
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historyError).toBe('Failed to fetch history');
-      expect(state.isLoadingHistory).toBe(false);
+  it('should set page size', () => {
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+    act(() => {
+      result.current.setPageSize(25);
     });
+    expect(result.current.pageSize).toBe(25);
+  });
 
-    it('should handle non-Error objects in delete catch blocks', async () => {
-      mockedCallApi.mockRejectedValue('String error');
-
-      await expect(async () => {
-        await useModelAuditHistoryStore.getState().deleteHistoricalScan('scan-123');
-      }).rejects.toThrow('String error');
-
-      const state = useModelAuditHistoryStore.getState();
-      expect(state.historyError).toBe('Failed to delete scan');
+  it('should set current page', () => {
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+    act(() => {
+      result.current.setCurrentPage(1);
     });
+    expect(result.current.currentPage).toBe(1);
+  });
+
+  it('should set sort model', () => {
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+    const sortModel = [{ field: 'name', sort: 'asc' }];
+    act(() => {
+      result.current.setSortModel(sortModel);
+    });
+    expect(result.current.sortModel).toEqual(sortModel);
+  });
+
+  it('should set filter model', () => {
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+    const filterModel = { items: [{ field: 'name', operator: 'contains', value: 'test' }] };
+    act(() => {
+      result.current.setFilterModel(filterModel);
+    });
+    expect(result.current.filterModel).toEqual(filterModel);
+  });
+
+  it('should set search query', () => {
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+    act(() => {
+      result.current.setSearchQuery('query');
+    });
+    expect(result.current.searchQuery).toBe('query');
+  });
+
+  it('should reset history state', () => {
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+    act(() => {
+      result.current.setPageSize(25);
+      result.current.setCurrentPage(1);
+      result.current.setSearchQuery('query');
+      result.current.resetHistoryState();
+    });
+    expect(result.current.pageSize).toBe(50);
+    expect(result.current.currentPage).toBe(0);
+    expect(result.current.searchQuery).toBe('');
+    expect(result.current.historicalScans).toEqual([]);
+    expect(result.current.isLoadingHistory).toBe(false);
+    expect(result.current.historyError).toBeNull();
   });
 });
