@@ -53,6 +53,34 @@ interface TestIndexRow {
   test_idx: number;
 }
 
+/**
+ * Sanitizes runtime options to ensure only JSON-serializable data is persisted.
+ * Removes non-serializable fields like AbortSignal, functions, and symbols.
+ */
+function sanitizeRuntimeOptions(
+  options?: Partial<import('../types').EvaluateOptions>,
+): Partial<import('../types').EvaluateOptions> | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  // Create a deep copy to avoid mutating the original
+  const sanitized = { ...options };
+
+  // Remove known non-serializable fields
+  delete (sanitized as any).abortSignal;
+
+  // Remove any function or symbol values
+  for (const key in sanitized) {
+    const value = (sanitized as any)[key];
+    if (typeof value === 'function' || typeof value === 'symbol') {
+      delete (sanitized as any)[key];
+    }
+  }
+
+  return sanitized;
+}
+
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
@@ -227,7 +255,7 @@ export default class Eval {
           config,
           results: {},
           vars: opts?.vars || [],
-          runtimeOptions: opts?.runtimeOptions,
+          runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
         })
         .run();
 
@@ -311,7 +339,7 @@ export default class Eval {
       author: opts?.author,
       createdAt,
       persisted: true,
-      runtimeOptions: opts?.runtimeOptions,
+      runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
     });
   }
 
@@ -370,7 +398,7 @@ export default class Eval {
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
-      runtimeOptions: this.runtimeOptions,
+      runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
     };
 
     if (this.useOldResults()) {

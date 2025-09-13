@@ -252,7 +252,7 @@ export async function doEval(
         Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
           ? (persisted.repeat as number)
           : 1;
-      cache = persisted.cache;
+      cache = persisted.cache ?? true;
       maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
       delay = (persisted.delay as number | undefined) ?? 0;
     } else {
@@ -260,13 +260,13 @@ export async function doEval(
       // CLI values explicitly provided by user should override config, but defaults should not
       const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
       repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
-      cache = cmdObj.cache ?? evaluateOptions.cache;
+      cache = cmdObj.cache ?? evaluateOptions.cache ?? true;
       maxConcurrency =
         cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
       delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
     }
 
-    if (!cache || repeat > 1) {
+    if (cache === false || repeat > 1) {
       logger.info('Cache is disabled.');
       disableCache();
     }

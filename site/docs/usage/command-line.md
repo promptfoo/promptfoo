@@ -104,6 +104,15 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
 
+### Pause and Resume
+
+```sh
+promptfoo eval --resume            # resumes the latest evaluation
+promptfoo eval --resume <evalId>   # resumes a specific evaluation
+```
+
+- On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
+
 ## `promptfoo init [directory]`
 
 Initialize a new project with dummy files.
@@ -127,19 +136,6 @@ If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory
 ## `promptfoo share [evalId]`
 
 Create a URL that can be shared online.
-
-### Pause and Resume
-
-- Press Ctrl+C once during an evaluation to pause it gracefully. In-flight requests are aborted and completed results remain saved.
-- Resume later with:
-
-  ```sh
-  promptfoo eval --resume            # resumes the latest evaluation
-  promptfoo eval --resume <evalId>   # resumes a specific evaluation
-  ```
-
-- When resuming, promptfoo reuses the effective runtime options from the original run (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`).
-- Completed test/prompt pairs are skipped; only missing work runs. To ensure correctness, some CLI overrides that change test ordering (filters, provider selection) are ignored during resume so test indices match the original run.
 
 | Option        | Description                                     |
 | ------------- | ----------------------------------------------- |
