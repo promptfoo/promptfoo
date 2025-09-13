@@ -15,48 +15,53 @@ Overall direction is strong: separation of concerns, improved discoverability, a
 
 ## Major Issues (Blockers / Must Address)
 
-1) Tests: inconsistent frameworks and expectations
-- File: `src/app/src/pages/model-audit-result/ModelAuditResult.test.tsx`
-  - Uses `jest.fn()` and `jest.spyOn()` inside a Vitest test suite (imports from `vitest`). Replace with `vi.fn()` and `vi.spyOn()` to avoid runtime errors.
-- File: `src/app/src/pages/model-audit/ModelAudit.test.tsx`
-  - Expects a preflight `callApi('/model-audit/check-path', ...)`, but the component no longer calls it. Either reintroduce preflight or update tests to reflect the current flow.
-- File: `src/app/src/pages/model-audit-history/ModelAuditHistory.test.tsx`
-  - Expects a specific error string (`Failed to fetch scans`) while the component displays a generic “Error loading scans” header with the underlying error message. Align expectations with actual UI output, or standardize error text in the component for stability.
+1. Tests: alignment with current behavior
 
-2) Result page fetch lifecycle
+- React tests are correctly using Vitest. Ensure expectations match the latest UI behavior.
+- `ModelAudit.test.tsx`: confirm tests no longer expect a preflight `check-path`; assert the success alert with history link on persisted scans.
+- `ModelAuditHistory.test.tsx`: assertions now reference the overlay header + error message; keep these stable or standardize message text in component.
+
+2. Result page fetch lifecycle
+
 - File: `src/app/src/pages/model-audit-result/ModelAuditResult.tsx`
   - Lacks `AbortController`. Navigating away mid-fetch may cause state updates on unmounted components. Add abort handling in the effect and on unmount.
 
-3) Type safety gaps
+3. Type safety gaps
+
 - File: `src/app/src/pages/model-audit-result/ModelAuditResult.tsx`
   - `results: any`. Replace with the shared `ScanResult` type. Prefer importing a generated type from Zod schemas to keep API parity.
 
-4) Server API parity & contracts
-- File: `src/server/routes/modelAudit.ts`
-  - `GET /api/model-audit/scans` does not accept pagination/sort/search parameters; UI implies large datasets. Implement `limit`, `offset`, `search`, `sort`, `order`.
-  - Missing `GET /api/model-audit/scans/latest`. Add endpoint for the latest result (200 with record, 204 when none).
-  - Response/Request validation via Zod not in place. Add Zod validation and return typed shapes consistently.
+4. Server API parity & contracts
 
-5) Route/link inconsistencies
-- Share URL generator uses `/model-audit/scan/:id` (see `src/share.ts`). Frontend uses `/model-audit/history/:id` and will add `/model-audit/:id`. Update to `/model-audit/:id` and retain redirect compatibility for legacy URLs.
+- File: `src/server/routes/modelAudit.ts`
+  - Implemented: Zod validation (requests/queries), `/scans/latest` (returns 204 when none), and query parsing for `/scans` (`limit`, `offset`, `search`, `sort`, `order`).
+  - Next: Wire UI to pass these params and consider moving filtering/sorting into DB queries to avoid fetching `limit + offset` then slicing.
+
+5. Route/link consistency
+
+- `src/share.ts` generates `/model-audit/:id` (correct). Ensure frontend routes include an alias `/model-audit/:id` in addition to `/model-audit/history/:id` so shared links resolve. Consider a redirect from `/model-audit/scan/:id` if that legacy path exists externally.
 
 ---
 
 ## High Priority
 
-6) Store/state duplication
+6. Store/state duplication
+
 - File: `src/app/src/pages/model-audit/store.ts` and `src/app/src/pages/model-audit-history/ModelAuditHistory.tsx`
   - History-related state/actions live in the monolithic store while History page manages its own fetch state. Choose one: (A) introduce `useModelAuditHistoryStore` and use it in the page, or (B) remove history from the main store. Avoid dual sources of truth.
 
-7) `/check-path` shape mismatch
-- File: `src/server/routes/modelAudit.ts`
-  - When path not found, API returns `{ exists: false, type: null }` but client code and planned schemas imply `'unknown'`. Standardize on `'unknown'` or update schema/client to accept `null`.
+7. `/check-path` shape
 
-8) Security and debug leakage
+- File: `src/server/routes/modelAudit.ts`
+  - Now returns `type: 'unknown'` when path is missing (good). Keep client types aligned.
+
+8. Security and debug leakage
+
 - File: `src/server/routes/modelAudit.ts` (`POST /scan` error and debug responses)
   - Responds with `debug` containing `args`, `paths`, `cwd`, and possibly large `stdout`/`stderr`. In production, gate debug fields behind an environment flag and censor absolute paths and secrets. Consider truncating outputs (currently first 1000 chars is used elsewhere—apply consistently).
 
-9) Navigation accessibility and mobile behavior
+9. Navigation accessibility and mobile behavior
+
 - File: `src/app/src/components/Navigation.tsx`
   - Ensure dropdown works via click (not only hover), is keyboard navigable, has proper aria attributes/roles, and closes on focus out/escape. Validate behavior in mobile breakpoints.
 
@@ -64,40 +69,48 @@ Overall direction is strong: separation of concerns, improved discoverability, a
 
 ## Medium Priority
 
-10) DataGrid UX for small screens
+10. DataGrid UX for small screens
+
 - File: `src/app/src/pages/model-audit-history/ModelAuditHistory.tsx`
   - Add responsive `columnVisibilityModel` for XS/SM (e.g., hide Checks) and set column `minWidth`s to prevent horizontal overflow.
   - Toolbar: On XS, show QuickFilter prominently; collapse utility buttons into a kebab menu.
   - Add `aria-label` to QuickFilter and ensure focus ring visibility.
 
-11) Download mechanism
+11. Download mechanism
+
 - File: `src/app/src/pages/model-audit-result/ModelAuditResult.tsx`
   - Use `Blob` + `URL.createObjectURL` instead of data URI for large payloads. Tests already mock `createObjectURL` so migration is straightforward.
 
-12) Long text handling
+12. Long text handling
+
 - Files: `ModelAuditResult.tsx`, History grid link cells
   - Add tooltips for truncated model paths and breadcrumb items to improve usability.
 
-13) ModelAudit.toJSON omissions
+13. ModelAudit.toJSON omissions
+
 - File: `src/models/modelAudit.ts`
   - `toJSON()` omits `author`, `checks`, and `issues`, which exist on the record type. If the UI or API consumers need these, include them; otherwise, document the intentional omission and ensure the UI uses `results.issues` consistently.
 
-14) SSE-based scan progress (future work)
+14. SSE-based scan progress (future work)
+
 - Add `POST /api/model-audit/scan/stream` to stream progress (`stage|progress|log|complete`). On the UI, add a stepper in Setup to show progress; fallback to `/scans/latest` polling on disconnect.
 
 ---
 
 ## Low Priority / Polish
 
-15) Styling QA (light/dark + responsive)
+15. Styling QA (light/dark + responsive)
+
 - Ensure no horizontal overflow at XS; adjust margins/paddings responsively (e.g., replace `mx: 4` with `{ xs: 0, sm: 2, md: 4 }`).
 - Confirm chip colors and row hover/selected states meet contrast in dark mode.
 - Add safe-area padding for notched devices on tall pages.
 
-16) Telemetry
+16. Telemetry
+
 - Emit events for history row clicks, CSV export, delete action, and result view to measure usage and surface regressions.
 
-17) Docs
+17. Docs
+
 - Update docs for new routes (`/model-audit/setup`, `/model-audit`, `/model-audit/:id`), DataGrid features, and Enterprise-supported storage backends (s3/gs/az, JFrog, HF via envs).
 
 ---
@@ -138,25 +151,30 @@ Overall direction is strong: separation of concerns, improved discoverability, a
 
 ## Suggested Follow-up PR Breakdown
 
-1) Tests + Types + A11y
+1. Tests + Types + A11y
+
 - Fix jest→vi in tests, align assertions, add AbortController to result page, add tooltips and aria labels.
 
-2) API Contracts
+2. API Contracts
+
 - Add Zod schemas, `/scans/latest`, extend `/scans` params, and wire UI to server-side pagination/sort/search (with debounce).
 
-3) Stores + Routes
+3. Stores + Routes
+
 - Split config vs history stores. Add `/model-audit/setup`, `/model-audit` (latest), `/model-audit/:id` alias; update breadcrumbs and nav.
 
-4) Styling QA
+4. Styling QA
+
 - Responsive DataGrid tweaks, safe-area padding, toolbar compaction on XS, chip/hover contrasts.
 
-5) Security/Debug
+5. Security/Debug
+
 - Gate debug payloads in `/scan` behind a flag; redact sensitive info; unify truncation.
 
-6) Telemetry + Docs
+6. Telemetry + Docs
+
 - Add telemetry events; update documentation and screenshots for new flows and Enterprise backends.
 
 ---
 
 If you want line-precise annotations, I can add review comments directly in a code review tool or provide patch suggestions for any of the items above.
-
