@@ -2,23 +2,29 @@ import fs from 'fs';
 import { Readable, Writable } from 'stream';
 import type { ChildProcess } from 'child_process';
 
-// First, create the mock that will be used
-const mockExecFileAsync = jest.fn();
+// Mock util before any imports that use it - define the mock inline
+jest.mock('util', () => {
+  const actualUtil = jest.requireActual('util');
+  const mockExecFile = jest.fn();
 
-// Mock util before any imports that use it
-jest.mock('util', () => ({
-  ...jest.requireActual('util'),
-  promisify: jest.fn((fn) => {
-    if (fn && fn.name === 'execFile') {
-      return mockExecFileAsync;
-    }
-    return jest.requireActual('util').promisify(fn);
-  }),
-}));
+  return {
+    ...actualUtil,
+    promisify: jest.fn((fn) => {
+      if (fn && fn.name === 'execFile') {
+        return mockExecFile;
+      }
+      return actualUtil.promisify(fn);
+    }),
+    __mockExecFileAsync: mockExecFile, // Export for test access
+  };
+});
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import * as pythonUtils from '../../src/python/pythonUtils';
+
+// Get reference to the mock after imports
+const mockExecFileAsync = (require('util') as any).__mockExecFileAsync;
 
 // Mock setup
 jest.mock('fs', () => ({
