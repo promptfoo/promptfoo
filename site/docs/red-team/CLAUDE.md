@@ -16,6 +16,7 @@ This file provides guidance for writing and maintaining documentation in the sit
 - Remove substantially redundant criteria across pages
 - Keep examples focused and actionable
 - Use precise, technical language without unnecessary elaboration
+- Avoid bullshit words like "sophisticated" and "crucial"
 
 ### Content Organization
 

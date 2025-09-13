@@ -1,6 +1,6 @@
 import { SingleBar } from 'cli-progress';
 import logger from '../../../src/logger';
-import { addImageToBase64 } from '../../../src/redteam/strategies/simpleImage';
+import { addImageToBase64Basic as addImageToBase64 } from '../../../src/redteam/strategies/imageBasic';
 
 import type { TestCase } from '../../../src/types';
 
@@ -178,7 +178,7 @@ describe('Image strategy', () => {
       const result = await addImageToBase64([testCaseWithoutMetadata], 'prompt');
 
       expect(result[0].metadata).toEqual({
-        strategyId: 'image',
+        strategyId: 'image:basic',
         originalText: 'No metadata',
       });
     });
@@ -199,7 +199,7 @@ describe('Image strategy', () => {
       expect(result[0].metadata).toEqual({
         source: 'test',
         category: 'image-test',
-        strategyId: 'image',
+        strategyId: 'image:basic',
         originalText: 'With metadata',
       });
     });
