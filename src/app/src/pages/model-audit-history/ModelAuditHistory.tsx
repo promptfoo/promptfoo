@@ -1,0 +1,489 @@
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+
+import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import Link from '@mui/material/Link';
+import Paper from '@mui/material/Paper';
+import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
+import {
+  DataGrid,
+  type GridCellParams,
+  type GridColDef,
+  GridCsvExportMenuItem,
+  type GridRenderCellParams,
+  type GridRowSelectionModel,
+  GridToolbarColumnsButton,
+  GridToolbarContainer,
+  GridToolbarDensitySelector,
+  GridToolbarExportContainer,
+  GridToolbarFilterButton,
+  GridToolbarQuickFilter,
+  type GridToolbarQuickFilterProps,
+} from '@mui/x-data-grid';
+import { useLocation } from 'react-router-dom';
+
+type ModelAuditScan = {
+  id: string;
+  name: string | null;
+  author: string | null;
+  modelPath: string;
+  createdAt: number;
+  hasErrors: boolean;
+  totalChecks: number | null;
+  passedChecks: number | null;
+  failedChecks: number | null;
+  results: {
+    issues?: Array<{
+      severity: 'critical' | 'error' | 'warning' | 'info' | 'debug';
+      message: string;
+    }>;
+  };
+};
+
+// augment the props for the toolbar slot
+declare module '@mui/x-data-grid' {
+  interface ToolbarPropsOverrides {
+    showUtilityButtons: boolean;
+    focusQuickFilterOnMount: boolean;
+  }
+}
+
+const GridToolbarExport = () => (
+  <GridToolbarExportContainer>
+    <GridCsvExportMenuItem />
+  </GridToolbarExportContainer>
+);
+
+const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((props, ref) => {
+  const theme = useTheme();
+  return (
+    <GridToolbarQuickFilter
+      {...props}
+      inputRef={ref}
+      sx={{
+        '& .MuiInputBase-root': {
+          borderRadius: 2,
+          backgroundColor: theme.palette.background.paper,
+        },
+      }}
+    />
+  );
+});
+
+QuickFilter.displayName = 'QuickFilter';
+
+function CustomToolbar({
+  showUtilityButtons,
+  focusQuickFilterOnMount,
+}: {
+  showUtilityButtons: boolean;
+  focusQuickFilterOnMount: boolean;
+}) {
+  const theme = useTheme();
+  const quickFilterRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (focusQuickFilterOnMount && quickFilterRef.current) {
+      quickFilterRef.current.focus();
+    }
+  }, [focusQuickFilterOnMount]);
+
+  return (
+    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
+      {showUtilityButtons && (
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <GridToolbarColumnsButton />
+          <GridToolbarFilterButton />
+          <GridToolbarDensitySelector />
+          <GridToolbarExport />
+        </Box>
+      )}
+      <Box sx={{ flexGrow: 1 }} />
+      <QuickFilter ref={quickFilterRef} />
+    </GridToolbarContainer>
+  );
+}
+
+/**
+ * Displays a list of model audit scans.
+ *
+ * @param onScanSelected - Callback to handle when a scan is selected (via clicking on its id cell).
+ * @param focusedScanId - An optional ID of the scan to focus when the grid loads.
+ * @param showUtilityButtons - Whether to show utility buttons in the toolbar.
+ * @param focusQuickFilterOnMount - Whether to focus the quick filter on mount.
+ */
+export default function ModelAuditHistory({
+  onScanSelected,
+  focusedScanId,
+  showUtilityButtons = false,
+  focusQuickFilterOnMount = false,
+}: {
+  onScanSelected?: (scanId: string) => void;
+  focusedScanId?: string;
+  showUtilityButtons?: boolean;
+  focusQuickFilterOnMount?: boolean;
+}) {
+  const [scans, setScans] = useState<ModelAuditScan[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
+    focusedScanId ? [focusedScanId] : [],
+  );
+
+  /**
+   * Fetch scans from the API.
+   */
+  const fetchScans = async (signal: AbortSignal) => {
+    try {
+      setIsLoading(true);
+      const response = await callApi('/model-audit/scans', { cache: 'no-store', signal });
+      if (!response.ok) {
+        throw new Error('Failed to fetch model audit scans');
+      }
+      const body = (await response.json()) as { scans: ModelAuditScan[] };
+      setScans(body.scans);
+      setError(null);
+    } catch (error) {
+      // Don't set error state if the request was aborted
+      if ((error as Error).name !== 'AbortError') {
+        setError(error as Error);
+      }
+    } finally {
+      // Don't set loading to false if the request was aborted
+      if (signal && !signal.aborted) {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  // Use React Router's location to detect navigation
+  const location = useLocation();
+
+  useEffect(() => {
+    // Create AbortController for this fetch
+    const abortController = new AbortController();
+
+    // Fetch scans whenever we navigate to this page
+    fetchScans(abortController.signal);
+
+    // Cleanup: abort any in-flight request when location changes or component unmounts
+    return () => {
+      abortController.abort();
+    };
+  }, [location.pathname, location.search]); // Refetch when the pathname or query params change
+
+  /**
+   * Construct dataset rows:
+   * 1. Filter out the focused scan from the list.
+   */
+  const rows = useMemo(() => {
+    let rows_ = scans;
+
+    if (focusedScanId && rows_.length > 0) {
+      // Filter out the focused scan from the list
+      rows_ = rows_.filter(({ id }: ModelAuditScan) => id !== focusedScanId);
+    }
+
+    return rows_;
+  }, [scans, focusedScanId]);
+
+  const handleCellClick = (params: GridCellParams<ModelAuditScan>) => {
+    if (onScanSelected) {
+      onScanSelected(params.row.id);
+    }
+  };
+
+  const getSeverityColor = (hasErrors: boolean) => {
+    return hasErrors ? 'error' : 'success';
+  };
+
+  const columns: GridColDef<ModelAuditScan>[] = useMemo(
+    () => [
+      {
+        field: 'id',
+        headerName: 'ID',
+        flex: 0.5,
+        minWidth: 120,
+        renderCell: (params: GridRenderCellParams<ModelAuditScan>) =>
+          params.row.id === focusedScanId ? (
+            params.row.id
+          ) : (
+            <Link
+              href={`/model-audit/history/${params.row.id}`}
+              /**
+               * Prevent the default behavior of the link, which is to navigate to the href.
+               * Instead, we want to call the onScanSelected callback which may or may not navigate.
+               */
+              onClick={(e) => {
+                e.preventDefault();
+                if (onScanSelected) {
+                  onScanSelected(params.row.id);
+                }
+                return false;
+              }}
+            >
+              {params.row.id}
+            </Link>
+          ),
+      },
+      {
+        field: 'createdAt',
+        headerName: 'Created',
+        flex: 0.9,
+        valueGetter: (value: ModelAuditScan['createdAt'], row: ModelAuditScan) => {
+          return new Date(value);
+        },
+        valueFormatter: (value: ModelAuditScan['createdAt']) => formatDataGridDate(value),
+      },
+      {
+        field: 'name',
+        headerName: 'Name',
+        flex: 1.5,
+        valueGetter: (value: ModelAuditScan['name'], row: ModelAuditScan) =>
+          value ?? `Scan ${row.id.slice(-8)}`,
+      },
+      {
+        field: 'modelPath',
+        headerName: 'Model Path',
+        flex: 2,
+        renderCell: (params: GridRenderCellParams<ModelAuditScan>) => (
+          <Typography variant="body2" noWrap sx={{ maxWidth: '100%' }} title={params.value}>
+            {params.value}
+          </Typography>
+        ),
+      },
+      {
+        field: 'status',
+        headerName: 'Status',
+        flex: 0.7,
+        renderCell: (params: GridRenderCellParams<ModelAuditScan>) => (
+          <Chip
+            label={params.row.hasErrors ? 'Issues Found' : 'Clean'}
+            color={getSeverityColor(params.row.hasErrors)}
+            size="small"
+            variant="filled"
+            sx={{
+              fontWeight: 500,
+              minWidth: 90,
+            }}
+          />
+        ),
+      },
+      {
+        field: 'issues',
+        headerName: 'Issues Found',
+        flex: 1,
+        renderCell: (params: GridRenderCellParams<ModelAuditScan>) => {
+          const issues = params.row.results?.issues;
+          if (!issues || issues.length === 0) {
+            return (
+              <Typography variant="body2" color="text.secondary">
+                None
+              </Typography>
+            );
+          }
+
+          const criticalCount = issues.filter((i) => i.severity === 'critical').length;
+          const errorCount = issues.filter((i) => i.severity === 'error').length;
+          const warningCount = issues.filter((i) => i.severity === 'warning').length;
+
+          return (
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+              {criticalCount > 0 && (
+                <Chip
+                  label={`${criticalCount} Critical`}
+                  color="error"
+                  size="small"
+                  variant="filled"
+                  sx={{ fontSize: '0.75rem', height: 22 }}
+                />
+              )}
+              {errorCount > 0 && (
+                <Chip
+                  label={`${errorCount} Error${errorCount > 1 ? 's' : ''}`}
+                  color="error"
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontSize: '0.75rem', height: 22 }}
+                />
+              )}
+              {warningCount > 0 && (
+                <Chip
+                  label={`${warningCount} Warning${warningCount > 1 ? 's' : ''}`}
+                  color="warning"
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontSize: '0.75rem', height: 22 }}
+                />
+              )}
+            </Box>
+          );
+        },
+      },
+      {
+        field: 'checks',
+        headerName: 'Checks',
+        flex: 0.7,
+        renderCell: (params: GridRenderCellParams<ModelAuditScan>) => {
+          if (params.row.totalChecks === null || params.row.totalChecks === undefined) {
+            return (
+              <Typography variant="body2" color="text.secondary">
+                -
+              </Typography>
+            );
+          }
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography variant="body2" color="success.main">
+                {params.row.passedChecks || 0}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                /
+              </Typography>
+              <Typography variant="body2">{params.row.totalChecks}</Typography>
+            </Box>
+          );
+        },
+      },
+    ],
+    [focusedScanId, onScanSelected],
+  );
+
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        bgcolor: (theme) =>
+          theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[50],
+        py: 4,
+      }}
+    >
+      <Paper elevation={2} sx={{ height: '100%', mx: 4 }}>
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          loading={isLoading}
+          getRowId={(row) => row.id}
+          slots={{
+            toolbar: CustomToolbar,
+            loadingOverlay: () => (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  gap: 2,
+                }}
+              >
+                <CircularProgress />
+                <Typography variant="body2" color="text.secondary">
+                  Loading model audit scans...
+                </Typography>
+              </Box>
+            ),
+            noRowsOverlay: () => (
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  color: 'text.secondary',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  p: 3,
+                }}
+              >
+                {error ? (
+                  <>
+                    <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
+                    <Typography variant="h6" gutterBottom color="error">
+                      Error loading scans
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {error.message}
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
+                    <Typography variant="h6" gutterBottom>
+                      No scans found
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Run your first model audit scan to see it appear here
+                    </Typography>
+                  </>
+                )}
+              </Box>
+            ),
+          }}
+          slotProps={{
+            toolbar: {
+              showUtilityButtons,
+              focusQuickFilterOnMount,
+            },
+          }}
+          onCellClick={(params) => {
+            if (params.id !== focusedScanId) {
+              handleCellClick(params);
+            }
+          }}
+          getRowClassName={(params) => (params.id === focusedScanId ? 'focused-row' : '')}
+          sx={{
+            border: 'none',
+            '& .MuiDataGrid-row': {
+              cursor: 'pointer',
+              transition: 'background-color 0.2s ease',
+              '&:hover': {
+                backgroundColor: 'action.hover',
+              },
+            },
+            '& .MuiDataGrid-row--disabled': {
+              cursor: 'default',
+              opacity: 0.7,
+              pointerEvents: 'none',
+            },
+            '& .focused-row': {
+              backgroundColor: 'action.selected',
+              cursor: 'default',
+              '&:hover': {
+                backgroundColor: 'action.selected',
+              },
+            },
+            '& .MuiDataGrid-cell': {
+              borderColor: 'divider',
+            },
+            '& .MuiDataGrid-columnHeaders': {
+              backgroundColor: 'background.default',
+              borderColor: 'divider',
+            },
+            '& .MuiDataGrid-selectedRow': {
+              backgroundColor: 'action.selected',
+            },
+            '--DataGrid-overlayHeight': '300px',
+          }}
+          onRowSelectionModelChange={setRowSelectionModel}
+          rowSelectionModel={rowSelectionModel}
+          initialState={{
+            sorting: {
+              sortModel: [{ field: 'createdAt', sort: 'desc' }],
+            },
+            pagination: {
+              paginationModel: { pageSize: 50 },
+            },
+          }}
+          pageSizeOptions={[10, 25, 50, 100]}
+          isRowSelectable={(params) => params.id !== focusedScanId}
+        />
+      </Paper>
+    </Box>
+  );
+}

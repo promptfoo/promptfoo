@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 
 import { callApi } from '@app/utils/api';
 import {
@@ -9,6 +10,7 @@ import {
 import {
   Alert,
   Box,
+  Button,
   CircularProgress,
   Container,
   Fade,
@@ -23,7 +25,6 @@ import {
 } from '@mui/material';
 import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
 import ConfigurationTab from './components/ConfigurationTab';
-import HistoryTab from './components/HistoryTab';
 import ResultsTab from './components/ResultsTab';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
 import { useModelAuditStore } from './store';
@@ -55,7 +56,6 @@ export default function ModelAudit() {
     setShowFilesDialog,
     setShowOptionsDialog,
     addRecentScan,
-    fetchHistoricalScans,
   } = useModelAuditStore();
 
   useEffect(() => {
@@ -91,9 +91,9 @@ export default function ModelAudit() {
       setActiveTab(1); // Switch to Results tab
       addRecentScan(paths); // Add to recent scans
 
-      // Refresh history to include the new scan if it was persisted
-      if (data.persisted) {
-        fetchHistoricalScans();
+      // If scan was persisted, user can view it in history
+      if (data.persisted && data.auditId) {
+        console.log(`Scan saved to history with ID: ${data.auditId}`);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
@@ -171,8 +171,11 @@ export default function ModelAudit() {
           <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
             <Tab label="Configuration" />
             <Tab label="Results" disabled={!scanResults} />
-            <Tab label="History" />
           </Tabs>
+
+          <Button component={RouterLink} to="/model-audit/history" variant="outlined" sx={{ mt: 2 }}>
+            View Scan History
+          </Button>
 
           {error && (
             <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
@@ -203,17 +206,28 @@ export default function ModelAudit() {
             <Fade in={activeTab === 1} unmountOnExit>
               <Box>
                 {scanResults && (
-                  <ResultsTab
-                    scanResults={scanResults}
-                    onShowFilesDialog={() => setShowFilesDialog(true)}
-                  />
+                  <>
+                    {/* Success message with history link */}
+                    {scanResults.persisted && scanResults.auditId && (
+                      <Alert severity="success" sx={{ mb: 3 }}>
+                        <Box>
+                          Scan completed and saved to history!{' '}
+                          <Link
+                            component={RouterLink}
+                            to={`/model-audit/history/${scanResults.auditId}`}
+                            sx={{ fontWeight: 'medium' }}
+                          >
+                            View in History
+                          </Link>
+                        </Box>
+                      </Alert>
+                    )}
+                    <ResultsTab
+                      scanResults={scanResults}
+                      onShowFilesDialog={() => setShowFilesDialog(true)}
+                    />
+                  </>
                 )}
-              </Box>
-            </Fade>
-
-            <Fade in={activeTab === 2} unmountOnExit>
-              <Box>
-                <HistoryTab />
               </Box>
             </Fade>
           </Box>
