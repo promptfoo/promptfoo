@@ -194,10 +194,6 @@ export const CustomPoliciesSection = () => {
       setGeneratedTestCase({
         prompt: data.prompt || '',
         context: data.context || policy.policy,
-        metadata: {
-          policy: policy.policy,
-          policyName: policy.name,
-        },
       });
     } catch (error) {
       console.error('Error generating test case:', error);
