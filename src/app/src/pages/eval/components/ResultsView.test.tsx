@@ -5,6 +5,7 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EvaluateTableRow } from './types';
 import ResultsView from './ResultsView';
 
 // Mock data
@@ -129,8 +130,9 @@ let mockResultsViewSettingsStoreData = {
   setStickyHeader: vi.fn(),
   inComparisonMode: false,
   setInComparisonMode: vi.fn(),
-  columnStates: { '1': mockColumnState },
+  globalColumnSettings: mockColumnState,
   setColumnState: vi.fn(),
+  getColumnState: vi.fn(() => mockColumnState),
   maxTextLength: 100,
   wordBreak: 'break-word',
   showInferenceDetails: true,
@@ -243,8 +245,9 @@ describe('ResultsView', () => {
       setStickyHeader: vi.fn(),
       inComparisonMode: false,
       setInComparisonMode: vi.fn(),
-      columnStates: { '1': mockColumnState },
+      globalColumnSettings: mockColumnState,
       setColumnState: vi.fn(),
+      getColumnState: vi.fn(() => mockColumnState),
       maxTextLength: 100,
       wordBreak: 'break-word',
       showInferenceDetails: true,
@@ -252,6 +255,46 @@ describe('ResultsView', () => {
       setComparisonEvalIds: vi.fn(),
       renderMarkdown: true,
     };
+  });
+
+  // [Tusk] Updated test to match current implementation
+  it('ResultsView should default to all columns visible and selected if neither a specific column state nor last used column settings exist for the current evaluation', () => {
+    // Update the existing mock objects directly instead of reassigning
+    mockTableStoreData.table = {
+      head: {
+        prompts: [{ provider: 'test-provider' }],
+        vars: ['Variable 1'],
+      },
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'test output' }],
+          test: {},
+          vars: ['test var'],
+          description: 'Test description',
+          testIdx: 0,
+        } as EvaluateTableRow,
+      ],
+    };
+
+    // When getColumnState returns null, the component will use default values
+    mockResultsViewSettingsStoreData.getColumnState = vi.fn(() => null) as any;
+    mockResultsViewSettingsStoreData.setColumnState = vi.fn();
+
+    renderWithProviders(
+      <ResultsView recentEvals={mockRecentEvals} onRecentEvalSelected={mockOnRecentEvalSelected} />,
+    );
+
+    // The component should render with all columns visible by default
+    // Since column state is now global and only saved on user interaction,
+    // we should verify that the column headers are rendered
+
+    // Check that Variable 1 header is visible
+    expect(screen.getByText('Variable 1')).toBeInTheDocument();
+
+    // Check that the prompt provider is visible (prompts show provider, not "Prompt 1")
+    expect(screen.getByText('test-provider')).toBeInTheDocument();
+
+    // Verify the component rendered successfully without requiring setColumnState to be called
   });
 
   it('renders ResultsCharts when table, config, and more than one prompt are present and viewport height is at least 1100px', () => {
@@ -438,12 +481,14 @@ describe('ResultsView', () => {
     };
     mockResultsViewSettingsStoreData = {
       ...mockResultsViewSettingsStoreData,
-      columnStates: {
-        '1': {
-          selectedColumns: ['Variable 1'],
-          columnVisibility: { 'Variable 1': true, 'Prompt 1': false },
-        },
+      globalColumnSettings: {
+        selectedColumns: ['Variable 1'],
+        columnVisibility: { 'Variable 1': true, 'Prompt 1': false },
       },
+      getColumnState: vi.fn(() => ({
+        selectedColumns: ['Variable 1'],
+        columnVisibility: { 'Variable 1': true, 'Prompt 1': false },
+      })),
     };
 
     vi.mock('./store', () => ({
@@ -513,6 +558,7 @@ describe('ResultsView', () => {
     mockResultsViewSettingsStoreData = {
       ...mockResultsViewSettingsStoreData,
       renderMarkdown: true,
+      getColumnState: vi.fn(() => mockColumnState),
     };
 
     renderWithProviders(
