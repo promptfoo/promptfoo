@@ -27,7 +27,7 @@ import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
 import ConfigurationTab from './components/ConfigurationTab';
 import ResultsTab from './components/ResultsTab';
 import ScannedFilesDialog from './components/ScannedFilesDialog';
-import { useModelAuditStore } from './store';
+import { useModelAuditConfigStore } from './stores';
 
 import type { ScanResult } from './ModelAudit.types';
 
@@ -56,13 +56,13 @@ export default function ModelAudit() {
     setShowFilesDialog,
     setShowOptionsDialog,
     addRecentScan,
-  } = useModelAuditStore();
+  } = useModelAuditConfigStore();
 
   useEffect(() => {
-    useModelAuditStore.persist.rehydrate();
+    useModelAuditConfigStore.persist.rehydrate();
     // Check installation status immediately after rehydration
     checkInstallation();
-  }, []); // Remove checkInstallation dependency to avoid potential issues
+  }, [checkInstallation]);
 
   const handleScan = async () => {
     setIsScanning(true);
