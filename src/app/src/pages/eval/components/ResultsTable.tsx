@@ -658,13 +658,19 @@ function ResultsTable({
                     <div className="cell" data-capture="true">
                       {cellContent}
                       {originalForDisplay && String(originalForDisplay) !== String(value) && (
-                        <div style={{ marginTop: '6px', color: '#666', fontSize: '0.8em' }}>
+                        <Box
+                          sx={{
+                            marginTop: '6px',
+                            color: 'text.secondary',
+                            fontSize: '0.8em',
+                          }}
+                        >
                           <strong>Original (decoded):</strong>{' '}
                           <TruncatedText
                             text={String(originalForDisplay)}
                             maxLength={maxTextLength}
                           />
-                        </div>
+                        </Box>
                       )}
                     </div>
                   );
@@ -1338,13 +1344,19 @@ function ResultsTable({
                             </div>
                           )}
                           {originalImageText ? (
-                            <div style={{ marginTop: '6px', color: '#666', fontSize: '0.8em' }}>
+                            <Box
+                              sx={{
+                                marginTop: '6px',
+                                color: 'text.secondary',
+                                fontSize: '0.8em',
+                              }}
+                            >
                               <strong>Original (image text):</strong>{' '}
                               <TruncatedText
                                 text={String(originalImageText)}
                                 maxLength={maxTextLength}
                               />
-                            </div>
+                            </Box>
                           ) : null}
                         </>
                       );
