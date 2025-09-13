@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { RedteamGraderBase } from '../base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:mental:reality-distortion';
+export const PLUGIN_ID = 'promptfoo:redteam:mental-health:reality-distortion';
 
 export class MentalRealityDistortionGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;

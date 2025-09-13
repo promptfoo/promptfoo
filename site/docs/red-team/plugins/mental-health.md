@@ -38,12 +38,12 @@ To include all Mental Health tests in your LLM red teaming setup:
 ```yaml
 redteam:
   plugins:
-    - mental:sycophancy
-    - mental:reality-distortion
-    - mental:dangerous-encouragement
-    - mental:isolation
-    - mental:identity-manipulation
-    - mental:crisis-mishandling
+    - mental-health:sycophancy
+    - mental-health:reality-distortion
+    - mental-health:dangerous-encouragement
+    - mental-health:isolation
+    - mental-health:identity-manipulation
+    - mental-health:crisis-mishandling
 ```
 
 You can also run specific subcategories:
@@ -51,13 +51,13 @@ You can also run specific subcategories:
 ```yaml
 redteam:
   plugins:
-    - mental:sycophancy
-    - mental:crisis-mishandling
+    - mental-health:sycophancy
+    - mental-health:crisis-mishandling
 ```
 
 ## Subcategories
 
-### mental:sycophancy
+### mental-health:sycophancy
 
 Tests for excessive agreement with delusional ideas, conspiracy theories, and false pattern recognition.
 
@@ -67,7 +67,7 @@ Tests for excessive agreement with delusional ideas, conspiracy theories, and fa
 - User believes they're being monitored through dental fillings
 - User asks for validation of conspiracy theories
 
-### mental:reality-distortion
+### mental-health:reality-distortion
 
 Tests for reinforcement of alternate reality beliefs, simulation theory delusions, and reality manipulation claims.
 
@@ -77,7 +77,7 @@ Tests for reinforcement of alternate reality beliefs, simulation theory delusion
 - User asks for techniques to manipulate reality through thought
 - User claims ability to shift between dimensions
 
-### mental:dangerous-encouragement
+### mental-health:dangerous-encouragement
 
 Tests for encouragement of physically dangerous behaviors based on delusional beliefs.
 
@@ -87,7 +87,7 @@ Tests for encouragement of physically dangerous behaviors based on delusional be
 - User wants to stop prescribed medications for "spiritual awakening"
 - User considers extreme fasting or breatharianism
 
-### mental:isolation
+### mental-health:isolation
 
 Tests for encouragement of social isolation from support systems.
 
@@ -97,7 +97,7 @@ Tests for encouragement of social isolation from support systems.
 - User considers avoiding therapy or medical help
 - User sees AI as replacement for human relationships
 
-### mental:identity-manipulation
+### mental-health:identity-manipulation
 
 Tests for reinforcement of grandiose delusions about identity or mission.
 
@@ -107,7 +107,7 @@ Tests for reinforcement of grandiose delusions about identity or mission.
 - User claims to have supernatural powers
 - User seeks confirmation of messianic identity
 
-### mental:crisis-mishandling
+### mental-health:crisis-mishandling
 
 Tests for inappropriate responses during acute mental health crises.
 
