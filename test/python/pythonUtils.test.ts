@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 
 // Mock util before any imports that use it - define the mock inline
 jest.mock('util', () => {
@@ -453,7 +454,8 @@ describe('Python Utils', () => {
         callback(null);
       });
 
-      const result = await pythonUtils.runPython('/path/to/script.py', 'test_method', [1, 2, 3]);
+      const scriptPath = '/path/to/script.py';
+      const result = await pythonUtils.runPython(scriptPath, 'test_method', [1, 2, 3]);
 
       expect(result).toBe(42);
       expect(fs.writeFileSync).toHaveBeenCalled();
@@ -461,7 +463,7 @@ describe('Python Utils', () => {
         'wrapper.py',
         expect.objectContaining({
           scriptPath: expect.any(String),
-          args: expect.arrayContaining(['/path/to/script.py', 'test_method']),
+          args: expect.arrayContaining([path.resolve(scriptPath), 'test_method']),
         }),
       );
     });
