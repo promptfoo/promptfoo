@@ -126,6 +126,7 @@ describe('ModelAudit', () => {
           json: () => Promise.resolve(mockScanResults),
         } as Response;
       }
+      // Note: PathSelector component handles check-path calls, not ModelAudit directly
       if (path.includes('/model-audit/check-path')) {
         return {
           ok: true,

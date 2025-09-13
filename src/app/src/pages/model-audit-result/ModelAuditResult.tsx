@@ -93,10 +93,13 @@ export default function ModelAuditResult() {
       return;
     }
 
+    const deleteController = new AbortController();
     setIsDeleting(true);
+
     try {
       const response = await callApi(`/model-audit/scans/${id}`, {
         method: 'DELETE',
+        signal: deleteController.signal,
       });
 
       if (!response.ok) {
@@ -106,9 +109,15 @@ export default function ModelAuditResult() {
       // Navigate back to history page after successful deletion
       navigate('/model-audit/history');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete scan');
+      // Don't set error state if the request was aborted (e.g., user navigated away)
+      if ((err as Error).name !== 'AbortError') {
+        setError(err instanceof Error ? err.message : 'Failed to delete scan');
+      }
     } finally {
-      setIsDeleting(false);
+      // Don't set loading state if the request was aborted
+      if (!deleteController.signal.aborted) {
+        setIsDeleting(false);
+      }
     }
   };
 

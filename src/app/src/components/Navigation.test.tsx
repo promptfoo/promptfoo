@@ -64,49 +64,40 @@ describe('Navigation', () => {
     modelAuditLink = screen.getByText('Model Audit', { selector: 'a' });
     expect(modelAuditLink).toHaveClass('active');
 
-    // Test /model-audit/setup path (should NOT be active)
+    // Test /model-audit/setup path (should NOT be active for the top-level NavLink)
     rerender(
       <MemoryRouter initialEntries={['/model-audit/setup']}>
         <Navigation darkMode={false} onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
-    modelAuditLink = screen.getByText('Model Audit', { selector: 'a' });
-    // TODO: There's a bug in Navigation.tsx - setup paths shouldn't activate Model Audit NavLink
-    // For now, document current (incorrect) behavior
-    const hasActiveClass = modelAuditLink.className.includes('active');
-    if (hasActiveClass) {
-      console.log('WARNING: NavLink is active on setup path (this is a bug)');
-    }
-    // Skip assertion for now: expect(modelAuditLink).not.toHaveClass('active');
+    // The issue was using a broad selector that found the dropdown item instead of the NavLink
+    // The dropdown item /model-audit/setup would show as active, but the NavLink should not
+    const allLinks = screen.getAllByText('Model Audit', { selector: 'a' });
+    const topLevelNavLink = allLinks.find(link => link.getAttribute('href') === '/model-audit');
+    expect(topLevelNavLink).toBeDefined();
+    expect(topLevelNavLink).not.toHaveClass('active');
 
-    // Test /model-audit/history path (should NOT be active)
+    // Test /model-audit/history path (should NOT be active for the top-level NavLink)
     rerender(
       <MemoryRouter initialEntries={['/model-audit/history']}>
         <Navigation darkMode={false} onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
-    modelAuditLink = screen.getByText('Model Audit', { selector: 'a' });
-    // TODO: Navigation bug - this should not be active but currently is
-    // expect(modelAuditLink).not.toHaveClass('active');
+    const allLinksHistory = screen.getAllByText('Model Audit', { selector: 'a' });
+    const topLevelNavLinkHistory = allLinksHistory.find(link => link.getAttribute('href') === '/model-audit');
+    expect(topLevelNavLinkHistory).toBeDefined();
+    expect(topLevelNavLinkHistory).not.toHaveClass('active');
 
-    // Test /model-audit/history/123 path
-    // Note: According to task.md restructure, this will eventually become /model-audit/:id
-    // For now, we test the current implementation behavior
+    // Test /model-audit/history/123 path (should NOT be active - this is for viewing specific scans)
     rerender(
       <MemoryRouter initialEntries={['/model-audit/history/123']}>
         <Navigation darkMode={false} onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
-    modelAuditLink = screen.getByText('Model Audit', { selector: 'a' });
-    // There might be a bug in the current NavLink implementation
-    // For now, let's document what's happening and accept the current behavior
-    const hasActiveClass2 = modelAuditLink.className.includes('active');
-    if (hasActiveClass2) {
-      console.log('WARNING: NavLink for /model-audit/history/123 unexpectedly has active class');
-      // TODO: Fix NavLink logic in Navigation.tsx for history paths
-    }
-    // Skip this assertion for now since there seems to be a navigation bug
-    // expect(modelAuditLink).not.toHaveClass('active');
+    const allLinksHistoryId = screen.getAllByText('Model Audit', { selector: 'a' });
+    const topLevelNavLinkHistoryId = allLinksHistoryId.find(link => link.getAttribute('href') === '/model-audit');
+    expect(topLevelNavLinkHistoryId).toBeDefined();
+    expect(topLevelNavLinkHistoryId).not.toHaveClass('active');
   });
 
   describe('Create Dropdown', () => {
@@ -225,8 +216,11 @@ describe('Navigation', () => {
         </MemoryRouter>,
       );
 
-      const modelAuditLink = screen.getByText('Model Audit', { selector: 'a' });
-      expect(modelAuditLink).toHaveClass('active');
+      // Find the top-level Model Audit NavLink (not the dropdown item)
+      const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
+      const topLevelModelAuditLink = allModelAuditLinks.find(link => link.getAttribute('href') === '/model-audit');
+      expect(topLevelModelAuditLink).toBeDefined();
+      expect(topLevelModelAuditLink).toHaveClass('active');
     });
 
     it('activates Model Audit NavLink on /model-audit/:id path', () => {
@@ -236,8 +230,10 @@ describe('Navigation', () => {
         </MemoryRouter>,
       );
 
-      const modelAuditLink = screen.getByText('Model Audit', { selector: 'a' });
-      expect(modelAuditLink).toHaveClass('active');
+      const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
+      const topLevelModelAuditLink = allModelAuditLinks.find(link => link.getAttribute('href') === '/model-audit');
+      expect(topLevelModelAuditLink).toBeDefined();
+      expect(topLevelModelAuditLink).toHaveClass('active');
     });
 
     it('does not activate Model Audit NavLink on setup or history paths', () => {
@@ -247,8 +243,10 @@ describe('Navigation', () => {
         </MemoryRouter>,
       );
 
-      let modelAuditLink = screen.getByText('Model Audit', { selector: 'a' });
-      expect(modelAuditLink).not.toHaveClass('active');
+      let allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
+      let topLevelModelAuditLink = allModelAuditLinks.find(link => link.getAttribute('href') === '/model-audit');
+      expect(topLevelModelAuditLink).toBeDefined();
+      expect(topLevelModelAuditLink).not.toHaveClass('active');
 
       rerender(
         <MemoryRouter initialEntries={['/model-audit/history']}>
@@ -256,8 +254,10 @@ describe('Navigation', () => {
         </MemoryRouter>,
       );
 
-      modelAuditLink = screen.getByText('Model Audit', { selector: 'a' });
-      expect(modelAuditLink).not.toHaveClass('active');
+      allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
+      topLevelModelAuditLink = allModelAuditLinks.find(link => link.getAttribute('href') === '/model-audit');
+      expect(topLevelModelAuditLink).toBeDefined();
+      expect(topLevelModelAuditLink).not.toHaveClass('active');
     });
   });
 
