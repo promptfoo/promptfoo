@@ -29,7 +29,7 @@ describe('ESM utilities', () => {
       });
       expect(result.testFunction()).toBe('js default test result');
       expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Successfully required module'),
+        expect.stringContaining('Successfully imported module'),
       );
     });
 
@@ -108,10 +108,7 @@ describe('ESM utilities', () => {
       const nonExistentPath = path.resolve(__dirname, '__fixtures__/nonExistent.js');
 
       await expect(importModule(nonExistentPath)).rejects.toThrow();
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('CommonJS require also failed'),
-      );
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
     });
 
     it('logs debug information during import process', async () => {
@@ -127,7 +124,7 @@ describe('ESM utilities', () => {
       );
     });
 
-    it('falls back to CommonJS when ESM import fails', async () => {
+    it('imports CommonJS files via ESM import', async () => {
       const modulePath = path.resolve(__dirname, '__fixtures__/testModule.cjs');
 
       const result = await importModule(modulePath);
@@ -135,10 +132,9 @@ describe('ESM utilities', () => {
         testFunction: expect.any(Function),
       });
 
-      // Should try ESM first, then fall back to CommonJS
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('ESM import failed'));
+      // Should succeed with ESM import (no fallback needed in ESM-only mode)
       expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Successfully required module'),
+        expect.stringContaining('Successfully imported module'),
       );
     });
 
