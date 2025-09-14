@@ -284,34 +284,6 @@ redteam:
           substituteChars: false
 ```
 
-## Technical Details
-
-### Character Substitution
-
-The strategy uses homoglyphs - characters that look identical but have different Unicode codepoints:
-
-- `A` (U+0041) → `Α` (U+0391, Greek) or `А` (U+0410, Cyrillic)
-- `O` (U+004F) → `Ο` (U+039F, Greek) or `О` (U+041E, Cyrillic)
-- `l` (U+006C) → `1` (U+0031, digit) or `ɭ` (U+026D, IPA)
-
-This exploits models that combine visual features with text embeddings, causing misalignment between what's seen and what's encoded.
-
-### EXIF Metadata Embedding
-
-Text embedded in EXIF ImageDescription field (tag 0x010E) can persist through image transformations. Some vision pipelines extract metadata before visual processing, creating a side channel for prompt injection.
-
-### Deep Fry Pipeline
-
-Sequential degradation mimics real-world image corruption:
-
-1. **Saturation boost** (1.4-1.75x) pushes colors outside typical training distribution
-2. **Contrast crushing** creates clipping in highlights/shadows
-3. **Unsharp masking** with high radius creates haloing artifacts
-4. **Bicubic downsampling** followed by nearest-neighbor upsampling introduces aliasing
-5. **Multi-pass JPEG** at quality 25-35 creates DCT quantization artifacts
-6. **Chromatic aberration** simulates lens distortion
-7. **Vignetting** reduces corner brightness, focusing attention centrally
-
 ## Variables and Metadata
 
 The strategy modifies test case variables:
