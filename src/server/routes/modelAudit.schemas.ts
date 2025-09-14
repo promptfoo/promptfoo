@@ -64,7 +64,11 @@ export const ZScanRequest = z.object({
   paths: z.array(z.string().min(1)).min(1),
   options: z.object({
     blacklist: z.array(z.string()),
-    timeout: z.number().int().positive().max(24 * 3600),
+    timeout: z
+      .number()
+      .int()
+      .positive()
+      .max(24 * 3600),
     verbose: z.boolean().optional(),
     maxSize: z.string().optional(),
     name: z.string().optional(),

@@ -26,6 +26,7 @@ import {
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import ResultsTab from '@app/pages/model-audit/components/ResultsTab';
+import type { ScanResult as BaseScanResult } from '@app/pages/model-audit/ModelAudit.types';
 
 interface ScanResult {
   id: string;
@@ -39,7 +40,7 @@ interface ScanResult {
   totalChecks?: number | null;
   passedChecks?: number | null;
   failedChecks?: number | null;
-  results: any; // This should match the ScanResult type from ModelAudit.types.ts
+  results: BaseScanResult;
   metadata?: Record<string, any> | null;
 }
 
@@ -59,7 +60,9 @@ export default function ModelAuditResult() {
 
     const fetchScan = async () => {
       try {
-        const response = await callApi(`/model-audit/scans/${id}`, { signal: abortController.signal });
+        const response = await callApi(`/model-audit/scans/${id}`, {
+          signal: abortController.signal,
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch scan details');
         }
@@ -221,7 +224,7 @@ export default function ModelAuditResult() {
               sx={{
                 '& .MuiBreadcrumbs-ol': {
                   flexWrap: isMobile ? 'wrap' : 'nowrap',
-                }
+                },
               }}
             >
               <Tooltip title="Go to Model Audit main page">
@@ -230,7 +233,12 @@ export default function ModelAuditResult() {
                 </Link>
               </Tooltip>
               <Tooltip title="Go to scan history">
-                <Link component={RouterLink} to="/model-audit/history" underline="hover" color="inherit">
+                <Link
+                  component={RouterLink}
+                  to="/model-audit/history"
+                  underline="hover"
+                  color="inherit"
+                >
                   History
                 </Link>
               </Tooltip>
@@ -241,7 +249,7 @@ export default function ModelAuditResult() {
                     maxWidth: isMobile ? '150px' : '300px',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   {scan.name || `Scan ${scan.id.slice(-8)}`}
@@ -303,7 +311,7 @@ export default function ModelAuditResult() {
                     flexWrap: 'wrap',
                     '& > *': {
                       minWidth: isMobile ? 'unset' : '120px',
-                    }
+                    },
                   }}
                 >
                   <Box>
@@ -397,7 +405,7 @@ export default function ModelAuditResult() {
                     color="error"
                     disabled={isDeleting}
                     sx={{ minWidth: 44, minHeight: 44 }}
-                    aria-label={isDeleting ? "Deleting scan..." : "Delete scan permanently"}
+                    aria-label={isDeleting ? 'Deleting scan...' : 'Delete scan permanently'}
                   >
                     {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
                   </IconButton>

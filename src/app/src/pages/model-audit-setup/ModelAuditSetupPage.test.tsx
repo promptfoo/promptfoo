@@ -98,9 +98,9 @@ describe('ModelAuditSetupPage', () => {
 
   it('handles a successful non-persisted scan', async () => {
     mockUseModelAuditConfigStore.mockReturnValue({
-        ...defaultStoreState,
-        paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
-      } as any);
+      ...defaultStoreState,
+      paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
+    } as any);
     mockCallApi.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ persisted: false, issues: [] }),
@@ -122,9 +122,9 @@ describe('ModelAuditSetupPage', () => {
 
   it('handles a failed scan', async () => {
     mockUseModelAuditConfigStore.mockReturnValue({
-        ...defaultStoreState,
-        paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
-      } as any);
+      ...defaultStoreState,
+      paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
+    } as any);
     mockCallApi.mockResolvedValue({
       ok: false,
       json: () => Promise.resolve({ error: 'Scan failed' }),
@@ -164,7 +164,12 @@ describe('ModelAuditSetupPage', () => {
 
     mockUseModelAuditConfigStore.mockReturnValue({
       ...defaultStoreState,
-      installationStatus: { checking: false, installed: false, error: 'Installation failed', cwd: null },
+      installationStatus: {
+        checking: false,
+        installed: false,
+        error: 'Installation failed',
+        cwd: null,
+      },
     } as any);
     rerender(
       <MemoryRouter>
@@ -176,31 +181,31 @@ describe('ModelAuditSetupPage', () => {
 
   it('opens the advanced options dialog', async () => {
     render(
-        <MemoryRouter>
-          <ModelAuditSetupPage />
-        </MemoryRouter>,
-      );
+      <MemoryRouter>
+        <ModelAuditSetupPage />
+      </MemoryRouter>,
+    );
 
-      // Mock implementation of onShowOptions in ConfigurationTab
-      const configurationTab = screen.getByTestId('configuration-tab');
-      const showOptionsButton = configurationTab.querySelector('button'); // Simplistic selector
-      if (showOptionsButton) {
-        fireEvent.click(showOptionsButton);
-      }
-      await waitFor(() => {
-        // This test is limited because ConfigurationTab is a child component.
-        // We can only assert that the action to open the dialog was called.
-        // expect(mockSetShowOptionsDialog).toHaveBeenCalledWith(true);
-      });
+    // Mock implementation of onShowOptions in ConfigurationTab
+    const configurationTab = screen.getByTestId('configuration-tab');
+    const showOptionsButton = configurationTab.querySelector('button'); // Simplistic selector
+    if (showOptionsButton) {
+      fireEvent.click(showOptionsButton);
+    }
+    await waitFor(() => {
+      // This test is limited because ConfigurationTab is a child component.
+      // We can only assert that the action to open the dialog was called.
+      // expect(mockSetShowOptionsDialog).toHaveBeenCalledWith(true);
+    });
   });
 });
 
 // Mock ConfigurationTab to allow testing interactions
 vi.mock('../model-audit/components/ConfigurationTab', () => ({
-    default: (props: any) => (
-      <div data-testid="configuration-tab">
-        <button onClick={props.onScan}>Start Security Scan</button>
-        <button onClick={props.onShowOptions}>Show Options</button>
-      </div>
-    ),
-  }));
+  default: (props: any) => (
+    <div data-testid="configuration-tab">
+      <button onClick={props.onScan}>Start Security Scan</button>
+      <button onClick={props.onShowOptions}>Show Options</button>
+    </div>
+  ),
+}));

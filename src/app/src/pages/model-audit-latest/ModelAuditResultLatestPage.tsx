@@ -26,9 +26,9 @@ interface LatestScan extends ScanResult {
   modelPath: string;
   createdAt: number;
   hasErrors: boolean;
-  totalChecks: number | null;
-  passedChecks: number | null;
-  failedChecks: number | null;
+  totalChecks?: number;
+  passedChecks?: number;
+  failedChecks?: number;
   metadata?: Record<string, any> | null;
 }
 
@@ -50,7 +50,7 @@ export default function ModelAuditResultLatestPage() {
         try {
           response = await callApi('/model-audit/scans/latest', {
             cache: 'no-store',
-            signal: abortController.signal
+            signal: abortController.signal,
           });
 
           if (response.ok) {
@@ -71,7 +71,7 @@ export default function ModelAuditResultLatestPage() {
         // Fallback: fetch first scan from the scans list
         response = await callApi('/model-audit/scans?limit=1', {
           cache: 'no-store',
-          signal: abortController.signal
+          signal: abortController.signal,
         });
 
         if (!response.ok) {
@@ -83,8 +83,9 @@ export default function ModelAuditResultLatestPage() {
 
         if (scans.length > 0) {
           // Sort by createdAt desc to get the latest
-          const sortedScans = scans.sort((a: LatestScan, b: LatestScan) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          const sortedScans = scans.sort(
+            (a: LatestScan, b: LatestScan) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
           );
           setLatestScan(sortedScans[0]);
         } else {
@@ -134,7 +135,9 @@ export default function ModelAuditResultLatestPage() {
         sx={{
           minHeight: '100vh',
           bgcolor: (theme) =>
-            theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[50],
+            theme.palette.mode === 'dark'
+              ? theme.palette.background.default
+              : theme.palette.grey[50],
           py: 4,
         }}
       >
@@ -159,7 +162,9 @@ export default function ModelAuditResultLatestPage() {
         sx={{
           minHeight: '100vh',
           bgcolor: (theme) =>
-            theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[50],
+            theme.palette.mode === 'dark'
+              ? theme.palette.background.default
+              : theme.palette.grey[50],
           py: 4,
         }}
       >
@@ -182,8 +187,13 @@ export default function ModelAuditResultLatestPage() {
               <Typography variant="h4" gutterBottom fontWeight="bold">
                 No scans found
               </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 600, mx: 'auto' }}>
-                Get started by running your first model security scan. You can scan ML models, datasets, and other AI assets for potential security vulnerabilities.
+              <Typography
+                variant="body1"
+                color="text.secondary"
+                sx={{ mb: 4, maxWidth: 600, mx: 'auto' }}
+              >
+                Get started by running your first model security scan. You can scan ML models,
+                datasets, and other AI assets for potential security vulnerabilities.
               </Typography>
               <Stack direction="row" spacing={2} justifyContent="center">
                 <Button
@@ -264,10 +274,7 @@ export default function ModelAuditResultLatestPage() {
           </Box>
 
           {/* Results */}
-          <ResultsTab
-            scanResults={latestScan}
-            onShowFilesDialog={() => setShowFilesDialog(true)}
-          />
+          <ResultsTab scanResults={latestScan} onShowFilesDialog={() => setShowFilesDialog(true)} />
 
           {/* Link to detailed view */}
           <Box sx={{ mt: 3, textAlign: 'center' }}>

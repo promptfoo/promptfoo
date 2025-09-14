@@ -3,12 +3,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
+import type { ModelAuditScanResults } from '../../types/modelAudit';
 import {
   ZCheckPathRequest,
   ZCheckPathResponse,
@@ -18,9 +19,26 @@ import {
   ZDeleteResponse,
   ZCheckInstalledResponse,
 } from './modelAudit.schemas';
-import type { Request, Response } from 'express';
 
-import type { ModelAuditScanResults } from '../../types/modelAudit';
+// Helper to conditionally include debug info (only in development or when DEBUG_MODEL_AUDIT is set)
+const includeDebugInfo = (debugInfo: Record<string, any>) => {
+  if (process.env.NODE_ENV === 'development' || process.env.DEBUG_MODEL_AUDIT === 'true') {
+    // In development, sanitize sensitive paths but include debug info
+    const sanitizedInfo = { ...debugInfo };
+    if (sanitizedInfo.cwd) {
+      // Replace absolute paths with relative ones for security
+      sanitizedInfo.cwd = sanitizedInfo.cwd.replace(process.env.HOME || '', '~');
+    }
+    if (sanitizedInfo.args && Array.isArray(sanitizedInfo.args)) {
+      // Truncate very long arguments
+      sanitizedInfo.args = sanitizedInfo.args.map((arg: string) =>
+        arg.length > 1000 ? arg.substring(0, 1000) + '...' : arg,
+      );
+    }
+    return sanitizedInfo;
+  }
+  return undefined;
+};
 
 export const modelAuditRouter = Router();
 
@@ -202,17 +220,24 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         suggestion = 'Check that modelaudit is executable and you have the necessary permissions';
       }
 
-      res.status(500).json({
+      const response: any = {
         error: errorMessage,
         originalError: error.message,
         suggestion: suggestion,
-        debug: {
-          command: 'modelaudit',
-          args: args,
-          paths: resolvedPaths,
-          cwd: process.cwd(),
-        },
+      };
+
+      const debugInfo = includeDebugInfo({
+        command: 'modelaudit',
+        args: args,
+        paths: resolvedPaths,
+        cwd: process.cwd(),
       });
+
+      if (debugInfo) {
+        response.debug = debugInfo;
+      }
+
+      res.status(500).json(response);
     });
 
     modelAudit.on('close', async (code) => {
@@ -307,38 +332,52 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           }
         }
 
-        res.status(500).json({
+        const response: any = {
           error: errorMessage,
           exitCode: code,
           stderr: stderr || undefined,
           stdout: stdout || undefined,
           ...errorDetails,
-          debug: {
-            command: 'modelaudit',
-            args: args,
-            paths: resolvedPaths,
-            cwd: process.cwd(),
-          },
+        };
+
+        const debugInfo = includeDebugInfo({
+          command: 'modelaudit',
+          args: args,
+          paths: resolvedPaths,
+          cwd: process.cwd(),
         });
+
+        if (debugInfo) {
+          response.debug = debugInfo;
+        }
+
+        res.status(500).json(response);
         return;
       }
 
       try {
         const jsonOutput = stdout.trim();
         if (!jsonOutput) {
-          res.status(500).json({
+          const response: any = {
             error: 'No output received from model scan',
             stderr: stderr || undefined,
             suggestion:
               'The scan may have failed silently. Check that the model files are valid and accessible.',
-            debug: {
-              command: 'modelaudit',
-              args: args,
-              paths: resolvedPaths,
-              cwd: process.cwd(),
-              exitCode: code,
-            },
+          };
+
+          const debugInfo = includeDebugInfo({
+            command: 'modelaudit',
+            args: args,
+            paths: resolvedPaths,
+            cwd: process.cwd(),
+            exitCode: code,
           });
+
+          if (debugInfo) {
+            response.debug = debugInfo;
+          }
+
+          res.status(500).json(response);
           return;
         }
 
@@ -347,21 +386,28 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           scanResults = JSON.parse(jsonOutput);
         } catch (parseError) {
           logger.error(`Failed to parse model scan output: ${parseError}`);
-          res.status(500).json({
+          const response: any = {
             error: 'Failed to parse scan results - invalid JSON output',
             parseError: String(parseError),
             output: jsonOutput.substring(0, 1000), // Include first 1000 chars for debugging
             stderr: stderr || undefined,
             suggestion:
               'The model scan may have produced invalid output. Check the raw output for error messages.',
-            debug: {
-              command: 'modelaudit',
-              args: args,
-              paths: resolvedPaths,
-              cwd: process.cwd(),
-              exitCode: code,
-            },
+          };
+
+          const debugInfo = includeDebugInfo({
+            command: 'modelaudit',
+            args: args,
+            paths: resolvedPaths,
+            cwd: process.cwd(),
+            exitCode: code,
           });
+
+          if (debugInfo) {
+            response.debug = debugInfo;
+          }
+
+          res.status(500).json(response);
           return;
         }
 
@@ -428,7 +474,9 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
     // Parse and validate query parameters
     const queryResult = ZScansQuery.safeParse(req.query);
     if (!queryResult.success) {
-      res.status(400).json({ error: 'Invalid query parameters', details: queryResult.error.errors });
+      res
+        .status(400)
+        .json({ error: 'Invalid query parameters', details: queryResult.error.errors });
       return;
     }
 
@@ -440,11 +488,12 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
     // Apply client-side filtering for search (temporary until server-side implementation)
     let filteredAudits = audits;
     if (search) {
-      filteredAudits = audits.filter(audit =>
-        audit.id.toLowerCase().includes(search.toLowerCase()) ||
-        (audit.name && audit.name.toLowerCase().includes(search.toLowerCase())) ||
-        audit.modelPath.toLowerCase().includes(search.toLowerCase()) ||
-        (audit.author && audit.author.toLowerCase().includes(search.toLowerCase()))
+      filteredAudits = audits.filter(
+        (audit) =>
+          audit.id.toLowerCase().includes(search.toLowerCase()) ||
+          (audit.name && audit.name.toLowerCase().includes(search.toLowerCase())) ||
+          audit.modelPath.toLowerCase().includes(search.toLowerCase()) ||
+          (audit.author && audit.author.toLowerCase().includes(search.toLowerCase())),
       );
     }
 

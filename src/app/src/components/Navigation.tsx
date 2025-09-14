@@ -70,10 +70,11 @@ function NavLink({ href, label }: { href: string; label: string }) {
   // Special handling for Model Audit to activate on both /model-audit and /model-audit/:id
   let isActive: boolean;
   if (href === '/model-audit') {
-    isActive = location.pathname === '/model-audit' ||
-               (location.pathname.startsWith('/model-audit/') &&
-                !location.pathname.startsWith('/model-audit/setup') &&
-                !location.pathname.startsWith('/model-audit/history'));
+    isActive =
+      location.pathname === '/model-audit' ||
+      (location.pathname.startsWith('/model-audit/') &&
+        !location.pathname.startsWith('/model-audit/setup') &&
+        !location.pathname.startsWith('/model-audit/history'));
   } else {
     isActive = location.pathname.startsWith(href);
   }
@@ -515,9 +516,7 @@ function _ModelAuditDropdown({
     scheduleClose();
   };
 
-  const isActive = ['/model-audit'].some((route) =>
-    location.pathname.startsWith(route),
-  );
+  const isActive = ['/model-audit'].some((route) => location.pathname.startsWith(route));
 
   const menuItems = [
     {

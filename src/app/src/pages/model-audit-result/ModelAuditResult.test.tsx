@@ -88,7 +88,11 @@ describe('ModelAuditResult', () => {
   });
 
   it('displays not found state when scan does not exist', async () => {
-    mockCallApi.mockResolvedValue({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response);
+    mockCallApi.mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: () => Promise.resolve({}),
+    } as Response);
     render(
       <MemoryRouter initialEntries={['/scans/1']}>
         <Routes>
@@ -159,7 +163,10 @@ describe('ModelAuditResult', () => {
 
   it('renders correctly when optional data is missing', async () => {
     const partialScan = { ...scan, author: null, totalChecks: null, passedChecks: null };
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(partialScan) } as Response);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(partialScan),
+    } as Response);
     render(
       <MemoryRouter initialEntries={['/scans/1']}>
         <Routes>

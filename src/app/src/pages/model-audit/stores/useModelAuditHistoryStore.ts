@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import type { ScanResult } from '../ModelAudit.types';
 
 // History-related types
-interface HistoricalScan {
+export interface HistoricalScan {
   id: string;
   createdAt: number;
   updatedAt: number;
@@ -61,10 +61,29 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
 
   // Actions - History
   fetchHistoricalScans: async () => {
+    const { pageSize, currentPage, sortModel, searchQuery } = get();
     set({ isLoadingHistory: true, historyError: null });
 
     try {
-      const response = await callApi('/model-audit/scans', { cache: 'no-store' });
+      // Build query parameters
+      const params = new URLSearchParams({
+        limit: pageSize.toString(),
+        offset: (currentPage * pageSize).toString(),
+      });
+
+      if (searchQuery.trim()) {
+        params.set('search', searchQuery.trim());
+      }
+
+      if (sortModel.length > 0) {
+        const sort = sortModel[0];
+        params.set('sort', sort.field);
+        params.set('order', sort.sort);
+      }
+
+      const response = await callApi(`/model-audit/scans?${params.toString()}`, {
+        cache: 'no-store',
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch historical scans');
       }
@@ -112,12 +131,14 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
   setSearchQuery: (searchQuery) => set({ searchQuery }),
 
   // Reset state
-  resetHistoryState: () => set({
-    historicalScans: [],
-    isLoadingHistory: false,
-    historyError: null,
-    currentPage: 0,
-    searchQuery: '',
-    filterModel: {},
-  }),
+  resetHistoryState: () =>
+    set({
+      historicalScans: [],
+      isLoadingHistory: false,
+      historyError: null,
+      pageSize: 50,
+      currentPage: 0,
+      searchQuery: '',
+      filterModel: {},
+    }),
 }));

@@ -34,7 +34,10 @@ describe('ModelAuditResultLatestPage', () => {
   };
 
   it('displays loading state initially', () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(latestScan) } as Response);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(latestScan),
+    } as Response);
     render(
       <MemoryRouter>
         <ModelAuditResultLatestPage />
@@ -44,7 +47,10 @@ describe('ModelAuditResultLatestPage', () => {
   });
 
   it('fetches and displays the latest scan via the primary endpoint', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(latestScan) } as Response);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(latestScan),
+    } as Response);
     render(
       <MemoryRouter>
         <ModelAuditResultLatestPage />
@@ -71,7 +77,10 @@ describe('ModelAuditResultLatestPage', () => {
 
   it('uses fallback endpoint when primary fails', async () => {
     mockCallApi.mockRejectedValueOnce(new Error('Primary endpoint failed'));
-    mockCallApi.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ scans: [fallbackScan] }) } as Response);
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ scans: [fallbackScan] }),
+    } as Response);
     render(
       <MemoryRouter>
         <ModelAuditResultLatestPage />
@@ -87,7 +96,10 @@ describe('ModelAuditResultLatestPage', () => {
 
   it('displays empty state when fallback returns no scans', async () => {
     mockCallApi.mockRejectedValueOnce(new Error('Primary endpoint failed'));
-    mockCallApi.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ scans: [] }) } as Response);
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ scans: [] }),
+    } as Response);
     render(
       <MemoryRouter>
         <ModelAuditResultLatestPage />
@@ -118,8 +130,14 @@ describe('ModelAuditResultLatestPage', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Start a Scan').closest('a')).toHaveAttribute('href', '/model-audit/setup');
-      expect(screen.getByText('View History').closest('a')).toHaveAttribute('href', '/model-audit/history');
+      expect(screen.getByText('Start a Scan').closest('a')).toHaveAttribute(
+        'href',
+        '/model-audit/setup',
+      );
+      expect(screen.getByText('View History').closest('a')).toHaveAttribute(
+        'href',
+        '/model-audit/history',
+      );
     });
   });
 });

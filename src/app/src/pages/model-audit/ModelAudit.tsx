@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 import { callApi } from '@app/utils/api';
@@ -32,6 +32,7 @@ import { useModelAuditConfigStore } from './stores';
 import type { ScanResult } from './ModelAudit.types';
 
 export default function ModelAudit() {
+  const [activeTab, setActiveTab] = useState(0);
   const {
     // State
     paths,
@@ -40,7 +41,6 @@ export default function ModelAudit() {
     scanResults,
     error,
     installationStatus,
-    activeTab,
     showFilesDialog,
     showOptionsDialog,
 
@@ -52,7 +52,6 @@ export default function ModelAudit() {
     setScanResults,
     setError,
     checkInstallation,
-    setActiveTab,
     setShowFilesDialog,
     setShowOptionsDialog,
     addRecentScan,
@@ -173,7 +172,12 @@ export default function ModelAudit() {
             <Tab label="Results" disabled={!scanResults} />
           </Tabs>
 
-          <Button component={RouterLink} to="/model-audit/history" variant="outlined" sx={{ mt: 2 }}>
+          <Button
+            component={RouterLink}
+            to="/model-audit/history"
+            variant="outlined"
+            sx={{ mt: 2 }}
+          >
             View Scan History
           </Button>
 

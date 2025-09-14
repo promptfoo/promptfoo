@@ -16,7 +16,13 @@ describe('ModelAuditHistory', () => {
       modelPath: '/path/to/model1',
       createdAt: Date.now(),
       hasErrors: true,
-      results: { issues: [{ severity: 'critical', message: '' }, { severity: 'error', message: '' }, { severity: 'warning', message: '' }] },
+      results: {
+        issues: [
+          { severity: 'critical', message: '' },
+          { severity: 'error', message: '' },
+          { severity: 'warning', message: '' },
+        ],
+      },
       totalChecks: 10,
       passedChecks: 8,
     },
@@ -33,7 +39,10 @@ describe('ModelAuditHistory', () => {
   ];
 
   it('displays loading state initially', () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve({ scans: [] }) } as Response);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ scans: [] }),
+    } as Response);
     render(
       <MemoryRouter>
         <ModelAuditHistory />
@@ -69,7 +78,10 @@ describe('ModelAuditHistory', () => {
   });
 
   it('displays empty state when no scans exist', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve({ scans: [] }) } as Response);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ scans: [] }),
+    } as Response);
     render(
       <MemoryRouter>
         <ModelAuditHistory />
@@ -160,7 +172,7 @@ describe('ModelAuditHistory', () => {
     );
 
     await waitFor(() => {
-        expect(screen.queryByLabelText('Show columns')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Show columns')).not.toBeInTheDocument();
     });
   });
 });

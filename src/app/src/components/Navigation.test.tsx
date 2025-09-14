@@ -73,7 +73,7 @@ describe('Navigation', () => {
     // The issue was using a broad selector that found the dropdown item instead of the NavLink
     // The dropdown item /model-audit/setup would show as active, but the NavLink should not
     const allLinks = screen.getAllByText('Model Audit', { selector: 'a' });
-    const topLevelNavLink = allLinks.find(link => link.getAttribute('href') === '/model-audit');
+    const topLevelNavLink = allLinks.find((link) => link.getAttribute('href') === '/model-audit');
     expect(topLevelNavLink).toBeDefined();
     expect(topLevelNavLink).not.toHaveClass('active');
 
@@ -84,7 +84,9 @@ describe('Navigation', () => {
       </MemoryRouter>,
     );
     const allLinksHistory = screen.getAllByText('Model Audit', { selector: 'a' });
-    const topLevelNavLinkHistory = allLinksHistory.find(link => link.getAttribute('href') === '/model-audit');
+    const topLevelNavLinkHistory = allLinksHistory.find(
+      (link) => link.getAttribute('href') === '/model-audit',
+    );
     expect(topLevelNavLinkHistory).toBeDefined();
     expect(topLevelNavLinkHistory).not.toHaveClass('active');
 
@@ -95,7 +97,9 @@ describe('Navigation', () => {
       </MemoryRouter>,
     );
     const allLinksHistoryId = screen.getAllByText('Model Audit', { selector: 'a' });
-    const topLevelNavLinkHistoryId = allLinksHistoryId.find(link => link.getAttribute('href') === '/model-audit');
+    const topLevelNavLinkHistoryId = allLinksHistoryId.find(
+      (link) => link.getAttribute('href') === '/model-audit',
+    );
     expect(topLevelNavLinkHistoryId).toBeDefined();
     expect(topLevelNavLinkHistoryId).not.toHaveClass('active');
   });
@@ -218,7 +222,9 @@ describe('Navigation', () => {
 
       // Find the top-level Model Audit NavLink (not the dropdown item)
       const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
-      const topLevelModelAuditLink = allModelAuditLinks.find(link => link.getAttribute('href') === '/model-audit');
+      const topLevelModelAuditLink = allModelAuditLinks.find(
+        (link) => link.getAttribute('href') === '/model-audit',
+      );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).toHaveClass('active');
     });
@@ -231,7 +237,9 @@ describe('Navigation', () => {
       );
 
       const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
-      const topLevelModelAuditLink = allModelAuditLinks.find(link => link.getAttribute('href') === '/model-audit');
+      const topLevelModelAuditLink = allModelAuditLinks.find(
+        (link) => link.getAttribute('href') === '/model-audit',
+      );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).toHaveClass('active');
     });
@@ -244,7 +252,9 @@ describe('Navigation', () => {
       );
 
       let allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
-      let topLevelModelAuditLink = allModelAuditLinks.find(link => link.getAttribute('href') === '/model-audit');
+      let topLevelModelAuditLink = allModelAuditLinks.find(
+        (link) => link.getAttribute('href') === '/model-audit',
+      );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).not.toHaveClass('active');
 
@@ -255,7 +265,9 @@ describe('Navigation', () => {
       );
 
       allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
-      topLevelModelAuditLink = allModelAuditLinks.find(link => link.getAttribute('href') === '/model-audit');
+      topLevelModelAuditLink = allModelAuditLinks.find(
+        (link) => link.getAttribute('href') === '/model-audit',
+      );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).not.toHaveClass('active');
     });

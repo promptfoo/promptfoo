@@ -192,7 +192,8 @@ export default function ModelAuditSetupPage() {
                   Scan completed successfully!
                 </Typography>
                 <Typography variant="body2">
-                  The scan results are displayed below. To save results for later viewing, enable persistence in your configuration.
+                  The scan results are displayed below. To save results for later viewing, enable
+                  persistence in your configuration.
                 </Typography>
               </Box>
             </Alert>

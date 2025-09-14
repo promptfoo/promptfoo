@@ -15,7 +15,7 @@ import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { getEvalSummaries } from '../models/eval';
+import Eval, { getAllEvalSummaries, getPaginatedEvalSummaries } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
@@ -41,7 +41,7 @@ import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary } from '../types';
+import type { EvalSummary, EvalQueryParams, PaginatedEvalResponse, EvalType } from '../types';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -110,16 +110,43 @@ export function createApp() {
   });
 
   /**
-   * Fetches summaries of all evals, optionally for a given dataset.
+   * Fetches summaries of all evals, with optional pagination, filtering, and sorting.
    */
   app.get(
     '/api/results',
     async (
-      req: Request<{}, {}, {}, { datasetId?: string }>,
-      res: Response<{ data: EvalSummary[] }>,
+      req: Request<{}, {}, {}, EvalQueryParams>,
+      res: Response<PaginatedEvalResponse | { data: EvalSummary[] }>,
     ): Promise<void> => {
-      const previousResults = await getEvalSummaries(req.query.datasetId);
-      res.json({ data: previousResults });
+      const { limit, offset, search, sort, order, datasetId, type } = req.query;
+
+      // Convert query params from strings to proper types
+      const parsedParams = {
+        limit: limit ? parseInt(String(limit), 10) : undefined,
+        offset: offset ? parseInt(String(offset), 10) : undefined,
+        search: search ? String(search) : undefined,
+        sort: sort as 'createdAt' | 'description' | 'passRate' | 'numTests' | 'type' | undefined,
+        order: order as 'asc' | 'desc' | undefined,
+        datasetId: datasetId ? String(datasetId) : undefined,
+        type: type as EvalType | undefined,
+      };
+
+      // If no pagination params provided, use legacy behavior for backward compatibility
+      if (parsedParams.limit === undefined && parsedParams.offset === undefined) {
+        const previousResults = await getAllEvalSummaries(parsedParams.datasetId);
+        res.json({ data: previousResults });
+        return;
+      }
+
+      // Use paginated endpoint
+      const result = await getPaginatedEvalSummaries(parsedParams);
+
+      res.json({
+        data: result.data,
+        total: result.total,
+        limit: parsedParams.limit || 50,
+        offset: parsedParams.offset || 0,
+      });
     },
   );
 

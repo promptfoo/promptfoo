@@ -138,12 +138,14 @@ describe('AdvancedOptionsDialog', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Save Options' }));
-    expect(mockOnOptionsChange).toHaveBeenCalledWith(expect.objectContaining({
-      blacklist: [],
-      timeout: 3600,
-      maxSize: undefined,
-      strict: false,
-    }));
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blacklist: [],
+        timeout: 3600,
+        maxSize: undefined,
+        strict: false,
+      }),
+    );
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 

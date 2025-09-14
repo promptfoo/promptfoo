@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
-
-import { callApi } from '@app/utils/api';
+import { useModelAuditHistoryStore } from '@app/pages/model-audit/stores';
+import type { HistoricalScan } from '@app/pages/model-audit/stores/useModelAuditHistoryStore';
 import { formatDataGridDate } from '@app/utils/date';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
@@ -11,7 +11,7 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import Paper from '@mui/material/Paper';
-import { useMediaQuery, useTheme } from '@mui/material/styles';
+import { useTheme, useMediaQuery } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import {
   DataGrid,
@@ -30,23 +30,8 @@ import {
 } from '@mui/x-data-grid';
 import { useLocation } from 'react-router-dom';
 
-type ModelAuditScan = {
-  id: string;
-  name: string | null;
-  author: string | null;
-  modelPath: string;
-  createdAt: number;
-  hasErrors: boolean;
-  totalChecks: number | null;
-  passedChecks: number | null;
-  failedChecks: number | null;
-  results: {
-    issues?: Array<{
-      severity: 'critical' | 'error' | 'warning' | 'info' | 'debug';
-      message: string;
-    }>;
-  };
-};
+// Use the store's type for consistency
+type ModelAuditScan = HistoricalScan;
 
 // augment the props for the toolbar slot
 declare module '@mui/x-data-grid' {
@@ -117,56 +102,57 @@ function CustomToolbar({
   };
 
   return (
-    <GridToolbarContainer sx={{
-      p: 1,
-      borderBottom: `1px solid ${theme.palette.divider}`,
-      spacing: { xs: 0.5, sm: 1 },
-    }}>
+    <GridToolbarContainer
+      sx={{
+        p: 1,
+        borderBottom: `1px solid ${theme.palette.divider}`,
+        spacing: { xs: 0.5, sm: 1 },
+      }}
+    >
       {showUtilityButtons &&
         (isMobile ? (
-            // Mobile: Show kebab menu with utility buttons
-            <>
-              <IconButton
-                onClick={handleMenuOpen}
-                size="small"
-                aria-label="Open table options menu"
-                sx={{ mr: 1 }}
-              >
-                <MoreVertIcon />
-              </IconButton>
-              <Menu
-                anchorEl={menuAnchorEl}
-                open={Boolean(menuAnchorEl)}
-                onClose={handleMenuClose}
-                anchorOrigin={{
-                  vertical: 'bottom',
-                  horizontal: 'left',
-                }}
-              >
-                <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
-                  <GridToolbarColumnsButton sx={{ border: 'none', width: '100%', justifyContent: 'flex-start' }} />
-                </MenuItem>
-                <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
-                  <GridToolbarFilterButton sx={{ border: 'none', width: '100%', justifyContent: 'flex-start' }} />
-                </MenuItem>
-                <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
-                  <GridToolbarDensitySelector sx={{ border: 'none', width: '100%', justifyContent: 'flex-start' }} />
-                </MenuItem>
-                <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
-                  <GridToolbarExport />
-                </MenuItem>
-              </Menu>
-            </>
-          ) : (
-            // Desktop: Show buttons in a row
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <GridToolbarColumnsButton />
-              <GridToolbarFilterButton />
-              <GridToolbarDensitySelector />
-              <GridToolbarExport />
-            </Box>
-          ))
-      }
+          // Mobile: Show kebab menu with utility buttons
+          <>
+            <IconButton
+              onClick={handleMenuOpen}
+              size="small"
+              aria-label="Open table options menu"
+              sx={{ mr: 1 }}
+            >
+              <MoreVertIcon />
+            </IconButton>
+            <Menu
+              anchorEl={menuAnchorEl}
+              open={Boolean(menuAnchorEl)}
+              onClose={handleMenuClose}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'left',
+              }}
+            >
+              <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
+                <GridToolbarColumnsButton />
+              </MenuItem>
+              <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
+                <GridToolbarFilterButton />
+              </MenuItem>
+              <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
+                <GridToolbarDensitySelector />
+              </MenuItem>
+              <MenuItem onClick={handleMenuClose} sx={{ p: 0 }}>
+                <GridToolbarExport />
+              </MenuItem>
+            </Menu>
+          </>
+        ) : (
+          // Desktop: Show buttons in a row
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <GridToolbarColumnsButton />
+            <GridToolbarFilterButton />
+            <GridToolbarDensitySelector />
+            <GridToolbarExport />
+          </Box>
+        ))}
       <Box sx={{ flexGrow: 1 }} />
       <QuickFilter ref={quickFilterRef} />
     </GridToolbarContainer>
@@ -196,55 +182,44 @@ export default function ModelAuditHistory({
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
-  const [scans, setScans] = useState<ModelAuditScan[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  // Use history store for data management
+  const {
+    historicalScans: scans,
+    isLoadingHistory: isLoading,
+    historyError,
+    pageSize,
+    currentPage,
+    sortModel,
+    searchQuery,
+    fetchHistoricalScans,
+    setPageSize,
+    setCurrentPage,
+    setSortModel,
+    setSearchQuery,
+  } = useModelAuditHistoryStore();
+
+  // Convert history error to Error object for compatibility
+  const error = historyError ? new Error(historyError) : null;
 
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
     focusedScanId ? [focusedScanId] : [],
   );
 
-  /**
-   * Fetch scans from the API.
-   */
-  const fetchScans = async (signal: AbortSignal) => {
-    try {
-      setIsLoading(true);
-      const response = await callApi('/model-audit/scans', { cache: 'no-store', signal });
-      if (!response.ok) {
-        throw new Error('Failed to fetch model audit scans');
-      }
-      const body = (await response.json()) as { scans: ModelAuditScan[] };
-      setScans(body.scans);
-      setError(null);
-    } catch (error) {
-      // Don't set error state if the request was aborted
-      if ((error as Error).name !== 'AbortError') {
-        setError(error as Error);
-      }
-    } finally {
-      // Don't set loading to false if the request was aborted
-      if (signal && !signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  };
-
   // Use React Router's location to detect navigation
   const location = useLocation();
 
   useEffect(() => {
-    // Create AbortController for this fetch
-    const abortController = new AbortController();
-
-    // Fetch scans whenever we navigate to this page
-    fetchScans(abortController.signal);
-
-    // Cleanup: abort any in-flight request when location changes or component unmounts
-    return () => {
-      abortController.abort();
-    };
-  }, [location.pathname, location.search]); // Refetch when the pathname or query params change
+    // Fetch scans whenever we navigate to this page or when pagination/search changes
+    fetchHistoricalScans();
+  }, [
+    location.pathname,
+    location.search,
+    pageSize,
+    currentPage,
+    sortModel,
+    searchQuery,
+    fetchHistoricalScans,
+  ]);
 
   /**
    * Construct dataset rows:
@@ -315,8 +290,14 @@ export default function ModelAuditHistory({
         headerName: 'Name',
         flex: 1.5,
         minWidth: 150,
-        valueGetter: (value: ModelAuditScan['name'], row: ModelAuditScan) =>
-          value ?? `Scan ${row.id.slice(-8)}`,
+        renderCell: (params: GridRenderCellParams<ModelAuditScan>) => {
+          const displayName = params.row.name ?? `Scan ${params.row.id.slice(-8)}`;
+          return (
+            <Typography variant="body2" noWrap sx={{ maxWidth: '100%' }} title={displayName}>
+              {displayName}
+            </Typography>
+          );
+        },
       },
       {
         field: 'modelPath',
@@ -430,13 +411,16 @@ export default function ModelAuditHistory({
   );
 
   // Responsive column visibility: hide less critical columns on smaller screens
-  const columnVisibilityModel = useMemo(() => ({
-    // On mobile (xs), only show ID, Name, and Status
-    createdAt: !isMobile,
-    modelPath: !isMobile,
-    issues: !isMobile,
-    checks: !isTablet, // Hide checks on mobile and tablet
-  }), [isMobile, isTablet]);
+  const columnVisibilityModel = useMemo(
+    () => ({
+      // On mobile (xs), only show ID, Name, and Status
+      createdAt: !isMobile,
+      modelPath: !isMobile,
+      issues: !isMobile,
+      checks: !isTablet, // Hide checks on mobile and tablet
+    }),
+    [isMobile, isTablet],
+  );
 
   return (
     <Box
@@ -557,13 +541,37 @@ export default function ModelAuditHistory({
           }}
           onRowSelectionModelChange={setRowSelectionModel}
           rowSelectionModel={rowSelectionModel}
+          // Controlled pagination
+          paginationMode="server"
+          paginationModel={{ page: currentPage, pageSize }}
+          onPaginationModelChange={(model) => {
+            setCurrentPage(model.page);
+            setPageSize(model.pageSize);
+          }}
+          rowCount={-1} // Use -1 to show that we don't know total count yet
+          // Controlled sorting
+          sortingMode="server"
+          sortModel={sortModel}
+          onSortModelChange={(model) =>
+            setSortModel(
+              model.filter((item) => item.sort !== undefined) as Array<{
+                field: string;
+                sort: 'asc' | 'desc';
+              }>,
+            )
+          }
+          // Controlled filtering
+          filterMode="server"
+          onFilterModelChange={(model) => {
+            // Extract search query from quick filter
+            const quickFilterValue = model.quickFilterValues?.[0] || '';
+            if (quickFilterValue !== searchQuery) {
+              setSearchQuery(quickFilterValue);
+              setCurrentPage(0); // Reset to first page when searching
+            }
+          }}
+          // Column visibility
           initialState={{
-            sorting: {
-              sortModel: [{ field: 'createdAt', sort: 'desc' }],
-            },
-            pagination: {
-              paginationModel: { pageSize: 50 },
-            },
             columns: {
               columnVisibilityModel,
             },

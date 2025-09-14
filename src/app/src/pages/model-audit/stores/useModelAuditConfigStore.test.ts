@@ -17,7 +17,7 @@ describe('useModelAuditConfigStore', () => {
 
   it('should set paths', () => {
     const { result } = renderHook(() => useModelAuditConfigStore());
-    const paths = [{ path: '/test', type: 'file', name: 'test' }];
+    const paths = [{ path: '/test', type: 'file' as const, name: 'test' }];
 
     act(() => {
       result.current.setPaths(paths);
@@ -28,7 +28,7 @@ describe('useModelAuditConfigStore', () => {
 
   it('should add a path', () => {
     const { result } = renderHook(() => useModelAuditConfigStore());
-    const path = { path: '/test', type: 'file', name: 'test' };
+    const path = { path: '/test', type: 'file' as const, name: 'test' };
 
     act(() => {
       result.current.addPath(path);
@@ -39,8 +39,8 @@ describe('useModelAuditConfigStore', () => {
 
   it('should remove a path', () => {
     const { result } = renderHook(() => useModelAuditConfigStore());
-    const path1 = { path: '/test1', type: 'file', name: 'test1' };
-    const path2 = { path: '/test2', type: 'file', name: 'test2' };
+    const path1 = { path: '/test1', type: 'file' as const, name: 'test1' };
+    const path2 = { path: '/test2', type: 'file' as const, name: 'test2' };
 
     act(() => {
       result.current.setPaths([path1, path2]);
@@ -90,7 +90,7 @@ describe('useModelAuditConfigStore', () => {
 
   it('should set scan options', () => {
     const { result } = renderHook(() => useModelAuditConfigStore());
-    const options = { timeout: 1000 };
+    const options = { blacklist: [], timeout: 1000 };
 
     act(() => {
       result.current.setScanOptions(options);

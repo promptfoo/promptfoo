@@ -125,7 +125,7 @@ describe('useModelAuditHistoryStore', () => {
 
   it('should set sort model', () => {
     const { result } = renderHook(() => useModelAuditHistoryStore());
-    const sortModel = [{ field: 'name', sort: 'asc' }];
+    const sortModel = [{ field: 'name', sort: 'asc' as const }];
     act(() => {
       result.current.setSortModel(sortModel);
     });
