@@ -49,7 +49,7 @@ This checklist reflects progress on esm-migration vs main and what’s left to f
     - [ ] `src/migrate.ts`
     - [ ] `src/providers/golangCompletion.ts`
     - [ ] `src/python/pythonUtils.ts`
-    - [ ] `src/app/vite.config.ts`
+    - [ ] `src/app/vite.config.ts` (ESM-only dev config; just switch to ESM-safe path resolution, no CJS fallback needed)
   - [ ] JSON imports: choose strategy and implement consistently
     - Option 1 (recommended with tsup): rely on bundling JSON; keep static imports; add Jest mapping if needed
     - Option 2: use JSON module assertions in source (Node 20+):
@@ -60,10 +60,43 @@ This checklist reflects progress on esm-migration vs main and what’s left to f
       - [ ] `src/constants.ts`
       - [ ] `src/commands/debug.ts`
       - [ ] `src/checkNodeVersion.ts`
-      - [ ] `src/app/vite.config.ts`
+      - [ ] `src/app/vite.config.ts` (app is ESM-only; Vite handles JSON in config, so this may not require change)
       - [ ] `src/redteam/strategies/promptInjections/index.ts` (dynamic)
       - [ ] `src/util/testCaseReader.ts` (replace `require(json)` with `fs.readFileSync + JSON.parse`)
   - [ ] Simplify `src/esm.ts`: remove eval() and CommonJS `require()` fallback; use native dynamic import with `pathToFileURL(safeResolve(...))`
+
+- Package.json (Exports/Type)
+  - [ ] After verifying builds, flip to `"type": "module"`
+  - [ ] Set conditional exports to match tsup outputs:
+    - [ ] `exports["."].import -> ./dist/src/index.js`
+    - [ ] `exports["."].require -> ./dist/src/index.cjs`
+    - [ ] `exports["."].types -> ./dist/src/index.d.ts`
+  - [ ] Keep `bin` entries pointing to `dist/src/main.js` (ESM CLI)
+  - [ ] Major version bump if moving to ESM-first package layout
+
+- Build Pipeline & Assets
+  - [ ] Update `build` to: `generate-constants (cjs)` -> `tsup` -> `tsc --emitDeclarationOnly` -> `npm run build:app` -> post-build asset copy
+  - [ ] Post-build asset copy parity with current: HTML, python wrapper, golang wrapper, drizzle dir
+  - [ ] Ensure `chmod +x dist/src/main.js`
+  - [ ] Verify heavy deps are externalized (tsup config shows: better-sqlite3, playwright, sharp)
+
+- Runtime & Test Verification
+  - [ ] Run unit tests with @swc/jest; fix any JSON import issues (mapper/transform)
+  - [ ] Build and smoke-test CLI from `dist`: `promptfoo --help`, basic commands
+  - [ ] Build app workspace and load in dev: `npm run dev --prefix src/app` (ESM-only config)
+  - [ ] Test library import in both ESM and CJS consumers locally
+
+- Documentation & Examples
+  - [ ] Remove/replace any remaining ts-jest guidance (we use @swc/jest)
+  - [ ] Remove outdated `module: "ES2022"` / `moduleResolution: "bundler"` advice
+  - [ ] Decide whether to keep CommonJS examples in docs; add ESM equivalents
+  - [ ] Note migration guidance for CJS consumers (use `require('promptfoo')` via conditional export or `await import('promptfoo')`)
+
+App Workspace (ESM-only)
+- [x] `src/app/package.json` already `"type": "module"`
+- [x] App uses Vite/Vitest (ESM-native); no CJS compatibility tasks
+- [ ] Ensure any `__dirname` usage in app config uses `fileURLToPath`/`dirname`
+- [ ] No import extension rewrites needed in app (bundled by Vite)
 
 - Build and Distribution
   - [ ] Ensure tsup CLI bundle includes shebang and `shims: true` (present in `tsup.config.ts`)
