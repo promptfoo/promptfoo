@@ -1,5 +1,3 @@
-import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
 import { Presets, SingleBar } from 'cli-progress';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -7,8 +5,6 @@ import invariant from '../../util/invariant';
 
 import type { TestCase } from '../../types/index';
 
-// Global variable defined by build system
-declare const BUILD_FORMAT: string | undefined;
 
 // Helper function to escape XML special characters for SVG
 function escapeXml(unsafe: string): string {
@@ -149,67 +145,3 @@ export async function addImageToBase64(
   return imageTestCases;
 }
 
-// Main function for direct testing via: npx tsx simpleImage.ts "Text to convert to image"
-async function main() {
-  // Get text from command line arguments or use default
-  const textToConvert = process.argv[2] || 'This is a test of the image encoding strategy.';
-
-  logger.info(`Converting text to image: "${textToConvert}"`);
-
-  try {
-    // Convert text to image
-    const base64Image = await textToImage(textToConvert);
-
-    // Log the first 100 characters of the base64 image to avoid terminal clutter
-    logger.info(`Base64 image (first 100 chars): ${base64Image.substring(0, 100)}...`);
-    logger.info(`Total base64 image length: ${base64Image.length} characters`);
-
-    // Create a simple test case
-    const testCase = {
-      vars: {
-        prompt: textToConvert,
-      },
-    };
-
-    // Process the test case
-    const processedTestCases = await addImageToBase64([testCase], 'prompt');
-
-    logger.info('Test case processed successfully.');
-    logger.info(`Original prompt length: ${textToConvert.length} characters`);
-    // Add type assertion to ensure TypeScript knows this is a string
-    const processedPrompt = processedTestCases[0].vars?.prompt as string;
-    logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
-
-    // Check if we're running this directly (not being imported)
-    if (process.env.BUILD_FORMAT === 'esm') {
-      const currentFile = fileURLToPath(import.meta.url);
-      const isSourceFile = currentFile.includes('simpleImage') && (currentFile.endsWith('.ts') || currentFile.endsWith('.js'));
-      if (isSourceFile && resolve(currentFile) === resolve(process.argv[1])) {
-        // Write to a file for testing with image viewers
-        const fs = await import('fs');
-        const outputFilePath = 'test-image.png';
-
-        // Decode base64 back to binary
-        const imageBuffer = Buffer.from(base64Image, 'base64');
-
-        // Write binary data to file
-        fs.writeFileSync(outputFilePath, imageBuffer);
-
-        logger.info(`Image file written to: ${outputFilePath}`);
-        logger.info(`You can open it with any image viewer to verify the conversion.`);
-      }
-    }
-  } catch (error) {
-    logger.error(`Error generating image from text: ${error}`);
-  }
-}
-
-// Run the main function if this file is executed directly
-// ESM replacement for require.main === module check
-if (process.env.BUILD_FORMAT === 'esm') {
-  const currentFile = fileURLToPath(import.meta.url);
-  const isSourceFile = currentFile.includes('simpleImage') && (currentFile.endsWith('.ts') || currentFile.endsWith('.js'));
-  if (isSourceFile && resolve(currentFile) === resolve(process.argv[1])) {
-    main();
-  }
-}

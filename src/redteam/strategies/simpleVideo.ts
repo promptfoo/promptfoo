@@ -1,8 +1,6 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
 
 import { Presets, SingleBar } from 'cli-progress';
 import cliState from '../../cliState';
@@ -12,8 +10,6 @@ import { neverGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
 
-// Global variable defined by build system
-declare const BUILD_FORMAT: string | undefined;
 
 let ffmpegCache: any = null;
 
@@ -241,48 +237,3 @@ export async function writeVideoFile(base64Video: string, outputFilePath: string
   }
 }
 
-async function main(): Promise<void> {
-  const textToConvert = process.argv[2] || 'This is a test of the video encoding strategy.';
-
-  logger.info(`Converting text to video: "${textToConvert}"`);
-
-  try {
-    const base64Video = await textToVideo(textToConvert);
-
-    logger.info(`Base64 video (first 100 chars): ${base64Video.substring(0, 100)}...`);
-    logger.info(`Total base64 video length: ${base64Video.length} characters`);
-
-    const testCase = {
-      vars: {
-        prompt: textToConvert,
-      },
-    };
-
-    const processedTestCases = await addVideoToBase64([testCase], 'prompt');
-
-    logger.info('Test case processed successfully.');
-    logger.info(`Original prompt length: ${textToConvert.length} characters`);
-    const processedPrompt = processedTestCases[0].vars?.prompt as string;
-    logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
-
-    if (process.env.BUILD_FORMAT === 'esm') {
-      const currentFile = fileURLToPath(import.meta.url);
-      const isSourceFile = currentFile.includes('simpleVideo') && (currentFile.endsWith('.ts') || currentFile.endsWith('.js'));
-      if (isSourceFile && resolve(currentFile) === resolve(process.argv[1])) {
-        await writeVideoFile(base64Video, 'test-video.mp4');
-        logger.info(`You can open it with any video player to verify the conversion.`);
-      }
-    }
-  } catch (error) {
-    logger.error(`Error generating video from text: ${error}`);
-  }
-}
-
-// ESM replacement for require.main === module check
-if (process.env.BUILD_FORMAT === 'esm') {
-  const currentFile = fileURLToPath(import.meta.url);
-  const isSourceFile = currentFile.includes('simpleVideo') && (currentFile.endsWith('.ts') || currentFile.endsWith('.js'));
-  if (isSourceFile && resolve(currentFile) === resolve(process.argv[1])) {
-    main();
-  }
-}
