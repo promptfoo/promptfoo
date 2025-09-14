@@ -121,30 +121,42 @@ export function createApp() {
     ): Promise<void> => {
       const { limit, offset, search, sort, order, datasetId } = req.query;
 
+      // Validate and sanitize query params
+      const allowedSorts = new Set(['createdAt', 'description'] as const);
+      const allowedOrders = new Set(['asc', 'desc'] as const);
+      const safeSort = allowedSorts.has(sort as any)
+        ? (sort as 'createdAt' | 'description')
+        : undefined;
+      const safeOrder = allowedOrders.has(order as any) ? (order as 'asc' | 'desc') : undefined;
+      const safeLimit = Number.isFinite(Number(limit))
+        ? Math.max(1, Math.min(100, Number(limit)))
+        : undefined;
+      const safeOffset = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : undefined;
+
       // Check if any pagination parameters are provided
       const isPaginationRequest =
-        limit !== undefined ||
-        offset !== undefined ||
+        safeLimit !== undefined ||
+        safeOffset !== undefined ||
         search !== undefined ||
-        sort !== undefined ||
-        order !== undefined;
+        safeSort !== undefined ||
+        safeOrder !== undefined;
 
       if (isPaginationRequest) {
         // Use new pagination API
         const result = await getPaginatedEvalSummaries({
-          limit: limit ? Number(limit) : undefined,
-          offset: offset ? Number(offset) : undefined,
+          limit: safeLimit,
+          offset: safeOffset,
           search,
-          sort,
-          order,
+          sort: safeSort,
+          order: safeOrder,
           datasetId,
         });
 
         res.json({
           data: result.data,
           total: result.total,
-          limit: limit ? Number(limit) : 50,
-          offset: offset ? Number(offset) : 0,
+          limit: safeLimit ?? 50,
+          offset: safeOffset ?? 0,
         });
       } else {
         // Legacy API - maintain backward compatibility

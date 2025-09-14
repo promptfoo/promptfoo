@@ -962,7 +962,7 @@ export async function getPaginatedEvalSummaries(
 
   // Get total count
   const countQuery = db
-    .select({ count: sql<number>`count(*)` })
+    .select({ count: sql<number>`count(DISTINCT ${evalsTable.id})` })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(whereClause);
@@ -1034,13 +1034,9 @@ export async function getPaginatedEvalSummaries(
 
   // Apply in-memory sorting for calculated fields
   if (sort === 'passRate') {
-    summaries.sort((a, b) =>
-      order === 'asc' ? a.passRate - b.passRate : b.passRate - a.passRate,
-    );
+    summaries.sort((a, b) => (order === 'asc' ? a.passRate - b.passRate : b.passRate - a.passRate));
   } else if (sort === 'numTests') {
-    summaries.sort((a, b) =>
-      order === 'asc' ? a.numTests - b.numTests : b.numTests - a.numTests,
-    );
+    summaries.sort((a, b) => (order === 'asc' ? a.numTests - b.numTests : b.numTests - a.numTests));
   }
 
   return {
