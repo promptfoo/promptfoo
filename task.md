@@ -180,6 +180,35 @@ App Workspace (ESM-only)
 
 Notes: Current branch already includes tsconfig NodeNext/ES2022, tsup config with ESM/CJS builds, and `.cjs` script renames. Next highest-impact steps are updating `package.json` scripts, addressing JSON imports, and replacing `require.main`/`__dirname` usages.
 
+CI Failures and Remediation Plan
+
+- Style Check: format error in `scripts/buildConstants.ts`
+  - [ ] Run Biome/Prettier locally and commit changes
+  - [ ] Or manually apply suggested diff (whitespace/formatting) in `scripts/buildConstants.ts`
+
+- Run Integration Tests: Jest cannot resolve `./jest.config` in `jest.integration.config.ts`
+  - [ ] Change import to include extension: `import baseConfig from './jest.config.ts'`
+  - [ ] Re-run tests to confirm parsing succeeds under NodeNext ESM
+
+- Share Test: `node dist/src/main.js eval ...` fails with “Dynamic require of 'util' is not supported” from bundled CJS dependency chain (form-data/combined-stream)
+  - Root cause: tsup bundles CJS node_modules into ESM output; esbuild polyfill rejects dynamic require at runtime
+  - Fix options (choose one):
+    - Safer (recommended): Externalize all bare module imports in tsup builds so node resolves CJS deps natively
+      - [ ] In `tsup.config.ts` add `external: [/^[a-z@][^:]/]` (or equivalent) to CLI + lib builds
+    - Targeted: Externalize problematic deps
+      - [ ] Add to `external`: `form-data`, `combined-stream`, `mime-types`, `asynckit`
+  - [ ] Ensure `platform: 'node'` (default) and no browser polyfills sneak in
+
+- Redteam / Redteam Custom Enterprise Server: build warns/fails on `import.meta` in dev runners included in library bundles
+  - Root cause: `src/redteam/strategies/index.ts` imports `simpleImage.ts` and `simpleVideo.ts`; these files contain top‑level `import.meta` for entry detection, which breaks CJS build
+  - Fix options:
+    - Guarded branches (quick):
+      - [ ] Wrap entrypoint checks in `if (process.env.BUILD_FORMAT === 'esm') { ... }`
+      - [ ] Add per‑format `define` in `tsup.config.ts` so CJS build DCEs the ESM branch
+    - Structural (clean):
+      - [ ] Move CLI runner code from `simpleImage.ts`/`simpleVideo.ts` into separate `*.runner.ts` files not imported by `Strategies`
+      - [ ] Keep strategy helpers export‑only (no top‑level `import.meta`)
+
 ### Phase 1: Preparation and Analysis (Low Risk)
 
 1. Audit all CommonJS-specific patterns

@@ -7,6 +7,9 @@ import invariant from '../../util/invariant';
 
 import type { TestCase } from '../../types/index';
 
+// Global variable defined by build system
+declare const BUILD_FORMAT: string | undefined;
+
 // Helper function to escape XML special characters for SVG
 function escapeXml(unsafe: string): string {
   return unsafe
@@ -178,7 +181,7 @@ async function main() {
     logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
     // Check if we're running this directly (not being imported)
-    if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
+    if (typeof BUILD_FORMAT === 'undefined' && (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm')) {
       if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
         // Write to a file for testing with image viewers
         const fs = await import('fs');
@@ -201,7 +204,7 @@ async function main() {
 
 // Run the main function if this file is executed directly
 // ESM replacement for require.main === module check
-if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
+if (typeof BUILD_FORMAT === 'undefined' && (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm')) {
   if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
     main();
   }
