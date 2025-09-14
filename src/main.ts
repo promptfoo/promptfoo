@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import pkg from '../package.json' assert { type: 'json' };
