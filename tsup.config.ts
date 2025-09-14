@@ -9,6 +9,10 @@ export default defineConfig([
     outDir: 'dist/src',
     clean: true,
     shims: true, // Provides __dirname, __filename shims automatically
+    sourcemap: true,
+    define: {
+      BUILD_FORMAT: '"esm"'
+    },
     banner: {
       js: '#!/usr/bin/env node'
     },
@@ -29,6 +33,11 @@ export default defineConfig([
     outDir: 'dist/src',
     splitting: false,
     treeshake: true,
+    sourcemap: true,
+    shims: true, // Ensure library ESM build has shims
+    define: {
+      BUILD_FORMAT: '"esm"'
+    },
     external: [
       /^better-sqlite3/,
       /^playwright/,
@@ -42,6 +51,13 @@ export default defineConfig([
     format: ['cjs'],
     target: 'node20',
     outDir: 'dist/src',
+    sourcemap: true,
+    define: {
+      BUILD_FORMAT: '"cjs"'
+    },
+    logOverride: {
+      'empty-import-meta': 'silent' // Silence import.meta warnings in CJS builds
+    },
     outExtension() {
       return { '.js': '.cjs' }
     },

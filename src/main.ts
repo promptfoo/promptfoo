@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { Command } from 'commander';
 import pkg from '../package.json' assert { type: 'json' };
 const { version } = pkg;
@@ -141,7 +142,7 @@ async function main() {
 }
 
 // ESM replacement for require.main === module check
-if (import.meta.url === `file://${process.argv[1]}` || import.meta.url === fileURLToPath(`file://${process.argv[1]}`)) {
+if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
   checkNodeVersion();
   main();
 }

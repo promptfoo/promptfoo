@@ -44,31 +44,31 @@ This checklist reflects progress on esm-migration vs main and what’s left to f
   - [ ] Switch `package.json` to `"type": "module"` and update `exports` to include ESM and CJS entries (or plan ESM-only + major bump)
 
 - Source Changes (ESM patterns)
-  - [ ] Replace `require.main === module` with `fileURLToPath(import.meta.url)` path equality in:
-    - [ ] `src/main.ts`
-    - [ ] `src/migrate.ts`
-    - [ ] `src/redteam/strategies/simpleImage.ts`
-    - [ ] `src/redteam/strategies/simpleVideo.ts`
-  - [ ] Replace `__dirname` usage with `dirname(fileURLToPath(import.meta.url))` in:
-    - [ ] `src/migrate.ts`
-    - [ ] `src/providers/golangCompletion.ts`
-    - [ ] `src/python/pythonUtils.ts`
-    - [ ] `src/app/vite.config.ts` (ESM-only dev config; just switch to ESM-safe path resolution, no CJS fallback needed)
+  - [ ] Replace `require.main === module` with path equality using `resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])` in:
+    - [ ] `src/main.ts` (current check is incorrect; fix to path equality)
+    - [ ] `src/migrate.ts` (current check is incorrect; fix to path equality)
+    - [ ] `src/redteam/strategies/simpleImage.ts` (ESM-only dev runner; fix check, no CJS support needed)
+    - [ ] `src/redteam/strategies/simpleVideo.ts` (ESM-only dev runner; fix check, no CJS support needed)
+  - [x] Replace `__dirname` usage with `dirname(fileURLToPath(import.meta.url))` in:
+    - [x] `src/migrate.ts`
+    - [x] `src/providers/golangCompletion.ts`
+    - [x] `src/python/pythonUtils.ts`
+    - [x] `src/app/vite.config.ts` (ESM-only dev config)
   - [ ] JSON imports: choose strategy and implement consistently
     - Option 1 (recommended with tsup): rely on bundling JSON; keep static imports; add Jest mapping if needed
     - Option 2: use JSON module assertions in source (Node 20+):
       - [ ] Static JSON: `import pkg from '../package.json' assert { type: 'json' }`
       - [ ] Dynamic JSON: `await import('./data.json', { assert: { type: 'json' } })`
     - Files to update:
-      - [ ] `src/main.ts`
-      - [ ] `src/constants.ts`
-      - [ ] `src/commands/debug.ts`
-      - [ ] `src/checkNodeVersion.ts`
-      - [ ] `src/app/vite.config.ts` (app is ESM-only; Vite handles JSON in config, so this may not require change)
-      - [ ] `src/redteam/strategies/promptInjections/index.ts` (dynamic)
-      - [ ] `src/util/testCaseReader.ts` (replace `require(json)` with `fs.readFileSync + JSON.parse`)
-  - [ ] Simplify `src/esm.ts`: remove eval() and CommonJS `require()` fallback; use native dynamic import with `pathToFileURL(safeResolve(...))`
-    - [ ] Guard any `import.meta` usage for dual-build (see Dual Build section)
+      - [x] `src/main.ts`
+      - [x] `src/constants.ts`
+      - [x] `src/commands/debug.ts`
+      - [x] `src/checkNodeVersion.ts`
+      - [x] `src/app/vite.config.ts` (app is ESM-only; Vite typically handles JSON)
+      - [x] `src/redteam/strategies/promptInjections/index.ts` (dynamic)
+      - [x] `src/util/testCaseReader.ts` (replaced `require(json)` with `fs.readFileSync + JSON.parse`)
+  - [x] Simplify `src/esm.ts`: remove eval() and CommonJS `require()` fallback; use native dynamic import with `pathToFileURL(safeResolve(...))`
+    - [ ] Guard `import.meta` usage for dual-build (add `BUILD_FORMAT` DCE guard)
 
 - Package.json (Exports/Type)
   - [ ] After verifying builds, flip to `"type": "module"`
@@ -85,6 +85,13 @@ This checklist reflects progress on esm-migration vs main and what’s left to f
   - [ ] Ensure `chmod +x dist/src/main.js`
   - [ ] Verify heavy deps are externalized (tsup config shows: better-sqlite3, playwright, sharp)
   - [ ] Confirm multiple tsup outputs to the same `outDir` do not overwrite unintended files (CLI ESM, lib ESM, lib CJS)
+  - [ ] Verify dev runners (`src/redteam/strategies/simpleImage.ts`, `src/redteam/strategies/simpleVideo.ts`) are not bundled into library outputs (not referenced from `src/index.ts`)
+
+Dev Runners (ESM-only)
+- [ ] Treat `src/redteam/strategies/simpleImage.ts` and `src/redteam/strategies/simpleVideo.ts` as ESM-only scripts for development
+- [ ] Keep `import.meta` usage; no dual-build guards required
+- [ ] Fix their ESM entry detection to path equality as above
+- [ ] Ensure they are not exported or imported by `src/index.ts` (excluded from library bundles)
 
 Dual Build (ESM + CJS) import.meta Strategy
 - Problem: `import.meta` is not valid in CJS output; esbuild warns (and may fail depending on settings)
@@ -120,7 +127,7 @@ Dual Build (ESM + CJS) import.meta Strategy
     }
     ```
   - [ ] Apply this pattern in `src/esm.ts` and any other shared module referencing `import.meta`
-  - [ ] Keep `import.meta` freely in CLI-only files (e.g., `src/main.ts`) since CLI is ESM-only in tsup
+  - [ ] Keep `import.meta` freely in ESM-only code: CLI (`src/main.ts`), App (`src/app/**`), and dev runners (`src/redteam/strategies/simpleImage.ts`, `src/redteam/strategies/simpleVideo.ts`)
   - [ ] Scan for `import.meta` usages and categorize:
     - [ ] CLI-only: allowed
     - [ ] Library/shared: guard behind `BUILD_FORMAT`

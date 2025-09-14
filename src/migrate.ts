@@ -1,7 +1,9 @@
 import * as path from 'path';
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Use currentDir instead of __dirname to avoid Jest/CJS conflicts
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database';
@@ -20,7 +22,7 @@ export async function runDbMigrations(): Promise<void> {
     setImmediate(() => {
       try {
         const db = getDb();
-        const migrationsFolder = path.join(__dirname, '..', 'drizzle');
+        const migrationsFolder = path.join(currentDir, '..', 'drizzle');
         logger.debug(`Running database migrations...`);
         migrate(db, { migrationsFolder });
         logger.debug('Database migrations completed');
@@ -34,7 +36,7 @@ export async function runDbMigrations(): Promise<void> {
 }
 
 // ESM replacement for require.main === module check
-if (import.meta.url === `file://${process.argv[1]}` || import.meta.url === fileURLToPath(`file://${process.argv[1]}`)) {
+if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
   // Run migrations and exit with appropriate code
   runDbMigrations()
     .then(() => process.exit(0))

@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
 import { Presets, SingleBar } from 'cli-progress';
 import cliState from '../../cliState';
@@ -261,7 +262,7 @@ async function main(): Promise<void> {
     const processedPrompt = processedTestCases[0].vars?.prompt as string;
     logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
-    if (import.meta.url === `file://${process.argv[1]}` || import.meta.url === fileURLToPath(`file://${process.argv[1]}`)) {
+    if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
       await writeVideoFile(base64Video, 'test-video.mp4');
       logger.info(`You can open it with any video player to verify the conversion.`);
     }
@@ -271,6 +272,6 @@ async function main(): Promise<void> {
 }
 
 // ESM replacement for require.main === module check
-if (import.meta.url === `file://${process.argv[1]}` || import.meta.url === fileURLToPath(`file://${process.argv[1]}`)) {
+if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
   main();
 }

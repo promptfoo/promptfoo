@@ -3,7 +3,8 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Use currentDir instead of __dirname to avoid Jest/CJS conflicts
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
@@ -279,7 +280,7 @@ export async function runPython(
     env: process.env,
     mode: 'binary',
     pythonPath,
-    scriptPath: __dirname,
+    scriptPath: currentDir,
     // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
     ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
   };

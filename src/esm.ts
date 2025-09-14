@@ -6,9 +6,15 @@ import logger from './logger';
 import { safeResolve } from './util/fileNode';
 
 /**
- * ESM replacement for __dirname - now that we're ESM-only, we can use this directly
+ * ESM replacement for __dirname - guarded for dual CJS/ESM builds
  */
 export function getDirectory(): string {
+  // Guard import.meta usage for CJS builds
+  if (typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'cjs') {
+    // In CJS builds, use __dirname which is shimmed by tsup
+    return __dirname;
+  }
+  // In ESM builds, use import.meta.url
   return path.dirname(fileURLToPath(import.meta.url));
 }
 
