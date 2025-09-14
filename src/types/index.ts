@@ -1159,6 +1159,7 @@ export interface EvalQueryParams {
   sort?: 'createdAt' | 'description' | 'passRate' | 'numTests' | 'type';
   order?: 'asc' | 'desc';
   datasetId?: string;
+  focusedEvalId?: string;
   type?: EvalType;
 }
 
@@ -1228,20 +1229,3 @@ export const EvalResultsFilterMode = z.enum([
 
 export type EvalResultsFilterMode = z.infer<typeof EvalResultsFilterMode>;
 
-// Pagination and server-side filtering types for the results API
-export interface EvalQueryParams {
-  limit?: number;
-  offset?: number;
-  search?: string;
-  sort?: 'createdAt' | 'description';
-  order?: 'asc' | 'desc';
-  datasetId?: string;
-  focusedEvalId?: string;
-}
-
-export interface PaginatedEvalResponse {
-  data: EvalSummary[];
-  total: number;
-  limit: number;
-  offset: number;
-}

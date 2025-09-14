@@ -15,7 +15,6 @@ import {
   type GridCellParams,
   type GridColDef,
   GridCsvExportMenuItem,
-  type GridFilterModel,
   type GridPaginationModel,
   type GridRenderCellParams,
   type GridRowSelectionModel,
