@@ -25,6 +25,8 @@ The strategy renders text into images through these steps:
 3. **Encoding**: Outputs base64-encoded PNG or JPEG for multi-modal model consumption
 4. **Hidden Channels**: Optionally embeds text in EXIF metadata, low-contrast overlays, or microtext patterns
 
+![Example of image distortions applied to text](/img/docs/redteam/image-strategy-distortions.png)
+
 ## Quick Start
 
 Configure the image strategy in your red team evaluation:
