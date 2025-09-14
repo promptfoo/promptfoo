@@ -1,4 +1,4 @@
-import packageJson from '../package.json';
+import packageJson from '../package.json' assert { type: 'json' };
 import { getEnvInt, getEnvString } from './envars';
 
 export * from './providers/constants';

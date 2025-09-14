@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
-import { version } from '../package.json';
+import pkg from '../package.json' assert { type: 'json' };
+const { version } = pkg;
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -140,7 +142,8 @@ async function main() {
   program.parse();
 }
 
-if (require.main === module) {
+// ESM replacement for require.main === module check
+if (import.meta.url === `file://${process.argv[1]}` || import.meta.url === fileURLToPath(`file://${process.argv[1]}`)) {
   checkNodeVersion();
   main();
 }

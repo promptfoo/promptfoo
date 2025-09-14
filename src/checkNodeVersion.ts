@@ -1,5 +1,6 @@
 import chalk from 'chalk';
-import { engines } from '../package.json';
+import pkg from '../package.json' assert { type: 'json' };
+const { engines } = pkg;
 import logger from './logger';
 
 /**

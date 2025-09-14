@@ -1,4 +1,7 @@
 import * as path from 'path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database';
@@ -30,7 +33,8 @@ export async function runDbMigrations(): Promise<void> {
   });
 }
 
-if (require.main === module) {
+// ESM replacement for require.main === module check
+if (import.meta.url === `file://${process.argv[1]}` || import.meta.url === fileURLToPath(`file://${process.argv[1]}`)) {
   // Run migrations and exit with appropriate code
   runDbMigrations()
     .then(() => process.exit(0))

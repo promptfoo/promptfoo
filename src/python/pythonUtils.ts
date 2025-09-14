@@ -1,6 +1,9 @@
 ﻿import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';

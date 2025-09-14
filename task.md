@@ -24,6 +24,66 @@ Migrate the promptfoo project from CommonJS to ESM (ECMAScript Modules) while ma
 
 ## Migration Strategy Overview
 
+## Current Status and TODOs (Live Checklist)
+
+This checklist reflects progress on esm-migration vs main and what’s left to finish. Items checked are already implemented in this branch.
+
+- Config and Tooling
+  - [x] Update `tsconfig.json` to ESM: `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `target: "ES2022"`, `emitDeclarationOnly: true`
+  - [x] Add `tsup` and `tsup.config.ts` with ESM CLI bundle and ESM/CJS library outputs
+  - [x] Rename Node-executed build scripts to `.cjs`: `scripts/generate-constants.cjs`, `scripts/generate-blog-image.cjs`
+  - [ ] Update `package.json` scripts to use tsup and tsc for types:
+    - [ ] `build`: `npm run generate-constants && tsup && tsc --emitDeclarationOnly && npm run post-build`
+    - [ ] `post-build`: copy assets (HTML, python wrapper, golang wrapper, drizzle) and `chmod +x dist/src/main.js`
+    - [ ] Fix `generate-constants` path to `.cjs`
+    - [ ] Prefer `tsx` for dev commands: `local`, `db:migrate`, `dev:server`
+  - [ ] Switch `package.json` to `"type": "module"` and update `exports` to include ESM and CJS entries (or plan ESM-only + major bump)
+
+- Source Changes (ESM patterns)
+  - [ ] Replace `require.main === module` with `fileURLToPath(import.meta.url)` path equality in:
+    - [ ] `src/main.ts`
+    - [ ] `src/migrate.ts`
+    - [ ] `src/redteam/strategies/simpleImage.ts`
+    - [ ] `src/redteam/strategies/simpleVideo.ts`
+  - [ ] Replace `__dirname` usage with `dirname(fileURLToPath(import.meta.url))` in:
+    - [ ] `src/migrate.ts`
+    - [ ] `src/providers/golangCompletion.ts`
+    - [ ] `src/python/pythonUtils.ts`
+    - [ ] `src/app/vite.config.ts`
+  - [ ] JSON imports: choose strategy and implement consistently
+    - Option 1 (recommended with tsup): rely on bundling JSON; keep static imports; add Jest mapping if needed
+    - Option 2: use JSON module assertions in source (Node 20+):
+      - [ ] Static JSON: `import pkg from '../package.json' assert { type: 'json' }`
+      - [ ] Dynamic JSON: `await import('./data.json', { assert: { type: 'json' } })`
+    - Files to update:
+      - [ ] `src/main.ts`
+      - [ ] `src/constants.ts`
+      - [ ] `src/commands/debug.ts`
+      - [ ] `src/checkNodeVersion.ts`
+      - [ ] `src/app/vite.config.ts`
+      - [ ] `src/redteam/strategies/promptInjections/index.ts` (dynamic)
+      - [ ] `src/util/testCaseReader.ts` (replace `require(json)` with `fs.readFileSync + JSON.parse`)
+  - [ ] Simplify `src/esm.ts`: remove eval() and CommonJS `require()` fallback; use native dynamic import with `pathToFileURL(safeResolve(...))`
+
+- Build and Distribution
+  - [ ] Ensure tsup CLI bundle includes shebang and `shims: true` (present in `tsup.config.ts`)
+  - [ ] Externalize heavy deps in tsup (present) and confirm asset copying in post-build
+  - [ ] Validate `bin` entries continue to point at `dist/src/main.js` and binary is executable
+
+- Testing (SWC/Jest)
+  - [x] Keep `@swc/jest` transformer; no switch to ts-jest
+  - [ ] If using JSON-in-source, add Jest support:
+    - [ ] `moduleNameMapper` for JSON or a lightweight JSON transform/mock
+  - [ ] Optional: add `moduleNameMapper` for “.js” suffix only if you codemod source imports (not needed with tsup approach)
+
+- Documentation Cleanups in this document
+  - [ ] Remove or update older guidance recommending `module: "ES2022"`, `moduleResolution: "bundler"`
+  - [ ] Remove ts-jest guidance; keep `@swc/jest`
+  - [ ] Consolidate duplicate “Create ESM Compatibility Utilities” sections
+  - [ ] Standardize JSON examples to a single approach (bundled vs assert)
+
+Notes: Current branch already includes tsconfig NodeNext/ES2022, tsup config with ESM/CJS builds, and `.cjs` script renames. Next highest-impact steps are updating `package.json` scripts, addressing JSON imports, and replacing `require.main`/`__dirname` usages.
+
 ### Phase 1: Preparation and Analysis (Low Risk)
 1. Audit all CommonJS-specific patterns
 2. Analyze external dependencies for ESM compatibility

@@ -12,7 +12,14 @@ export default defineConfig([
     banner: {
       js: '#!/usr/bin/env node'
     },
-    external: ['better-sqlite3', 'playwright', 'sharp'] // Externalize heavy deps
+    external: [
+      // Externalize heavy deps to avoid bundling
+      /^better-sqlite3/,
+      /^playwright/,
+      /^sharp/,
+      // Externalize all node_modules
+      /^[^./]/
+    ]
   },
   // Library ESM build
   {
@@ -22,7 +29,12 @@ export default defineConfig([
     outDir: 'dist/src',
     splitting: false,
     treeshake: true,
-    external: ['better-sqlite3', 'playwright', 'sharp']
+    external: [
+      /^better-sqlite3/,
+      /^playwright/,
+      /^sharp/,
+      /^[^./]/
+    ]
   },
   // Library CJS build for compatibility
   {
@@ -30,7 +42,14 @@ export default defineConfig([
     format: ['cjs'],
     target: 'node20',
     outDir: 'dist/src',
-    outExtension: { '.js': '.cjs' },
-    external: ['better-sqlite3', 'playwright', 'sharp']
+    outExtension() {
+      return { '.js': '.cjs' }
+    },
+    external: [
+      /^better-sqlite3/,
+      /^playwright/,
+      /^sharp/,
+      /^[^./]/
+    ]
   }
 ]);

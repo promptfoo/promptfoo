@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { Presets, SingleBar } from 'cli-progress';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -176,7 +177,7 @@ async function main() {
     logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
     // Check if we're running this directly (not being imported)
-    if (require.main === module) {
+    if (import.meta.url === `file://${process.argv[1]}` || import.meta.url === fileURLToPath(`file://${process.argv[1]}`)) {
       // Write to a file for testing with image viewers
       const fs = await import('fs');
       const outputFilePath = 'test-image.png';
@@ -196,6 +197,7 @@ async function main() {
 }
 
 // Run the main function if this file is executed directly
-if (require.main === module) {
+// ESM replacement for require.main === module check
+if (import.meta.url === `file://${process.argv[1]}` || import.meta.url === fileURLToPath(`file://${process.argv[1]}`)) {
   main();
 }

@@ -7,7 +7,7 @@ export async function addInjections(
 ): Promise<TestCase[]> {
   const sampleSize = config.sample || 1;
   const harmfulOnly = config.harmfulOnly || false;
-  const data: string[] = (await import('./data.json')).default;
+  const data: string[] = (await import('./data.json', { assert: { type: 'json' } })).default;
   const injections =
     sampleSize === 1
       ? // Take skeleton key (the first one) by default
