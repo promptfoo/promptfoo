@@ -186,7 +186,7 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 <details>
 <summary>Show example YAML</summary>
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Automatic response evaluation using LLM rubric scoring
 
@@ -407,7 +407,7 @@ A simple `npx promptfoo@latest eval` will run the example. Also note that you ca
 
 Produces this HTML table:
 
-![Side-by-side evaluation of LLM model quality, gpt-5 vs gpt-5-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+![Side-by-side eval of LLM model quality, gpt-5 vs gpt-5-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
 Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-model-comparison).
 

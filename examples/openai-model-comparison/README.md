@@ -30,7 +30,7 @@ npx promptfoo@latest init --example openai-model-comparison
 
    Alternatively, you can set the API key in a `.env` file:
 
-   ```
+   ```bash
    OPENAI_API_KEY=your_openai_api_key
    ```
 

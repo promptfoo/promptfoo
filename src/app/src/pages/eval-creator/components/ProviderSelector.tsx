@@ -293,7 +293,7 @@ const defaultProviders: ProviderOptions[] = (
       label: 'Azure: GPT-5',
       config: {
         api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-02-15-preview',
+        api_version: '2025-08-07',
         temperature: 0.5,
         max_tokens: 1024,
       },
@@ -303,7 +303,7 @@ const defaultProviders: ProviderOptions[] = (
       label: 'Azure: GPT-5 Mini',
       config: {
         api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-02-15-preview',
+        api_version: '2025-08-07',
         temperature: 0.5,
         max_tokens: 1024,
       },
@@ -313,7 +313,7 @@ const defaultProviders: ProviderOptions[] = (
       label: 'Azure: GPT-4o',
       config: {
         api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-02-15-preview',
+        api_version: '2025-08-07',
         temperature: 0.5,
         max_tokens: 1024,
       },
@@ -323,7 +323,7 @@ const defaultProviders: ProviderOptions[] = (
       label: 'Azure: GPT-4o Mini',
       config: {
         api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-02-15-preview',
+        api_version: '2025-08-07',
         temperature: 0.5,
         max_tokens: 2048,
       },
