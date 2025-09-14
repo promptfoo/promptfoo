@@ -122,7 +122,13 @@ export function createApp() {
       const { limit, offset, search, sort, order, datasetId, focusedEvalId, type } = req.query;
 
       // Validate and sanitize query params - enhanced for model audit support
-      const allowedSorts = new Set(['createdAt', 'description', 'passRate', 'numTests', 'type'] as const);
+      const allowedSorts = new Set([
+        'createdAt',
+        'description',
+        'passRate',
+        'numTests',
+        'type',
+      ] as const);
       const allowedOrders = new Set(['asc', 'desc'] as const);
       const allowedTypes = new Set(['eval', 'redteam', 'modelaudit'] as const);
 
