@@ -17,7 +17,7 @@ function revertImportsInFile(filePath) {
       modified = true;
       console.log(`${filePath}: Reverting ${importPath}.js -> ${importPath}`);
       return `from ${quote}${importPath}${quote}`;
-    }
+    },
   );
 
   // Also handle import statements with .js
@@ -27,7 +27,7 @@ function revertImportsInFile(filePath) {
       modified = true;
       console.log(`${filePath}: Reverting import ${importPath}.js -> ${importPath}`);
       return `import ${importClause}from ${quote}${importPath}${quote}`;
-    }
+    },
   );
 
   // Handle export statements with .js
@@ -37,7 +37,7 @@ function revertImportsInFile(filePath) {
       modified = true;
       console.log(`${filePath}: Reverting export ${importPath}.js -> ${importPath}`);
       return `export ${exportClause}from ${quote}${importPath}${quote}`;
-    }
+    },
   );
 
   // Handle jest.mock() and jest.requireActual() with .js extensions
@@ -47,7 +47,7 @@ function revertImportsInFile(filePath) {
       modified = true;
       console.log(`${filePath}: Reverting jest.${method} ${importPath}.js -> ${importPath}`);
       return `jest.${method}(${quote}${importPath}${quote}`;
-    }
+    },
   );
 
   if (modified) {
@@ -88,4 +88,6 @@ const srcFixed = processDirectory('src');
 const testFixed = processDirectory('test');
 const totalFixed = srcFixed + testFixed;
 
-console.log(`\nReverted .js extensions in ${totalFixed} files (${srcFixed} in src/, ${testFixed} in test/).`);
+console.log(
+  `\nReverted .js extensions in ${totalFixed} files (${srcFixed} in src/, ${testFixed} in test/).`,
+);

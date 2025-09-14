@@ -7,7 +7,12 @@ import {
   handleIContainsAny,
 } from '../../src/assertions/contains';
 
-import type { ApiProvider, AssertionParams, AssertionValue, AtomicTestCase } from '../../src/types/index';
+import type {
+  ApiProvider,
+  AssertionParams,
+  AssertionValue,
+  AtomicTestCase,
+} from '../../src/types/index';
 
 const mockProvider: ApiProvider = {
   id: () => 'mock',

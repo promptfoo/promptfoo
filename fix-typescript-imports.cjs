@@ -15,10 +15,11 @@ function fixImportsInFile(filePath) {
       const [, prefix, importPath, suffix] = importMatch;
 
       // Only process relative imports that don't already have extensions
-      if ((importPath.startsWith('./') || importPath.startsWith('../')) &&
-          !(/\.[jt]sx?$/.test(importPath)) &&
-          !importPath.endsWith('.json')) {
-
+      if (
+        (importPath.startsWith('./') || importPath.startsWith('../')) &&
+        !/\.[jt]sx?$/.test(importPath) &&
+        !importPath.endsWith('.json')
+      ) {
         const baseDir = path.dirname(filePath);
         const resolvedPath = path.resolve(baseDir, importPath);
 
