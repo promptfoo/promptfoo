@@ -12,13 +12,20 @@ vi.mock('@app/utils/api');
 
 // Mock the DataGrid component to simplify testing
 vi.mock('@mui/x-data-grid', () => ({
-  DataGrid: ({ rows, loading, slots, getRowClassName }: any) => {
+  DataGrid: ({ rows, loading, slots, getRowClassName, filterModel }: any) => {
     if (loading && slots?.loadingOverlay) {
       const LoadingOverlay = slots.loadingOverlay;
       return <LoadingOverlay />;
     }
 
     if (!loading && rows.length === 0 && slots?.noRowsOverlay) {
+      const NoRowsOverlay = slots.noRowsOverlay;
+      return <NoRowsOverlay />;
+    }
+
+    const filterByDatasetId = filterModel?.items?.some((item: any) => item.field === 'datasetId');
+
+    if (!loading && filterByDatasetId && rows.length === 0 && slots?.noRowsOverlay) {
       const NoRowsOverlay = slots.noRowsOverlay;
       return <NoRowsOverlay />;
     }
@@ -437,6 +444,40 @@ describe('EvalsDataGrid', () => {
     await waitFor(() => {
       expect(screen.getByTestId('eval-eval-1')).toHaveTextContent('Original Description');
       expect(screen.queryByTestId('eval-eval-2')).toBeNull();
+    });
+  });
+
+  it('should display "No evals found" when filterByDatasetId is true and the focused eval is not in the current page', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: [
+          {
+            evalId: 'eval-3',
+            createdAt: Date.now(),
+            description: 'Eval 3 - Dataset 2',
+            datasetId: 'dataset-2',
+            isRedteam: false,
+            label: 'eval-3',
+            numTests: 8,
+            passRate: 75,
+          },
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+      }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} focusedEvalId="eval-1" filterByDatasetId={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('No evals found')).toBeInTheDocument();
     });
   });
 
