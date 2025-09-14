@@ -182,7 +182,9 @@ async function main() {
 
     // Check if we're running this directly (not being imported)
     if (process.env.BUILD_FORMAT === 'esm') {
-      if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
+      const currentFile = fileURLToPath(import.meta.url);
+      const isSourceFile = currentFile.includes('simpleImage') && (currentFile.endsWith('.ts') || currentFile.endsWith('.js'));
+      if (isSourceFile && resolve(currentFile) === resolve(process.argv[1])) {
         // Write to a file for testing with image viewers
         const fs = await import('fs');
         const outputFilePath = 'test-image.png';
@@ -205,7 +207,9 @@ async function main() {
 // Run the main function if this file is executed directly
 // ESM replacement for require.main === module check
 if (process.env.BUILD_FORMAT === 'esm') {
-  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
+  const currentFile = fileURLToPath(import.meta.url);
+  const isSourceFile = currentFile.includes('simpleImage') && (currentFile.endsWith('.ts') || currentFile.endsWith('.js'));
+  if (isSourceFile && resolve(currentFile) === resolve(process.argv[1])) {
     main();
   }
 }
