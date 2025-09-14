@@ -195,7 +195,10 @@ export default function EvalsDataGrid({
           params.set('order', sortModel[0].sort);
         }
 
-        // Note: Dataset filtering is handled client-side in the rows useMemo
+        // Dataset filtering via focusedEvalId - handled server-side
+        if (filterByDatasetId && focusedEvalId) {
+          params.set('focusedEvalId', focusedEvalId);
+        }
 
         const response = await callApi(`/results?${params.toString()}`, {
           cache: 'no-store',
@@ -248,23 +251,10 @@ export default function EvalsDataGrid({
   }, [fetchEvals, location]); // Include location to trigger refetch on navigation
 
   /**
-   * For server-side pagination, we mostly use the rows as-is from the server.
-   * Client-side filtering is minimal since server handles most of it.
-   * Exception: Dataset filtering is done client-side for PR #1 simplicity.
+   * For server-side pagination, we use the rows as-is from the server.
+   * All filtering (including dataset filtering) is handled server-side.
    */
-  const rows = useMemo(() => {
-    let filteredEvals = evals;
-
-    // Apply dataset filtering if enabled
-    if (filterByDatasetId && focusedEvalId) {
-      const focusedEval = evals.find((e) => e.evalId === focusedEvalId);
-      if (focusedEval?.datasetId) {
-        filteredEvals = evals.filter((e) => e.datasetId === focusedEval.datasetId);
-      }
-    }
-
-    return filteredEvals;
-  }, [evals, filterByDatasetId, focusedEvalId]);
+  const rows = useMemo(() => evals, [evals]);
 
   const hasRedteamEvals = useMemo(() => evals.some(({ isRedteam }) => !!isRedteam), [evals]);
 
@@ -368,6 +358,7 @@ export default function EvalsDataGrid({
           headerName: 'Pass Rate',
           flex: 0.5,
           type: 'number',
+          sortable: false,
           renderCell: (params: GridRenderCellParams<Eval>) => (
             <>
               <Typography
@@ -397,6 +388,7 @@ export default function EvalsDataGrid({
           headerName: '# Tests',
           type: 'number',
           flex: 0.5,
+          sortable: false,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
     [focusedEvalId, onEvalSelected, hasRedteamEvals],
