@@ -32,11 +32,15 @@ This checklist reflects progress on esm-migration vs main and what’s left to f
   - [x] Update `tsconfig.json` to ESM: `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `target: "ES2022"`, `emitDeclarationOnly: true`
   - [x] Add `tsup` and `tsup.config.ts` with ESM CLI bundle and ESM/CJS library outputs
   - [x] Rename Node-executed build scripts to `.cjs`: `scripts/generate-constants.cjs`, `scripts/generate-blog-image.cjs`
+  - [ ] Add per-format defines and CJS log override in `tsup.config.ts` (see Dual Build section)
+  - [ ] Set `shims: true` in the library ESM build OR refactor library `__dirname` usages (CLI ESM already has `shims: true`)
+  - [ ] Enable `sourcemap: true` for easier debugging in development builds
   - [ ] Update `package.json` scripts to use tsup and tsc for types:
     - [ ] `build`: `npm run generate-constants && tsup && tsc --emitDeclarationOnly && npm run post-build`
     - [ ] `post-build`: copy assets (HTML, python wrapper, golang wrapper, drizzle) and `chmod +x dist/src/main.js`
-    - [ ] Fix `generate-constants` path to `.cjs`
+    - [ ] Fix `generate-constants` script to call `.cjs`
     - [ ] Prefer `tsx` for dev commands: `local`, `db:migrate`, `dev:server`
+    - [ ] Update other ad-hoc ts-node uses (e.g., `citation:generate`) to `tsx` for consistency
   - [ ] Switch `package.json` to `"type": "module"` and update `exports` to include ESM and CJS entries (or plan ESM-only + major bump)
 
 - Source Changes (ESM patterns)
@@ -64,6 +68,7 @@ This checklist reflects progress on esm-migration vs main and what’s left to f
       - [ ] `src/redteam/strategies/promptInjections/index.ts` (dynamic)
       - [ ] `src/util/testCaseReader.ts` (replace `require(json)` with `fs.readFileSync + JSON.parse`)
   - [ ] Simplify `src/esm.ts`: remove eval() and CommonJS `require()` fallback; use native dynamic import with `pathToFileURL(safeResolve(...))`
+    - [ ] Guard any `import.meta` usage for dual-build (see Dual Build section)
 
 - Package.json (Exports/Type)
   - [ ] After verifying builds, flip to `"type": "module"`
@@ -79,18 +84,62 @@ This checklist reflects progress on esm-migration vs main and what’s left to f
   - [ ] Post-build asset copy parity with current: HTML, python wrapper, golang wrapper, drizzle dir
   - [ ] Ensure `chmod +x dist/src/main.js`
   - [ ] Verify heavy deps are externalized (tsup config shows: better-sqlite3, playwright, sharp)
+  - [ ] Confirm multiple tsup outputs to the same `outDir` do not overwrite unintended files (CLI ESM, lib ESM, lib CJS)
+
+Dual Build (ESM + CJS) import.meta Strategy
+- Problem: `import.meta` is not valid in CJS output; esbuild warns (and may fail depending on settings)
+- Solution (compile-time branching):
+  - [ ] Update `tsup.config.ts` with per-format defines so esbuild can DCE branches:
+    - ESM configs (CLI + lib): `define: { 'process.env.BUILD_FORMAT': '"esm"' }`
+    - CJS config (lib): `define: { 'process.env.BUILD_FORMAT': '"cjs"' }`
+    - Optional (CJS only): `esbuildOptions: (o) => { o.logOverride = { 'empty-import-meta': 'silent' }; }`
+    - Example (CJS block):
+      ```ts
+      {
+        entry: ['src/index.ts'],
+        format: ['cjs'],
+        target: 'node20',
+        outDir: 'dist/src',
+        outExtension: { '.js': '.cjs' },
+        define: { 'process.env.BUILD_FORMAT': '"cjs"' },
+        esbuildOptions: (o) => { o.logOverride = { 'empty-import-meta': 'silent' }; },
+        external: ['better-sqlite3', 'playwright', 'sharp']
+      }
+      ```
+  - [ ] Refactor any `import.meta` usages in shared library code to guarded branches so CJS never sees them (CLI code can remain ESM-only):
+    ```ts
+    // Before (fails/warns in CJS)
+    const here = dirname(fileURLToPath(import.meta.url));
+
+    // After (branch gets erased in CJS build)
+    export function getCurrentDir() {
+      if (process.env.BUILD_FORMAT === 'esm') {
+        return dirname(fileURLToPath(import.meta.url));
+      }
+      return __dirname; // available in CJS
+    }
+    ```
+  - [ ] Apply this pattern in `src/esm.ts` and any other shared module referencing `import.meta`
+  - [ ] Keep `import.meta` freely in CLI-only files (e.g., `src/main.ts`) since CLI is ESM-only in tsup
+  - [ ] Scan for `import.meta` usages and categorize:
+    - [ ] CLI-only: allowed
+    - [ ] Library/shared: guard behind `BUILD_FORMAT`
+    - Command: `rg -n "import\\.meta" src`
 
 - Runtime & Test Verification
   - [ ] Run unit tests with @swc/jest; fix any JSON import issues (mapper/transform)
   - [ ] Build and smoke-test CLI from `dist`: `promptfoo --help`, basic commands
   - [ ] Build app workspace and load in dev: `npm run dev --prefix src/app` (ESM-only config)
   - [ ] Test library import in both ESM and CJS consumers locally
+  - [ ] Verify `db:migrate` works via tsx (`tsx src/migrate.ts`) and as part of CLI flow
+  - [ ] Ensure CI uses the new build and test scripts without relying on tsc JS output
 
 - Documentation & Examples
   - [ ] Remove/replace any remaining ts-jest guidance (we use @swc/jest)
   - [ ] Remove outdated `module: "ES2022"` / `moduleResolution: "bundler"` advice
   - [ ] Decide whether to keep CommonJS examples in docs; add ESM equivalents
   - [ ] Note migration guidance for CJS consumers (use `require('promptfoo')` via conditional export or `await import('promptfoo')`)
+  - [ ] Update any references to `scripts/generate-constants.js` to `.cjs`
 
 App Workspace (ESM-only)
 - [x] `src/app/package.json` already `"type": "module"`
