@@ -2,10 +2,13 @@ import * as path from 'path';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
+// Global variable defined by build system
+declare const BUILD_FORMAT: string | undefined;
+
 // Use currentDir instead of __dirname to avoid Jest/CJS conflicts
 // Guard import.meta usage for dual CJS/ESM builds
 const currentDir = (() => {
-  if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
+  if (process.env.BUILD_FORMAT === 'esm') {
     return path.dirname(fileURLToPath(import.meta.url));
   }
   return __dirname;
@@ -42,7 +45,7 @@ export async function runDbMigrations(): Promise<void> {
 }
 
 // ESM replacement for require.main === module check
-if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
+if (process.env.BUILD_FORMAT === 'esm') {
   if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
     // Run migrations and exit with appropriate code
     runDbMigrations()

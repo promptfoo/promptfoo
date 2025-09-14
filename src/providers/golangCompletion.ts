@@ -5,10 +5,13 @@ import path from 'path';
 import util from 'util';
 import { fileURLToPath } from 'node:url';
 
+// Global variable defined by build system
+declare const BUILD_FORMAT: string | undefined;
+
 // Use currentDir instead of __dirname to avoid Jest/CJS conflicts
 // Guard import.meta usage for dual CJS/ESM builds
 const currentDir = (() => {
-  if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
+  if (process.env.BUILD_FORMAT === 'esm') {
     return path.dirname(fileURLToPath(import.meta.url));
   }
   return __dirname;

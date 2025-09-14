@@ -265,7 +265,7 @@ async function main(): Promise<void> {
     const processedPrompt = processedTestCases[0].vars?.prompt as string;
     logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
-    if (typeof BUILD_FORMAT === 'undefined' && (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm')) {
+    if (process.env.BUILD_FORMAT === 'esm') {
       if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
         await writeVideoFile(base64Video, 'test-video.mp4');
         logger.info(`You can open it with any video player to verify the conversion.`);
@@ -277,7 +277,7 @@ async function main(): Promise<void> {
 }
 
 // ESM replacement for require.main === module check
-if (typeof BUILD_FORMAT === 'undefined' && (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm')) {
+if (process.env.BUILD_FORMAT === 'esm') {
   if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
     main();
   }

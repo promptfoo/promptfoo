@@ -1,6 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { Command } from 'commander';
+
+// Global variable defined by build system
+declare const BUILD_FORMAT: string | undefined;
 import pkg from '../package.json' with { type: 'json' };
 const { version } = pkg;
 import { checkNodeVersion } from './checkNodeVersion';
@@ -142,7 +145,9 @@ async function main() {
 }
 
 // ESM replacement for require.main === module check
-if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
-  checkNodeVersion();
-  main();
+if (process.env.BUILD_FORMAT === 'esm') {
+  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
+    checkNodeVersion();
+    main();
+  }
 }
