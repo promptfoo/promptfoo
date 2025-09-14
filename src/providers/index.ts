@@ -4,17 +4,17 @@ import path from 'path';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
-import cliState from '../cliState';
-import logger from '../logger';
-import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud';
-import { maybeLoadConfigFromExternalFile } from '../util/file';
-import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
-import { providerMap } from './registry';
+import cliState from '../cliState.js';
+import logger from '../logger.js';
+import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud.js';
+import { maybeLoadConfigFromExternalFile } from '../util/file.js';
+import invariant from '../util/invariant.js';
+import { getNunjucksEngine } from '../util/templates.js';
+import { providerMap } from './registry.js';
 
-import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
+import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index.js';
+import type { EnvOverrides } from '../types/env.js';
+import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers.js';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(

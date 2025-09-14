@@ -1,14 +1,14 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { z } from 'zod';
-import { getUserEmail } from '../../globalConfig/accounts';
-import { API_HOST, cloudConfig } from '../../globalConfig/cloud';
-import logger from '../../logger';
-import { TestSuite, UnifiedConfig } from '../../types';
-import { CallApiContextParams, CallApiOptionsParams } from '../../types/providers';
-import { setupEnv } from '../../util';
-import { resolveConfigs } from '../../util/config/load';
-import { fetchWithProxy } from '../../util/fetch';
+import { getUserEmail } from '../../globalConfig/accounts.js';
+import { API_HOST, cloudConfig } from '../../globalConfig/cloud.js';
+import logger from '../../logger.js';
+import { TestSuite, UnifiedConfig } from '../../types/index.js';
+import { CallApiContextParams, CallApiOptionsParams } from '../../types/providers.js';
+import { setupEnv } from '../../util/index.js';
+import { resolveConfigs } from '../../util/config/load.js';
+import { fetchWithProxy } from '../../util/fetch/index.js';
 
 const SimbaCommandSchema = z.object({
   config: z.union([z.string(), z.array(z.string())]).optional(),

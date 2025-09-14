@@ -1,5 +1,5 @@
 import { Gateway } from '@adaline/gateway';
-import { getCache } from '../../src/cache';
+import { getCache } from '../../src/cache.js';
 import {
   AdalineGatewayCachePlugin,
   AdalineGatewayChatProvider,

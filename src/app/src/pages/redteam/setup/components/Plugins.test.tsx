@@ -4,8 +4,8 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import Plugins from './Plugins';
+import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig.js';
+import Plugins from './Plugins.js';
 
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');

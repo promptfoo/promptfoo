@@ -1,6 +1,6 @@
 import chalk from 'chalk';
-import { checkNodeVersion } from '../src/checkNodeVersion';
-import logger from '../src/logger';
+import { checkNodeVersion } from '../src/checkNodeVersion.js';
+import logger from '../src/logger.js';
 
 jest.mock('../package.json', () => ({
   engines: { node: '>=20.0.1' },

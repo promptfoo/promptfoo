@@ -1,13 +1,13 @@
 import { Presets, SingleBar } from 'cli-progress';
-import { fetchWithCache } from '../../cache';
-import { VERSION } from '../../constants';
-import { getUserEmail } from '../../globalConfig/accounts';
-import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { fetchWithCache } from '../../cache.js';
+import { VERSION } from '../../constants.js';
+import { getUserEmail } from '../../globalConfig/accounts.js';
+import logger from '../../logger.js';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared.js';
+import invariant from '../../util/invariant.js';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration.js';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index.js';
 
 /**
  * Converts text to audio using the remote API

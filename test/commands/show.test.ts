@@ -1,10 +1,10 @@
 import { Command } from 'commander';
-import { handleDataset, handleEval, handlePrompt, showCommand } from '../../src/commands/show';
-import logger from '../../src/logger';
-import Eval from '../../src/models/eval';
-import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../../src/util/database';
+import { handleDataset, handleEval, handlePrompt, showCommand } from '../../src/commands/show.js';
+import logger from '../../src/logger.js';
+import Eval from '../../src/models/eval.js';
+import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../../src/util/database.js';
 
-import type { Prompt } from '../../src/types/prompts';
+import type { Prompt } from '../../src/types/prompts.js';
 
 jest.mock('../../src/logger');
 jest.mock('../../src/models/eval');

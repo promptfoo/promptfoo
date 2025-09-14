@@ -1,8 +1,8 @@
 import opener from 'opener';
-import { getDefaultPort, VERSION } from '../../src/constants';
-import logger from '../../src/logger';
-import * as remoteGeneration from '../../src/redteam/remoteGeneration';
-import * as readlineUtils from '../../src/util/readline';
+import { getDefaultPort, VERSION } from '../../src/constants.js';
+import logger from '../../src/logger.js';
+import * as remoteGeneration from '../../src/redteam/remoteGeneration.js';
+import * as readlineUtils from '../../src/util/readline.js';
 // Import the module under test after mocks are set up
 import {
   __clearFeatureCache,
@@ -10,7 +10,7 @@ import {
   checkServerFeatureSupport,
   checkServerRunning,
   openBrowser,
-} from '../../src/util/server';
+} from '../../src/util/server.js';
 
 // Mock opener
 jest.mock('opener', () => jest.fn());
@@ -40,7 +40,7 @@ jest.mock('../../src/redteam/remoteGeneration', () => ({
 }));
 
 // Import the mocked fetchWithProxy for use in tests
-import * as fetchModule from '../../src/util/fetch';
+import * as fetchModule from '../../src/util/fetch/index.js';
 
 const mockFetchWithProxy = fetchModule.fetchWithProxy as jest.MockedFunction<
   typeof fetchModule.fetchWithProxy

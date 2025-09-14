@@ -17,7 +17,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 
-import type { ScanAsset, ScanCheck } from '../ModelAudit.types';
+import type { ScanAsset, ScanCheck } from '../ModelAudit.types.js';
 
 interface ChecksSectionProps {
   checks?: ScanCheck[];

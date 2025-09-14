@@ -1,4 +1,4 @@
-import cliState from '../src/cliState';
+import cliState from '../src/cliState.js';
 import {
   getEnvBool,
   getEnvFloat,
@@ -8,7 +8,7 @@ import {
   isCI,
 } from '../src/envars';
 
-import type { EnvVarKey } from '../src/envars';
+import type { EnvVarKey } from '../src/envars.js';
 
 describe('envars', () => {
   const originalEnv = process.env;

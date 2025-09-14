@@ -1,10 +1,10 @@
-import { fetchWithCache } from '../../cache';
-import invariant from '../../util/invariant';
-import { REQUEST_TIMEOUT_MS } from '../shared';
-import { DEFAULT_AZURE_API_VERSION } from './defaults';
-import { AzureGenericProvider } from './generic';
+import { fetchWithCache } from '../../cache.js';
+import invariant from '../../util/invariant.js';
+import { REQUEST_TIMEOUT_MS } from '../shared.js';
+import { DEFAULT_AZURE_API_VERSION } from './defaults.js';
+import { AzureGenericProvider } from './generic.js';
 
-import type { ProviderEmbeddingResponse } from '../../types';
+import type { ProviderEmbeddingResponse } from '../../types/index.js';
 
 export class AzureEmbeddingProvider extends AzureGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {

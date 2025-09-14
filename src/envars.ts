@@ -1,8 +1,8 @@
 import dotenv from 'dotenv';
 dotenv.config({ quiet: true });
 
-import cliState from './cliState';
-import type { EnvOverrides } from './types/env';
+import cliState from './cliState.js';
+import type { EnvOverrides } from './types/env.js';
 
 // Define the supported environment variables and their types
 type EnvVars = {

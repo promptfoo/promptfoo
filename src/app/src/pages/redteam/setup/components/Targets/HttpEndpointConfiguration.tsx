@@ -28,9 +28,9 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import yaml from 'js-yaml';
 import Editor from 'react-simple-code-editor';
-import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
+import HttpAdvancedConfiguration from './HttpAdvancedConfiguration.js';
 
-import type { ProviderOptions } from '../../types';
+import type { ProviderOptions } from '../../types.js';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;

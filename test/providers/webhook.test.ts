@@ -1,5 +1,5 @@
-import { fetchWithCache } from '../../src/cache';
-import { WebhookProvider } from '../../src/providers/webhook';
+import { fetchWithCache } from '../../src/cache.js';
+import { WebhookProvider } from '../../src/providers/webhook.js';
 
 jest.mock('../../src/cache');
 

@@ -1,11 +1,11 @@
-import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion';
+import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion.js';
 import {
   AnthropicLlmRubricProvider,
   DEFAULT_ANTHROPIC_MODEL,
   getAnthropicProviders,
 } from '../../../src/providers/anthropic/defaults';
-import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
-import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic.js';
+import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages.js';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,

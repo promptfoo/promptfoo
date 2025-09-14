@@ -1,10 +1,10 @@
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import yaml from 'js-yaml';
-import { getEnvBool, getEnvString } from '../envars';
-import invariant from '../util/invariant';
+import { getEnvBool, getEnvString } from '../envars.js';
+import invariant from '../util/invariant.js';
 
-import type { EvaluateResult, ResultFailureReason } from '../types';
+import type { EvaluateResult, ResultFailureReason } from '../types/index.js';
 
 let ajvInstance: Ajv | null = null;
 

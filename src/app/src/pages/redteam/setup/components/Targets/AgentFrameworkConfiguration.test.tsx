@@ -4,9 +4,9 @@ import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
+import AgentFrameworkConfiguration from './AgentFrameworkConfiguration.js';
 
-import type { ProviderOptions } from '../../types';
+import type { ProviderOptions } from '../../types.js';
 
 vi.mock('../../../hooks/useTelemetry', () => ({
   useTelemetry: () => ({

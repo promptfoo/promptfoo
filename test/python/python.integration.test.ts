@@ -4,8 +4,8 @@ import path from 'path';
 import util from 'util';
 
 import dedent from 'dedent';
-import logger from '../../src/logger';
-import { runPython } from '../../src/python/pythonUtils';
+import logger from '../../src/logger.js';
+import { runPython } from '../../src/python/pythonUtils.js';
 
 const execPromise = util.promisify(exec);
 

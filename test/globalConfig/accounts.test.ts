@@ -1,6 +1,6 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
-import { getEnvString, isCI } from '../../src/envars';
+import { getEnvString, isCI } from '../../src/envars.js';
 import {
   checkEmailStatus,
   checkEmailStatusOrExit,
@@ -16,9 +16,9 @@ import {
   writeGlobalConfig,
   writeGlobalConfigPartial,
 } from '../../src/globalConfig/globalConfig';
-import logger from '../../src/logger';
-import telemetry from '../../src/telemetry';
-import { fetchWithTimeout } from '../../src/util/fetch';
+import logger from '../../src/logger.js';
+import telemetry from '../../src/telemetry.js';
+import { fetchWithTimeout } from '../../src/util/fetch/index.js';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 jest.mock('../../src/util/fetch', () => ({

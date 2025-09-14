@@ -1,9 +1,9 @@
-import { handlePiScorer } from '../../src/assertions/pi';
-import { matchesClosedQa, matchesPiScore } from '../../src/matchers';
-import { getNunjucksEngine } from '../../src/util/templates';
+import { handlePiScorer } from '../../src/assertions/pi.js';
+import { matchesClosedQa, matchesPiScore } from '../../src/matchers.js';
+import { getNunjucksEngine } from '../../src/util/templates.js';
 import type nunjucks from 'nunjucks';
 
-import type { AssertionParams } from '../../src/types';
+import type { AssertionParams } from '../../src/types/index.js';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/util/templates');

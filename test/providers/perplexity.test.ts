@@ -1,4 +1,4 @@
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
 import {
   calculatePerplexityCost,
   createPerplexityProvider,

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { processMarkdownFile } from '../../../src/prompts/processors/markdown';
+import { processMarkdownFile } from '../../../src/prompts/processors/markdown.js';
 
 jest.mock('fs');
 

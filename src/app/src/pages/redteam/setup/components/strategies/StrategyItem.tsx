@@ -13,7 +13,7 @@ import {
   MULTI_MODAL_STRATEGIES,
 } from '@promptfoo/redteam/constants';
 
-import type { StrategyCardData } from './types';
+import type { StrategyCardData } from './types.js';
 
 interface StrategyItemProps {
   strategy: StrategyCardData;

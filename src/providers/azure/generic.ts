@@ -1,17 +1,17 @@
-import { getEnvString } from '../../envars';
-import logger from '../../logger';
-import { throwConfigurationError } from './util';
+import { getEnvString } from '../../envars.js';
+import logger from '../../logger.js';
+import { throwConfigurationError } from './util.js';
 import type { TokenCredential } from '@azure/identity';
 
-import type { EnvVarKey } from '../../envars';
+import type { EnvVarKey } from '../../envars.js';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types';
-import type { EnvOverrides } from '../../types/env';
-import type { AzureCompletionOptions, AzureProviderOptions } from './types';
+import type { EnvOverrides } from '../../types/env.js';
+import type { AzureCompletionOptions, AzureProviderOptions } from './types.js';
 
 export class AzureGenericProvider implements ApiProvider {
   deploymentName: string;

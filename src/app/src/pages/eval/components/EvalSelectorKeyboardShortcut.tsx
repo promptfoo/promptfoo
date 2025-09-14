@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-import EvalSelectorDialog from './EvalSelectorDialog';
+import EvalSelectorDialog from './EvalSelectorDialog.js';
 
 interface EvalSelectorProps {
   onEvalSelected: (evalId: string) => void;

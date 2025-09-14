@@ -1,11 +1,11 @@
 import { randomUUID } from 'crypto';
 
 import { eq, lt } from 'drizzle-orm';
-import { getDb } from '../database';
-import { spansTable, tracesTable } from '../database/tables';
-import logger from '../logger';
+import { getDb } from '../database/index.js';
+import { spansTable, tracesTable } from '../database/tables.js';
+import logger from '../logger.js';
 
-import type { TraceData } from '../types/tracing';
+import type { TraceData } from '../types/tracing.js';
 
 interface StoreTraceData extends Omit<TraceData, 'spans'> {
   evaluationId: string;

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import { useUserStore } from '@app/stores/userStore';
 import posthog from 'posthog-js';
-import { PostHogContext, type PostHogContextType } from './PostHogContext';
+import { PostHogContext, type PostHogContextType } from './PostHogContext.js';
 
 // PostHog configuration - using the same key system as the backend
 const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY;

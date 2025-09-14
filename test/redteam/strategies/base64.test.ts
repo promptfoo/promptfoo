@@ -1,6 +1,6 @@
-import { addBase64Encoding } from '../../../src/redteam/strategies/base64';
+import { addBase64Encoding } from '../../../src/redteam/strategies/base64.js';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index.js';
 
 describe('addBase64Encoding', () => {
   const mockTestCases: TestCase[] = [

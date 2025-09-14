@@ -1,5 +1,5 @@
-import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types';
-import invariant from '../util/invariant';
+import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index.js';
+import invariant from '../util/invariant.js';
 
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   invariant(

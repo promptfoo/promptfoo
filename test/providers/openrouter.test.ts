@@ -1,6 +1,6 @@
-import { clearCache } from '../../src/cache';
-import * as fetchModule from '../../src/util/fetch';
-import { OpenRouterProvider } from '../../src/providers/openrouter';
+import { clearCache } from '../../src/cache.js';
+import * as fetchModule from '../../src/util/fetch/index.js';
+import { OpenRouterProvider } from '../../src/providers/openrouter.js';
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
 

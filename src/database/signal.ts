@@ -1,8 +1,8 @@
 import fs from 'fs';
 
 import debounce from 'debounce';
-import logger from '../logger';
-import { getDbSignalPath } from './index';
+import logger from '../logger.js';
+import { getDbSignalPath } from './index.js';
 
 /**
  * Updates the signal file with the current timestamp.

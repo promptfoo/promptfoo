@@ -5,7 +5,7 @@
  */
 import fs from 'fs';
 
-import logger from '../../../src/logger';
+import logger from '../../../src/logger.js';
 import {
   addVideoToBase64,
   createProgressBar,
@@ -13,7 +13,7 @@ import {
   writeVideoFile,
 } from '../../../src/redteam/strategies/simpleVideo';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index.js';
 
 // Mock for dummy video data
 const DUMMY_VIDEO_BASE64 = 'AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAu1tZGF0';

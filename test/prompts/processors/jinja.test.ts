@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { processJinjaFile } from '../../../src/prompts/processors/jinja';
+import { processJinjaFile } from '../../../src/prompts/processors/jinja.js';
 
 jest.mock('fs');
 

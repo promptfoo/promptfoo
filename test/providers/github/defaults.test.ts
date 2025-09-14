@@ -1,5 +1,5 @@
-import { getDefaultProviders } from '../../../src/providers/defaults';
-import { getEnvString } from '../../../src/envars';
+import { getDefaultProviders } from '../../../src/providers/defaults.js';
+import { getEnvString } from '../../../src/envars.js';
 
 jest.mock('../../../src/envars');
 jest.mock('../../../src/logger', () => ({

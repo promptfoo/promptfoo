@@ -2,8 +2,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import logger from '../logger';
-import { runPython } from './pythonUtils';
+import logger from '../logger.js';
+import { runPython } from './pythonUtils.js';
 
 /**
  * Executes Python code by writing it to a temporary file

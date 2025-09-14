@@ -1,6 +1,6 @@
-import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
-import { hashPrompt } from '../../src/prompts/utils';
+import { runDbMigrations } from '../../src/migrate.js';
+import EvalResult, { sanitizeProvider } from '../../src/models/evalResult.js';
+import { hashPrompt } from '../../src/prompts/utils.js';
 import {
   type ApiProvider,
   type AtomicTestCase,

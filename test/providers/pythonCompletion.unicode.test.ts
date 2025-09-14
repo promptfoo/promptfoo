@@ -2,9 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
-import { PythonProvider } from '../../src/providers/pythonCompletion';
-import type { CallApiContextParams } from '../../src/types';
-import { runPython } from '../../src/python/pythonUtils';
+import { PythonProvider } from '../../src/providers/pythonCompletion.js';
+import type { CallApiContextParams } from '../../src/types/index.js';
+import { runPython } from '../../src/python/pythonUtils.js';
 
 // Mock the expensive Python execution for fast, reliable tests
 jest.mock('../../src/python/pythonUtils');

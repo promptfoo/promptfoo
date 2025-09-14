@@ -1,10 +1,10 @@
-import { getDefaultPort } from '../../constants';
-import logger from '../../logger';
-import { startServer } from '../../server/server';
-import telemetry from '../../telemetry';
-import { setupEnv } from '../../util';
-import { setConfigDirectoryPath } from '../../util/config/manage';
-import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
+import { getDefaultPort } from '../../constants.js';
+import logger from '../../logger.js';
+import { startServer } from '../../server/server.js';
+import telemetry from '../../telemetry.js';
+import { setupEnv } from '../../util/index.js';
+import { setConfigDirectoryPath } from '../../util/config/manage.js';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server.js';
 import type { Command } from 'commander';
 
 export function redteamSetupCommand(program: Command) {

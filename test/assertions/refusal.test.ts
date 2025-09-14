@@ -1,4 +1,4 @@
-import { handleIsRefusal } from '../../src/assertions/refusal';
+import { handleIsRefusal } from '../../src/assertions/refusal.js';
 
 import type {
   Assertion,

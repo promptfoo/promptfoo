@@ -1,9 +1,9 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import { OpenAiCompletionProvider } from './openai/completion';
-import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { OpenAiChatCompletionProvider } from './openai/chat.js';
+import { OpenAiCompletionProvider } from './openai/completion.js';
+import { OpenAiEmbeddingProvider } from './openai/embedding.js';
 
-import type { ApiProvider, ProviderOptions } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderOptions } from '../types/index.js';
+import type { EnvOverrides } from '../types/env.js';
 
 /**
  * Creates a TogetherAI provider using OpenAI-compatible endpoints

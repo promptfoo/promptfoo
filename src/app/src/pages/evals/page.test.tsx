@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import EvalsIndexPage from './page';
+import EvalsIndexPage from './page.js';
 
 vi.mock('./components/EvalsDataGrid', () => ({
   default: ({ onEvalSelected }: { onEvalSelected: (evalId: string) => void }) => (

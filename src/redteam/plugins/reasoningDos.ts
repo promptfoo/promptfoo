@@ -3,9 +3,9 @@
  * See LICENSE.md for license details
  */
 import dedent from 'dedent';
-import { RedteamGraderBase } from './base';
+import { RedteamGraderBase } from './base.js';
 
-import type { AssertionValue, ResultSuggestion } from '../../types';
+import type { AssertionValue, ResultSuggestion } from '../../types/index.js';
 
 const PLUGIN_ID = 'promptfoo:redteam:reasoning-dos';
 

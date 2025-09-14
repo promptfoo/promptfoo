@@ -1,14 +1,14 @@
 import { randomUUID } from 'crypto';
 
 import { and, eq, gte, inArray, lt } from 'drizzle-orm';
-import { getDb } from '../database';
-import { evalResultsTable } from '../database/tables';
-import { getEnvBool } from '../envars';
-import { hashPrompt } from '../prompts/utils';
-import { type EvaluateResult } from '../types';
-import { isApiProvider, isProviderOptions } from '../types/providers';
-import { safeJsonStringify } from '../util/json';
-import { getCurrentTimestamp } from '../util/time';
+import { getDb } from '../database/index.js';
+import { evalResultsTable } from '../database/tables.js';
+import { getEnvBool } from '../envars.js';
+import { hashPrompt } from '../prompts/utils.js';
+import { type EvaluateResult } from '../types/index.js';
+import { isApiProvider, isProviderOptions } from '../types/providers.js';
+import { safeJsonStringify } from '../util/json.js';
+import { getCurrentTimestamp } from '../util/time.js';
 
 import type {
   ApiProvider,

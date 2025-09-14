@@ -2,7 +2,7 @@ import { useApiHealth } from '@app/hooks/useApiHealth';
 import useApiConfig from '@app/stores/apiConfig';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ApiSettingsModal from './ApiSettingsModal';
+import ApiSettingsModal from './ApiSettingsModal.js';
 
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: vi.fn(),

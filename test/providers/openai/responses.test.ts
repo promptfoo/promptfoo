@@ -1,6 +1,6 @@
-import * as cache from '../../../src/cache';
-import logger from '../../../src/logger';
-import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import * as cache from '../../../src/cache.js';
+import logger from '../../../src/logger.js';
+import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses.js';
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),

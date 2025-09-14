@@ -1,10 +1,10 @@
 import express from 'express';
-import { VERSION } from '../../constants';
-import { getEnvBool } from '../../envars';
-import { getLatestVersion } from '../../updates';
-import { getUpdateCommands } from '../../updates/updateCommands';
-import { isRunningUnderNpx } from '../../util';
-import logger from '../../logger';
+import { VERSION } from '../../constants.js';
+import { getEnvBool } from '../../envars.js';
+import { getLatestVersion } from '../../updates.js';
+import { getUpdateCommands } from '../../updates/updateCommands.js';
+import { isRunningUnderNpx } from '../../util/index.js';
+import logger from '../../logger.js';
 import type { Request, Response } from 'express';
 
 const router = express.Router();

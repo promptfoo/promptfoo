@@ -1,18 +1,18 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-import { renderPrompt } from '../../../evaluatorHelpers';
-import logger from '../../../logger';
-import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import invariant from '../../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json';
-import { getNunjucksEngine } from '../../../util/templates';
-import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../../remoteGeneration';
-import { isBasicRefusal } from '../../util';
-import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
-import { getGoalRubric } from '../prompts';
+import { renderPrompt } from '../../../evaluatorHelpers.js';
+import logger from '../../../logger.js';
+import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo.js';
+import invariant from '../../../util/invariant.js';
+import { extractFirstJsonObject, safeJsonStringify } from '../../../util/json.js';
+import { getNunjucksEngine } from '../../../util/templates.js';
+import { sleep } from '../../../util/time.js';
+import { TokenUsageTracker } from '../../../util/tokenUsage.js';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils.js';
+import { shouldGenerateRemote } from '../../remoteGeneration.js';
+import { isBasicRefusal } from '../../util.js';
+import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts.js';
+import { getGoalRubric } from '../prompts.js';
 import {
   getLastMessageContent,
   getTargetResponse,
@@ -34,8 +34,8 @@ import type {
   RedteamFileConfig,
   TokenUsage,
 } from '../../../types';
-import type { BaseRedteamMetadata } from '../../types';
-import type { Message } from '../shared';
+import type { BaseRedteamMetadata } from '../../types.js';
+import type { Message } from '../shared.js';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;

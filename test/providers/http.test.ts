@@ -6,10 +6,10 @@ import dedent from 'dedent';
 
 // Mock console.warn to prevent test noise
 const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-import { fetchWithCache } from '../../src/cache';
-import cliState from '../../src/cliState';
-import { importModule } from '../../src/esm';
-import logger from '../../src/logger';
+import { fetchWithCache } from '../../src/cache.js';
+import cliState from '../../src/cliState.js';
+import { importModule } from '../../src/esm.js';
+import logger from '../../src/logger.js';
 import {
   createSessionParser,
   createTransformRequest,
@@ -22,8 +22,8 @@ import {
   processTextBody,
   urlEncodeRawRequestPath,
 } from '../../src/providers/http';
-import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
-import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../src/util/file';
+import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared.js';
+import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../src/util/file.js';
 
 jest.mock('../../src/cache', () => ({
   ...jest.requireActual('../../src/cache'),

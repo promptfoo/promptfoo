@@ -1,8 +1,8 @@
-import { matchesContextFaithfulness } from '../matchers';
-import invariant from '../util/invariant';
-import { resolveContext } from './contextUtils';
+import { matchesContextFaithfulness } from '../matchers.js';
+import invariant from '../util/invariant.js';
+import { resolveContext } from './contextUtils.js';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index.js';
 
 /**
  * Handles context-faithfulness assertions by evaluating whether the LLM output

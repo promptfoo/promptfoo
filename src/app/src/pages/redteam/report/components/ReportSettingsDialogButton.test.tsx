@@ -1,8 +1,8 @@
 import { render, screen, within, waitForElementToBeRemoved } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import ReportSettingsDialogButton from './ReportSettingsDialogButton';
-import { useReportStore } from './store';
+import ReportSettingsDialogButton from './ReportSettingsDialogButton.js';
+import { useReportStore } from './store.js';
 
 vi.mock('./store');
 const mockUseReportStore = vi.mocked(useReportStore);

@@ -1,25 +1,25 @@
-import { getGraderById } from '../../src/redteam/graders';
-import { AegisGrader } from '../../src/redteam/plugins/aegis';
-import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
-import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
-import { BiasGrader } from '../../src/redteam/plugins/bias';
-import { FinancialCalculationErrorPluginGrader } from '../../src/redteam/plugins/financial/financialCalculationError';
-import { FinancialComplianceViolationPluginGrader } from '../../src/redteam/plugins/financial/financialComplianceViolation';
-import { FinancialDataLeakagePluginGrader } from '../../src/redteam/plugins/financial/financialDataLeakage';
-import { FinancialHallucinationPluginGrader } from '../../src/redteam/plugins/financial/financialHallucination';
-import { FinancialSycophancyPluginGrader } from '../../src/redteam/plugins/financial/financialSycophancy';
+import { getGraderById } from '../../src/redteam/graders.js';
+import { AegisGrader } from '../../src/redteam/plugins/aegis.js';
+import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling.js';
+import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails.js';
+import { BiasGrader } from '../../src/redteam/plugins/bias.js';
+import { FinancialCalculationErrorPluginGrader } from '../../src/redteam/plugins/financial/financialCalculationError.js';
+import { FinancialComplianceViolationPluginGrader } from '../../src/redteam/plugins/financial/financialComplianceViolation.js';
+import { FinancialDataLeakagePluginGrader } from '../../src/redteam/plugins/financial/financialDataLeakage.js';
+import { FinancialHallucinationPluginGrader } from '../../src/redteam/plugins/financial/financialHallucination.js';
+import { FinancialSycophancyPluginGrader } from '../../src/redteam/plugins/financial/financialSycophancy.js';
 import {
   HarmfulGrader,
   MisinformationDisinformationGrader,
 } from '../../src/redteam/plugins/harmful/graders';
-import { MCPPluginGrader } from '../../src/redteam/plugins/mcp';
-import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias';
-import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
-import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
-import { PlinyGrader } from '../../src/redteam/plugins/pliny';
-import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
-import { ToxicChatGrader } from '../../src/redteam/plugins/toxicChat';
-import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
+import { MCPPluginGrader } from '../../src/redteam/plugins/mcp.js';
+import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias.js';
+import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination.js';
+import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic.js';
+import { PlinyGrader } from '../../src/redteam/plugins/pliny.js';
+import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery.js';
+import { ToxicChatGrader } from '../../src/redteam/plugins/toxicChat.js';
+import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench.js';
 
 describe('getGraderById', () => {
   it('should return correct grader for valid ID', () => {

@@ -1,11 +1,11 @@
-import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
-import logger from '../logger';
-import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { fetchWithCache } from '../cache.js';
+import { getEnvString } from '../envars.js';
+import logger from '../logger.js';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared.js';
 
-import type { EnvVarKey } from '../envars';
-import type { ApiProvider, CallApiContextParams, ProviderResponse, TokenUsage } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { EnvVarKey } from '../envars.js';
+import type { ApiProvider, CallApiContextParams, ProviderResponse, TokenUsage } from '../types/index.js';
+import type { EnvOverrides } from '../types/env.js';
 
 const AI21_CHAT_MODELS = [
   {

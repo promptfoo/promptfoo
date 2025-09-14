@@ -1,4 +1,4 @@
-import { getPortkeyHeaders, toKebabCase } from '../../src/providers/portkey';
+import { getPortkeyHeaders, toKebabCase } from '../../src/providers/portkey.js';
 
 describe('toKebabCase', () => {
   it('should convert simple camelCase to kebab-case', () => {

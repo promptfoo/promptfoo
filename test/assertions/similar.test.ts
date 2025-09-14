@@ -1,4 +1,4 @@
-import { handleSimilar } from '../../src/assertions/similar';
+import { handleSimilar } from '../../src/assertions/similar.js';
 
 jest.mock('../../src/matchers', () => ({
   matchesSimilarity: jest.fn().mockImplementation(async (expected, output, threshold, inverse) => {

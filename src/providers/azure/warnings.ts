@@ -1,8 +1,8 @@
 import chalk from 'chalk';
-import { MODEL_GRADED_ASSERTION_TYPES } from '../../assertions';
-import logger from '../../logger';
+import { MODEL_GRADED_ASSERTION_TYPES } from '../../assertions/index.js';
+import logger from '../../logger.js';
 
-import type { TestCase, TestSuite } from '../../types';
+import type { TestCase, TestSuite } from '../../types/index.js';
 
 /**
  * Emits a warning if Azure providers are used with model-graded assertions without

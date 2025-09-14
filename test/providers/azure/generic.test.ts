@@ -1,4 +1,4 @@
-import { AzureGenericProvider } from '../../../src/providers/azure/generic';
+import { AzureGenericProvider } from '../../../src/providers/azure/generic.js';
 
 describe('AzureGenericProvider', () => {
   describe('getApiBaseUrl', () => {

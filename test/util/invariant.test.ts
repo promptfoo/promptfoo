@@ -1,4 +1,4 @@
-import invariant from '../../src/util/invariant';
+import invariant from '../../src/util/invariant.js';
 
 describe('invariant', () => {
   it('should not throw when condition is true', () => {

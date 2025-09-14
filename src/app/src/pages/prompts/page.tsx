@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
-import ErrorBoundary from '../../components/ErrorBoundary';
-import Prompts from './Prompts';
+import ErrorBoundary from '../../components/ErrorBoundary.js';
+import Prompts from './Prompts.js';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
 interface PromptsPageProps {

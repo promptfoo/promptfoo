@@ -1,8 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { readResult } from '../../../util/database';
-import { createToolResponse } from '../lib/utils';
+import { readResult } from '../../../util/database.js';
+import { createToolResponse } from '../lib/utils.js';
 
 /**
  * Tool to retrieve detailed results for a specific evaluation run

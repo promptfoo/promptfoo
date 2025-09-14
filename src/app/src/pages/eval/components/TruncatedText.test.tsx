@@ -2,7 +2,7 @@ import React from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import TruncatedText from './TruncatedText';
+import TruncatedText from './TruncatedText.js';
 
 describe('TruncatedText', () => {
   it('should display truncated text with ellipsis and toggle UI when the input text length exceeds maxLength', () => {

@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import '@testing-library/jest-dom';
 
-import PluginStrategyFlow from './PluginStrategyFlow';
+import PluginStrategyFlow from './PluginStrategyFlow.js';
 import { type EvaluateResult, type GradingResult } from '@promptfoo/types';
 
 vi.mock('recharts', () => ({

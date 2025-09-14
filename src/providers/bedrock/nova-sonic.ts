@@ -9,8 +9,8 @@ import {
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
 import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
-import logger from '../../logger';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import logger from '../../logger.js';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils.js';
 import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 import type {

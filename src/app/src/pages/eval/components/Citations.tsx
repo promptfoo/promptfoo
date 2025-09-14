@@ -13,7 +13,7 @@ import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import { alpha } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import { ellipsize } from '../../../../../util/text';
+import { ellipsize } from '../../../../../util/text.js';
 
 const isValidUrl = (str: string): boolean => {
   try {

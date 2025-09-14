@@ -2,7 +2,7 @@ import { render, act } from '@testing-library/react';
 import type { ContextType } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useState, useEffect } from 'react';
-import PylonChat from './PylonChat';
+import PylonChat from './PylonChat.js';
 import { UserContext } from '@app/contexts/UserContextDef';
 
 declare global {

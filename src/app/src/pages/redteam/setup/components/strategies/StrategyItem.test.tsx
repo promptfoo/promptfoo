@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
-import { StrategyItem } from './StrategyItem';
+import { StrategyItem } from './StrategyItem.js';
 
-import type { StrategyCardData } from './types';
+import type { StrategyCardData } from './types.js';
 
 describe('StrategyItem', () => {
   const mockOnToggle = vi.fn();

@@ -1,7 +1,7 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiChatCompletionProvider } from './openai/chat.js';
 
-import type { ApiProvider, ProviderOptions } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderOptions } from '../types/index.js';
+import type { EnvOverrides } from '../types/env.js';
 
 /**
  * Creates a Cerebras provider using OpenAI-compatible chat endpoints

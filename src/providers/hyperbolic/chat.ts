@@ -1,9 +1,9 @@
-import logger from '../../logger';
-import invariant from '../../util/invariant';
-import { OpenAiChatCompletionProvider } from '../openai/chat';
+import logger from '../../logger.js';
+import invariant from '../../util/invariant.js';
+import { OpenAiChatCompletionProvider } from '../openai/chat.js';
 
-import type { ApiProvider, ProviderOptions } from '../../types';
-import type { OpenAiCompletionOptions } from '../openai/types';
+import type { ApiProvider, ProviderOptions } from '../../types/index.js';
+import type { OpenAiCompletionOptions } from '../openai/types.js';
 
 type HyperbolicConfig = OpenAiCompletionOptions;
 

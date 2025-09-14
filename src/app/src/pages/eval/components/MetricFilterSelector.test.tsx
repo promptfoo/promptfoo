@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MetricFilterSelector } from './MetricFilterSelector';
-import { useTableStore } from './store';
+import { MetricFilterSelector } from './MetricFilterSelector.js';
+import { useTableStore } from './store.js';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),

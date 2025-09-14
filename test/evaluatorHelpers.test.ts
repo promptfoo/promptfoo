@@ -9,9 +9,9 @@ import {
   resolveVariables,
   runExtensionHook,
 } from '../src/evaluatorHelpers';
-import { transform } from '../src/util/transform';
+import { transform } from '../src/util/transform.js';
 
-import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types';
+import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types/index.js';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

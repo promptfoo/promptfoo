@@ -3,11 +3,11 @@ import os from 'os';
 import path from 'path';
 
 import yaml from 'js-yaml';
-import { doEval } from '../../../src/commands/eval';
-import * as evaluatorModule from '../../../src/evaluator';
+import { doEval } from '../../../src/commands/eval.js';
+import * as evaluatorModule from '../../../src/evaluator.js';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, EvaluateOptions } from '../../../src/types';
+import type { CommandLineOptions, EvaluateOptions } from '../../../src/types/index.js';
 
 jest.mock('../../../src/evaluator', () => ({
   evaluate: jest.fn().mockResolvedValue({ results: [], summary: {} }),

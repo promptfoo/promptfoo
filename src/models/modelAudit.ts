@@ -1,10 +1,10 @@
 import { desc, eq } from 'drizzle-orm';
-import { getDb } from '../database';
-import { modelAuditsTable } from '../database/tables';
-import logger from '../logger';
-import { randomSequence } from '../util/createHash';
+import { getDb } from '../database/index.js';
+import { modelAuditsTable } from '../database/tables.js';
+import logger from '../logger.js';
+import { randomSequence } from '../util/createHash.js';
 
-import type { ModelAuditScanResults } from '../types/modelAudit';
+import type { ModelAuditScanResults } from '../types/modelAudit.js';
 
 export function createScanId(createdAt: Date = new Date()) {
   return `scan-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;

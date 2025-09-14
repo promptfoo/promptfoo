@@ -1,13 +1,13 @@
-import { fetchWithCache } from '../../cache';
-import logger from '../../logger';
-import { ellipsize } from '../../util/text';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { fetchWithCache } from '../../cache.js';
+import logger from '../../logger.js';
+import { ellipsize } from '../../util/text.js';
+import { REQUEST_TIMEOUT_MS } from '../shared.js';
 import { OpenAiGenericProvider } from '.';
-import { formatOpenAiError } from './util';
+import { formatOpenAiError } from './util.js';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
-import type { OpenAiSharedOptions } from './types';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index.js';
+import type { EnvOverrides } from '../../types/env.js';
+import type { OpenAiSharedOptions } from './types.js';
 
 type OpenAiImageModel = 'dall-e-2' | 'dall-e-3' | 'gpt-image-1';
 type OpenAiImageOperation = 'generation' | 'variation' | 'edit';

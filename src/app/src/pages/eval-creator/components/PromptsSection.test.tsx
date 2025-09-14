@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import PromptsSection from './PromptsSection';
+import PromptsSection from './PromptsSection.js';
 import { useStore } from '@app/stores/evalConfig';
 
 vi.mock('@app/stores/evalConfig');

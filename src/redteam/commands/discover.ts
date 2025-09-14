@@ -6,21 +6,21 @@ import cliProgress from 'cli-progress';
 import { type Command } from 'commander';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { VERSION } from '../../constants';
-import { renderPrompt } from '../../evaluatorHelpers';
-import { getUserEmail } from '../../globalConfig/accounts';
-import { cloudConfig } from '../../globalConfig/cloud';
-import logger from '../../logger';
-import { loadApiProvider, loadApiProviders } from '../../providers';
-import { HttpProvider } from '../../providers/http';
-import telemetry from '../../telemetry';
-import { getProviderFromCloud } from '../../util/cloud';
-import { readConfig } from '../../util/config/load';
-import { fetchWithProxy } from '../../util/fetch';
-import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { VERSION } from '../../constants.js';
+import { renderPrompt } from '../../evaluatorHelpers.js';
+import { getUserEmail } from '../../globalConfig/accounts.js';
+import { cloudConfig } from '../../globalConfig/cloud.js';
+import logger from '../../logger.js';
+import { loadApiProvider, loadApiProviders } from '../../providers/index.js';
+import { HttpProvider } from '../../providers/http.js';
+import telemetry from '../../telemetry.js';
+import { getProviderFromCloud } from '../../util/cloud.js';
+import { readConfig } from '../../util/config/load.js';
+import { fetchWithProxy } from '../../util/fetch/index.js';
+import invariant from '../../util/invariant.js';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration.js';
 
-import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index.js';
 
 // ========================================================
 // Schemas

@@ -1,12 +1,12 @@
-import { fetchWithCache } from '../../src/cache';
-import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
-import { AzureCompletionProvider } from '../../src/providers/azure/completion';
-import { AzureGenericProvider } from '../../src/providers/azure/generic';
-import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azure/warnings';
-import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
-import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { fetchWithCache } from '../../src/cache.js';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat.js';
+import { AzureCompletionProvider } from '../../src/providers/azure/completion.js';
+import { AzureGenericProvider } from '../../src/providers/azure/generic.js';
+import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azure/warnings.js';
+import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface.js';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion.js';
 
-import type { TestCase, TestSuite } from '../../src/types';
+import type { TestCase, TestSuite } from '../../src/types/index.js';
 
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),

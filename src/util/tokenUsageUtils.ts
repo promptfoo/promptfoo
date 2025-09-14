@@ -1,4 +1,4 @@
-import type { CompletionTokenDetails, TokenUsage } from '../types/shared';
+import type { CompletionTokenDetails, TokenUsage } from '../types/shared.js';
 
 /**
  * Helper to create empty completion details

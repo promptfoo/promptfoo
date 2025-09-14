@@ -1,5 +1,5 @@
-import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
-import logger from '../../src/logger';
+import { CIProgressReporter } from '../../src/progress/ciProgressReporter.js';
+import logger from '../../src/logger.js';
 
 // Mock the logger
 jest.mock('../../src/logger', () => ({

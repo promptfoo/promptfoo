@@ -1,7 +1,7 @@
-import invariant from '../util/invariant';
-import { transform } from '../util/transform';
+import invariant from '../util/invariant.js';
+import { transform } from '../util/transform.js';
 
-import type { Assertion, AtomicTestCase } from '../types';
+import type { Assertion, AtomicTestCase } from '../types/index.js';
 
 /**
  * Resolves the context value for context-based assertions.

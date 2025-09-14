@@ -3,11 +3,11 @@ import path from 'path';
 
 import cacheManager from 'cache-manager';
 import fsStore from 'cache-manager-fs-hash';
-import { getEnvBool, getEnvInt, getEnvString } from './envars';
-import logger from './logger';
-import { REQUEST_TIMEOUT_MS } from './providers/shared';
-import { getConfigDirectoryPath } from './util/config/manage';
-import { fetchWithRetries } from './util/fetch';
+import { getEnvBool, getEnvInt, getEnvString } from './envars.js';
+import logger from './logger.js';
+import { REQUEST_TIMEOUT_MS } from './providers/shared.js';
+import { getConfigDirectoryPath } from './util/config/manage.js';
+import { fetchWithRetries } from './util/fetch/index.js';
 import type { Cache } from 'cache-manager';
 
 let cacheInstance: Cache | undefined;

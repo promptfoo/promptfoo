@@ -1,10 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
-import type { TestSuite } from '../../../types';
-import { createToolResponse } from '../lib/utils';
-import { validateFilePath, validateProviderId } from '../lib/security';
+import { synthesizeFromTestSuite } from '../../../testCase/synthesis.js';
+import type { TestSuite } from '../../../types/index.js';
+import { createToolResponse } from '../lib/utils.js';
+import { validateFilePath, validateProviderId } from '../lib/security.js';
 
 /**
  * Tool to generate test datasets using AI

@@ -1,6 +1,6 @@
-import { AssertionsResult } from '../../src/assertions/assertionsResult';
+import { AssertionsResult } from '../../src/assertions/assertionsResult.js';
 
-import type { AssertionSet, GradingResult } from '../../src/types';
+import type { AssertionSet, GradingResult } from '../../src/types/index.js';
 
 describe('AssertionsResult', () => {
   beforeEach(() => {

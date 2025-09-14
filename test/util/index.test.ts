@@ -3,9 +3,9 @@ import * as path from 'path';
 
 import dotenv from 'dotenv';
 import { globSync } from 'glob';
-import { getDb } from '../../src/database';
-import * as googleSheets from '../../src/googleSheets';
-import Eval from '../../src/models/eval';
+import { getDb } from '../../src/database/index.js';
+import * as googleSheets from '../../src/googleSheets.js';
+import Eval from '../../src/models/eval.js';
 import {
   type ApiProvider,
   type EvaluateResult,
@@ -25,8 +25,8 @@ import {
   writeMultipleOutputs,
   writeOutput,
   createOutputMetadata,
-} from '../../src/util';
-import { TestGrader } from './utils';
+} from '../../src/util/index.js';
+import { TestGrader } from './utils.js';
 
 jest.mock('../../src/database', () => ({
   getDb: jest.fn(),

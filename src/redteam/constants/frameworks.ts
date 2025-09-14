@@ -1,7 +1,7 @@
-import { FOUNDATION_PLUGINS, PII_PLUGINS } from './plugins';
+import { FOUNDATION_PLUGINS, PII_PLUGINS } from './plugins.js';
 
-import type { Plugin } from './plugins';
-import type { Strategy } from './strategies';
+import type { Plugin } from './plugins.js';
+import type { Strategy } from './strategies.js';
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
   'mitre:atlas': 'MITRE ATLAS',

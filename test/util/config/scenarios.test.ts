@@ -2,15 +2,15 @@ import * as fs from 'fs';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { validateAssertions } from '../../../src/assertions/validateAssertions';
-import cliState from '../../../src/cliState';
-import { readPrompts, readProviderPromptMap } from '../../../src/prompts';
-import { loadApiProviders } from '../../../src/providers';
-import { readFilters } from '../../../src/util';
+import { validateAssertions } from '../../../src/assertions/validateAssertions.js';
+import cliState from '../../../src/cliState.js';
+import { readPrompts, readProviderPromptMap } from '../../../src/prompts/index.js';
+import { loadApiProviders } from '../../../src/providers/index.js';
+import { readFilters } from '../../../src/util/index.js';
 // Import after mocking
-import { resolveConfigs } from '../../../src/util/config/load';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
-import { readTests } from '../../../src/util/testCaseReader';
+import { resolveConfigs } from '../../../src/util/config/load.js';
+import { maybeLoadFromExternalFile } from '../../../src/util/file.js';
+import { readTests } from '../../../src/util/testCaseReader.js';
 
 jest.mock('fs');
 jest.mock('glob');

@@ -19,7 +19,7 @@ import {
 import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { useDebounce } from 'use-debounce';
-import { type ResultsFilter, useTableStore } from '../store';
+import { type ResultsFilter, useTableStore } from '../store.js';
 
 const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   metric: 'Metric',

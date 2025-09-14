@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { ProviderOptions } from '@promptfoo/types';
-import { useProvidersStore } from './providersStore';
+import { useProvidersStore } from './providersStore.js';
 import { create } from 'zustand';
 
 describe('useProvidersStore', () => {

@@ -3,8 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
-import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../../src/util/config/manage';
-import { writePromptfooConfig } from '../../../src/util/config/writer';
+import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../../src/util/config/manage.js';
+import { writePromptfooConfig } from '../../../src/util/config/writer.js';
 
 jest.mock('fs');
 jest.mock('os');

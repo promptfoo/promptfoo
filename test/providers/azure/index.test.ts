@@ -1,9 +1,9 @@
-import { AzureCompletionProvider } from '../../../src/providers/azure/completion';
-import { maybeEmitAzureOpenAiWarning } from '../../../src/providers/azure/warnings';
-import { HuggingfaceTextGenerationProvider } from '../../../src/providers/huggingface';
-import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
+import { AzureCompletionProvider } from '../../../src/providers/azure/completion.js';
+import { maybeEmitAzureOpenAiWarning } from '../../../src/providers/azure/warnings.js';
+import { HuggingfaceTextGenerationProvider } from '../../../src/providers/huggingface.js';
+import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion.js';
 
-import type { TestCase, TestSuite } from '../../../src/types';
+import type { TestCase, TestSuite } from '../../../src/types/index.js';
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),

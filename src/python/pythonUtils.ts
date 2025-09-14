@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 import { PythonShell } from 'python-shell';
-import { getEnvBool, getEnvString } from '../envars';
-import logger from '../logger';
-import { safeJsonStringify } from '../util/json';
+import { getEnvBool, getEnvString } from '../envars.js';
+import logger from '../logger.js';
+import { safeJsonStringify } from '../util/json.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 

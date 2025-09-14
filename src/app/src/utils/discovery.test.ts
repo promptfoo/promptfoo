@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatToolsAsJSDocs } from './discovery';
+import { formatToolsAsJSDocs } from './discovery.js';
 
 interface Tool {
   name: string;

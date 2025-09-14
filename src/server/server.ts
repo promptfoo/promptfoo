@@ -9,18 +9,18 @@ import path from 'node:path';
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
-import { getDefaultPort, VERSION } from '../constants';
-import { setupSignalWatcher } from '../database/signal';
-import { getDirectory } from '../esm';
-import { cloudConfig } from '../globalConfig/cloud';
-import logger from '../logger';
-import { runDbMigrations } from '../migrate';
-import Eval, { getEvalSummaries } from '../models/eval';
-import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
-import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
-import telemetry, { TelemetryEventSchema } from '../telemetry';
-import { synthesizeFromTestSuite } from '../testCase/synthesis';
-import { checkRemoteHealth } from '../util/apiHealth';
+import { getDefaultPort, VERSION } from '../constants.js';
+import { setupSignalWatcher } from '../database/signal.js';
+import { getDirectory } from '../esm.js';
+import { cloudConfig } from '../globalConfig/cloud.js';
+import logger from '../logger.js';
+import { runDbMigrations } from '../migrate.js';
+import Eval, { getEvalSummaries } from '../models/eval.js';
+import { getRemoteHealthUrl } from '../redteam/remoteGeneration.js';
+import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share.js';
+import telemetry, { TelemetryEventSchema } from '../telemetry.js';
+import { synthesizeFromTestSuite } from '../testCase/synthesis.js';
+import { checkRemoteHealth } from '../util/apiHealth.js';
 import {
   getPrompts,
   getPromptsForTestCasesHash,
@@ -28,20 +28,20 @@ import {
   getTestCases,
   readResult,
 } from '../util/database';
-import invariant from '../util/invariant';
-import { BrowserBehavior, openBrowser } from '../util/server';
-import { configsRouter } from './routes/configs';
-import { evalRouter } from './routes/eval';
-import { modelAuditRouter } from './routes/modelAudit';
-import { providersRouter } from './routes/providers';
-import { redteamRouter } from './routes/redteam';
-import { tracesRouter } from './routes/traces';
-import { userRouter } from './routes/user';
-import versionRouter from './routes/version';
+import invariant from '../util/invariant.js';
+import { BrowserBehavior, openBrowser } from '../util/server.js';
+import { configsRouter } from './routes/configs.js';
+import { evalRouter } from './routes/eval.js';
+import { modelAuditRouter } from './routes/modelAudit.js';
+import { providersRouter } from './routes/providers.js';
+import { redteamRouter } from './routes/redteam.js';
+import { tracesRouter } from './routes/traces.js';
+import { userRouter } from './routes/user.js';
+import versionRouter from './routes/version.js';
 import type { Request, Response } from 'express';
 
-import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary } from '../types';
+import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index.js';
+import type { EvalSummary } from '../types/index.js';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;

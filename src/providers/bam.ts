@@ -1,16 +1,16 @@
-import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString } from '../envars';
-import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getCache, isCacheEnabled } from '../cache.js';
+import { getEnvString } from '../envars.js';
+import logger from '../logger.js';
+import { REQUEST_TIMEOUT_MS } from './shared.js';
 import type {
   Client as GenAIClient,
   TextGenerationCreateInput,
   TextGenerationCreateOutput,
 } from '@ibm-generative-ai/node-sdk';
 
-import type { EnvVarKey } from '../envars';
-import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { EnvVarKey } from '../envars.js';
+import type { ApiProvider, ProviderResponse, TokenUsage } from '../types/index.js';
+import type { EnvOverrides } from '../types/env.js';
 
 interface BAMGenerationParameters {
   apiKey?: string | null;

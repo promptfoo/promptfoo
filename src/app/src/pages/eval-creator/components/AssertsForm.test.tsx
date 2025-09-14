@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import userEvent from '@testing-library/user-event';
-import AssertsForm from './AssertsForm';
+import AssertsForm from './AssertsForm.js';
 
 const renderWithTheme = (component: React.ReactNode) => {
   const theme = createTheme({ palette: { mode: 'light' } });

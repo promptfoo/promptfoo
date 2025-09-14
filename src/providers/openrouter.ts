@@ -1,9 +1,9 @@
-import { fetchWithCache } from '../cache';
-import logger from '../logger';
-import { normalizeFinishReason } from '../util/finishReason';
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { fetchWithCache } from '../cache.js';
+import logger from '../logger.js';
+import { normalizeFinishReason } from '../util/finishReason.js';
+import { OpenAiChatCompletionProvider } from './openai/chat.js';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util.js';
+import { REQUEST_TIMEOUT_MS } from './shared.js';
 
 import type {
   ApiProvider,

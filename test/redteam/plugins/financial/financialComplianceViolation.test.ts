@@ -1,4 +1,4 @@
-import { FinancialComplianceViolationPluginGrader } from '../../../../src/redteam/plugins/financial/financialComplianceViolation';
+import { FinancialComplianceViolationPluginGrader } from '../../../../src/redteam/plugins/financial/financialComplianceViolation.js';
 
 describe('FinancialComplianceViolationPluginGrader', () => {
   let grader: FinancialComplianceViolationPluginGrader;

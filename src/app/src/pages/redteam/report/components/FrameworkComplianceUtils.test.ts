@@ -6,7 +6,7 @@ import {
   getSeverityColor,
   getProgressColor,
 } from './FrameworkComplianceUtils';
-import type { CategoryStats } from './FrameworkComplianceUtils';
+import type { CategoryStats } from './FrameworkComplianceUtils.js';
 import { displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
 
 describe('expandPluginCollections', () => {

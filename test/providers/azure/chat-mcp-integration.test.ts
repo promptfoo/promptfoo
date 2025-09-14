@@ -1,5 +1,5 @@
-import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
-import { MCPClient } from '../../../src/providers/mcp/client';
+import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat.js';
+import { MCPClient } from '../../../src/providers/mcp/client.js';
 
 // Mock external dependencies
 jest.mock('../../../src/cache');

@@ -2,8 +2,8 @@ import { act } from 'react';
 
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ResultsTable from './ResultsTable';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import ResultsTable from './ResultsTable.js';
+import { useResultsViewSettingsStore, useTableStore } from './store.js';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({

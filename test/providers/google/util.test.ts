@@ -2,7 +2,7 @@ import * as fs from 'fs';
 
 import { GoogleAuth } from 'google-auth-library';
 import * as nunjucks from 'nunjucks';
-import logger from '../../../src/logger';
+import logger from '../../../src/logger.js';
 import {
   geminiFormatAndSystemInstructions,
   loadFile,
@@ -12,7 +12,7 @@ import {
   validateFunctionCall,
 } from '../../../src/providers/google/util';
 
-import type { Tool } from '../../../src/providers/google/types';
+import type { Tool } from '../../../src/providers/google/types.js';
 
 jest.mock('google-auth-library');
 

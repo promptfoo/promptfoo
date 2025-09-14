@@ -1,9 +1,9 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
-import { StrategySection } from './StrategySection';
+import { StrategySection } from './StrategySection.js';
 
-import type { StrategyCardData } from './types';
+import type { StrategyCardData } from './types.js';
 
 describe('StrategySection', () => {
   const mockOnToggle = vi.fn();

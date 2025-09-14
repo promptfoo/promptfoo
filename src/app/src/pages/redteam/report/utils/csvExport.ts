@@ -1,5 +1,5 @@
 import { stringify } from 'csv-stringify/browser/esm/sync';
-import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
+import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared.js';
 import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
 
 export function convertEvalDataToCsv(evalData: ResultsFile): string {

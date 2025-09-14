@@ -8,13 +8,13 @@ import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import LoadExampleButton from '../LoadExampleButton';
-import PageWrapper from '../PageWrapper';
-import { getProviderType } from './helpers';
-import ProviderTypeSelector from './ProviderTypeSelector';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig.js';
+import LoadExampleButton from '../LoadExampleButton.js';
+import PageWrapper from '../PageWrapper.js';
+import { getProviderType } from './helpers.js';
+import ProviderTypeSelector from './ProviderTypeSelector.js';
 
-import type { ProviderOptions } from '../../types';
+import type { ProviderOptions } from '../../types.js';
 
 interface TargetTypeSelectionProps {
   onNext: () => void;

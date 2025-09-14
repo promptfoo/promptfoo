@@ -3,9 +3,9 @@ import path from 'path';
 import axios from 'axios';
 import dedent from 'dedent';
 import WebSocket from 'ws';
-import cliState from '../../../src/cliState';
-import { importModule } from '../../../src/esm';
-import { GoogleLiveProvider } from '../../../src/providers/google/live';
+import cliState from '../../../src/cliState.js';
+import { importModule } from '../../../src/esm.js';
+import { GoogleLiveProvider } from '../../../src/providers/google/live.js';
 
 // Mock setTimeout globally to speed up tests
 const originalSetTimeout = global.setTimeout;

@@ -1,14 +1,14 @@
-import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
-import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util';
-import { sleep } from '../../util/time';
-import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
-import { AzureGenericProvider } from './generic';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../cache.js';
+import logger from '../../logger.js';
+import { maybeLoadToolsFromExternalFile } from '../../util/index.js';
+import { sleep } from '../../util/time.js';
+import { FunctionCallbackHandler } from '../functionCallbackUtils.js';
+import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared.js';
+import { AzureGenericProvider } from './generic.js';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { CallbackContext } from '../openai/types';
-import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index.js';
+import type { CallbackContext } from '../openai/types.js';
+import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types.js';
 
 /**
  * Interface for thread creation response

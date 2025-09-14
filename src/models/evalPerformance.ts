@@ -1,9 +1,9 @@
 import { sql } from 'drizzle-orm';
-import { getDb } from '../database';
-import { evalResultsTable } from '../database/tables';
-import logger from '../logger';
+import { getDb } from '../database/index.js';
+import { evalResultsTable } from '../database/tables.js';
+import logger from '../logger.js';
 
-import type { EvalResultsFilterMode } from '../types';
+import type { EvalResultsFilterMode } from '../types/index.js';
 
 interface CountCacheEntry {
   count: number;

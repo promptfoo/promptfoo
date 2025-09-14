@@ -1,7 +1,7 @@
-import Eval from '../../models/eval';
-import { readOutput, resultIsForTestCase } from '../../util';
+import Eval from '../../models/eval.js';
+import { readOutput, resultIsForTestCase } from '../../util/index.js';
 
-import type { EvaluateResult, TestSuite } from '../../types';
+import type { EvaluateResult, TestSuite } from '../../types/index.js';
 
 type Tests = NonNullable<TestSuite['tests']>;
 

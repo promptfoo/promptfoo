@@ -1,4 +1,4 @@
-import type { AzureModelCost } from './types';
+import type { AzureModelCost } from './types.js';
 
 export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
 

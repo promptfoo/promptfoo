@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto';
 
 import { desc, eq, sql } from 'drizzle-orm';
-import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
-import { updateSignalFile } from '../database/signal';
+import { DEFAULT_QUERY_LIMIT } from '../constants.js';
+import { getDb } from '../database/index.js';
+import { updateSignalFile } from '../database/signal.js';
 import {
   datasetsTable,
   evalResultsTable,
@@ -14,12 +14,12 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
-import { getEnvBool } from '../envars';
-import { getUserEmail } from '../globalConfig/accounts';
-import logger from '../logger';
-import { hashPrompt } from '../prompts/utils';
-import { PLUGIN_CATEGORIES } from '../redteam/constants';
-import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
+import { getEnvBool } from '../envars.js';
+import { getUserEmail } from '../globalConfig/accounts.js';
+import logger from '../logger.js';
+import { hashPrompt } from '../prompts/utils.js';
+import { PLUGIN_CATEGORIES } from '../redteam/constants.js';
+import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend.js';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -34,16 +34,16 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types';
-import { convertResultsToTable } from '../util/convertEvalResultsToTable';
-import { randomSequence, sha256 } from '../util/createHash';
-import { convertTestResultsToTableRow } from '../util/exportToFile';
-import invariant from '../util/invariant';
-import { getCurrentTimestamp } from '../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
-import EvalResult from './evalResult';
+import { convertResultsToTable } from '../util/convertEvalResultsToTable.js';
+import { randomSequence, sha256 } from '../util/createHash.js';
+import { convertTestResultsToTableRow } from '../util/exportToFile/index.js';
+import invariant from '../util/invariant.js';
+import { getCurrentTimestamp } from '../util/time.js';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils.js';
+import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance.js';
+import EvalResult from './evalResult.js';
 
-import type { EvalResultsFilterMode } from '../types';
+import type { EvalResultsFilterMode } from '../types/index.js';
 
 interface FilteredCountRow {
   count: number | null;

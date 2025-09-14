@@ -3,15 +3,15 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
-import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
-import promptfoo from '../../index';
-import logger from '../../logger';
-import Eval from '../../models/eval';
-import EvalResult from '../../models/evalResult';
-import { EvalResultsFilterMode } from '../../types';
-import { deleteEval, updateResult, writeResultsToDatabase } from '../../util/database';
-import invariant from '../../util/invariant';
-import { ApiSchemas } from '../apiSchemas';
+import { getUserEmail, setUserEmail } from '../../globalConfig/accounts.js';
+import promptfoo from '../../index.js';
+import logger from '../../logger.js';
+import Eval from '../../models/eval.js';
+import EvalResult from '../../models/evalResult.js';
+import { EvalResultsFilterMode } from '../../types/index.js';
+import { deleteEval, updateResult, writeResultsToDatabase } from '../../util/database.js';
+import invariant from '../../util/invariant.js';
+import { ApiSchemas } from '../apiSchemas.js';
 import type { Request, Response } from 'express';
 
 import type {

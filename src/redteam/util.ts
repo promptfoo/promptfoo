@@ -1,9 +1,9 @@
-import { fetchWithCache } from '../cache';
-import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from '../providers/shared';
-import { pluginDescriptions } from './constants';
-import { DATASET_PLUGINS } from './constants/strategies';
-import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
+import { fetchWithCache } from '../cache.js';
+import logger from '../logger.js';
+import { REQUEST_TIMEOUT_MS } from '../providers/shared.js';
+import { pluginDescriptions } from './constants.js';
+import { DATASET_PLUGINS } from './constants/strategies.js';
+import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration.js';
 
 /**
  * Normalizes different types of apostrophes to a standard single quote

@@ -1,7 +1,7 @@
-import logger from '../../../src/logger';
-import { maybeEmitAzureOpenAiWarning } from '../../../src/providers/azure/warnings';
+import logger from '../../../src/logger.js';
+import { maybeEmitAzureOpenAiWarning } from '../../../src/providers/azure/warnings.js';
 
-import type { TestCase, TestSuite } from '../../../src/types';
+import type { TestCase, TestSuite } from '../../../src/types/index.js';
 
 describe('maybeEmitAzureOpenAiWarning', () => {
   beforeEach(() => {

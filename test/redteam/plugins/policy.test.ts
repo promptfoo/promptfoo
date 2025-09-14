@@ -1,7 +1,7 @@
-import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
-import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy';
+import { RedteamGraderBase } from '../../../src/redteam/plugins/base.js';
+import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy.js';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index.js';
 
 describe('PolicyPlugin', () => {
   const mockProvider: ApiProvider = {

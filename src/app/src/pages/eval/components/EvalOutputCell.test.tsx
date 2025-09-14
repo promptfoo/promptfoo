@@ -6,10 +6,10 @@ import {
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
-import EvalOutputCell from './EvalOutputCell';
+import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext.js';
+import EvalOutputCell from './EvalOutputCell.js';
 
-import type { EvalOutputCellProps } from './EvalOutputCell';
+import type { EvalOutputCellProps } from './EvalOutputCell.js';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({

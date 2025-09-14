@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { getEnvString } from '../envars.js';
 
 export const PROMPT_DELIMITER = getEnvString('PROMPTFOO_PROMPT_SEPARATOR') || '---';
 export const VALID_FILE_EXTENSIONS = [

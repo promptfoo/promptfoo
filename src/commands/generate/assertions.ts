@@ -3,13 +3,13 @@ import * as fs from 'fs';
 import chalk from 'chalk';
 import { InvalidArgumentError } from 'commander';
 import yaml from 'js-yaml';
-import { synthesizeFromTestSuite } from '../../assertions/synthesis';
-import { disableCache } from '../../cache';
-import logger from '../../logger';
-import telemetry from '../../telemetry';
-import { type TestSuite, type UnifiedConfig } from '../../types';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
-import { resolveConfigs } from '../../util/config/load';
+import { synthesizeFromTestSuite } from '../../assertions/synthesis.js';
+import { disableCache } from '../../cache.js';
+import logger from '../../logger.js';
+import telemetry from '../../telemetry.js';
+import { type TestSuite, type UnifiedConfig } from '../../types/index.js';
+import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index.js';
+import { resolveConfigs } from '../../util/config/load.js';
 import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {

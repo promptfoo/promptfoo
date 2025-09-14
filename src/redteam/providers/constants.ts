@@ -1,4 +1,4 @@
-import { getEnvFloat } from '../../envars';
+import { getEnvFloat } from '../../envars.js';
 
 export const ATTACKER_MODEL = 'gpt-4.1-2025-04-14';
 

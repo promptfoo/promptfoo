@@ -5,9 +5,9 @@ import {
   generateTraceId,
   generateTraceparent,
   isOtlpReceiverStarted,
-} from '../../src/tracing/evaluatorTracing';
+} from '../../src/tracing/evaluatorTracing.js';
 
-import type { TestCase } from '../../src/types';
+import type { TestCase } from '../../src/types/index.js';
 
 // Mock the logger
 jest.mock('../../src/logger', () => ({

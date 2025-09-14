@@ -1,8 +1,8 @@
 import path from 'path';
 
-import { maybeReadConfig } from './load';
+import { maybeReadConfig } from './load.js';
 
-import type { UnifiedConfig } from '../../types';
+import type { UnifiedConfig } from '../../types/index.js';
 
 /**
  * Cache to store loaded configurations for different directories.

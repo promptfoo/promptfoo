@@ -1,7 +1,7 @@
-import cliState from '../../src/cliState';
-import { getEnvBool, getEnvString } from '../../src/envars';
-import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
-import { readGlobalConfig } from '../../src/globalConfig/globalConfig';
+import cliState from '../../src/cliState.js';
+import { getEnvBool, getEnvString } from '../../src/envars.js';
+import { isLoggedIntoCloud } from '../../src/globalConfig/accounts.js';
+import { readGlobalConfig } from '../../src/globalConfig/globalConfig.js';
 import {
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,

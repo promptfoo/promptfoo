@@ -1,5 +1,5 @@
-import { matchesClassification } from '../../src/matchers';
-import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
+import { matchesClassification } from '../../src/matchers.js';
+import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface.js';
 
 import type {
   ApiProvider,

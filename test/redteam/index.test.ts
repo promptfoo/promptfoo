@@ -2,11 +2,11 @@ import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
-import logger from '../../src/logger';
-import { loadApiProvider } from '../../src/providers';
-import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
-import { extractEntities } from '../../src/redteam/extraction/entities';
-import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
+import logger from '../../src/logger.js';
+import { loadApiProvider } from '../../src/providers/index.js';
+import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants.js';
+import { extractEntities } from '../../src/redteam/extraction/entities.js';
+import { extractSystemPurpose } from '../../src/redteam/extraction/purpose.js';
 import {
   calculateTotalTests,
   getMultilingualRequestedCount,
@@ -14,14 +14,14 @@ import {
   resolvePluginConfig,
   synthesize,
 } from '../../src/redteam/index';
-import { Plugins } from '../../src/redteam/plugins';
-import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
-import { Strategies, validateStrategies } from '../../src/redteam/strategies';
-import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
-import { checkRemoteHealth } from '../../src/util/apiHealth';
-import { extractVariablesFromTemplates } from '../../src/util/templates';
+import { Plugins } from '../../src/redteam/plugins/index.js';
+import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration.js';
+import { Strategies, validateStrategies } from '../../src/redteam/strategies/index.js';
+import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual.js';
+import { checkRemoteHealth } from '../../src/util/apiHealth.js';
+import { extractVariablesFromTemplates } from '../../src/util/templates.js';
 
-import type { TestCaseWithPlugin } from '../../src/types';
+import type { TestCaseWithPlugin } from '../../src/types/index.js';
 
 jest.mock('cli-progress');
 jest.mock('../../src/logger');

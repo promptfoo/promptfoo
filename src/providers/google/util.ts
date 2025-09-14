@@ -1,17 +1,17 @@
 import Clone from 'rfdc';
 import { z } from 'zod';
-import { getEnvString } from '../../envars';
-import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { getAjv } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { parseChatPrompt } from '../shared';
-import { VALID_SCHEMA_TYPES } from './types';
+import { getEnvString } from '../../envars.js';
+import logger from '../../logger.js';
+import { renderVarsInObject } from '../../util/index.js';
+import { maybeLoadFromExternalFile } from '../../util/file.js';
+import { getAjv } from '../../util/json.js';
+import { getNunjucksEngine } from '../../util/templates.js';
+import { parseChatPrompt } from '../shared.js';
+import { VALID_SCHEMA_TYPES } from './types.js';
 import type { AnySchema } from 'ajv';
 import type { GoogleAuth } from 'google-auth-library';
 
-import type { Content, FunctionCall, Part, Tool } from './types';
+import type { Content, FunctionCall, Part, Tool } from './types.js';
 
 const ajv = getAjv();
 // property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.

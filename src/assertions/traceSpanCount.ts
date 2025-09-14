@@ -1,5 +1,5 @@
-import type { AssertionParams, GradingResult } from '../types';
-import type { TraceSpan } from '../types/tracing';
+import type { AssertionParams, GradingResult } from '../types/index.js';
+import type { TraceSpan } from '../types/tracing.js';
 
 interface TraceSpanCountValue {
   pattern: string;

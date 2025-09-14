@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { ResultFailureReason } from '../../src/types';
+import { ResultFailureReason } from '../../src/types/index.js';
 import {
   convertSlashCommentsToHash,
   extractFirstJsonObject,
@@ -10,9 +10,9 @@ import {
   resetAjv,
   safeJsonStringify,
   summarizeEvaluateResultForLogging,
-} from '../../src/util/json';
+} from '../../src/util/json.js';
 
-import type { EvaluateResult } from '../../src/types';
+import type { EvaluateResult } from '../../src/types/index.js';
 
 describe('json utilities', () => {
   describe('getAjv', () => {

@@ -1,6 +1,6 @@
-import { fetchWithProxy } from '../../util/fetch';
-import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
-import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index.js';
+import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets.js';
+import logger from '../../logger.js';
 
 /**
  * Detect image format from buffer

@@ -1,4 +1,4 @@
-import { MedicalAnchoringBiasPluginGrader } from '../../../../src/redteam/plugins/medical/medicalAnchoringBias';
+import { MedicalAnchoringBiasPluginGrader } from '../../../../src/redteam/plugins/medical/medicalAnchoringBias.js';
 
 describe('MedicalAnchoringBiasPluginGrader', () => {
   let grader: MedicalAnchoringBiasPluginGrader;

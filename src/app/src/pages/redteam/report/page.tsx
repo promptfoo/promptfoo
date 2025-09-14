@@ -7,8 +7,8 @@ import { useUserStore } from '@app/stores/userStore';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useNavigate } from 'react-router-dom';
-import Report from './components/Report';
-import ReportIndex from './components/ReportIndex';
+import Report from './components/Report.js';
+import ReportIndex from './components/ReportIndex.js';
 
 export default function ReportPage() {
   const navigate = useNavigate();

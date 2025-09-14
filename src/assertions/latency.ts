@@ -1,4 +1,4 @@
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index.js';
 
 export const handleLatency = ({ assertion, latencyMs }: AssertionParams): GradingResult => {
   if (!assertion.threshold) {

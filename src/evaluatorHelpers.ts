@@ -2,16 +2,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
-import cliState from './cliState';
-import { getEnvBool } from './envars';
-import { importModule } from './esm';
-import { getPrompt as getHeliconePrompt } from './integrations/helicone';
-import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
-import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
-import logger from './logger';
-import { isPackagePath, loadFromPackage } from './providers/packageParser';
-import { runPython } from './python/pythonUtils';
-import telemetry from './telemetry';
+import cliState from './cliState.js';
+import { getEnvBool } from './envars.js';
+import { importModule } from './esm.js';
+import { getPrompt as getHeliconePrompt } from './integrations/helicone.js';
+import { getPrompt as getLangfusePrompt } from './integrations/langfuse.js';
+import { getPrompt as getPortkeyPrompt } from './integrations/portkey.js';
+import logger from './logger.js';
+import { isPackagePath, loadFromPackage } from './providers/packageParser.js';
+import { runPython } from './python/pythonUtils.js';
+import telemetry from './telemetry.js';
 import {
   type ApiProvider,
   type CompletedPrompt,
@@ -21,13 +21,13 @@ import {
   type TestCase,
   type TestSuite,
 } from './types';
-import { renderVarsInObject } from './util';
-import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import invariant from './util/invariant';
-import { getNunjucksEngine } from './util/templates';
-import { transform } from './util/transform';
+import { renderVarsInObject } from './util/index.js';
+import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions.js';
+import invariant from './util/invariant.js';
+import { getNunjucksEngine } from './util/templates.js';
+import { transform } from './util/transform.js';
 
-import type EvalResult from './models/evalResult';
+import type EvalResult from './models/evalResult.js';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 

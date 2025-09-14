@@ -1,6 +1,6 @@
-import { addCustom } from '../../../src/redteam/strategies/custom';
+import { addCustom } from '../../../src/redteam/strategies/custom.js';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index.js';
 
 describe('addCustom', () => {
   const mockTestCases: TestCase[] = [

@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 
 import glob from 'glob';
-import { FILE_METADATA_KEY } from '../src/constants';
+import { FILE_METADATA_KEY } from '../src/constants.js';
 import {
   evaluate,
   formatVarsForDisplay,
@@ -10,14 +10,14 @@ import {
   isAllowedPrompt,
   runEval,
 } from '../src/evaluator';
-import { runExtensionHook } from '../src/evaluatorHelpers';
-import logger from '../src/logger';
-import { runDbMigrations } from '../src/migrate';
-import Eval from '../src/models/eval';
-import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types';
-import { processConfigFileReferences } from '../src/util/fileReference';
-import { sleep } from '../src/util/time';
-import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
+import { runExtensionHook } from '../src/evaluatorHelpers.js';
+import logger from '../src/logger.js';
+import { runDbMigrations } from '../src/migrate.js';
+import Eval from '../src/models/eval.js';
+import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types/index.js';
+import { processConfigFileReferences } from '../src/util/fileReference.js';
+import { sleep } from '../src/util/time.js';
+import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils.js';
 
 jest.mock('../src/util/transform', () => ({
   TransformInputType: {

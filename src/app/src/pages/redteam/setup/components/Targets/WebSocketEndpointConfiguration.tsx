@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
-import type { ProviderOptions } from '../../types';
+import type { ProviderOptions } from '../../types.js';
 
 interface WebSocketEndpointConfigurationProps {
   selectedTarget: ProviderOptions;

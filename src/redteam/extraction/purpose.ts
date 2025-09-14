@@ -1,10 +1,10 @@
 import dedent from 'dedent';
-import logger from '../../logger';
-import { neverGenerateRemote } from '../remoteGeneration';
-import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
+import logger from '../../logger.js';
+import { neverGenerateRemote } from '../remoteGeneration.js';
+import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util.js';
 
-import type { ApiProvider } from '../../types';
-import type { RedTeamTask } from './util';
+import type { ApiProvider } from '../../types/index.js';
+import type { RedTeamTask } from './util.js';
 
 export const DEFAULT_PURPOSE = 'An AI system';
 

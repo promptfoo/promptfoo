@@ -1,7 +1,7 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import TargetTypeSelection from './TargetTypeSelection';
+import TargetTypeSelection from './TargetTypeSelection.js';
 
 const mockUpdateConfig = vi.fn();
 const mockUseRedTeamConfig = vi.fn();

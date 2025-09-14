@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
-import { ToastContext, type ToastProviderProps } from './ToastContextDef';
+import { ToastContext, type ToastProviderProps } from './ToastContextDef.js';
 import type { AlertColor } from '@mui/material/Alert';
 
 export const ToastProvider = ({ children }: ToastProviderProps) => {

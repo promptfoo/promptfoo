@@ -1,6 +1,6 @@
-import { sleep } from '../util/time';
+import { sleep } from '../util/time.js';
 
-import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types/providers';
+import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types/providers.js';
 
 export class EchoProvider implements ApiProvider {
   private options: ProviderOptions;

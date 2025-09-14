@@ -1,12 +1,12 @@
-import { VERSION } from '../constants';
-import { getUserEmail } from '../globalConfig/accounts';
-import logger from '../logger';
+import { VERSION } from '../constants.js';
+import { getUserEmail } from '../globalConfig/accounts.js';
+import logger from '../logger.js';
 import {
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
 } from '../redteam/remoteGeneration';
-import { fetchWithRetries } from '../util/fetch';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { fetchWithRetries } from '../util/fetch/index.js';
+import { REQUEST_TIMEOUT_MS } from './shared.js';
 
 import type {
   ApiProvider,
@@ -16,7 +16,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../types/env.js';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;

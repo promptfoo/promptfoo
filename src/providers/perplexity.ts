@@ -1,4 +1,4 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiChatCompletionProvider } from './openai/chat.js';
 
 import type {
   ApiProvider,
@@ -7,8 +7,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import type { EnvOverrides } from '../types/env';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { EnvOverrides } from '../types/env.js';
+import type { OpenAiCompletionOptions } from './openai/types.js';
 
 /**
  * Calculate the cost of using the Perplexity API based on token usage

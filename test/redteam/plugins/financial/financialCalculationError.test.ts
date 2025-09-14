@@ -1,4 +1,4 @@
-import { FinancialCalculationErrorPluginGrader } from '../../../../src/redteam/plugins/financial/financialCalculationError';
+import { FinancialCalculationErrorPluginGrader } from '../../../../src/redteam/plugins/financial/financialCalculationError.js';
 
 describe('FinancialCalculationErrorPluginGrader', () => {
   let grader: FinancialCalculationErrorPluginGrader;

@@ -3,7 +3,7 @@ import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import yaml from 'js-yaml';
 import type { RedteamFileConfig } from '@promptfoo/types';
 
-import type { Config } from '../types';
+import type { Config } from '../types.js';
 
 const orderRedTeam = (redteam: any): any => {
   const orderedRedTeam: any = {};

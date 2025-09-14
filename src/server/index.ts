@@ -1,7 +1,7 @@
-import { getDefaultPort } from '../constants';
-import logger from '../logger';
-import { BrowserBehavior, checkServerRunning } from '../util/server';
-import { startServer } from './server';
+import { getDefaultPort } from '../constants.js';
+import logger from '../logger.js';
+import { BrowserBehavior, checkServerRunning } from '../util/server.js';
+import { startServer } from './server.js';
 
 async function main() {
   const port = getDefaultPort();

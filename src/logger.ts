@@ -3,9 +3,9 @@ import path from 'path';
 
 import chalk from 'chalk';
 import winston from 'winston';
-import { getEnvString } from './envars';
-import { getConfigDirectoryPath } from './util/config/manage';
-import { sanitizeBody, sanitizeUrl } from './util/sanitizer';
+import { getEnvString } from './envars.js';
+import { getConfigDirectoryPath } from './util/config/manage.js';
+import { sanitizeBody, sanitizeUrl } from './util/sanitizer.js';
 
 const MAX_LOG_FILES = 50;
 

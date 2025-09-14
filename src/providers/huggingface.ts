@@ -1,7 +1,7 @@
-import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
-import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { fetchWithCache } from '../cache.js';
+import { getEnvString } from '../envars.js';
+import logger from '../logger.js';
+import { REQUEST_TIMEOUT_MS } from './shared.js';
 
 import type {
   ApiProvider,

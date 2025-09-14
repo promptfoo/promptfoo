@@ -1,7 +1,7 @@
 import fs from 'fs';
 
-import { fetchWithCache } from '../../src/cache';
-import { HttpProvider } from '../../src/providers/http';
+import { fetchWithCache } from '../../src/cache.js';
+import { HttpProvider } from '../../src/providers/http.js';
 
 // Mock dependencies
 jest.mock('../../src/cache', () => ({

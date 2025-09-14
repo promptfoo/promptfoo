@@ -1,7 +1,7 @@
-import { matchesClassification } from '../matchers';
-import invariant from '../util/invariant';
+import { matchesClassification } from '../matchers.js';
+import invariant from '../util/invariant.js';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index.js';
 
 export async function handleClassifier({
   assertion,

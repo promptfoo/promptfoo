@@ -4,13 +4,13 @@ import * as os from 'os';
 import chalk from 'chalk';
 import pkg from '../../package.json' with { type: 'json' };
 const { version } = pkg;
-import { getEnvString } from '../envars';
-import logger from '../logger';
-import { printBorder } from '../util';
-import { resolveConfigs } from '../util/config/load';
+import { getEnvString } from '../envars.js';
+import logger from '../logger.js';
+import { printBorder } from '../util/index.js';
+import { resolveConfigs } from '../util/config/load.js';
 import type { Command } from 'commander';
 
-import type { UnifiedConfig } from '../types';
+import type { UnifiedConfig } from '../types/index.js';
 
 interface DebugOptions {
   config?: string;

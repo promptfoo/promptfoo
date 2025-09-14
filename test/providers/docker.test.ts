@@ -7,8 +7,8 @@ import {
   DMRCompletionProvider,
   DMREmbeddingProvider,
 } from '../../src/providers/docker';
-import { fetchWithCache } from '../../src/cache';
-import logger from '../../src/logger';
+import { fetchWithCache } from '../../src/cache.js';
+import logger from '../../src/logger.js';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/logger');

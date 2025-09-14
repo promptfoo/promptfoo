@@ -1,7 +1,7 @@
 import { usePostHog } from '@app/components/PostHogContext';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useTelemetry } from './useTelemetry';
+import { useTelemetry } from './useTelemetry.js';
 
 vi.mock('@app/components/PostHogContext', () => ({
   usePostHog: vi.fn(),

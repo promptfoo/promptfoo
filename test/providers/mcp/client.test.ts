@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { MCPClient } from '../../../src/providers/mcp/client';
+import { MCPClient } from '../../../src/providers/mcp/client.js';
 
 // Create mock implementations for the imported modules
 const mockClient = {

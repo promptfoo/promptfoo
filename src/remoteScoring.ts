@@ -1,9 +1,9 @@
-import { fetchWithCache } from './cache';
-import { getEnvString } from './envars';
-import logger from './logger';
-import { REQUEST_TIMEOUT_MS } from './providers/shared';
+import { fetchWithCache } from './cache.js';
+import { getEnvString } from './envars.js';
+import logger from './logger.js';
+import { REQUEST_TIMEOUT_MS } from './providers/shared.js';
 
-import type { GradingResult } from './types';
+import type { GradingResult } from './types/index.js';
 
 type PiQuestion = {
   question: string;

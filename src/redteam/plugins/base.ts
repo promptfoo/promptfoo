@@ -1,14 +1,14 @@
 import dedent from 'dedent';
-import cliState from '../../cliState';
-import logger from '../../logger';
-import { matchesLlmRubric } from '../../matchers';
-import { maybeLoadToolsFromExternalFile } from '../../util';
-import { retryWithDeduplication, sampleArray } from '../../util/generation';
-import invariant from '../../util/invariant';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
+import cliState from '../../cliState.js';
+import logger from '../../logger.js';
+import { matchesLlmRubric } from '../../matchers.js';
+import { maybeLoadToolsFromExternalFile } from '../../util/index.js';
+import { retryWithDeduplication, sampleArray } from '../../util/generation.js';
+import invariant from '../../util/invariant.js';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates.js';
+import { sleep } from '../../util/time.js';
+import { redteamProviderManager } from '../providers/shared.js';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util.js';
 
 import type {
   ApiProvider,

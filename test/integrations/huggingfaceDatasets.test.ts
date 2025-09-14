@@ -1,5 +1,5 @@
-import { fetchWithCache } from '../../src/cache';
-import { getEnvString } from '../../src/envars';
+import { fetchWithCache } from '../../src/cache.js';
+import { getEnvString } from '../../src/envars.js';
 import {
   fetchHuggingFaceDataset,
   parseDatasetPath,

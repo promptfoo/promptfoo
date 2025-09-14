@@ -1,13 +1,13 @@
 import dedent from 'dedent';
-import { getEnvInt } from '../../envars';
-import { renderPrompt } from '../../evaluatorHelpers';
-import logger from '../../logger';
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject } from '../../util/json';
-import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getEnvInt } from '../../envars.js';
+import { renderPrompt } from '../../evaluatorHelpers.js';
+import logger from '../../logger.js';
+import invariant from '../../util/invariant.js';
+import { extractFirstJsonObject } from '../../util/json.js';
+import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates.js';
+import { sleep } from '../../util/time.js';
+import { TokenUsageTracker } from '../../util/tokenUsage.js';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils.js';
 import {
   createIterationContext,
   getTargetResponse,

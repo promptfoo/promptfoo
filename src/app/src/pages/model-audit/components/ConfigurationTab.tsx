@@ -7,9 +7,9 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import PathSelector from './PathSelector';
+import PathSelector from './PathSelector.js';
 
-import type { ScanPath } from '../ModelAudit.types';
+import type { ScanPath } from '../ModelAudit.types.js';
 
 interface ConfigurationTabProps {
   paths: ScanPath[];

@@ -1,10 +1,10 @@
-import { getEnvBool, getEnvString } from '../../../../src/envars';
+import { getEnvBool, getEnvString } from '../../../../src/envars.js';
 import {
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
 } from '../../../../src/redteam/constants';
-import { GRADERS } from '../../../../src/redteam/graders';
+import { GRADERS } from '../../../../src/redteam/graders.js';
 import {
   createTestCase,
   getHarmfulAssertions,

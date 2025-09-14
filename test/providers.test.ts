@@ -2,18 +2,18 @@ import fs from 'fs';
 import path from 'path';
 
 import yaml from 'js-yaml';
-import cliState from '../src/cliState';
-import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
-import { loadApiProvider, loadApiProviders } from '../src/providers';
-import { HttpProvider } from '../src/providers/http';
-import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
-import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
-import { PythonProvider } from '../src/providers/pythonCompletion';
-import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
-import { WebSocketProvider } from '../src/providers/websocket';
-import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
+import cliState from '../src/cliState.js';
+import { CLOUD_PROVIDER_PREFIX } from '../src/constants.js';
+import { loadApiProvider, loadApiProviders } from '../src/providers/index.js';
+import { HttpProvider } from '../src/providers/http.js';
+import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat.js';
+import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding.js';
+import { PythonProvider } from '../src/providers/pythonCompletion.js';
+import { ScriptCompletionProvider } from '../src/providers/scriptCompletion.js';
+import { WebSocketProvider } from '../src/providers/websocket.js';
+import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud.js';
 
-import type { ProviderOptions } from '../src/types';
+import type { ProviderOptions } from '../src/types/index.js';
 
 jest.mock('fs');
 jest.mock('js-yaml');

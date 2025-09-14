@@ -2,10 +2,10 @@ import crypto from 'crypto';
 
 import z from 'zod';
 import { fromError } from 'zod-validation-error';
-import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
-import logger from '../logger';
-import telemetry from '../telemetry';
-import { transform } from '../util/transform';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars.js';
+import logger from '../logger.js';
+import telemetry from '../telemetry.js';
+import { transform } from '../util/transform.js';
 
 import type {
   ApiEmbeddingProvider,
@@ -16,8 +16,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import type { EnvOverrides } from '../types/env';
-import type { TransformContext } from '../util/transform';
+import type { EnvOverrides } from '../types/env.js';
+import type { TransformContext } from '../util/transform.js';
 
 /**
  * Sleep utility function for implementing delays

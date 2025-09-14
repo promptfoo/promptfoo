@@ -29,8 +29,8 @@ import {
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useNavigate } from 'react-router-dom';
-import { getSeverityColor } from './FrameworkComplianceUtils';
-import { getStrategyIdFromTest } from './shared';
+import { getSeverityColor } from './FrameworkComplianceUtils.js';
+import { getStrategyIdFromTest } from './shared.js';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 

@@ -1,13 +1,13 @@
 import dedent from 'dedent';
 
-import { matchesLlmRubric } from '../../../src/matchers';
+import { matchesLlmRubric } from '../../../src/matchers.js';
 import {
   parseGeneratedPrompts,
   RedteamGraderBase,
   RedteamPluginBase,
 } from '../../../src/redteam/plugins/base';
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../../src/types';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
+import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../../src/types/index.js';
+import { maybeLoadFromExternalFile } from '../../../src/util/file.js';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),

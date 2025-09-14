@@ -2,10 +2,10 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import chalk from 'chalk';
 import semverGt from 'semver/functions/gt.js';
-import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
-import { getEnvBool } from './envars';
-import logger from './logger';
-import { fetchWithTimeout } from './util/fetch';
+import { TERMINAL_MAX_WIDTH, VERSION } from './constants.js';
+import { getEnvBool } from './envars.js';
+import logger from './logger.js';
+import { fetchWithTimeout } from './util/fetch/index.js';
 
 const execAsync = promisify(exec);
 

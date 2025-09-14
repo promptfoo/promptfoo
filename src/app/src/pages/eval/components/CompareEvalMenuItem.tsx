@@ -5,8 +5,8 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
-import EvalSelectorDialog from './EvalSelectorDialog';
-import { useTableStore } from './store';
+import EvalSelectorDialog from './EvalSelectorDialog.js';
+import { useTableStore } from './store.js';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 interface CompareEvalMenuItemProps {

@@ -2,8 +2,8 @@ import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import logger from './logger';
-import { safeResolve } from './util/fileNode';
+import logger from './logger.js';
+import { safeResolve } from './util/fileNode.js';
 
 /**
  * ESM replacement for __dirname - guarded for dual CJS/ESM builds

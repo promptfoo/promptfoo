@@ -21,14 +21,14 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
-import ConfigurationTab from './components/ConfigurationTab';
-import HistoryTab from './components/HistoryTab';
-import ResultsTab from './components/ResultsTab';
-import ScannedFilesDialog from './components/ScannedFilesDialog';
-import { useModelAuditStore } from './store';
+import AdvancedOptionsDialog from './components/AdvancedOptionsDialog.js';
+import ConfigurationTab from './components/ConfigurationTab.js';
+import HistoryTab from './components/HistoryTab.js';
+import ResultsTab from './components/ResultsTab.js';
+import ScannedFilesDialog from './components/ScannedFilesDialog.js';
+import { useModelAuditStore } from './store.js';
 
-import type { ScanResult } from './ModelAudit.types';
+import type { ScanResult } from './ModelAudit.types.js';
 
 export default function ModelAudit() {
   const {

@@ -1,7 +1,7 @@
 import { callApi } from '@app/utils/api';
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useApiHealth } from './useApiHealth';
+import { useApiHealth } from './useApiHealth.js';
 
 // Mock the API call
 vi.mock('@app/utils/api', () => ({

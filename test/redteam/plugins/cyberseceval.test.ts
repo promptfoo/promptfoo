@@ -1,7 +1,7 @@
-import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
-import { fetchWithTimeout } from '../../../src/util/fetch';
+import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval.js';
+import { fetchWithTimeout } from '../../../src/util/fetch/index.js';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index.js';
 
 jest.mock('../../../src/util/fetch', () => ({
   fetchWithTimeout: jest.fn(),

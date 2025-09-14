@@ -1,6 +1,6 @@
 import readline from 'readline';
 
-import { createReadlineInterface, promptUser, promptYesNo } from '../../src/util/readline';
+import { createReadlineInterface, promptUser, promptYesNo } from '../../src/util/readline.js';
 
 jest.mock('readline');
 

@@ -1,9 +1,9 @@
 import dedent from 'dedent';
-import logger from '../../logger';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
-import { ImageDatasetManager } from './imageDatasetUtils';
+import logger from '../../logger.js';
+import { RedteamGraderBase, RedteamPluginBase } from './base.js';
+import { ImageDatasetManager } from './imageDatasetUtils.js';
 
-import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types';
+import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index.js';
 
 /**
  * Configuration for image dataset plugins

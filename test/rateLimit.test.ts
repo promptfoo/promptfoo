@@ -1,4 +1,4 @@
-import { fetchWithRetries } from '../src/util/fetch';
+import { fetchWithRetries } from '../src/util/fetch/index.js';
 
 const mockedFetch = jest.spyOn(global, 'fetch');
 

@@ -1,10 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { runAssertions } from '../../../assertions';
-import logger from '../../../logger';
-import type { Assertion, AtomicTestCase } from '../../../types';
-import { createToolResponse } from '../utils';
+import { runAssertions } from '../../../assertions/index.js';
+import logger from '../../../logger.js';
+import type { Assertion, AtomicTestCase } from '../../../types/index.js';
+import { createToolResponse } from '../utils.js';
 
 /**
  * Run an assertion against an LLM output to test grading logic

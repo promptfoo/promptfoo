@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import RiskCard from './RiskCard';
-import { useReportStore } from './store';
+import RiskCard from './RiskCard.js';
+import { useReportStore } from './store.js';
 
 vi.mock('./store', () => ({
   useReportStore: vi.fn(),

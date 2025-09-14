@@ -1,13 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
-import logger from '../../logger';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { AnthropicGenericProvider } from './generic';
+import { getCache, isCacheEnabled } from '../../cache.js';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars.js';
+import logger from '../../logger.js';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils.js';
+import { AnthropicGenericProvider } from './generic.js';
 
-import type { ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
-import type { AnthropicCompletionOptions } from './types';
+import type { ProviderResponse } from '../../types/index.js';
+import type { EnvOverrides } from '../../types/env.js';
+import type { AnthropicCompletionOptions } from './types.js';
 
 export class AnthropicCompletionProvider extends AnthropicGenericProvider {
   // NOTE: As of March 15, 2025, all legacy completion models are retired

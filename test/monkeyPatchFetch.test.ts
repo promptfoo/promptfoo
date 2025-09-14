@@ -1,7 +1,7 @@
-import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, KA_ENDPOINT, R_ENDPOINT } from '../src/constants';
-import { CLOUD_API_HOST, cloudConfig } from '../src/globalConfig/cloud';
-import logger, { logRequestResponse } from '../src/logger';
-import { createMockResponse } from './util/utils';
+import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, KA_ENDPOINT, R_ENDPOINT } from '../src/constants.js';
+import { CLOUD_API_HOST, cloudConfig } from '../src/globalConfig/cloud.js';
+import logger, { logRequestResponse } from '../src/logger.js';
+import { createMockResponse } from './util/utils.js';
 
 jest.mock('../src/logger', () => ({
   __esModule: true,

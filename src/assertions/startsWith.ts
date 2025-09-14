@@ -1,6 +1,6 @@
-import invariant from '../util/invariant';
+import invariant from '../util/invariant.js';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index.js';
 
 export const handleStartsWith = ({
   assertion,

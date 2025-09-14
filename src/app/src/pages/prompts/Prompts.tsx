@@ -18,7 +18,7 @@ import {
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
 import { Link, useSearchParams } from 'react-router-dom';
-import PromptDialog from './PromptDialog';
+import PromptDialog from './PromptDialog.js';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
 // augment the props for the toolbar slot

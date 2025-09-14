@@ -20,11 +20,11 @@ import {
   Severity,
   type Strategy,
 } from '../redteam/constants';
-import { isCustomStrategy } from '../redteam/constants/strategies';
-import { isJavascriptFile } from '../util/fileExtensions';
-import { ProviderSchema } from '../validators/providers';
+import { isCustomStrategy } from '../redteam/constants/strategies.js';
+import { isJavascriptFile } from '../util/fileExtensions.js';
+import { ProviderSchema } from '../validators/providers.js';
 
-import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
+import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types.js';
 
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),

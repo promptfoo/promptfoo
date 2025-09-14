@@ -1,9 +1,9 @@
-import { clearCache } from '../../../src/cache';
+import { clearCache } from '../../../src/cache.js';
 import {
   AnthropicLlmRubricProvider,
   getAnthropicProviders,
 } from '../../../src/providers/anthropic/defaults';
-import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages.js';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

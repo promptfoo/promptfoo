@@ -1,10 +1,10 @@
 import { type BrowserContext, type ElementHandle, type Page } from 'playwright';
-import logger from '../logger';
-import { fetchWithTimeout } from '../util/fetch';
-import { maybeLoadFromExternalFile } from '../util/file';
-import invariant from '../util/invariant';
-import { safeJsonStringify } from '../util/json';
-import { getNunjucksEngine } from '../util/templates';
+import logger from '../logger.js';
+import { fetchWithTimeout } from '../util/fetch/index.js';
+import { maybeLoadFromExternalFile } from '../util/file.js';
+import invariant from '../util/invariant.js';
+import { safeJsonStringify } from '../util/json.js';
+import { getNunjucksEngine } from '../util/templates.js';
 
 import type {
   ApiProvider,

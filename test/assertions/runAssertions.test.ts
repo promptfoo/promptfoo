@@ -1,10 +1,10 @@
-import { runAssertions } from '../../src/assertions';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
-import { ReplicateModerationProvider } from '../../src/providers/replicate';
-import { TestGrader } from '../util/utils';
+import { runAssertions } from '../../src/assertions/index.js';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
+import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults.js';
+import { ReplicateModerationProvider } from '../../src/providers/replicate.js';
+import { TestGrader } from '../util/utils.js';
 
-import type { ApiProvider, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
+import type { ApiProvider, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types/index.js';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),

@@ -1,5 +1,5 @@
-import { getRemoteHealthUrl } from '../../src/redteam/remoteGeneration';
-import { checkRemoteHealth } from '../../src/util/apiHealth';
+import { getRemoteHealthUrl } from '../../src/redteam/remoteGeneration.js';
+import { checkRemoteHealth } from '../../src/util/apiHealth.js';
 
 const mockedFetch = jest.mocked(jest.fn());
 global.fetch = mockedFetch;

@@ -1,5 +1,5 @@
-import { Telemetry } from '../src/telemetry';
-import { fetchWithTimeout } from '../src/util/fetch';
+import { Telemetry } from '../src/telemetry.js';
+import { fetchWithTimeout } from '../src/util/fetch/index.js';
 
 jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
@@ -17,7 +17,7 @@ jest.mock('../src/globalConfig/globalConfig', () => ({
 }));
 
 jest.mock('../src/constants', () => ({
-  ...jest.requireActual('../src/constants'),
+  ...jest.requireActual('../src/constants.js'),
   VERSION: '1.0.0',
 }));
 
@@ -29,7 +29,7 @@ jest.mock('../src/cliState', () => ({
 }));
 
 jest.mock('../src/envars', () => ({
-  ...jest.requireActual('../src/envars'),
+  ...jest.requireActual('../src/envars.js'),
   getEnvBool: jest.fn().mockImplementation((key) => {
     if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
       return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';

@@ -1,5 +1,5 @@
-import logger from '../../logger';
-import { MCPClient } from './client';
+import logger from '../../logger.js';
+import { MCPClient } from './client.js';
 
 import type {
   ApiProvider,
@@ -7,7 +7,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types';
-import type { MCPConfig } from './types';
+import type { MCPConfig } from './types.js';
 
 interface MCPProviderOptions {
   config?: MCPConfig;

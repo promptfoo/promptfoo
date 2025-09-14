@@ -1,6 +1,6 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import type { ApiProvider, ProviderOptions } from '../types';
-import type { EnvOverrides } from '../types/env';
+import { OpenAiChatCompletionProvider } from './openai/chat.js';
+import type { ApiProvider, ProviderOptions } from '../types/index.js';
+import type { EnvOverrides } from '../types/env.js';
 
 export const LLAMA_API_MODELS = [
   // Llama 4 Models (Multimodal)

@@ -20,10 +20,10 @@ import {
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
 import { useNavigate } from 'react-router-dom';
-import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
-import PluginStrategyFlow from './PluginStrategyFlow';
-import SuggestionsDialog from './SuggestionsDialog';
-import { getStrategyIdFromTest } from './shared';
+import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog.js';
+import PluginStrategyFlow from './PluginStrategyFlow.js';
+import SuggestionsDialog from './SuggestionsDialog.js';
+import { getStrategyIdFromTest } from './shared.js';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import './RiskCategoryDrawer.css';
 

@@ -1,13 +1,13 @@
 import fs from 'fs';
 
 import yaml from 'js-yaml';
-import { synthesizeFromTestSuite } from '../../../src/assertions/synthesis';
-import { disableCache } from '../../../src/cache';
-import { doGenerateAssertions } from '../../../src/commands/generate/assertions';
-import telemetry from '../../../src/telemetry';
-import { resolveConfigs } from '../../../src/util/config/load';
+import { synthesizeFromTestSuite } from '../../../src/assertions/synthesis.js';
+import { disableCache } from '../../../src/cache.js';
+import { doGenerateAssertions } from '../../../src/commands/generate/assertions.js';
+import telemetry from '../../../src/telemetry.js';
+import { resolveConfigs } from '../../../src/util/config/load.js';
 
-import type { Assertion, TestSuite } from '../../../src/types';
+import type { Assertion, TestSuite } from '../../../src/types/index.js';
 
 jest.mock('fs');
 jest.mock('js-yaml');

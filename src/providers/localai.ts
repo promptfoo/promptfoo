@@ -1,9 +1,9 @@
-import { fetchWithCache } from '../cache';
-import { getEnvFloat, getEnvString } from '../envars';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { fetchWithCache } from '../cache.js';
+import { getEnvFloat, getEnvString } from '../envars.js';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared.js';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index.js';
+import type { EnvOverrides } from '../types/env.js';
 
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;

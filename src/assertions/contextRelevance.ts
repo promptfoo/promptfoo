@@ -1,8 +1,8 @@
-import { matchesContextRelevance } from '../matchers';
-import invariant from '../util/invariant';
-import { resolveContext } from './contextUtils';
+import { matchesContextRelevance } from '../matchers.js';
+import invariant from '../util/invariant.js';
+import { resolveContext } from './contextUtils.js';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index.js';
 
 /**
  * Handles context-relevance assertions by evaluating whether the provided context

@@ -1,7 +1,7 @@
 import path from 'path';
 
-import { importModule } from '../src/esm';
-import logger from '../src/logger';
+import { importModule } from '../src/esm.js';
+import logger from '../src/logger.js';
 
 jest.mock('../src/logger', () => ({
   __esModule: true,

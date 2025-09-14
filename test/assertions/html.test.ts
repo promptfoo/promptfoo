@@ -1,6 +1,6 @@
-import { handleContainsHtml, handleIsHtml } from '../../src/assertions/html';
+import { handleContainsHtml, handleIsHtml } from '../../src/assertions/html.js';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types';
+import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index.js';
 
 const mockProvider: ApiProvider = {
   id: () => 'mock',

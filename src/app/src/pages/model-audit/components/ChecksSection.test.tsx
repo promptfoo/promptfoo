@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 
-import ChecksSection from './ChecksSection';
-import type { ScanCheck } from '../ModelAudit.types';
+import ChecksSection from './ChecksSection.js';
+import type { ScanCheck } from '../ModelAudit.types.js';
 
 vi.mock('@mui/x-data-grid', () => ({
   ...vi.importActual('@mui/x-data-grid'),

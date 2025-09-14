@@ -1,6 +1,6 @@
-import { addCrescendo } from '../../../src/redteam/strategies/crescendo';
+import { addCrescendo } from '../../../src/redteam/strategies/crescendo.js';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index.js';
 
 describe('addCrescendo', () => {
   it('should add crescendo configuration to test cases', () => {

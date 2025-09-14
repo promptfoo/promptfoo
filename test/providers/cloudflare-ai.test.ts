@@ -1,4 +1,4 @@
-import { clearCache, enableCache } from '../../src/cache';
+import { clearCache, enableCache } from '../../src/cache.js';
 import {
   CloudflareAiChatCompletionProvider,
   CloudflareAiCompletionProvider,
@@ -6,9 +6,9 @@ import {
   CloudflareAiEmbeddingProvider,
   createCloudflareAiProvider,
 } from '../../src/providers/cloudflare-ai';
-import { loadApiProviders } from '../../src/providers/index';
+import { loadApiProviders } from '../../src/providers/index.js';
 
-import type { ProviderOptionsMap } from '../../src/types';
+import type { ProviderOptionsMap } from '../../src/types/index.js';
 
 jest.mock('fs');
 

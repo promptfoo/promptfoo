@@ -37,20 +37,20 @@ import type { RedteamStrategy } from '@promptfoo/types';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { customTargetOption, predefinedTargets } from './components/constants';
-import Plugins from './components/Plugins';
-import Purpose from './components/Purpose';
-import Review from './components/Review';
-import Setup from './components/Setup';
-import Strategies from './components/Strategies';
-import TargetConfiguration from './components/Targets/TargetConfiguration';
-import TargetTypeSelection from './components/Targets/TargetTypeSelection';
-import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
-import { useSetupState } from './hooks/useSetupState';
-import { generateOrderedYaml } from './utils/yamlHelpers';
+import { customTargetOption, predefinedTargets } from './components/constants.js';
+import Plugins from './components/Plugins.js';
+import Purpose from './components/Purpose.js';
+import Review from './components/Review.js';
+import Setup from './components/Setup.js';
+import Strategies from './components/Strategies.js';
+import TargetConfiguration from './components/Targets/TargetConfiguration.js';
+import TargetTypeSelection from './components/Targets/TargetTypeSelection.js';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig.js';
+import { useSetupState } from './hooks/useSetupState.js';
+import { generateOrderedYaml } from './utils/yamlHelpers.js';
 
 import './page.css';
-import type { Config, RedteamUITarget } from './types';
+import type { Config, RedteamUITarget } from './types.js';
 
 export const SIDEBAR_WIDTH = 240;
 

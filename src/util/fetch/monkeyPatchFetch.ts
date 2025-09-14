@@ -1,6 +1,6 @@
-import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, KA_ENDPOINT, R_ENDPOINT } from '../../constants';
-import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
-import logger, { logRequestResponse } from '../../logger';
+import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, KA_ENDPOINT, R_ENDPOINT } from '../../constants.js';
+import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud.js';
+import logger, { logRequestResponse } from '../../logger.js';
 
 function isConnectionError(error: Error) {
   return (

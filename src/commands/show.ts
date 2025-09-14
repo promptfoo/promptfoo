@@ -1,11 +1,11 @@
 import chalk from 'chalk';
-import logger from '../logger';
-import Eval from '../models/eval';
-import { generateTable, wrapTable } from '../table';
-import telemetry from '../telemetry';
-import { printBorder, setupEnv } from '../util';
-import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/database';
-import invariant from '../util/invariant';
+import logger from '../logger.js';
+import Eval from '../models/eval.js';
+import { generateTable, wrapTable } from '../table.js';
+import telemetry from '../telemetry.js';
+import { printBorder, setupEnv } from '../util/index.js';
+import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/database.js';
+import invariant from '../util/invariant.js';
 import type { Command } from 'commander';
 
 export async function handlePrompt(id: string) {

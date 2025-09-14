@@ -7,17 +7,17 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { testCaseFromCsvRow } from '../csv';
-import { getEnvBool, getEnvString } from '../envars';
-import { importModule } from '../esm';
-import { fetchCsvFromGoogleSheet } from '../googleSheets';
-import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
-import logger from '../logger';
-import { loadApiProvider } from '../providers';
-import { runPython } from '../python/pythonUtils';
-import telemetry from '../telemetry';
-import { maybeLoadConfigFromExternalFile } from './file';
-import { isJavascriptFile } from './fileExtensions';
+import { testCaseFromCsvRow } from '../csv.js';
+import { getEnvBool, getEnvString } from '../envars.js';
+import { importModule } from '../esm.js';
+import { fetchCsvFromGoogleSheet } from '../googleSheets.js';
+import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets.js';
+import logger from '../logger.js';
+import { loadApiProvider } from '../providers/index.js';
+import { runPython } from '../python/pythonUtils.js';
+import telemetry from '../telemetry.js';
+import { maybeLoadConfigFromExternalFile } from './file.js';
+import { isJavascriptFile } from './fileExtensions.js';
 
 import type {
   CsvRow,

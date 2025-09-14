@@ -1,4 +1,4 @@
-import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { OpenAiChatCompletionProvider } from '../openai/chat.js';
 
 // GitHub Models default providers
 // Using OpenAI-compatible API with GitHub's endpoint

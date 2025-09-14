@@ -1,13 +1,13 @@
-import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
+import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets.js';
 import {
   AegisGrader,
   AegisPlugin,
   DATASET_PATH,
   fetchDataset,
 } from '../../../src/redteam/plugins/aegis';
-import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
+import { RedteamGraderBase } from '../../../src/redteam/plugins/base.js';
 
-import type { ApiProvider, TestCase } from '../../../src/types';
+import type { ApiProvider, TestCase } from '../../../src/types/index.js';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');
 

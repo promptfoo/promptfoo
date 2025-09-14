@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import EvalPage from './page';
+import EvalPage from './page.js';
 
 vi.mock('@app/pages/eval/components/Eval', () => ({
   default: ({ fetchId }: { fetchId?: string | null }) => (

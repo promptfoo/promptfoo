@@ -3,8 +3,8 @@ import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import Strategies from './Strategies';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig.js';
+import Strategies from './Strategies.js';
 
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');

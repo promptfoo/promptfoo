@@ -2,8 +2,8 @@ import { screen } from '@testing-library/dom';
 import { fireEvent, render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import DownloadMenu from './DownloadMenu';
-import { useTableStore as useResultsViewStore } from './store';
+import DownloadMenu from './DownloadMenu.js';
+import { useTableStore as useResultsViewStore } from './store.js';
 
 // Get a reference to the mock
 const showToastMock = vi.fn();

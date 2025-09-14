@@ -1,7 +1,7 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiChatCompletionProvider } from './openai/chat.js';
 
-import type { ProviderOptions } from '../types/providers';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { ProviderOptions } from '../types/providers.js';
+import type { OpenAiCompletionOptions } from './openai/types.js';
 
 type GroqCompletionOptions = OpenAiCompletionOptions & {
   systemPrompt?: string;

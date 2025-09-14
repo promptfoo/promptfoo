@@ -1,12 +1,12 @@
-import { clearCache } from '../../src/cache';
+import { clearCache } from '../../src/cache.js';
 import {
   AlibabaChatCompletionProvider,
   AlibabaEmbeddingProvider,
 } from '../../src/providers/alibaba';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding.js';
 
-import type { ProviderOptions } from '../../src/types';
+import type { ProviderOptions } from '../../src/types/index.js';
 
 jest.mock('../../src/logger');
 jest.mock('../../src/providers/openai');

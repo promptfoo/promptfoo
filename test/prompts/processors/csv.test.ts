@@ -1,9 +1,9 @@
 import fs from 'fs';
 
 import dedent from 'ts-dedent';
-import { processCsvPrompts } from '../../../src/prompts/processors/csv';
+import { processCsvPrompts } from '../../../src/prompts/processors/csv.js';
 
-import type { Prompt } from '../../../src/types';
+import type { Prompt } from '../../../src/types/index.js';
 
 jest.mock('fs');
 

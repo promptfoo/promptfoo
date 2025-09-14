@@ -4,14 +4,14 @@ import os from 'os';
 import path from 'path';
 
 import { Router } from 'express';
-import { checkModelAuditInstalled } from '../../commands/modelScan';
-import logger from '../../logger';
-import ModelAudit from '../../models/modelAudit';
-import telemetry from '../../telemetry';
-import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
+import { checkModelAuditInstalled } from '../../commands/modelScan.js';
+import logger from '../../logger.js';
+import ModelAudit from '../../models/modelAudit.js';
+import telemetry from '../../telemetry.js';
+import { parseModelAuditArgs } from '../../util/modelAuditCliParser.js';
 import type { Request, Response } from 'express';
 
-import type { ModelAuditScanResults } from '../../types/modelAudit';
+import type { ModelAuditScanResults } from '../../types/modelAudit.js';
 
 export const modelAuditRouter = Router();
 

@@ -1,7 +1,7 @@
-import { handleTraceErrorSpans } from '../../src/assertions/traceErrorSpans';
+import { handleTraceErrorSpans } from '../../src/assertions/traceErrorSpans.js';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types';
-import type { TraceData } from '../../src/types/tracing';
+import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index.js';
+import type { TraceData } from '../../src/types/tracing.js';
 
 const mockProvider: ApiProvider = {
   id: () => 'mock',

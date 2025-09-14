@@ -1,20 +1,20 @@
 import { globSync } from 'glob';
-import logger from '../logger';
-import { parsePathOrGlob } from '../util';
-import { isJavascriptFile } from '../util/fileExtensions';
-import invariant from '../util/invariant';
-import { PromptSchema } from '../validators/prompts';
-import { processCsvPrompts } from './processors/csv';
-import { processJsFile } from './processors/javascript';
-import { processJinjaFile } from './processors/jinja';
-import { processJsonFile } from './processors/json';
-import { processJsonlFile } from './processors/jsonl';
-import { processMarkdownFile } from './processors/markdown';
-import { processPythonFile } from './processors/python';
-import { processString } from './processors/string';
-import { processTxtFile } from './processors/text';
-import { processYamlFile } from './processors/yaml';
-import { maybeFilePath, normalizeInput } from './utils';
+import logger from '../logger.js';
+import { parsePathOrGlob } from '../util/index.js';
+import { isJavascriptFile } from '../util/fileExtensions.js';
+import invariant from '../util/invariant.js';
+import { PromptSchema } from '../validators/prompts.js';
+import { processCsvPrompts } from './processors/csv.js';
+import { processJsFile } from './processors/javascript.js';
+import { processJinjaFile } from './processors/jinja.js';
+import { processJsonFile } from './processors/json.js';
+import { processJsonlFile } from './processors/jsonl.js';
+import { processMarkdownFile } from './processors/markdown.js';
+import { processPythonFile } from './processors/python.js';
+import { processString } from './processors/string.js';
+import { processTxtFile } from './processors/text.js';
+import { processYamlFile } from './processors/yaml.js';
+import { maybeFilePath, normalizeInput } from './utils.js';
 
 import type {
   EvaluateTestSuite,
@@ -26,7 +26,7 @@ import type {
   UnifiedConfig,
 } from '../types';
 
-export * from './grading';
+export * from './grading.js';
 
 /**
  * Reads and maps provider prompts based on the configuration and parsed prompts.

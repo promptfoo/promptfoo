@@ -1,7 +1,7 @@
 import { distance } from 'fastest-levenshtein';
-import invariant from '../util/invariant';
+import invariant from '../util/invariant.js';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index.js';
 
 export function handleLevenshtein({
   assertion,

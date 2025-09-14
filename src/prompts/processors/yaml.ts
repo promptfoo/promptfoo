@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 
 import yaml from 'js-yaml';
-import logger from '../../logger';
-import { maybeLoadConfigFromExternalFile } from '../../util/file';
+import logger from '../../logger.js';
+import { maybeLoadConfigFromExternalFile } from '../../util/file.js';
 
-import type { Prompt } from '../../types';
+import type { Prompt } from '../../types/index.js';
 
 /**
  * Processes a YAML file to extract prompts.

@@ -1,9 +1,9 @@
 import yaml from 'js-yaml';
-import invariant from '../util/invariant';
-import { extractJsonObjects, getAjv } from '../util/json';
+import invariant from '../util/invariant.js';
+import { extractJsonObjects, getAjv } from '../util/json.js';
 import type { ValidateFunction } from 'ajv';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index.js';
 
 export function handleIsJson({
   outputString,

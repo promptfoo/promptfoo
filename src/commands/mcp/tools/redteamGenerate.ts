@@ -2,9 +2,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
-import { DEFAULT_MAX_CONCURRENCY } from '../../../evaluator';
-import logger from '../../../logger';
-import { doGenerateRedteam } from '../../../redteam/commands/generate';
+import { DEFAULT_MAX_CONCURRENCY } from '../../../evaluator.js';
+import logger from '../../../logger.js';
+import { doGenerateRedteam } from '../../../redteam/commands/generate.js';
 import {
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES,
@@ -12,10 +12,10 @@ import {
   DEFAULT_STRATEGIES,
   REDTEAM_MODEL,
 } from '../../../redteam/constants';
-import type { RedteamCliGenerateOptions } from '../../../redteam/types';
-import { loadDefaultConfig } from '../../../util/config/default';
-import { RedteamGenerateOptionsSchema } from '../../../validators/redteam';
-import { createToolResponse } from '../utils';
+import type { RedteamCliGenerateOptions } from '../../../redteam/types.js';
+import { loadDefaultConfig } from '../../../util/config/default.js';
+import { RedteamGenerateOptionsSchema } from '../../../validators/redteam.js';
+import { createToolResponse } from '../utils.js';
 
 /**
  * Generate adversarial test cases for redteam security testing

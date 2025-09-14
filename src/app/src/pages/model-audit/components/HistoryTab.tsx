@@ -33,9 +33,9 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useModelAuditStore } from '../store';
+import { useModelAuditStore } from '../store.js';
 
-import type { ScanIssue } from '../ModelAudit.types';
+import type { ScanIssue } from '../ModelAudit.types.js';
 
 export default function HistoryTab() {
   const {

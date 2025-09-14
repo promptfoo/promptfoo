@@ -1,10 +1,10 @@
 import type { Agent } from 'http';
 
-import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt, getEnvString } from '../../envars';
-import logger from '../../logger';
-import telemetry from '../../telemetry';
-import { AwsBedrockGenericProvider } from './index';
+import { getCache, isCacheEnabled } from '../../cache.js';
+import { getEnvInt, getEnvString } from '../../envars.js';
+import logger from '../../logger.js';
+import telemetry from '../../telemetry.js';
+import { AwsBedrockGenericProvider } from './index.js';
 import type {
   BedrockAgentRuntimeClient,
   InvokeAgentCommandInput,
@@ -13,8 +13,8 @@ import type {
   InferenceConfig,
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
-import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, ProviderResponse } from '../../types/providers';
+import type { EnvOverrides } from '../../types/env.js';
+import type { ApiProvider, ProviderResponse } from '../../types/providers.js';
 
 /**
  * Configuration options for AWS Bedrock AgentCore provider

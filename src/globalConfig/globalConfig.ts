@@ -7,9 +7,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
-import { getConfigDirectoryPath } from '../util/config/manage';
+import { getConfigDirectoryPath } from '../util/config/manage.js';
 
-import type { GlobalConfig } from '../configTypes';
+import type { GlobalConfig } from '../configTypes.js';
 
 export function writeGlobalConfig(config: GlobalConfig): void {
   fs.writeFileSync(

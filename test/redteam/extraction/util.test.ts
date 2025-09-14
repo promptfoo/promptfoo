@@ -1,16 +1,16 @@
-import { fetchWithCache } from '../../../src/cache';
-import { VERSION } from '../../../src/constants';
-import logger from '../../../src/logger';
-import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
+import { fetchWithCache } from '../../../src/cache.js';
+import { VERSION } from '../../../src/constants.js';
+import logger from '../../../src/logger.js';
+import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared.js';
 import {
   callExtraction,
   fetchRemoteGeneration,
   formatPrompts,
   RedTeamGenerationResponse,
 } from '../../../src/redteam/extraction/util';
-import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration.js';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index.js';
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),

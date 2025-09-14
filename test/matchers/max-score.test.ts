@@ -1,6 +1,6 @@
-import { selectMaxScore } from '../../src/matchers';
-import { ResultFailureReason } from '../../src/types';
-import type { Assertion, EvaluateResult } from '../../src/types';
+import { selectMaxScore } from '../../src/matchers.js';
+import { ResultFailureReason } from '../../src/types/index.js';
+import type { Assertion, EvaluateResult } from '../../src/types/index.js';
 
 describe('selectMaxScore', () => {
   const createMockResult = (score: number, testIdx: number): EvaluateResult => ({

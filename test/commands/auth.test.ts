@@ -1,12 +1,12 @@
 import { Command } from 'commander';
-import { authCommand } from '../../src/commands/auth';
-import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
-import { cloudConfig } from '../../src/globalConfig/cloud';
-import logger from '../../src/logger';
-import telemetry from '../../src/telemetry';
-import { getDefaultTeam } from '../../src/util/cloud';
-import { fetchWithProxy } from '../../src/util/fetch';
-import { createMockResponse } from '../util/utils';
+import { authCommand } from '../../src/commands/auth.js';
+import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts.js';
+import { cloudConfig } from '../../src/globalConfig/cloud.js';
+import logger from '../../src/logger.js';
+import telemetry from '../../src/telemetry.js';
+import { getDefaultTeam } from '../../src/util/cloud.js';
+import { fetchWithProxy } from '../../src/util/fetch/index.js';
+import { createMockResponse } from '../util/utils.js';
 
 const mockCloudUser = {
   id: '1',

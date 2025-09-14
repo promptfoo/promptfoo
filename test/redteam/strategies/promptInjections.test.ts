@@ -1,6 +1,6 @@
-import { addInjections } from '../../../src/redteam/strategies/promptInjections';
+import { addInjections } from '../../../src/redteam/strategies/promptInjections/index.js';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index.js';
 
 describe('addInjections', () => {
   beforeEach(() => {

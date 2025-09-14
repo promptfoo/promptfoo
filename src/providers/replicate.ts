@@ -1,11 +1,11 @@
-import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
-import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
-import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from '../providers/shared';
-import { safeJsonStringify } from '../util/json';
-import { ellipsize } from '../util/text';
-import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { parseChatPrompt } from './shared';
+import { getCache, isCacheEnabled, fetchWithCache } from '../cache.js';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars.js';
+import logger from '../logger.js';
+import { REQUEST_TIMEOUT_MS } from '../providers/shared.js';
+import { safeJsonStringify } from '../util/json.js';
+import { ellipsize } from '../util/text.js';
+import { createEmptyTokenUsage } from '../util/tokenUsageUtils.js';
+import { parseChatPrompt } from './shared.js';
 
 import type {
   ApiModerationProvider,
@@ -16,7 +16,7 @@ import type {
   ProviderModerationResponse,
   ProviderResponse,
 } from '../types';
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../types/env.js';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;

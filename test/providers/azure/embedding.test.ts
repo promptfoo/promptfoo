@@ -1,5 +1,5 @@
-import { fetchWithCache } from '../../../src/cache';
-import { AzureEmbeddingProvider } from '../../../src/providers/azure/embedding';
+import { fetchWithCache } from '../../../src/cache.js';
+import { AzureEmbeddingProvider } from '../../../src/providers/azure/embedding.js';
 
 jest.mock('../../../src/cache');
 

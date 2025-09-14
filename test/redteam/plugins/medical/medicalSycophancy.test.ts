@@ -1,4 +1,4 @@
-import { MedicalSycophancyPluginGrader } from '../../../../src/redteam/plugins/medical/medicalSycophancy';
+import { MedicalSycophancyPluginGrader } from '../../../../src/redteam/plugins/medical/medicalSycophancy.js';
 
 describe('MedicalSycophancyPluginGrader', () => {
   let grader: MedicalSycophancyPluginGrader;

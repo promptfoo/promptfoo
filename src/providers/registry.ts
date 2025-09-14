@@ -1,46 +1,46 @@
 import path from 'path';
 
 import dedent from 'dedent';
-import { importModule } from '../esm';
-import logger from '../logger';
-import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
-import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
-import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
-import RedteamCustomProvider from '../redteam/providers/custom';
-import RedteamGoatProvider from '../redteam/providers/goat';
-import RedteamIterativeProvider from '../redteam/providers/iterative';
-import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
-import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
-import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
-import { isJavascriptFile } from '../util/fileExtensions';
-import { AI21ChatCompletionProvider } from './ai21';
-import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
-import { AnthropicCompletionProvider } from './anthropic/completion';
-import { AnthropicMessagesProvider } from './anthropic/messages';
-import { ANTHROPIC_MODELS } from './anthropic/util';
-import { AzureAssistantProvider } from './azure/assistant';
-import { AzureChatCompletionProvider } from './azure/chat';
-import { AzureCompletionProvider } from './azure/completion';
-import { AzureEmbeddingProvider } from './azure/embedding';
-import { AzureModerationProvider } from './azure/moderation';
-import { BAMProvider } from './bam';
-import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
-import { BrowserProvider } from './browser';
-import { createCerebrasProvider } from './cerebras';
-import { ClouderaAiChatCompletionProvider } from './cloudera';
-import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
-import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
-import { EchoProvider } from './echo';
-import { FalImageGenerationProvider } from './fal';
-import { createGitHubProvider } from './github/index';
-import { GolangProvider } from './golangCompletion';
-import { AIStudioChatProvider } from './google/ai.studio';
-import { GoogleImageProvider } from './google/image';
-import { GoogleLiveProvider } from './google/live';
-import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GroqProvider } from './groq';
-import { HeliconeGatewayProvider } from './helicone';
-import { HttpProvider } from './http';
+import { importModule } from '../esm.js';
+import logger from '../logger.js';
+import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning.js';
+import RedteamBestOfNProvider from '../redteam/providers/bestOfN.js';
+import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo/index.js';
+import RedteamCustomProvider from '../redteam/providers/custom/index.js';
+import RedteamGoatProvider from '../redteam/providers/goat.js';
+import RedteamIterativeProvider from '../redteam/providers/iterative.js';
+import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage.js';
+import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree.js';
+import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser.js';
+import { isJavascriptFile } from '../util/fileExtensions.js';
+import { AI21ChatCompletionProvider } from './ai21.js';
+import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba.js';
+import { AnthropicCompletionProvider } from './anthropic/completion.js';
+import { AnthropicMessagesProvider } from './anthropic/messages.js';
+import { ANTHROPIC_MODELS } from './anthropic/util.js';
+import { AzureAssistantProvider } from './azure/assistant.js';
+import { AzureChatCompletionProvider } from './azure/chat.js';
+import { AzureCompletionProvider } from './azure/completion.js';
+import { AzureEmbeddingProvider } from './azure/embedding.js';
+import { AzureModerationProvider } from './azure/moderation.js';
+import { BAMProvider } from './bam.js';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index.js';
+import { BrowserProvider } from './browser.js';
+import { createCerebrasProvider } from './cerebras.js';
+import { ClouderaAiChatCompletionProvider } from './cloudera.js';
+import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere.js';
+import { DatabricksMosaicAiChatCompletionProvider } from './databricks.js';
+import { EchoProvider } from './echo.js';
+import { FalImageGenerationProvider } from './fal.js';
+import { createGitHubProvider } from './github/index.js';
+import { GolangProvider } from './golangCompletion.js';
+import { AIStudioChatProvider } from './google/ai.studio.js';
+import { GoogleImageProvider } from './google/image.js';
+import { GoogleLiveProvider } from './google/live.js';
+import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex.js';
+import { GroqProvider } from './groq.js';
+import { HeliconeGatewayProvider } from './helicone.js';
+import { HttpProvider } from './http.js';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceSentenceSimilarityProvider,
@@ -48,52 +48,52 @@ import {
   HuggingfaceTextGenerationProvider,
   HuggingfaceTokenExtractionProvider,
 } from './huggingface';
-import { JfrogMlChatCompletionProvider } from './jfrog';
-import { createLambdaLabsProvider } from './lambdalabs';
-import { LlamaProvider } from './llama';
+import { JfrogMlChatCompletionProvider } from './jfrog.js';
+import { createLambdaLabsProvider } from './lambdalabs.js';
+import { LlamaProvider } from './llama.js';
 import {
   LocalAiChatProvider,
   LocalAiCompletionProvider,
   LocalAiEmbeddingProvider,
 } from './localai';
-import { ManualInputProvider } from './manualInput';
-import { MCPProvider } from './mcp';
-import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
-import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
-import { OpenAiAssistantProvider } from './openai/assistant';
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import { OpenAiCompletionProvider } from './openai/completion';
-import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { OpenAiImageProvider } from './openai/image';
-import { OpenAiModerationProvider } from './openai/moderation';
-import { OpenAiRealtimeProvider } from './openai/realtime';
-import { OpenAiResponsesProvider } from './openai/responses';
-import { createOpenRouterProvider } from './openrouter';
-import { parsePackageProvider } from './packageParser';
-import { createPerplexityProvider } from './perplexity';
-import { PortkeyChatCompletionProvider } from './portkey';
-import { PromptfooModelProvider } from './promptfooModel';
-import { PythonProvider } from './pythonCompletion';
+import { ManualInputProvider } from './manualInput.js';
+import { MCPProvider } from './mcp/index.js';
+import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral.js';
+import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama.js';
+import { OpenAiAssistantProvider } from './openai/assistant.js';
+import { OpenAiChatCompletionProvider } from './openai/chat.js';
+import { OpenAiCompletionProvider } from './openai/completion.js';
+import { OpenAiEmbeddingProvider } from './openai/embedding.js';
+import { OpenAiImageProvider } from './openai/image.js';
+import { OpenAiModerationProvider } from './openai/moderation.js';
+import { OpenAiRealtimeProvider } from './openai/realtime.js';
+import { OpenAiResponsesProvider } from './openai/responses.js';
+import { createOpenRouterProvider } from './openrouter.js';
+import { parsePackageProvider } from './packageParser.js';
+import { createPerplexityProvider } from './perplexity.js';
+import { PortkeyChatCompletionProvider } from './portkey.js';
+import { PromptfooModelProvider } from './promptfooModel.js';
+import { PythonProvider } from './pythonCompletion.js';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
 } from './replicate';
-import { createScriptBasedProviderFactory } from './scriptBasedProvider';
-import { ScriptCompletionProvider } from './scriptCompletion';
-import { SequenceProvider } from './sequence';
-import { SimulatedUser } from './simulatedUser';
-import { createTogetherAiProvider } from './togetherai';
-import { VoyageEmbeddingProvider } from './voyage';
-import { WatsonXProvider } from './watsonx';
-import { WebhookProvider } from './webhook';
-import { WebSocketProvider } from './websocket';
-import { createXAIProvider } from './xai/chat';
-import { createXAIImageProvider } from './xai/image';
-import { createLlamaApiProvider } from './llamaApi';
+import { createScriptBasedProviderFactory } from './scriptBasedProvider.js';
+import { ScriptCompletionProvider } from './scriptCompletion.js';
+import { SequenceProvider } from './sequence.js';
+import { SimulatedUser } from './simulatedUser.js';
+import { createTogetherAiProvider } from './togetherai.js';
+import { VoyageEmbeddingProvider } from './voyage.js';
+import { WatsonXProvider } from './watsonx.js';
+import { WebhookProvider } from './webhook.js';
+import { WebSocketProvider } from './websocket.js';
+import { createXAIProvider } from './xai/chat.js';
+import { createXAIImageProvider } from './xai/image.js';
+import { createLlamaApiProvider } from './llamaApi.js';
 
-import type { LoadApiProviderContext } from '../types';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { LoadApiProviderContext } from '../types/index.js';
+import type { ApiProvider, ProviderOptions } from '../types/providers.js';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;

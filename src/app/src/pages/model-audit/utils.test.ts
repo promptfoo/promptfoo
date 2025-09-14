@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getIssueFilePath, getSeverityLabel, getSeverityValue } from './utils';
+import { getIssueFilePath, getSeverityLabel, getSeverityValue } from './utils.js';
 
 describe('getSeverityLabel', () => {
   it('should return "critical" for "error" severity', () => {

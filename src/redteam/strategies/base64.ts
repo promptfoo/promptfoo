@@ -1,4 +1,4 @@
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index.js';
 
 export function addBase64Encoding(testCases: TestCase[], injectVar: string): TestCase[] {
   return testCases.map((testCase) => {

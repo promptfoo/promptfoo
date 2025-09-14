@@ -1,4 +1,4 @@
-import { UnverifiableClaimsGrader } from '../../../src/redteam/plugins/unverifiableClaims';
+import { UnverifiableClaimsGrader } from '../../../src/redteam/plugins/unverifiableClaims.js';
 
 describe('UnverifiableClaimsGrader Integration Tests', () => {
   const grader = new UnverifiableClaimsGrader();

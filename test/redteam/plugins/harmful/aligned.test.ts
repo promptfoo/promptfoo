@@ -1,9 +1,9 @@
-import { HARM_PLUGINS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/redteam/constants';
-import { AlignedHarmfulPlugin } from '../../../../src/redteam/plugins/harmful/aligned';
-import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
+import { HARM_PLUGINS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/redteam/constants.js';
+import { AlignedHarmfulPlugin } from '../../../../src/redteam/plugins/harmful/aligned.js';
+import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants.js';
 
-import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider } from '../../../../src/types';
+import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants.js';
+import type { ApiProvider } from '../../../../src/types/index.js';
 
 describe('AlignedHarmfulPlugin', () => {
   let mockProvider: ApiProvider;

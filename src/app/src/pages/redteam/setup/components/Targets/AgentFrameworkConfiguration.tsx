@@ -18,9 +18,9 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { AGENT_TEMPLATE } from './consts';
+import { AGENT_TEMPLATE } from './consts.js';
 
-import type { ProviderOptions } from '../../types';
+import type { ProviderOptions } from '../../types.js';
 
 interface AgentFrameworkConfigurationProps {
   selectedTarget: ProviderOptions;

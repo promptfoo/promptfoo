@@ -1,5 +1,5 @@
-import type { LoadApiProviderContext, ProviderOptions } from '../../types';
-import { OpenAiChatCompletionProvider } from '../openai/chat';
+import type { LoadApiProviderContext, ProviderOptions } from '../../types/index.js';
+import { OpenAiChatCompletionProvider } from '../openai/chat.js';
 
 export function createGitHubProvider(
   providerPath: string,

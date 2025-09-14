@@ -3,10 +3,10 @@ import path from 'path';
 
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { importModule } from '../esm';
-import logger from '../logger';
+import { importModule } from '../esm.js';
+import logger from '../logger.js';
 
-import type { ApiProvider, ProviderOptions } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/index.js';
 
 function getValue<T extends object, K extends string>(obj: T, path: K): any {
   return path.split('.').reduce((acc: any, key: string) => {

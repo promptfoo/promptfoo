@@ -1,19 +1,19 @@
 import crypto from 'crypto';
 
 import { z } from 'zod';
-import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
-import { getEnvString } from '../envars';
-import logger from '../logger';
-import invariant from '../util/invariant';
-import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache.js';
+import { getEnvString } from '../envars.js';
+import logger from '../logger.js';
+import invariant from '../util/invariant.js';
+import { createEmptyTokenUsage } from '../util/tokenUsageUtils.js';
+import { calculateCost, REQUEST_TIMEOUT_MS } from './shared.js';
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 
-import type { EnvVarKey } from '../envars';
-import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
-import type { EnvOverrides } from '../types/env';
-import type { ProviderOptions } from '../types/providers';
+import type { EnvVarKey } from '../envars.js';
+import type { ApiProvider, ProviderResponse, TokenUsage } from '../types/index.js';
+import type { EnvOverrides } from '../types/env.js';
+import type { ProviderOptions } from '../types/providers.js';
 
 interface TextGenRequestParametersModel {
   max_new_tokens: number;

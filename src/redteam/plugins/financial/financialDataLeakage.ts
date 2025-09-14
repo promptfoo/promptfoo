@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from '../base';
+import { RedteamGraderBase } from '../base.js';
 
 export class FinancialDataLeakagePluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:financial:data-leakage';

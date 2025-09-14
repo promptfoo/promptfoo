@@ -5,12 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
 import { Presets, SingleBar } from 'cli-progress';
-import cliState from '../../cliState';
-import logger from '../../logger';
-import invariant from '../../util/invariant';
-import { neverGenerateRemote } from '../remoteGeneration';
+import cliState from '../../cliState.js';
+import logger from '../../logger.js';
+import invariant from '../../util/invariant.js';
+import { neverGenerateRemote } from '../remoteGeneration.js';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index.js';
 
 let ffmpegCache: any = null;
 

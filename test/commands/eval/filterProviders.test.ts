@@ -1,6 +1,6 @@
-import { filterProviders } from '../../../src/commands/eval/filterProviders';
+import { filterProviders } from '../../../src/commands/eval/filterProviders.js';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index.js';
 
 describe('filterProviders', () => {
   const mockProviders: ApiProvider[] = [

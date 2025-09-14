@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { AbstractTool } from '../../../../src/commands/mcp/lib/baseTool';
-import type { ToolResult } from '../../../../src/commands/mcp/lib/types';
+import { AbstractTool } from '../../../../src/commands/mcp/lib/baseTool.js';
+import type { ToolResult } from '../../../../src/commands/mcp/lib/types.js';
 
 // Mock implementation for testing
 class TestTool extends AbstractTool {

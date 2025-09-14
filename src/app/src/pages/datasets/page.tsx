@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
-import ErrorBoundary from '../../components/ErrorBoundary';
-import Datasets from './Datasets';
+import ErrorBoundary from '../../components/ErrorBoundary.js';
+import Datasets from './Datasets.js';
 import type { TestCasesWithMetadata } from '@promptfoo/types';
 
 function DatasetsPageContent() {

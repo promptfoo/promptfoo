@@ -1,11 +1,11 @@
-import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
+import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets.js';
 import {
   BeavertailsGrader,
   BeavertailsPlugin,
   fetchAllDatasets,
 } from '../../../src/redteam/plugins/beavertails';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index.js';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');
 

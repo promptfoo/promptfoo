@@ -1,13 +1,13 @@
-import { getEnvString } from '../envars';
-import invariant from '../util/invariant';
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import { OpenAiCompletionProvider } from './openai/completion';
-import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { getEnvString } from '../envars.js';
+import invariant from '../util/invariant.js';
+import { OpenAiChatCompletionProvider } from './openai/chat.js';
+import { OpenAiCompletionProvider } from './openai/completion.js';
+import { OpenAiEmbeddingProvider } from './openai/embedding.js';
 
-import type { EnvVarKey } from '../envars';
-import type { ApiProvider, ProviderOptions } from '../types';
-import type { EnvOverrides } from '../types/env';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { EnvVarKey } from '../envars.js';
+import type { ApiProvider, ProviderOptions } from '../types/index.js';
+import type { EnvOverrides } from '../types/env.js';
+import type { OpenAiCompletionOptions } from './openai/types.js';
 
 export interface CloudflareAiConfig extends OpenAiCompletionOptions {
   accountId?: string;

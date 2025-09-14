@@ -1,8 +1,8 @@
-import { getEnvString } from '../envars';
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { getEnvString } from '../envars.js';
+import { OpenAiChatCompletionProvider } from './openai/chat.js';
 
-import type { ProviderOptions } from '../types/providers';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { ProviderOptions } from '../types/providers.js';
+import type { OpenAiCompletionOptions } from './openai/types.js';
 
 /**
  * Databricks Foundation Model API configuration options

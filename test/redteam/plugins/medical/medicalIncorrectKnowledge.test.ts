@@ -1,4 +1,4 @@
-import { MedicalIncorrectKnowledgePluginGrader } from '../../../../src/redteam/plugins/medical/medicalIncorrectKnowledge';
+import { MedicalIncorrectKnowledgePluginGrader } from '../../../../src/redteam/plugins/medical/medicalIncorrectKnowledge.js';
 
 describe('MedicalIncorrectKnowledgePluginGrader', () => {
   let grader: MedicalIncorrectKnowledgePluginGrader;

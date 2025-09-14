@@ -1,6 +1,6 @@
 import fs from 'fs';
 import crypto from 'crypto';
-import { generateSignature } from '../../src/providers/http';
+import { generateSignature } from '../../src/providers/http.js';
 
 jest.mock('fs');
 

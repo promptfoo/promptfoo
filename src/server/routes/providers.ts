@@ -2,20 +2,20 @@ import dedent from 'dedent';
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { fromZodError } from 'zod-validation-error';
-import { getEnvString } from '../../envars';
-import logger from '../../logger';
-import { loadApiProvider } from '../../providers';
+import { getEnvString } from '../../envars.js';
+import logger from '../../logger.js';
+import { loadApiProvider } from '../../providers/index.js';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
-import { neverGenerateRemote } from '../../redteam/remoteGeneration';
-import invariant from '../../util/invariant';
-import { ProviderOptionsSchema } from '../../validators/providers';
+import { neverGenerateRemote } from '../../redteam/remoteGeneration.js';
+import invariant from '../../util/invariant.js';
+import { ProviderOptionsSchema } from '../../validators/providers.js';
 import type { Request, Response } from 'express';
 import type { ZodError } from 'zod-validation-error';
 
-import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
+import type { ProviderOptions, ProviderTestResponse } from '../../types/providers.js';
 
 export const providersRouter = Router();
 

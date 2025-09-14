@@ -1,4 +1,4 @@
-import { maybeFilePath, normalizeInput } from '../../src/prompts/utils';
+import { maybeFilePath, normalizeInput } from '../../src/prompts/utils.js';
 
 jest.mock('fs', () => ({
   statSync: jest.fn(jest.requireActual('fs').statSync),

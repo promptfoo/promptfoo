@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { ConfigurationError } from './errors';
+import { ConfigurationError } from './errors.js';
 
 /**
  * Security utilities for MCP server operations

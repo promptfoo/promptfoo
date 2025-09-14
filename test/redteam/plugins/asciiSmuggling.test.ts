@@ -1,6 +1,6 @@
-import { AsciiSmugglingGrader } from '../../../src/redteam/plugins/asciiSmuggling';
+import { AsciiSmugglingGrader } from '../../../src/redteam/plugins/asciiSmuggling.js';
 
-import type { AtomicTestCase } from '../../../src/types';
+import type { AtomicTestCase } from '../../../src/types/index.js';
 
 describe('AsciiSmugglingGrader', () => {
   let grader: AsciiSmugglingGrader;

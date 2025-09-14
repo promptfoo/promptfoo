@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuthorChip } from './AuthorChip';
+import { AuthorChip } from './AuthorChip.js';
 
 describe('AuthorChip', () => {
   const mockOnEditAuthor = vi.fn(() => Promise.resolve());

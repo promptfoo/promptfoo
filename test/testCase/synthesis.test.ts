@@ -1,8 +1,8 @@
 import dedent from 'dedent';
-import { loadApiProvider } from '../../src/providers';
-import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';
+import { loadApiProvider } from '../../src/providers/index.js';
+import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis.js';
 
-import type { TestCase } from '../../src/types';
+import type { TestCase } from '../../src/types/index.js';
 
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),

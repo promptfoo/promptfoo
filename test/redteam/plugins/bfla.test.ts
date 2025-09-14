@@ -1,4 +1,4 @@
-import { BflaGrader } from '../../../src/redteam/plugins/bfla';
+import { BflaGrader } from '../../../src/redteam/plugins/bfla.js';
 
 describe('BflaGrader', () => {
   let grader: BflaGrader;

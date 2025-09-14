@@ -2,8 +2,8 @@ import fs from 'fs';
 import { rm } from 'fs/promises';
 
 import yaml from 'js-yaml';
-import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
-import { TestSuiteConfigSchema } from '../src/types';
+import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding.js';
+import { TestSuiteConfigSchema } from '../src/types/index.js';
 
 jest.mock('fs', () => ({
   existsSync: jest.fn(),

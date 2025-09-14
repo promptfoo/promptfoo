@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Review from './Review';
+import Review from './Review.js';
 
 // Mock the dependencies
 vi.mock('@app/hooks/useEmailVerification', () => ({

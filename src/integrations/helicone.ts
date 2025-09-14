@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { getEnvString } from '../envars.js';
 
 const heliconeApiKey = getEnvString('HELICONE_API_KEY');
 

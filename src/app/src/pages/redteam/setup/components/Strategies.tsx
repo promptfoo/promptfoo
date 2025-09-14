@@ -18,18 +18,18 @@ import {
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
 import { Link as RouterLink } from 'react-router-dom';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import PageWrapper from './PageWrapper';
-import StrategyConfigDialog from './StrategyConfigDialog';
-import { PresetSelector } from './strategies/PresetSelector';
-import { RecommendedOptions } from './strategies/RecommendedOptions';
-import { StrategySection } from './strategies/StrategySection';
-import { SystemConfiguration } from './strategies/SystemConfiguration';
-import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
-import { getEstimatedProbes, getStrategyId } from './strategies/utils';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig.js';
+import PageWrapper from './PageWrapper.js';
+import StrategyConfigDialog from './StrategyConfigDialog.js';
+import { PresetSelector } from './strategies/PresetSelector.js';
+import { RecommendedOptions } from './strategies/RecommendedOptions.js';
+import { StrategySection } from './strategies/StrategySection.js';
+import { SystemConfiguration } from './strategies/SystemConfiguration.js';
+import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types.js';
+import { getEstimatedProbes, getStrategyId } from './strategies/utils.js';
 import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
 
-import type { ConfigDialogState, StrategyCardData } from './strategies/types';
+import type { ConfigDialogState, StrategyCardData } from './strategies/types.js';
 
 // ------------------------------------------------------------------
 // Types & Interfaces

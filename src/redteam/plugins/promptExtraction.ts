@@ -1,7 +1,7 @@
 import dedent from 'dedent';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base.js';
 
-import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types';
+import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types/index.js';
 
 const PLUGIN_ID = 'promptfoo:redteam:prompt-extraction';
 

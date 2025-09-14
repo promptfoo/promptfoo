@@ -2,22 +2,22 @@ import fs from 'fs';
 
 import { Command } from 'commander';
 import * as yaml from 'js-yaml';
-import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
-import { cloudConfig } from '../../../src/globalConfig/cloud';
-import logger from '../../../src/logger';
-import { synthesize } from '../../../src/redteam';
-import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
-import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
-import { Severity } from '../../../src/redteam/constants';
-import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
-import { getConfigFromCloud } from '../../../src/util/cloud';
-import { checkCloudPermissions, ConfigPermissionError } from '../../../src/util/cloud';
-import * as configModule from '../../../src/util/config/load';
-import { readConfig } from '../../../src/util/config/load';
-import { writePromptfooConfig } from '../../../src/util/config/writer';
+import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts.js';
+import { cloudConfig } from '../../../src/globalConfig/cloud.js';
+import logger from '../../../src/logger.js';
+import { synthesize } from '../../../src/redteam/index.js';
+import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover.js';
+import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate.js';
+import { Severity } from '../../../src/redteam/constants.js';
+import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools.js';
+import { getConfigFromCloud } from '../../../src/util/cloud.js';
+import { checkCloudPermissions, ConfigPermissionError } from '../../../src/util/cloud.js';
+import * as configModule from '../../../src/util/config/load.js';
+import { readConfig } from '../../../src/util/config/load.js';
+import { writePromptfooConfig } from '../../../src/util/config/writer.js';
 
-import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types';
+import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types.js';
+import type { ApiProvider } from '../../../src/types/index.js';
 
 jest.mock('fs');
 jest.mock('../../../src/redteam');

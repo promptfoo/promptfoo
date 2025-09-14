@@ -1,5 +1,5 @@
-import { handleGEval } from '../../src/assertions/geval';
-import { matchesGEval } from '../../src/matchers';
+import { handleGEval } from '../../src/assertions/geval.js';
+import { matchesGEval } from '../../src/matchers.js';
 
 jest.mock('../../src/matchers');
 

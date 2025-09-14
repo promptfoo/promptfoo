@@ -1,7 +1,7 @@
-import invariant from '../util/invariant';
-import { getNGrams } from './ngrams';
+import invariant from '../util/invariant.js';
+import { getNGrams } from './ngrams.js';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index.js';
 
 /**
  * Calculates the Google-BLEU (GLEU) score for a candidate string against reference strings.

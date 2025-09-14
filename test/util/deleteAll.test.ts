@@ -1,7 +1,7 @@
-import { runDbMigrations } from '../../src/migrate';
-import Eval from '../../src/models/eval';
-import { deleteAllEvals } from '../../src/util/database';
-import EvalFactory from '../factories/evalFactory';
+import { runDbMigrations } from '../../src/migrate.js';
+import Eval from '../../src/models/eval.js';
+import { deleteAllEvals } from '../../src/util/database.js';
+import EvalFactory from '../factories/evalFactory.js';
 
 describe('delete all evals', () => {
   beforeAll(async () => {

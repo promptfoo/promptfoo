@@ -1,8 +1,8 @@
-import logger from '../../logger';
-import { ResultFailureReason } from '../../types';
-import { filterTestsByResults } from './filterTestsUtil';
+import logger from '../../logger.js';
+import { ResultFailureReason } from '../../types/index.js';
+import { filterTestsByResults } from './filterTestsUtil.js';
 
-import type { TestSuite } from '../../types';
+import type { TestSuite } from '../../types/index.js';
 
 /**
  * Options for filtering test cases in a test suite.

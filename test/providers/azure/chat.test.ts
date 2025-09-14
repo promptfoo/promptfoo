@@ -1,6 +1,6 @@
-import { fetchWithCache } from '../../../src/cache';
-import logger from '../../../src/logger';
-import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
+import { fetchWithCache } from '../../../src/cache.js';
+import logger from '../../../src/logger.js';
+import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat.js';
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),

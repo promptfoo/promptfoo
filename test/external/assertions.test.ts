@@ -1,5 +1,5 @@
-import { handleConversationRelevance } from '../../src/external/assertions/deepeval';
-import type { AssertionParams, AtomicTestCase, ApiProvider } from '../../src/types';
+import { handleConversationRelevance } from '../../src/external/assertions/deepeval.js';
+import type { AssertionParams, AtomicTestCase, ApiProvider } from '../../src/types/index.js';
 
 const createMockProvider = (output: string, reason?: string): ApiProvider => ({
   id: () => 'mock',

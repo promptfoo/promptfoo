@@ -1,30 +1,30 @@
-import assertions from './assertions';
-import * as cache from './cache';
-import { evaluate as doEvaluate } from './evaluator';
-import guardrails from './guardrails';
-import { runDbMigrations } from './migrate';
-import Eval from './models/eval';
-import { processPrompts, readProviderPromptMap } from './prompts';
-import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
-import { doGenerateRedteam } from './redteam/commands/generate';
-import { extractEntities } from './redteam/extraction/entities';
-import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
-import { extractSystemPurpose } from './redteam/extraction/purpose';
-import { GRADERS } from './redteam/graders';
-import { Plugins } from './redteam/plugins';
-import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
-import { doRedteamRun } from './redteam/shared';
-import { Strategies } from './redteam/strategies';
-import { readFilters, writeMultipleOutputs, writeOutput } from './util';
-import { maybeLoadFromExternalFile } from './util/file';
-import { readTests } from './util/testCaseReader';
+import assertions from './assertions/index.js';
+import * as cache from './cache.js';
+import { evaluate as doEvaluate } from './evaluator.js';
+import guardrails from './guardrails.js';
+import { runDbMigrations } from './migrate.js';
+import Eval from './models/eval.js';
+import { processPrompts, readProviderPromptMap } from './prompts/index.js';
+import { loadApiProvider, loadApiProviders, resolveProvider } from './providers/index.js';
+import { doGenerateRedteam } from './redteam/commands/generate.js';
+import { extractEntities } from './redteam/extraction/entities.js';
+import { extractMcpToolsInfo } from './redteam/extraction/mcpTools.js';
+import { extractSystemPurpose } from './redteam/extraction/purpose.js';
+import { GRADERS } from './redteam/graders.js';
+import { Plugins } from './redteam/plugins/index.js';
+import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base.js';
+import { doRedteamRun } from './redteam/shared.js';
+import { Strategies } from './redteam/strategies/index.js';
+import { readFilters, writeMultipleOutputs, writeOutput } from './util/index.js';
+import { maybeLoadFromExternalFile } from './util/file.js';
+import { readTests } from './util/testCaseReader.js';
 
-import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
-import type { ApiProvider } from './types/providers';
-import { isApiProvider } from './types/providers';
+import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types/index.js';
+import type { ApiProvider } from './types/providers.js';
+import { isApiProvider } from './types/providers.js';
 
-export { generateTable } from './table';
-export * from './types';
+export { generateTable } from './table.js';
+export * from './types/index.js';
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {

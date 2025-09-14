@@ -1,6 +1,6 @@
-import invariant from '../../util/invariant';
+import invariant from '../../util/invariant.js';
 
-import type { Prompt } from '../../types';
+import type { Prompt } from '../../types/index.js';
 
 /**
  * Processes a string as a literal prompt.

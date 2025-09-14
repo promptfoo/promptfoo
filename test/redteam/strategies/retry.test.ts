@@ -1,6 +1,6 @@
-import { deduplicateTests } from '../../../src/redteam/strategies/retry';
+import { deduplicateTests } from '../../../src/redteam/strategies/retry.js';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index.js';
 
 describe('deduplicateTests', () => {
   it('should deduplicate test cases based on vars', () => {

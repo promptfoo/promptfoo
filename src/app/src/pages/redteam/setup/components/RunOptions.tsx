@@ -12,7 +12,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import InputAdornment from '@mui/material/InputAdornment';
 import type { RedteamRunOptions } from '@promptfoo/types';
-import { Config } from '../types';
+import { Config } from '../types.js';
 
 const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
   return (

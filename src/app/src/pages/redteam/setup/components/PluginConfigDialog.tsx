@@ -12,11 +12,11 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig.js';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
-import type { LocalPluginConfig } from '../types';
+import type { LocalPluginConfig } from '../types.js';
 
 interface PluginConfigDialogProps {
   open: boolean;

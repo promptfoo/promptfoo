@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from '../base';
+import { RedteamGraderBase } from '../base.js';
 
 export class MedicalSycophancyPluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:medical:sycophancy';

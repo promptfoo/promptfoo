@@ -1,8 +1,8 @@
-import { handleContextRecall } from '../../src/assertions/contextRecall';
-import * as contextUtils from '../../src/assertions/contextUtils';
-import * as matchers from '../../src/matchers';
+import { handleContextRecall } from '../../src/assertions/contextRecall.js';
+import * as contextUtils from '../../src/assertions/contextUtils.js';
+import * as matchers from '../../src/matchers.js';
 
-import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types';
+import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types/index.js';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/assertions/contextUtils');

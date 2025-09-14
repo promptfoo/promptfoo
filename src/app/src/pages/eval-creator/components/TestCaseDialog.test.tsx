@@ -3,9 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import type { Assertion, TestCase } from '@promptfoo/types';
-import TestCaseForm from './TestCaseDialog';
-import VarsForm from './VarsForm';
-import AssertsForm from './AssertsForm';
+import TestCaseForm from './TestCaseDialog.js';
+import VarsForm from './VarsForm.js';
+import AssertsForm from './AssertsForm.js';
 
 vi.mock('./VarsForm', () => ({
   default: vi.fn(() => <div data-testid="mock-vars-form" />),

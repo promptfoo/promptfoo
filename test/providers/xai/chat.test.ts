@@ -1,4 +1,4 @@
-import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat.js';
 import {
   calculateXAICost,
   createXAIProvider,
@@ -9,7 +9,7 @@ import {
   XAI_CHAT_MODELS,
 } from '../../../src/providers/xai/chat';
 
-import type { ProviderOptions } from '../../../src/types/providers';
+import type { ProviderOptions } from '../../../src/types/providers.js';
 
 jest.mock('../../../src/providers/openai/chat');
 jest.mock('../../../src/logger');

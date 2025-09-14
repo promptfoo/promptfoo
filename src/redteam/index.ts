@@ -5,13 +5,13 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import yaml from 'js-yaml';
-import cliState from '../cliState';
-import { getEnvString } from '../envars';
-import logger, { getLogLevel } from '../logger';
-import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../types';
-import { checkRemoteHealth } from '../util/apiHealth';
-import invariant from '../util/invariant';
-import { extractVariablesFromTemplates } from '../util/templates';
+import cliState from '../cliState.js';
+import { getEnvString } from '../envars.js';
+import logger, { getLogLevel } from '../logger.js';
+import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../types/index.js';
+import { checkRemoteHealth } from '../util/apiHealth.js';
+import invariant from '../util/invariant.js';
+import { extractVariablesFromTemplates } from '../util/templates.js';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
@@ -24,18 +24,18 @@ import {
   STRATEGY_COLLECTIONS,
   STRATEGY_EXEMPT_PLUGINS,
 } from './constants';
-import { extractEntities } from './extraction/entities';
-import { extractSystemPurpose } from './extraction/purpose';
-import { Plugins } from './plugins';
-import { CustomPlugin } from './plugins/custom';
-import { redteamProviderManager } from './providers/shared';
-import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
-import { loadStrategy, Strategies, validateStrategies } from './strategies';
-import { DEFAULT_LANGUAGES } from './strategies/multilingual';
-import { extractGoalFromPrompt, getShortPluginId } from './util';
+import { extractEntities } from './extraction/entities.js';
+import { extractSystemPurpose } from './extraction/purpose.js';
+import { Plugins } from './plugins/index.js';
+import { CustomPlugin } from './plugins/custom.js';
+import { redteamProviderManager } from './providers/shared.js';
+import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration.js';
+import { loadStrategy, Strategies, validateStrategies } from './strategies/index.js';
+import { DEFAULT_LANGUAGES } from './strategies/multilingual.js';
+import { extractGoalFromPrompt, getShortPluginId } from './util.js';
 
-import type { StrategyExemptPlugin } from './constants';
-import type { RedteamStrategyObject, SynthesizeOptions } from './types';
+import type { StrategyExemptPlugin } from './constants.js';
+import type { RedteamStrategyObject, SynthesizeOptions } from './types.js';
 
 const MAX_MAX_CONCURRENCY = 20;
 

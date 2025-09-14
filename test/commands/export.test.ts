@@ -1,11 +1,11 @@
 import fs from 'fs';
 
 import { Command } from 'commander';
-import { exportCommand } from '../../src/commands/export';
-import logger from '../../src/logger';
-import Eval from '../../src/models/eval';
-import { writeOutput } from '../../src/util';
-import { getConfigDirectoryPath } from '../../src/util/config/manage';
+import { exportCommand } from '../../src/commands/export.js';
+import logger from '../../src/logger.js';
+import Eval from '../../src/models/eval.js';
+import { writeOutput } from '../../src/util/index.js';
+import { getConfigDirectoryPath } from '../../src/util/config/manage.js';
 
 jest.mock('../../src/telemetry', () => ({
   record: jest.fn(),

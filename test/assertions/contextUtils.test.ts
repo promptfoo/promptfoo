@@ -1,7 +1,7 @@
-import { resolveContext } from '../../src/assertions/contextUtils';
-import * as transformUtil from '../../src/util/transform';
+import { resolveContext } from '../../src/assertions/contextUtils.js';
+import * as transformUtil from '../../src/util/transform.js';
 
-import type { Assertion, AtomicTestCase } from '../../src/types';
+import type { Assertion, AtomicTestCase } from '../../src/types/index.js';
 
 jest.mock('../../src/util/transform');
 

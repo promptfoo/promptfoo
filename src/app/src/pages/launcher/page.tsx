@@ -15,8 +15,8 @@ import { createTheme, styled, ThemeProvider } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useNavigate } from 'react-router-dom';
-import DarkModeToggle from '../../components/DarkMode';
-import { useApiHealth } from '../../hooks/useApiHealth';
+import DarkModeToggle from '../../components/DarkMode.js';
+import { useApiHealth } from '../../hooks/useApiHealth.js';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
 

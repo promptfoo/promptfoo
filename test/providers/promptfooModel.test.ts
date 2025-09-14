@@ -1,6 +1,6 @@
-import { cloudConfig } from '../../src/globalConfig/cloud';
-import logger from '../../src/logger';
-import { PromptfooModelProvider } from '../../src/providers/promptfooModel';
+import { cloudConfig } from '../../src/globalConfig/cloud.js';
+import logger from '../../src/logger.js';
+import { PromptfooModelProvider } from '../../src/providers/promptfooModel.js';
 
 describe('PromptfooModelProvider', () => {
   let mockFetch: jest.Mock;

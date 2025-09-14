@@ -1,7 +1,7 @@
-import { fetchWithCache } from '../../src/cache';
-import logger from '../../src/logger';
-import { HttpProvider } from '../../src/providers/http';
-import { sanitizeUrl } from '../../src/util/sanitizer';
+import { fetchWithCache } from '../../src/cache.js';
+import logger from '../../src/logger.js';
+import { HttpProvider } from '../../src/providers/http.js';
+import { sanitizeUrl } from '../../src/util/sanitizer.js';
 
 // Mock console.warn to prevent test noise
 const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});

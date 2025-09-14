@@ -1,6 +1,6 @@
-import { handleContextRelevance } from '../../src/assertions/contextRelevance';
-import * as contextUtils from '../../src/assertions/contextUtils';
-import { matchesContextRelevance } from '../../src/matchers';
+import { handleContextRelevance } from '../../src/assertions/contextRelevance.js';
+import * as contextUtils from '../../src/assertions/contextUtils.js';
+import { matchesContextRelevance } from '../../src/matchers.js';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/assertions/contextUtils');

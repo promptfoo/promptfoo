@@ -1,5 +1,5 @@
-import { handleModeration } from '../../src/assertions/moderation';
-import { matchesModeration } from '../../src/matchers';
+import { handleModeration } from '../../src/assertions/moderation.js';
+import { matchesModeration } from '../../src/matchers.js';
 
 import type {
   ApiProvider,

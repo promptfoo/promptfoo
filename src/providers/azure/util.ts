@@ -1,8 +1,8 @@
 import dedent from 'dedent';
-import { calculateCost } from '../shared';
-import { AZURE_MODELS } from './defaults';
+import { calculateCost } from '../shared.js';
+import { AZURE_MODELS } from './defaults.js';
 
-import type { AzureCompletionOptions } from './types';
+import type { AzureCompletionOptions } from './types.js';
 
 /**
  * Throws a configuration error with standard formatting and documentation link

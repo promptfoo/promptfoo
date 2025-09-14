@@ -1,9 +1,9 @@
 import WebSocket from 'ws';
-import { disableCache, enableCache } from '../../../src/cache';
-import logger from '../../../src/logger';
-import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
+import { disableCache, enableCache } from '../../../src/cache.js';
+import logger from '../../../src/logger.js';
+import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime.js';
 
-import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realtime';
+import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realtime.js';
 
 // Mock WebSocket
 jest.mock('ws');

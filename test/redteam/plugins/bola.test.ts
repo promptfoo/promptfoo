@@ -1,4 +1,4 @@
-import { BolaGrader } from '../../../src/redteam/plugins/bola';
+import { BolaGrader } from '../../../src/redteam/plugins/bola.js';
 
 describe('BolaGrader', () => {
   let grader: BolaGrader;

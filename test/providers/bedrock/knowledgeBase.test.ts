@@ -1,5 +1,5 @@
-import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
-import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
+import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase.js';
+import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils.js';
 
 const mockSend = jest.fn();
 const mockBedrockClient = {

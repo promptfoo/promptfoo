@@ -3,8 +3,8 @@ import { render, screen, act, waitFor, fireEvent } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 
-import type { ScanOptions } from '../ModelAudit.types';
-import AdvancedOptionsDialog from './AdvancedOptionsDialog';
+import type { ScanOptions } from '../ModelAudit.types.js';
+import AdvancedOptionsDialog from './AdvancedOptionsDialog.js';
 
 const theme = createTheme();
 

@@ -5,7 +5,7 @@ import Paper from '@mui/material/Paper';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import Typography from '@mui/material/Typography';
-import { PRESET_IDS, STRATEGY_PRESETS } from './types';
+import { PRESET_IDS, STRATEGY_PRESETS } from './types.js';
 
 interface RecommendedOptionsProps {
   isMultiTurnEnabled: boolean;

@@ -3,7 +3,7 @@ import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, fireEvent, queryByRole } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import TargetConfiguration from './TargetConfiguration';
+import TargetConfiguration from './TargetConfiguration.js';
 
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({

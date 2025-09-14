@@ -3,11 +3,11 @@
  * (https://github.com/elder-plinius/L1B3RT4S).
  */
 import dedent from 'dedent';
-import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import logger from '../../logger.js';
+import { fetchWithProxy } from '../../util/fetch/index.js';
+import { RedteamGraderBase, RedteamPluginBase } from './base.js';
 
-import type { Assertion, TestCase } from '../../types';
+import type { Assertion, TestCase } from '../../types/index.js';
 
 const PLUGIN_ID = 'promptfoo:redteam:pliny';
 

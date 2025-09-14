@@ -3,9 +3,9 @@ import React from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import FoundationModelConfiguration from './FoundationModelConfiguration';
+import FoundationModelConfiguration from './FoundationModelConfiguration.js';
 
-import type { ProviderOptions } from '../../types';
+import type { ProviderOptions } from '../../types.js';
 
 const renderWithTheme = (ui: React.ReactElement) => {
   const theme = createTheme({ palette: { mode: 'light' } });

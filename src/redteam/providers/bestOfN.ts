@@ -1,14 +1,14 @@
 import async from 'async';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { VERSION } from '../../constants';
-import { renderPrompt } from '../../evaluatorHelpers';
-import { getUserEmail } from '../../globalConfig/accounts';
-import logger from '../../logger';
-import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { VERSION } from '../../constants.js';
+import { renderPrompt } from '../../evaluatorHelpers.js';
+import { getUserEmail } from '../../globalConfig/accounts.js';
+import logger from '../../logger.js';
+import invariant from '../../util/invariant.js';
+import { safeJsonStringify } from '../../util/json.js';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils.js';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration.js';
 
 import type {
   ApiProvider,

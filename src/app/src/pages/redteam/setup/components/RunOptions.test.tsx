@@ -1,8 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RunOptionsContent, RunOptions } from './RunOptions';
+import { RunOptionsContent, RunOptions } from './RunOptions.js';
 import type { RedteamRunOptions } from '@promptfoo/types';
-import { Config } from '../types';
+import { Config } from '../types.js';
 
 describe('RunOptionsContent', () => {
   const mockUpdateConfig = vi.fn();

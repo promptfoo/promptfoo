@@ -1,4 +1,4 @@
-import { convertResponse } from '../../src/providers/bam';
+import { convertResponse } from '../../src/providers/bam.js';
 import type { TextGenerationCreateOutput } from '@ibm-generative-ai/node-sdk';
 
 describe('BAM Provider', () => {

@@ -1,7 +1,7 @@
-import { getEnvBool } from '../envars';
-import { isGradingResult } from '../types';
+import { getEnvBool } from '../envars.js';
+import { isGradingResult } from '../types/index.js';
 
-import type { AssertionSet, GradingResult, ScoringFunction } from '../types';
+import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index.js';
 
 export const DEFAULT_TOKENS_USED = {
   total: 0,

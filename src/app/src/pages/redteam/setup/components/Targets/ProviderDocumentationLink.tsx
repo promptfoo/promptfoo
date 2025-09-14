@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import Tooltip from '@mui/material/Tooltip';
-import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
+import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap.js';
 
 interface ProviderDocumentationLinkProps {
   providerId?: string;

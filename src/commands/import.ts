@@ -1,11 +1,11 @@
 import fs from 'fs';
 
-import { getDb } from '../database';
-import { evalsTable } from '../database/tables';
-import logger from '../logger';
-import Eval, { createEvalId } from '../models/eval';
-import EvalResult from '../models/evalResult';
-import telemetry from '../telemetry';
+import { getDb } from '../database/index.js';
+import { evalsTable } from '../database/tables.js';
+import logger from '../logger.js';
+import Eval, { createEvalId } from '../models/eval.js';
+import EvalResult from '../models/evalResult.js';
+import telemetry from '../telemetry.js';
 import type { Command } from 'commander';
 
 export function importCommand(program: Command) {

@@ -1,6 +1,6 @@
-import type { AssertionParams, GradingResult } from '../../src/types';
+import type { AssertionParams, GradingResult } from '../../src/types/index.js';
 
-import type { handleMeteorAssertion as originalHandleMeteorAssertion } from '../../src/assertions/meteor';
+import type { handleMeteorAssertion as originalHandleMeteorAssertion } from '../../src/assertions/meteor.js';
 
 const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<GradingResult> => {
   const { assertion, renderedValue, outputString, inverse } = params;

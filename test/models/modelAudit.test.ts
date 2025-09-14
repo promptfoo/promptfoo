@@ -1,5 +1,5 @@
-import ModelAudit from '../../src/models/modelAudit';
-import type { ModelAuditScanResults } from '../../src/types/modelAudit';
+import ModelAudit from '../../src/models/modelAudit.js';
+import type { ModelAuditScanResults } from '../../src/types/modelAudit.js';
 
 // Mock the database
 jest.mock('../../src/database', () => ({

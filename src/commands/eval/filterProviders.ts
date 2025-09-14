@@ -1,4 +1,4 @@
-import type { ApiProvider } from '../../types';
+import type { ApiProvider } from '../../types/index.js';
 
 export function filterProviders(
   providers: ApiProvider[],

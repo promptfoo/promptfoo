@@ -1,11 +1,11 @@
 import cliProgress from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../cache';
-import cliState from '../cliState';
-import { getEnvString, isCI } from '../envars';
-import logger from '../logger';
+import { fetchWithCache } from '../cache.js';
+import cliState from '../cliState.js';
+import { getEnvString, isCI } from '../envars.js';
+import logger from '../logger.js';
 
-import type { TestCase, Vars } from '../types';
+import type { TestCase, Vars } from '../types/index.js';
 
 /**
  * Safely casts HuggingFace row data to Vars type

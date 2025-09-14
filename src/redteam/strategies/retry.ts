@@ -1,10 +1,10 @@
 import { and, eq, sql } from 'drizzle-orm';
-import { getDb } from '../../database';
-import { evalResultsTable } from '../../database/tables';
-import logger from '../../logger';
-import invariant from '../../util/invariant';
+import { getDb } from '../../database/index.js';
+import { evalResultsTable } from '../../database/tables.js';
+import logger from '../../logger.js';
+import invariant from '../../util/invariant.js';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types';
+import type { TestCase, TestCaseWithPlugin } from '../../types/index.js';
 
 export function deduplicateTests(tests: TestCase[]): TestCase[] {
   const seen = new Set<string>();

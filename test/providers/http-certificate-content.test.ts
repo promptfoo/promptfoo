@@ -1,4 +1,4 @@
-import { HttpProviderConfigSchema } from '../../src/providers/http';
+import { HttpProviderConfigSchema } from '../../src/providers/http.js';
 
 // Mock fs to prevent actual file system access during tests
 jest.mock('fs');

@@ -1,7 +1,7 @@
 import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import EnterpriseBanner from './EnterpriseBanner';
+import EnterpriseBanner from './EnterpriseBanner.js';
 
 vi.mock('@app/utils/api');
 

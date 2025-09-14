@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from './base';
+import { RedteamGraderBase } from './base.js';
 
 const PLUGIN_ID = 'promptfoo:redteam:hijacking';
 

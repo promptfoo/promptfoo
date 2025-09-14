@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 
-import type { Assertion } from '../../types';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import type { Assertion } from '../../types/index.js';
+import { RedteamGraderBase, RedteamPluginBase } from './base.js';
 
 const PLUGIN_ID = 'promptfoo:redteam:shell-injection';
 

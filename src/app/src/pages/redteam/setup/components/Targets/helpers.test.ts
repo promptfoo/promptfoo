@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getProviderType } from './helpers';
+import { getProviderType } from './helpers.js';
 
 describe('getProviderType', () => {
   it.each([

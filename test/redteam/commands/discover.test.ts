@@ -3,7 +3,7 @@ import {
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
 } from '../../../src/redteam/commands/discover';
-import { fetchWithProxy } from '../../../src/util/fetch';
+import { fetchWithProxy } from '../../../src/util/fetch/index.js';
 
 jest.mock('../../../src/util/fetch');
 

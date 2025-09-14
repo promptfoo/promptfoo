@@ -1,12 +1,12 @@
 import { PythonShell } from 'python-shell';
-import logger from '../../../src/logger';
+import logger from '../../../src/logger.js';
 import {
   pythonPromptFunction,
   pythonPromptFunctionLegacy,
 } from '../../../src/prompts/processors/python';
-import { runPython } from '../../../src/python/pythonUtils';
+import { runPython } from '../../../src/python/pythonUtils.js';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index.js';
 
 jest.mock('fs');
 jest.mock('python-shell');

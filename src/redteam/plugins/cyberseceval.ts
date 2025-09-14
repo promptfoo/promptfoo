@@ -1,9 +1,9 @@
-import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import { fetchWithTimeout } from '../../util/fetch';
-import { RedteamPluginBase } from './base';
+import logger from '../../logger.js';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared.js';
+import { fetchWithTimeout } from '../../util/fetch/index.js';
+import { RedteamPluginBase } from './base.js';
 
-import type { Assertion, TestCase } from '../../types';
+import type { Assertion, TestCase } from '../../types/index.js';
 
 const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';
 

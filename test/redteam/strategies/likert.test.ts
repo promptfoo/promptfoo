@@ -1,11 +1,11 @@
 import { SingleBar } from 'cli-progress';
-import { fetchWithCache } from '../../../src/cache';
-import { getUserEmail } from '../../../src/globalConfig/accounts';
-import logger from '../../../src/logger';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { addLikertTestCases } from '../../../src/redteam/strategies/likert';
+import { fetchWithCache } from '../../../src/cache.js';
+import { getUserEmail } from '../../../src/globalConfig/accounts.js';
+import logger from '../../../src/logger.js';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration.js';
+import { addLikertTestCases } from '../../../src/redteam/strategies/likert.js';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index.js';
 
 jest.mock('cli-progress');
 jest.mock('../../../src/cache');

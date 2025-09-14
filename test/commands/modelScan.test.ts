@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from 'child_process';
 
 import { Command } from 'commander';
-import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan';
+import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan.js';
 jest.mock('child_process');
 jest.mock('../../src/models/modelAudit', () => ({
   __esModule: true,

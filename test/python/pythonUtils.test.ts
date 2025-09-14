@@ -19,8 +19,8 @@ jest.mock('util', () => {
 });
 
 import { PythonShell } from 'python-shell';
-import { getEnvBool, getEnvString } from '../../src/envars';
-import * as pythonUtils from '../../src/python/pythonUtils';
+import { getEnvBool, getEnvString } from '../../src/envars.js';
+import * as pythonUtils from '../../src/python/pythonUtils.js';
 
 // Get reference to the mock after imports
 const mockExecFileAsync = (require('util') as any).__mockExecFileAsync;

@@ -1,7 +1,7 @@
-import { calculateCost as calculateCostBase } from '../shared';
+import { calculateCost as calculateCostBase } from '../shared.js';
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { TokenUsage } from '../../types';
+import type { TokenUsage } from '../../types/index.js';
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [

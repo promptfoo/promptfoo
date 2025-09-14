@@ -1,11 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { runAssertion } from '../../src/assertions';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
-import { fetchWithRetries } from '../../src/util/fetch';
-import { TestGrader } from '../util/utils';
+import { runAssertion } from '../../src/assertions/index.js';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
+import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults.js';
+import { fetchWithRetries } from '../../src/util/fetch/index.js';
+import { TestGrader } from '../util/utils.js';
 
 import type {
   ApiProvider,

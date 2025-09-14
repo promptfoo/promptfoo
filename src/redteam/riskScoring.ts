@@ -1,4 +1,4 @@
-import { Severity } from './constants';
+import { Severity } from './constants.js';
 
 export interface StrategyMetadata {
   humanExploitable: boolean;

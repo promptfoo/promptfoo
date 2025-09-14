@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { ToastContext } from '@app/contexts/ToastContextDef';
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { useToast } from './useToast';
+import { useToast } from './useToast.js';
 
 describe('useToast', () => {
   it('should throw an error when used outside of a ToastProvider', () => {

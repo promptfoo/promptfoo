@@ -1,7 +1,7 @@
-import { sha256 } from '../util/createHash';
-import { VALID_FILE_EXTENSIONS } from './constants';
+import { sha256 } from '../util/createHash.js';
+import { VALID_FILE_EXTENSIONS } from './constants.js';
 
-import type { Prompt } from '../types';
+import type { Prompt } from '../types/index.js';
 
 /**
  * Determines if a string is a valid file path.

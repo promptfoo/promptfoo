@@ -1,16 +1,16 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
-import { getEnvBool } from '../../envars';
+import { getEnvBool } from '../../envars.js';
 import {
   checkEmailStatus,
   getUserEmail,
   getUserId,
   setUserEmail,
 } from '../../globalConfig/accounts';
-import logger from '../../logger';
-import telemetry from '../../telemetry';
-import { ApiSchemas } from '../apiSchemas';
+import logger from '../../logger.js';
+import telemetry from '../../telemetry.js';
+import { ApiSchemas } from '../apiSchemas.js';
 import type { Request, Response } from 'express';
 
 export const userRouter = Router();

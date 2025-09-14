@@ -1,14 +1,14 @@
 import dedent from 'dedent';
-import logger from '../logger';
-import { loadApiProvider } from '../providers';
-import { getDefaultProviders } from '../providers/defaults';
-import { retryWithDeduplication, sampleArray } from '../util/generation';
-import invariant from '../util/invariant';
-import { extractJsonObjects } from '../util/json';
-import { extractVariablesFromTemplates } from '../util/templates';
+import logger from '../logger.js';
+import { loadApiProvider } from '../providers/index.js';
+import { getDefaultProviders } from '../providers/defaults.js';
+import { retryWithDeduplication, sampleArray } from '../util/generation.js';
+import invariant from '../util/invariant.js';
+import { extractJsonObjects } from '../util/json.js';
+import { extractVariablesFromTemplates } from '../util/templates.js';
 import type { SingleBar } from 'cli-progress';
 
-import type { ApiProvider, TestCase, TestSuite, VarMapping } from '../types';
+import type { ApiProvider, TestCase, TestSuite, VarMapping } from '../types/index.js';
 
 interface SynthesizeOptions {
   instructions?: string;

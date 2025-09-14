@@ -1,8 +1,8 @@
-import { clearCache } from '../../src/cache';
-import { DatabricksMosaicAiChatCompletionProvider } from '../../src/providers/databricks';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { clearCache } from '../../src/cache.js';
+import { DatabricksMosaicAiChatCompletionProvider } from '../../src/providers/databricks.js';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
 
-import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/databricks';
+import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/databricks.js';
 
 jest.mock('../../src/logger');
 jest.mock('../../src/providers/openai/chat');

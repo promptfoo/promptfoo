@@ -1,13 +1,13 @@
 import { spawn } from 'child_process';
 
 import chalk from 'chalk';
-import { getAuthor } from '../globalConfig/accounts';
-import ModelAudit from '../models/modelAudit';
-import { checkModelAuditUpdates } from '../updates';
+import { getAuthor } from '../globalConfig/accounts.js';
+import ModelAudit from '../models/modelAudit.js';
+import { checkModelAuditUpdates } from '../updates.js';
 import type { Command } from 'commander';
 
-import type { ModelAuditScanResults } from '../types/modelAudit';
-import { parseModelAuditArgs, DEPRECATED_OPTIONS_MAP } from '../util/modelAuditCliParser';
+import type { ModelAuditScanResults } from '../types/modelAudit.js';
+import { parseModelAuditArgs, DEPRECATED_OPTIONS_MAP } from '../util/modelAuditCliParser.js';
 import { z } from 'zod';
 
 export async function checkModelAuditInstalled(): Promise<boolean> {

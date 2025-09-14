@@ -7,9 +7,9 @@ import {
   SelfHarmGrader,
   SexualContentGrader,
 } from '../../../../src/redteam/plugins/harmful/graders';
-import { isBasicRefusal } from '../../../../src/redteam/util';
+import { isBasicRefusal } from '../../../../src/redteam/util.js';
 
-import type { ApiProvider, AtomicTestCase } from '../../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../../src/types/index.js';
 
 jest.mock('../../../../src/redteam/util');
 

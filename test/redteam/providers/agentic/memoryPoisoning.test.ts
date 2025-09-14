@@ -1,6 +1,6 @@
-import { MemoryPoisoningProvider } from '../../../../src/redteam/providers/agentic/memoryPoisoning';
+import { MemoryPoisoningProvider } from '../../../../src/redteam/providers/agentic/memoryPoisoning.js';
 
-import type { ApiProvider, CallApiContextParams } from '../../../../src/types/providers';
+import type { ApiProvider, CallApiContextParams } from '../../../../src/types/providers.js';
 
 describe('MemoryPoisoningProvider', () => {
   let provider: MemoryPoisoningProvider;

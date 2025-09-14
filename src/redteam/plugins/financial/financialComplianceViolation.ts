@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from '../base';
+import { RedteamGraderBase } from '../base.js';
 
 export class FinancialComplianceViolationPluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:financial:compliance-violation';

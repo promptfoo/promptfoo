@@ -1,8 +1,8 @@
-import { runPythonCode } from '../python/wrapper';
-import { type GradingResult, isGradingResult } from '../types';
-import invariant from '../util/invariant';
+import { runPythonCode } from '../python/wrapper.js';
+import { type GradingResult, isGradingResult } from '../types/index.js';
+import invariant from '../util/invariant.js';
 
-import type { AssertionParams } from '../types';
+import type { AssertionParams } from '../types/index.js';
 
 // Recursively map snake_case keys to camelCase for Python dataclass compatibility
 function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string, any> {

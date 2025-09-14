@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../../../src/cache';
+import { fetchWithCache } from '../../../src/cache.js';
 import {
   createHyperbolicImageProvider,
   formatHyperbolicImageOutput,

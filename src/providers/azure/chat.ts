@@ -1,19 +1,19 @@
-import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
-import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
-import invariant from '../../util/invariant';
-import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { MCPClient } from '../mcp/client';
-import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import { DEFAULT_AZURE_API_VERSION } from './defaults';
-import { AzureGenericProvider } from './generic';
-import { calculateAzureCost } from './util';
+import { fetchWithCache } from '../../cache.js';
+import { getEnvFloat, getEnvInt } from '../../envars.js';
+import logger from '../../logger.js';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index.js';
+import { maybeLoadFromExternalFile } from '../../util/file.js';
+import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason.js';
+import invariant from '../../util/invariant.js';
+import { FunctionCallbackHandler } from '../functionCallbackUtils.js';
+import { MCPClient } from '../mcp/client.js';
+import { transformMCPToolsToOpenAi } from '../mcp/transform.js';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared.js';
+import { DEFAULT_AZURE_API_VERSION } from './defaults.js';
+import { AzureGenericProvider } from './generic.js';
+import { calculateAzureCost } from './util.js';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index.js';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;

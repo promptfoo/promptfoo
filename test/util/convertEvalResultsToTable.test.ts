@@ -1,6 +1,6 @@
-import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable';
+import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable.js';
 
-import type { CompletedPrompt, EvaluateTable, ResultsFile } from '../../src/types';
+import type { CompletedPrompt, EvaluateTable, ResultsFile } from '../../src/types/index.js';
 
 describe('convertResultsToTable', () => {
   it('should convert results to table format', () => {

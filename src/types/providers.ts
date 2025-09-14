@@ -1,10 +1,10 @@
 import type winston from 'winston';
 
-import type { EnvOverrides } from './env';
-import type { Prompt } from './prompts';
-import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { EnvOverrides } from './env.js';
+import type { Prompt } from './prompts.js';
+import type { NunjucksFilterMap, TokenUsage } from './shared.js';
 
-export type { TokenUsage } from './shared';
+export type { TokenUsage } from './shared.js';
 export type ProviderId = string;
 export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];

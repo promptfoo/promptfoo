@@ -1,4 +1,4 @@
-import type { RunEvalOptions } from '../src/types';
+import type { RunEvalOptions } from '../src/types/index.js';
 
 // Mock dependencies
 jest.mock('cli-progress', () => {

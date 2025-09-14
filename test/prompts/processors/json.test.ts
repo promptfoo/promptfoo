@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 
-import { processJsonFile } from '../../../src/prompts/processors/json';
-import * as fileModule from '../../../src/util/file';
+import { processJsonFile } from '../../../src/prompts/processors/json.js';
+import * as fileModule from '../../../src/util/file.js';
 
 jest.mock('fs');
 jest.mock('../../../src/util/file');

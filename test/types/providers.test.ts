@@ -1,6 +1,6 @@
-import { isApiProvider, isProviderOptions } from '../../src/types/providers';
+import { isApiProvider, isProviderOptions } from '../../src/types/providers.js';
 
-import type { GuardrailResponse, ProviderOptions } from '../../src/types/providers';
+import type { GuardrailResponse, ProviderOptions } from '../../src/types/providers.js';
 
 describe('isApiProvider', () => {
   it('should correctly identify valid ApiProvider objects', () => {

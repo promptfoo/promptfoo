@@ -1,4 +1,4 @@
-import { removeEmpty } from '../../src/util/objectUtils';
+import { removeEmpty } from '../../src/util/objectUtils.js';
 
 describe('objectUtils', () => {
   describe('removeEmpty', () => {

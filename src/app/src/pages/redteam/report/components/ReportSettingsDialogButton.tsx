@@ -10,7 +10,7 @@ import IconButton from '@mui/material/IconButton';
 import Slider from '@mui/material/Slider';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useReportStore } from './store';
+import { useReportStore } from './store.js';
 
 const ReportSettingsDialogButton = () => {
   const {

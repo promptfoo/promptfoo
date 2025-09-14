@@ -1,4 +1,4 @@
-import { FinancialHallucinationPluginGrader } from '../../../../src/redteam/plugins/financial/financialHallucination';
+import { FinancialHallucinationPluginGrader } from '../../../../src/redteam/plugins/financial/financialHallucination.js';
 
 describe('FinancialHallucinationPluginGrader', () => {
   let grader: FinancialHallucinationPluginGrader;

@@ -1,9 +1,9 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { getUserEmail } from './globalConfig/accounts';
-import logger from './logger';
-import { fetchWithProxy } from './util/fetch';
-import { promptUser } from './util/readline';
+import { getUserEmail } from './globalConfig/accounts.js';
+import logger from './logger.js';
+import { fetchWithProxy } from './util/fetch/index.js';
+import { promptUser } from './util/readline.js';
 
 /**
  * Send feedback to the promptfoo API

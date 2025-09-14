@@ -1,6 +1,6 @@
-import logger from '../logger';
-import { PoliciesById, type PolicyObject, RedteamPluginObject } from '../redteam/types';
-import { getPoliciesFromCloud } from '../util/cloud';
+import logger from '../logger.js';
+import { PoliciesById, type PolicyObject, RedteamPluginObject } from '../redteam/types.js';
+import { getPoliciesFromCloud } from '../util/cloud.js';
 
 /**
  * Retries an operation with deduplication until the target count is reached or max retries are exhausted.

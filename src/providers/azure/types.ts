@@ -1,8 +1,8 @@
 import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
 
-import type { EnvOverrides } from '../../types/env';
-import type { MCPConfig } from '../mcp/types';
-import type { AssistantFunctionCallback } from '../openai/types';
+import type { EnvOverrides } from '../../types/env.js';
+import type { MCPConfig } from '../mcp/types.js';
+import type { AssistantFunctionCallback } from '../openai/types.js';
 
 /**
  * Options for configuring retry behavior

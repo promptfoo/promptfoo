@@ -9,20 +9,20 @@ import {
   RouterProvider,
   useLocation,
 } from 'react-router-dom';
-import PageShell from './components/PageShell';
-import { ToastProvider } from './contexts/ToastContext';
-import { useTelemetry } from './hooks/useTelemetry';
-import DatasetsPage from './pages/datasets/page';
-import EvalPage from './pages/eval/page';
-import EvalCreatorPage from './pages/eval-creator/page';
-import EvalsIndexPage from './pages/evals/page';
-import HistoryPage from './pages/history/page';
-import LauncherPage from './pages/launcher/page';
-import LoginPage from './pages/login';
-import ModelAuditPage from './pages/model-audit/page';
-import PromptsPage from './pages/prompts/page';
-import ReportPage from './pages/redteam/report/page';
-import RedteamSetupPage from './pages/redteam/setup/page';
+import PageShell from './components/PageShell.js';
+import { ToastProvider } from './contexts/ToastContext.js';
+import { useTelemetry } from './hooks/useTelemetry.js';
+import DatasetsPage from './pages/datasets/page.js';
+import EvalPage from './pages/eval/page.js';
+import EvalCreatorPage from './pages/eval-creator/page.js';
+import EvalsIndexPage from './pages/evals/page.js';
+import HistoryPage from './pages/history/page.js';
+import LauncherPage from './pages/launcher/page.js';
+import LoginPage from './pages/login.js';
+import ModelAuditPage from './pages/model-audit/page.js';
+import PromptsPage from './pages/prompts/page.js';
+import ReportPage from './pages/redteam/report/page.js';
+import RedteamSetupPage from './pages/redteam/setup/page.js';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 

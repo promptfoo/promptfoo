@@ -3,9 +3,9 @@ import path from 'path';
 
 import yaml from 'js-yaml';
 import Clone from 'rfdc';
-import cliState from '../cliState';
-import { importModule } from '../esm';
-import { type Assertion, type TestCase } from '../types';
+import cliState from '../cliState.js';
+import { importModule } from '../esm.js';
+import { type Assertion, type TestCase } from '../types/index.js';
 
 const clone = Clone();
 

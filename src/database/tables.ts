@@ -20,7 +20,7 @@ import {
   type UnifiedConfig,
 } from '../types';
 
-import type { ModelAuditScanResults } from '../types/modelAudit';
+import type { ModelAuditScanResults } from '../types/modelAudit.js';
 
 // ------------ Prompts ------------
 

@@ -1,9 +1,9 @@
-import logger from '../logger';
-import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
-import { sleep } from '../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { PromptfooSimulatedUserProvider } from './promptfoo';
+import logger from '../logger.js';
+import invariant from '../util/invariant.js';
+import { getNunjucksEngine } from '../util/templates.js';
+import { sleep } from '../util/time.js';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils.js';
+import { PromptfooSimulatedUserProvider } from './promptfoo.js';
 
 import type {
   ApiProvider,

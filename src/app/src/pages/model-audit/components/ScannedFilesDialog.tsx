@@ -12,9 +12,9 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { getIssueFilePath, isCriticalSeverity } from '../utils';
+import { getIssueFilePath, isCriticalSeverity } from '../utils.js';
 
-import type { ScanPath, ScanResult } from '../ModelAudit.types';
+import type { ScanPath, ScanResult } from '../ModelAudit.types.js';
 
 interface ScannedFilesDialogProps {
   open: boolean;

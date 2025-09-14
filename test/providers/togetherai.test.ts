@@ -1,10 +1,10 @@
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
-import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
-import { createTogetherAiProvider } from '../../src/providers/togetherai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion.js';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding.js';
+import { createTogetherAiProvider } from '../../src/providers/togetherai.js';
 
-import type { ProviderOptions } from '../../src/types';
-import type { EnvOverrides } from '../../src/types/env';
+import type { ProviderOptions } from '../../src/types/index.js';
+import type { EnvOverrides } from '../../src/types/env.js';
 
 jest.mock('../../src/providers/openai');
 

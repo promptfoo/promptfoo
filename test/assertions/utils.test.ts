@@ -7,10 +7,10 @@ import {
   loadFromJavaScriptFile,
   processFileReference,
 } from '../../src/assertions/utils';
-import cliState from '../../src/cliState';
-import { importModule } from '../../src/esm';
+import cliState from '../../src/cliState.js';
+import { importModule } from '../../src/esm.js';
 
-import type { ApiProvider, Assertion, TestCase } from '../../src/types';
+import type { ApiProvider, Assertion, TestCase } from '../../src/types/index.js';
 
 jest.mock('fs');
 jest.mock('path');

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import UpdateBanner from './UpdateBanner';
+import UpdateBanner from './UpdateBanner.js';
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import { ThemeProvider, createTheme, Theme } from '@mui/material/styles';
 

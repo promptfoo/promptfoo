@@ -1,7 +1,7 @@
-import { clearCache } from '../cache';
-import logger from '../logger';
-import telemetry from '../telemetry';
-import { setupEnv } from '../util';
+import { clearCache } from '../cache.js';
+import logger from '../logger.js';
+import telemetry from '../telemetry.js';
+import { setupEnv } from '../util/index.js';
 import type { Command } from 'commander';
 
 export function cacheCommand(program: Command) {

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import RedteamGoatProvider from '../../../src/redteam/providers/goat';
-import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import RedteamGoatProvider from '../../../src/redteam/providers/goat.js';
+import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration.js';
 
-import type { ApiProvider, AtomicTestCase, CallApiContextParams, Prompt } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase, CallApiContextParams, Prompt } from '../../../src/types/index.js';
 
 // Mock the graders module at the top level
 const mockGrader = {

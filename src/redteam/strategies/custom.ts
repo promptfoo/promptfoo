@@ -1,4 +1,4 @@
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index.js';
 
 export function addCustom(
   testCases: TestCase[],

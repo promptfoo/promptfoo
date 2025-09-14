@@ -1,5 +1,5 @@
-import { cloudConfig } from '../globalConfig/cloud';
-import logger from '../logger';
+import { cloudConfig } from '../globalConfig/cloud.js';
+import logger from '../logger.js';
 
 import type {
   ApiProvider,

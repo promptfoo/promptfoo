@@ -9,7 +9,7 @@ import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
-import type { ProviderOptions } from '../../types';
+import type { ProviderOptions } from '../../types.js';
 
 interface FoundationModelConfigurationProps {
   selectedTarget: ProviderOptions;

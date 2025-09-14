@@ -1,8 +1,8 @@
 import { SingleBar } from 'cli-progress';
-import logger from '../../../src/logger';
-import { addImageToBase64 } from '../../../src/redteam/strategies/simpleImage';
+import logger from '../../../src/logger.js';
+import { addImageToBase64 } from '../../../src/redteam/strategies/simpleImage.js';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index.js';
 
 jest.mock('sharp', () => {
   return {

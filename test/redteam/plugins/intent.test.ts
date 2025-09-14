@@ -1,11 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { fetchWithCache } from '../../../src/cache';
-import { matchesLlmRubric } from '../../../src/matchers';
-import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
+import { fetchWithCache } from '../../../src/cache.js';
+import { matchesLlmRubric } from '../../../src/matchers.js';
+import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent.js';
 
-import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types/index.js';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),

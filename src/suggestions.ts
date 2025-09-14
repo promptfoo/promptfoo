@@ -1,7 +1,7 @@
-import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts';
-import { DefaultSuggestionsProvider } from './providers/openai/defaults';
+import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts/index.js';
+import { DefaultSuggestionsProvider } from './providers/openai/defaults.js';
 
-import type { TokenUsage } from './types';
+import type { TokenUsage } from './types/index.js';
 
 interface GeneratePromptsOutput {
   prompts?: string[];

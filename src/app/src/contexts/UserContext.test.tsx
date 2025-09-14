@@ -3,8 +3,8 @@ import React, { useContext } from 'react';
 import * as api from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { UserProvider } from './UserContext';
-import { UserContext } from './UserContextDef';
+import { UserProvider } from './UserContext.js';
+import { UserContext } from './UserContextDef.js';
 
 vi.mock('@app/utils/api');
 

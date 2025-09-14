@@ -1,6 +1,6 @@
-import { isBasicRefusal } from '../redteam/util';
+import { isBasicRefusal } from '../redteam/util.js';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index.js';
 
 export function handleIsRefusal(params: AssertionParams): GradingResult {
   const { output, inverse } = params;

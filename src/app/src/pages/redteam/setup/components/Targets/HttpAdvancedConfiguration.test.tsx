@@ -3,7 +3,7 @@ import React from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
+import HttpAdvancedConfiguration from './HttpAdvancedConfiguration.js';
 import type { ProviderOptions } from '@promptfoo/types';
 
 vi.mock('@app/hooks/useToast', () => ({

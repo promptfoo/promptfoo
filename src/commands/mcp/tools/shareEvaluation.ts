@@ -1,17 +1,17 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { cloudConfig } from '../../../globalConfig/cloud';
-import logger from '../../../logger';
-import Eval from '../../../models/eval';
+import { cloudConfig } from '../../../globalConfig/cloud.js';
+import logger from '../../../logger.js';
+import Eval from '../../../models/eval.js';
 import {
   createShareableUrl,
   getShareableUrl,
   hasEvalBeenShared,
   isSharingEnabled,
 } from '../../../share';
-import { loadDefaultConfig } from '../../../util/config/default';
-import { createToolResponse } from '../utils';
+import { loadDefaultConfig } from '../../../util/config/default.js';
+import { createToolResponse } from '../utils.js';
 
 /**
  * Share an evaluation to create a publicly accessible URL

@@ -1,14 +1,14 @@
-import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
-import logger from '../../logger';
-import { normalizeFinishReason } from '../../util/finishReason';
-import invariant from '../../util/invariant';
-import { REQUEST_TIMEOUT_MS } from '../shared';
-import { DEFAULT_AZURE_API_VERSION } from './defaults';
-import { AzureGenericProvider } from './generic';
-import { calculateAzureCost } from './util';
+import { fetchWithCache } from '../../cache.js';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars.js';
+import logger from '../../logger.js';
+import { normalizeFinishReason } from '../../util/finishReason.js';
+import invariant from '../../util/invariant.js';
+import { REQUEST_TIMEOUT_MS } from '../shared.js';
+import { DEFAULT_AZURE_API_VERSION } from './defaults.js';
+import { AzureGenericProvider } from './generic.js';
+import { calculateAzureCost } from './util.js';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index.js';
 
 export class AzureCompletionProvider extends AzureGenericProvider {
   async callApi(

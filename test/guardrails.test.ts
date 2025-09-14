@@ -1,5 +1,5 @@
-import { fetchWithCache } from '../src/cache';
-import guardrails, { type AdaptiveRequest } from '../src/guardrails';
+import { fetchWithCache } from '../src/cache.js';
+import guardrails, { type AdaptiveRequest } from '../src/guardrails.js';
 
 jest.mock('../src/cache', () => ({
   fetchWithCache: jest.fn(),

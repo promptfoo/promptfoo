@@ -1,13 +1,13 @@
 // Note: This file is in the process of being deconstructed into `types/` and `validators/`
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import { ProviderEnvOverridesSchema } from '../types/env';
-import { BaseTokenUsageSchema } from '../types/shared';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
-import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
-import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
-import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema } from '../validators/shared';
+import { ProviderEnvOverridesSchema } from '../types/env.js';
+import { BaseTokenUsageSchema } from '../types/shared.js';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions.js';
+import { PromptConfigSchema, PromptSchema } from '../validators/prompts.js';
+import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers.js';
+import { RedteamConfigSchema } from '../validators/redteam.js';
+import { NunjucksFilterMapSchema } from '../validators/shared.js';
 
 import type {
   PluginConfig,
@@ -15,17 +15,17 @@ import type {
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
-import type { EnvOverrides } from '../types/env';
-import type { Prompt, PromptFunction } from './prompts';
-import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
-import type { NunjucksFilterMap, TokenUsage } from './shared';
-import type { TraceData } from './tracing';
+import type { EnvOverrides } from '../types/env.js';
+import type { Prompt, PromptFunction } from './prompts.js';
+import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers.js';
+import type { NunjucksFilterMap, TokenUsage } from './shared.js';
+import type { TraceData } from './tracing.js';
 
-export * from '../redteam/types';
-export * from './prompts';
-export * from './providers';
-export * from './shared';
-export * from './tracing';
+export * from '../redteam/types.js';
+export * from './prompts.js';
+export * from './providers.js';
+export * from './shared.js';
+export * from './tracing.js';
 
 export type { EnvOverrides };
 

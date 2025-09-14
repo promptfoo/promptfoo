@@ -1,11 +1,11 @@
 import { describe, expect, it } from '@jest/globals';
 import { SingleBar } from 'cli-progress';
-import { fetchWithCache } from '../../../src/cache';
-import logger from '../../../src/logger';
-import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
+import { fetchWithCache } from '../../../src/cache.js';
+import logger from '../../../src/logger.js';
+import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration.js';
+import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio.js';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index.js';
 
 // Mock the remoteGeneration module
 jest.mock('../../../src/redteam/remoteGeneration', () => ({

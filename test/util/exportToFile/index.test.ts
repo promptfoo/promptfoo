@@ -1,12 +1,12 @@
-import { ResultFailureReason } from '../../../src/types';
+import { ResultFailureReason } from '../../../src/types/index.js';
 import {
   convertEvalResultToTableCell,
   convertTestResultsToTableRow,
-} from '../../../src/util/exportToFile';
-import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
+} from '../../../src/util/exportToFile/index.js';
+import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable.js';
 
-import type Eval from '../../../src/models/eval';
-import type EvalResult from '../../../src/models/evalResult';
+import type Eval from '../../../src/models/eval.js';
+import type EvalResult from '../../../src/models/evalResult.js';
 
 describe('exportToFile utils', () => {
   describe('getHeaderForTable', () => {

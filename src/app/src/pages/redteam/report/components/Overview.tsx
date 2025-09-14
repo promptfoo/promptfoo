@@ -11,7 +11,7 @@ import {
   severityDisplayNames,
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import { useReportStore } from './store';
+import { useReportStore } from './store.js';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
 

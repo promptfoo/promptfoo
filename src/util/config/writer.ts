@@ -1,9 +1,9 @@
 import fs from 'fs';
 
 import yaml from 'js-yaml';
-import logger from '../../logger';
-import { UnifiedConfig } from '../../types';
-import { orderKeys } from '../json';
+import logger from '../../logger.js';
+import { UnifiedConfig } from '../../types/index.js';
+import { orderKeys } from '../json.js';
 
 export function writePromptfooConfig(
   config: Partial<UnifiedConfig>,

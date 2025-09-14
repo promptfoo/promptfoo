@@ -15,9 +15,9 @@ import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import ProviderResponse from './ProviderResponse';
+import ProviderResponse from './ProviderResponse.js';
 
-import type { ProviderOptions } from '../../types';
+import type { ProviderOptions } from '../../types.js';
 
 interface TestTargetConfigurationProps {
   testingTarget: boolean;

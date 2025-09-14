@@ -3,9 +3,9 @@ import React from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import ProviderConfigEditor, { ProviderConfigEditorRef } from './ProviderConfigEditor';
+import ProviderConfigEditor, { ProviderConfigEditorRef } from './ProviderConfigEditor.js';
 
-import type { ProviderOptions } from '../../types';
+import type { ProviderOptions } from '../../types.js';
 
 vi.mock('./HttpEndpointConfiguration', () => ({
   default: () => <div data-testid="http-config" />,

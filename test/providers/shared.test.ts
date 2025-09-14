@@ -1,4 +1,4 @@
-import { getEnvBool } from '../../src/envars';
+import { getEnvBool } from '../../src/envars.js';
 import {
   calculateCost,
   isPromptfooSampleTarget,

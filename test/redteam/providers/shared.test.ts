@@ -1,6 +1,6 @@
-import cliState from '../../../src/cliState';
-import { loadApiProviders } from '../../../src/providers';
-import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import cliState from '../../../src/cliState.js';
+import { loadApiProviders } from '../../../src/providers/index.js';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat.js';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
@@ -13,7 +13,7 @@ import {
   redteamProviderManager,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
-import { sleep } from '../../../src/util/time';
+import { sleep } from '../../../src/util/time.js';
 
 import type {
   ApiProvider,

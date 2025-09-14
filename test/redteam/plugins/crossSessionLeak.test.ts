@@ -3,7 +3,7 @@ import {
   CrossSessionLeakPlugin,
 } from '../../../src/redteam/plugins/crossSessionLeak';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index.js';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),

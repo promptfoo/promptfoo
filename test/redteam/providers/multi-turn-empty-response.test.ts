@@ -1,7 +1,7 @@
-import { CrescendoProvider } from '../../../src/redteam/providers/crescendo';
-import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
-import { CustomProvider } from '../../../src/redteam/providers/custom';
-import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import { CrescendoProvider } from '../../../src/redteam/providers/crescendo/index.js';
+import RedteamIterativeProvider from '../../../src/redteam/providers/iterative.js';
+import { CustomProvider } from '../../../src/redteam/providers/custom/index.js';
+import { getTargetResponse } from '../../../src/redteam/providers/shared.js';
 
 import type {
   ApiProvider,

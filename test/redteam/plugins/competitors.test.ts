@@ -1,6 +1,6 @@
-import { CompetitorsGrader } from '../../../src/redteam/plugins/competitors';
+import { CompetitorsGrader } from '../../../src/redteam/plugins/competitors.js';
 
-import type { AssertionValue } from '../../../src/types';
+import type { AssertionValue } from '../../../src/types/index.js';
 
 describe('CompetitorsGrader', () => {
   let grader: CompetitorsGrader;

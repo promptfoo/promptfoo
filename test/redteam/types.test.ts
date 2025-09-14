@@ -1,4 +1,4 @@
-import { Severity } from '../../src/redteam/constants';
+import { Severity } from '../../src/redteam/constants.js';
 
 import type {
   BaseRedteamMetadata,
@@ -13,7 +13,7 @@ import type {
   SavedRedteamConfig,
   SynthesizeOptions,
 } from '../../src/redteam/types';
-import type { ApiProvider } from '../../src/types/providers';
+import type { ApiProvider } from '../../src/types/providers.js';
 
 describe('redteam types', () => {
   it('should create valid RedteamPluginObject', () => {

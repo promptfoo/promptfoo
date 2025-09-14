@@ -1,4 +1,4 @@
-import type { ToolContent, ToolResponse, ToolResult } from './types';
+import type { ToolContent, ToolResponse, ToolResult } from './types.js';
 
 /**
  * Creates a standardized tool response with proper typing

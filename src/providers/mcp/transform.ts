@@ -5,8 +5,8 @@ import type {
   Schema as GoogleSchema,
   Tool as GoogleTool,
 } from '../google/types';
-import type { OpenAiTool } from '../openai/util';
-import type { MCPTool, MCPToolInputSchema } from './types';
+import type { OpenAiTool } from '../openai/util.js';
+import type { MCPTool, MCPToolInputSchema } from './types.js';
 
 export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
   return tools.map((tool) => {

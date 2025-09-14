@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 
-import type { REDTEAM_PROVIDER_HARM_PLUGINS } from '../../constants';
+import type { REDTEAM_PROVIDER_HARM_PLUGINS } from '../../constants.js';
 
 export interface HarmfulCategory {
   key: keyof typeof REDTEAM_PROVIDER_HARM_PLUGINS;

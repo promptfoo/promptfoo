@@ -21,10 +21,10 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
-import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import PageWrapper from './PageWrapper';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig.js';
+import PageWrapper from './PageWrapper.js';
 
-import type { ApplicationDefinition } from '../types';
+import type { ApplicationDefinition } from '../types.js';
 
 interface PromptsProps {
   onNext: () => void;

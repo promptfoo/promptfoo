@@ -1,13 +1,13 @@
-import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
-import logger from '../../logger';
-import { sleep } from '../../util/time';
-import { REQUEST_TIMEOUT_MS } from '../shared';
-import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
+import { fetchWithCache } from '../../cache.js';
+import { getEnvString } from '../../envars.js';
+import logger from '../../logger.js';
+import { sleep } from '../../util/time.js';
+import { REQUEST_TIMEOUT_MS } from '../shared.js';
+import { getGoogleClient, loadCredentials, resolveProjectId } from './util.js';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
-import type { CompletionOptions } from './types';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index.js';
+import type { EnvOverrides } from '../../types/env.js';
+import type { CompletionOptions } from './types.js';
 
 interface GoogleImageOptions {
   config?: CompletionOptions;

@@ -1,12 +1,12 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { DEFAULT_MAX_CONCURRENCY } from '../../../evaluator';
-import logger from '../../../logger';
-import { doRedteamRun } from '../../../redteam/shared';
-import type { RedteamRunOptions } from '../../../redteam/types';
-import { loadDefaultConfig } from '../../../util/config/default';
-import { createToolResponse } from '../utils';
+import { DEFAULT_MAX_CONCURRENCY } from '../../../evaluator.js';
+import logger from '../../../logger.js';
+import { doRedteamRun } from '../../../redteam/shared.js';
+import type { RedteamRunOptions } from '../../../redteam/types.js';
+import { loadDefaultConfig } from '../../../util/config/default.js';
+import { createToolResponse } from '../utils.js';
 
 /**
  * Run a redteam scan to test AI systems for vulnerabilities

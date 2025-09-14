@@ -1,6 +1,6 @@
-import { handleIsSql } from '../../src/assertions/sql';
+import { handleIsSql } from '../../src/assertions/sql.js';
 
-import type { Assertion, AssertionParams, GradingResult } from '../../src/types';
+import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index.js';
 
 const assertion: Assertion = {
   type: 'is-sql',

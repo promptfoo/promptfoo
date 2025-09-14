@@ -6,12 +6,12 @@ import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types'
 import { diffJson, diffSentences, diffWords } from 'diff';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import CustomMetrics from './CustomMetrics';
-import EvalOutputPromptDialog from './EvalOutputPromptDialog';
-import FailReasonCarousel from './FailReasonCarousel';
-import { useResultsViewSettingsStore, useTableStore } from './store';
-import CommentDialog from './TableCommentDialog';
-import TruncatedText from './TruncatedText';
+import CustomMetrics from './CustomMetrics.js';
+import EvalOutputPromptDialog from './EvalOutputPromptDialog.js';
+import FailReasonCarousel from './FailReasonCarousel.js';
+import { useResultsViewSettingsStore, useTableStore } from './store.js';
+import CommentDialog from './TableCommentDialog.js';
+import TruncatedText from './TruncatedText.js';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;

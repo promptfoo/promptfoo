@@ -1,7 +1,7 @@
 import fs from 'fs';
 
-import { runPython, state, validatePythonPath } from '../../src/python/pythonUtils';
-import { runPythonCode } from '../../src/python/wrapper';
+import { runPython, state, validatePythonPath } from '../../src/python/pythonUtils.js';
+import { runPythonCode } from '../../src/python/wrapper.js';
 
 jest.mock('../../src/esm');
 jest.mock('python-shell');

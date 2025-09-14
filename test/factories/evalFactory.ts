@@ -1,12 +1,12 @@
 import { randomUUID } from 'crypto';
 
-import { ResultFailureReason } from '../../src';
-import { getDb } from '../../src/database';
-import { evalsTable } from '../../src/database/tables';
-import Eval from '../../src/models/eval';
-import { oldStyleEval } from './data/eval/database_records';
+import { ResultFailureReason } from '../../src/index.js';
+import { getDb } from '../../src/database/index.js';
+import { evalsTable } from '../../src/database/tables.js';
+import Eval from '../../src/models/eval.js';
+import { oldStyleEval } from './data/eval/database_records.js';
 
-import type { EvaluateResult } from '../../src/types';
+import type { EvaluateResult } from '../../src/types/index.js';
 
 interface CreateEvalOptions {
   numResults?: number;

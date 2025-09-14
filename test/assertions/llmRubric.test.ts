@@ -1,7 +1,7 @@
-import { handleLlmRubric } from '../../src/assertions/llmRubric';
-import { matchesLlmRubric } from '../../src/matchers';
+import { handleLlmRubric } from '../../src/assertions/llmRubric.js';
+import { matchesLlmRubric } from '../../src/matchers.js';
 
-import type { Assertion, AssertionParams, GradingResult } from '../../src/types';
+import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index.js';
 
 jest.mock('../../src/matchers');
 

@@ -1,8 +1,8 @@
-import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { fetchWithCache } from '../cache.js';
+import { getEnvString } from '../envars.js';
+import { REQUEST_TIMEOUT_MS } from './shared.js';
 
-import type { ApiProvider, ProviderResponse } from '../types';
+import type { ApiProvider, ProviderResponse } from '../types/index.js';
 
 interface LlamaCompletionOptions {
   n_predict?: number;

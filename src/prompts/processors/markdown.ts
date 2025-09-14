@@ -1,6 +1,6 @@
 import fs from 'fs';
 
-import type { Prompt } from '../../types';
+import type { Prompt } from '../../types/index.js';
 
 export function processMarkdownFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
   const content = fs.readFileSync(filePath, 'utf8');

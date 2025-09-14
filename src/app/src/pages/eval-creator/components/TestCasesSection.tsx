@@ -23,7 +23,7 @@ import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
-import TestCaseDialog from './TestCaseDialog';
+import TestCaseDialog from './TestCaseDialog.js';
 import type { CsvRow, TestCase } from '@promptfoo/types';
 
 interface TestCasesSectionProps {

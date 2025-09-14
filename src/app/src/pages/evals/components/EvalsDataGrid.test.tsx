@@ -3,7 +3,7 @@ import { render, waitFor, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { callApi } from '@app/utils/api';
-import EvalsDataGrid from './EvalsDataGrid';
+import EvalsDataGrid from './EvalsDataGrid.js';
 import { useState } from 'react';
 import { act } from '@testing-library/react';
 

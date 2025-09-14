@@ -1,7 +1,7 @@
-import { matchesClosedQa } from '../../src/matchers';
-import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+import { matchesClosedQa } from '../../src/matchers.js';
+import { DefaultGradingProvider } from '../../src/providers/openai/defaults.js';
 
-import type { GradingConfig } from '../../src/types';
+import type { GradingConfig } from '../../src/types/index.js';
 
 describe('matchesClosedQa', () => {
   beforeEach(() => {

@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { AwsBedrockAgentCoreProvider } from '../../src/providers/bedrock/agentcore';
+import { AwsBedrockAgentCoreProvider } from '../../src/providers/bedrock/agentcore.js';
 
 // Mock AWS SDK modules
 jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({

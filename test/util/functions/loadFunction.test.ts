@@ -1,12 +1,12 @@
 import * as path from 'path';
 
-import { importModule } from '../../../src/esm';
-import { runPython } from '../../../src/python/pythonUtils';
+import { importModule } from '../../../src/esm.js';
+import { runPython } from '../../../src/python/pythonUtils.js';
 import {
   functionCache,
   loadFunction,
   parseFileUrl,
-} from '../../../src/util/functions/loadFunction';
+} from '../../../src/util/functions/loadFunction.js';
 
 jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),
