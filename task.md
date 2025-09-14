@@ -7,6 +7,7 @@ Migrate the promptfoo project from CommonJS to ESM (ECMAScript Modules) while ma
 ## Motivation
 
 ### Benefits of ESM Migration:
+
 1. **Modern JavaScript Standard**: ESM is the official ECMAScript standard for modules
 2. **Better Tree Shaking**: Improved bundle optimization and smaller production builds
 3. **Static Analysis**: Better tooling support for imports/exports analysis
@@ -17,6 +18,7 @@ Migrate the promptfoo project from CommonJS to ESM (ECMAScript Modules) while ma
 8. **Performance**: Potentially faster module loading and resolution
 
 ### Current Pain Points:
+
 - Complex dual-mode module loading system (`src/esm.ts`) with eval() workarounds
 - TypeScript compilation to CommonJS creates interop complexity
 - Mixed module systems between workspaces create confusion
@@ -88,12 +90,14 @@ This checklist reflects progress on esm-migration vs main and what’s left to f
   - [ ] Verify dev runners (`src/redteam/strategies/simpleImage.ts`, `src/redteam/strategies/simpleVideo.ts`) are not bundled into library outputs (not referenced from `src/index.ts`)
 
 Dev Runners (ESM-only)
+
 - [ ] Treat `src/redteam/strategies/simpleImage.ts` and `src/redteam/strategies/simpleVideo.ts` as ESM-only scripts for development
 - [ ] Keep `import.meta` usage; no dual-build guards required
 - [ ] Fix their ESM entry detection to path equality as above
 - [ ] Ensure they are not exported or imported by `src/index.ts` (excluded from library bundles)
 
 Dual Build (ESM + CJS) import.meta Strategy
+
 - Problem: `import.meta` is not valid in CJS output; esbuild warns (and may fail depending on settings)
 - Solution (compile-time branching):
   - [ ] Update `tsup.config.ts` with per-format defines so esbuild can DCE branches:
@@ -114,6 +118,7 @@ Dual Build (ESM + CJS) import.meta Strategy
       }
       ```
   - [ ] Refactor any `import.meta` usages in shared library code to guarded branches so CJS never sees them (CLI code can remain ESM-only):
+
     ```ts
     // Before (fails/warns in CJS)
     const here = dirname(fileURLToPath(import.meta.url));
@@ -126,6 +131,7 @@ Dual Build (ESM + CJS) import.meta Strategy
       return __dirname; // available in CJS
     }
     ```
+
   - [ ] Apply this pattern in `src/esm.ts` and any other shared module referencing `import.meta`
   - [ ] Keep `import.meta` freely in ESM-only code: CLI (`src/main.ts`), App (`src/app/**`), and dev runners (`src/redteam/strategies/simpleImage.ts`, `src/redteam/strategies/simpleVideo.ts`)
   - [ ] Scan for `import.meta` usages and categorize:
@@ -149,6 +155,7 @@ Dual Build (ESM + CJS) import.meta Strategy
   - [ ] Update any references to `scripts/generate-constants.js` to `.cjs`
 
 App Workspace (ESM-only)
+
 - [x] `src/app/package.json` already `"type": "module"`
 - [x] App uses Vite/Vitest (ESM-native); no CJS compatibility tasks
 - [ ] Ensure any `__dirname` usage in app config uses `fileURLToPath`/`dirname`
@@ -174,24 +181,28 @@ App Workspace (ESM-only)
 Notes: Current branch already includes tsconfig NodeNext/ES2022, tsup config with ESM/CJS builds, and `.cjs` script renames. Next highest-impact steps are updating `package.json` scripts, addressing JSON imports, and replacing `require.main`/`__dirname` usages.
 
 ### Phase 1: Preparation and Analysis (Low Risk)
+
 1. Audit all CommonJS-specific patterns
 2. Analyze external dependencies for ESM compatibility
 3. Set up testing infrastructure for dual-mode validation
 4. Create compatibility shims for migration period
 
 ### Phase 2: Core Infrastructure (Medium Risk)
+
 1. Update package.json configurations
 2. Modify TypeScript compilation targets
 3. Update build processes and tooling
-4. Convert CommonJS-specific patterns (__dirname, require.main, etc.)
+4. Convert CommonJS-specific patterns (\_\_dirname, require.main, etc.)
 
 ### Phase 3: Module System Migration (High Risk)
+
 1. Convert import/export patterns
 2. Update dynamic imports and module loading
 3. Migrate CLI entry points
 4. Update npm exports configuration
 
 ### Phase 4: Testing and Validation (Medium Risk)
+
 1. Comprehensive testing of CLI functionality
 2. Library API compatibility testing
 3. Workspace integration testing
@@ -204,6 +215,7 @@ Notes: Current branch already includes tsconfig NodeNext/ES2022, tsup config wit
 This phase focuses on understanding the current state, identifying blockers, and creating the foundation for the migration without making any breaking changes.
 
 #### 1.1 Dependency Audit and Compatibility Analysis
+
 - **Task**: Complete analysis of all production dependencies for ESM compatibility
 - **Deliverable**: ESM compatibility matrix and migration strategy per dependency
 
@@ -219,15 +231,18 @@ All dependencies work fine with ESM since Node.js ESM can import CommonJS module
 4. **All other deps**: Standard ESM import syntax
 
 **✅ ESM-READY DEPENDENCIES:**
+
 - @anthropic-ai/sdk, openai, commander, winston, zod, socket.io, tsx, undici
 - These require no changes, just import syntax updates
 
 **⚠️ NEEDS TESTING:**
+
 - drizzle-orm: ESM compatible but complex import patterns
 - async: Status unclear, may need replacement with native Promises
 - js-yaml: Status unclear, may need dynamic import
 
 **Actions for 1.1:**
+
 - [ ] Test chalk v5 upgrade compatibility
 - [ ] Evaluate better-sqlite3 alternatives (libsql benchmark)
 - [ ] Research nunjucks alternatives or ESM compatibility layers
@@ -235,12 +250,14 @@ All dependencies work fine with ESM since Node.js ESM can import CommonJS module
 - [ ] Document rollback strategy for each dependency choice
 
 #### 1.2 CommonJS Pattern Detailed Analysis
+
 - **Task**: Comprehensive mapping of all CommonJS-specific code patterns
 - **Files analyzed**: 8 files with CommonJS patterns identified
 
 **Detailed Pattern Inventory:**
 
 **1. CLI Entry Point Detection (`require.main === module`)**
+
 - **Files affected**: 4 files
   - `src/main.ts`: Main CLI entry point
   - `src/migrate.ts`: Database migration script
@@ -251,6 +268,7 @@ All dependencies work fine with ESM since Node.js ESM can import CommonJS module
 - **Migration complexity**: Low - straightforward pattern replacement
 
 **2. Directory Resolution (`__dirname`)**
+
 - **Files affected**: 5 files
   - `src/esm.ts`: Legacy compatibility layer
   - `src/python/pythonUtils.ts`: Python script path resolution
@@ -262,12 +280,14 @@ All dependencies work fine with ESM since Node.js ESM can import CommonJS module
 - **Migration complexity**: Low - mechanical replacement
 
 **3. Filename Resolution (`__filename`)**
+
 - **Files affected**: 1 file
   - `src/esm.ts`: Currently commented out but available
 - **ESM equivalent**: `fileURLToPath(import.meta.url)`
 - **Migration complexity**: Low
 
 **4. Dynamic Module Loading (`require()`)**
+
 - **Files affected**: 4 files with 7 total occurrences
   - `src/esm.ts`: Fallback require() in importModule function
   - `src/__mocks__/esm.ts`: Test mock using require()
@@ -282,18 +302,21 @@ All dependencies work fine with ESM since Node.js ESM can import CommonJS module
 - **Migration complexity**: Medium - requires async/await handling
 
 **Actions for 1.2:**
+
 - [ ] Create detailed migration plan for each file
 - [ ] Document dependencies between files that need coordinated changes
 - [ ] Identify which patterns can be migrated independently
 - [ ] Plan testing strategy for each pattern replacement
 
 #### 1.3 Create ESM Compatibility Utilities
+
 - **Task**: Build comprehensive helper functions for CommonJS → ESM transition
 - **Strategy**: Create utilities that work in both CommonJS and ESM during transition
 
 **New files to create:**
 
 **`src/utils/esm-compat.ts`**
+
 ```typescript
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
@@ -324,6 +347,7 @@ export function resolvePathFromUrl(metaUrl: string, ...segments: string[]): stri
 ```
 
 **`src/utils/cli-detect.ts`**
+
 ```typescript
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -351,6 +375,7 @@ export function isMainModule(metaUrl: string): boolean {
 ```
 
 **`src/utils/dynamic-import.ts`**
+
 ```typescript
 /**
  * Safe dynamic import with fallback handling
@@ -362,7 +387,7 @@ export async function safeDynamicImport<T = any>(
     fallbackRequire?: boolean;
     namedExport?: string;
     defaultExport?: boolean;
-  } = {}
+  } = {},
 ): Promise<T> {
   const { fallbackRequire = false, namedExport, defaultExport = false } = options;
 
@@ -410,12 +435,14 @@ export async function loadJsonFile(filePath: string): Promise<any> {
 ```
 
 #### 1.4 Testing Infrastructure Preparation
+
 - **Task**: Set up comprehensive testing for migration phases
 - **Strategy**: Ensure no regressions during gradual migration
 
 **Test Categories:**
 
 **1. Unit Test Compatibility**
+
 - **Current**: Jest with SWC transformer
 - **ESM Challenge**: Jest ESM support has limitations
 - **Actions**:
@@ -425,6 +452,7 @@ export async function loadJsonFile(filePath: string): Promise<any> {
   - [ ] Create test utilities for dual-mode compatibility
 
 **2. Integration Test Suite**
+
 - **Coverage needed**:
   - [ ] CLI command execution tests
   - [ ] Library API usage tests
@@ -438,36 +466,43 @@ export async function loadJsonFile(filePath: string): Promise<any> {
   - [ ] Cross-platform path handling
 
 **3. Compatibility Testing**
+
 - **Node.js versions**: Test ESM on Node 18, 20, 22+
 - **Package managers**: npm, yarn, pnpm compatibility
 - **Import patterns**: Both `import pkg` and `import { named } from 'pkg'`
 - **File extensions**: Verify .js extensions in imports work correctly
 
 #### 1.5 Migration Environment Setup
+
 - **Task**: Prepare development environment for safe migration
 
 **Branch Strategy:**
+
 - [ ] Create `esm-migration` branch from main
 - [ ] Set up parallel testing with both CommonJS and ESM builds
 - [ ] Configure CI/CD for dual-mode validation
 - [ ] Plan staged rollout strategy
 
 **Development Tools:**
+
 - [ ] Update VSCode settings for ESM development
 - [ ] Configure TypeScript for ESM-aware IntelliSense
 - [ ] Set up lint rules for ESM import patterns
 - [ ] Create pre-commit hooks for import validation
 
 **Build Pipeline Updates:**
+
 - [ ] Test build process with ESM TypeScript compilation
 - [ ] Verify dist/ output structure remains compatible
 - [ ] Ensure CLI binary permissions and shebangs work
 - [ ] Test npm pack/publish process with ESM package
 
 #### 1.6 Risk Assessment and Mitigation Planning
+
 - **Task**: Comprehensive risk analysis with specific mitigation strategies
 
 **High-Risk Areas:**
+
 1. **CLI Binary Execution**
    - Risk: ESM changes break CLI installation/execution
    - Mitigation: Extensive cross-platform testing, version pinning
@@ -489,32 +524,38 @@ export async function loadJsonFile(filePath: string): Promise<any> {
    - Testing: All template rendering scenarios
 
 **Medium-Risk Areas:**
+
 - Build process changes affecting asset copying
 - Test framework compatibility issues
 - Development workflow disruptions
 - Documentation and example updates needed
 
 **Low-Risk Areas:**
+
 - Basic import/export syntax changes
 - TypeScript compilation settings
 - Static analysis and linting updates
 
 #### 1.7 Documentation and Communication Plan
+
 - **Task**: Prepare comprehensive documentation for migration
 
 **Internal Documentation:**
+
 - [ ] Migration runbook with step-by-step procedures
 - [ ] Rollback procedures for each phase
 - [ ] Troubleshooting guide for common issues
 - [ ] Testing checklists for each migration phase
 
 **External Communication:**
+
 - [ ] Migration announcement with timeline
 - [ ] Breaking changes documentation
 - [ ] ESM migration guide for library consumers
 - [ ] FAQ document for common migration questions
 
 **Success Criteria for Phase 1:**
+
 - [ ] Complete dependency compatibility matrix
 - [ ] All CommonJS patterns catalogued and migration planned
 - [ ] ESM compatibility utilities created and tested
@@ -530,11 +571,12 @@ This phase is designed to be completely safe - no breaking changes to the codeba
 
 ## **CRITICAL UPDATE: Repo-Specific Analysis Results**
 
-*Based on comprehensive code audit findings, the following critical blockers and concrete implementation details have been identified:*
+_Based on comprehensive code audit findings, the following critical blockers and concrete implementation details have been identified:_
 
 ### **🚨 MANDATORY CHANGES (Cannot proceed without these)**
 
 #### **1. Import Extension Challenge - SOLVED WITH BUNDLING**
+
 - **Scale**: 2,709 extensionless relative imports across 638 files in src/
 - **Problem**: Node.js ESM requires explicit `.js` extensions for relative imports
 - **Solution**: **tsup bundling (SINGLE RECOMMENDATION)**
@@ -544,6 +586,7 @@ This phase is designed to be completely safe - no breaking changes to the codeba
 - **Estimated Effort**: 2-3 days total
 
 #### **2. JSON Module Imports - CHOOSE STRATEGY**
+
 - **Files affected**: 8 files with JSON imports
   - `src/main.ts`, `src/constants.ts`, `src/commands/debug.ts`, `src/checkNodeVersion.ts`
   - `src/app/vite.config.ts`, `src/redteam/strategies/promptInjections/index.ts`
@@ -552,16 +595,19 @@ This phase is designed to be completely safe - no breaking changes to the codeba
 **Two Safe Paths (choose one):**
 
 **Path A: Bundler-inlined JSON (RECOMMENDED)**
+
 - Keep existing: `import packageJson from '../package.json'` in source
 - tsup will inline JSON during bundling - no `assert` needed
 - Add Jest mapping if tests import JSON: `"^\\.\\./package\\.json$": "<rootDir>/package.json"`
 
 **Path B: Node JSON modules**
+
 - Static: `import pkg from '../package.json' assert { type: 'json' };`
 - Dynamic: `await import('./data.json', { assert: { type: 'json' } })`
 - Ensure Jest + SWC can handle JSON assertions or mock in tests
 
 #### **3. CommonJS Build Scripts - IMMEDIATE BLOCKER**
+
 - **Files**: `scripts/generate-constants.js`, `scripts/generate-blog-image.js`
 - **Problem**: These CJS scripts will break under `"type": "module"`
 - **Solution**: Rename to `.cjs` or convert to ESM/TypeScript
@@ -569,16 +615,17 @@ This phase is designed to be completely safe - no breaking changes to the codeba
 ### **🔧 CONCRETE IMPLEMENTATION PLAN UPDATES**
 
 #### **Phase 1.1: TypeScript Configuration (Corrected)**
+
 ```json
 // tsconfig.json changes
 {
   "compilerOptions": {
-    "module": "NodeNext",           // Matches Node's ESM resolver exactly
+    "module": "NodeNext", // Matches Node's ESM resolver exactly
     "moduleResolution": "NodeNext", // Aligns TS resolution with Node semantics
     "target": "ES2022",
-    "resolveJsonModule": true,      // Keep for JSON import support
-    "esModuleInterop": true,        // Required for CJS interop
-    "verbatimModuleSyntax": true,   // Optional: preserves import syntax faithfully
+    "resolveJsonModule": true, // Keep for JSON import support
+    "esModuleInterop": true, // Required for CJS interop
+    "verbatimModuleSyntax": true, // Optional: preserves import syntax faithfully
     "outDir": "dist",
     "rootDir": "."
   }
@@ -586,6 +633,7 @@ This phase is designed to be completely safe - no breaking changes to the codeba
 ```
 
 #### **Phase 1.2: JSON Import Fixes (Specific Files)**
+
 **Immediate fixes needed:**
 
 ```typescript
@@ -631,11 +679,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 **Approach**: Use bundler (tsup/rollup/esbuild) for runtime, tsc only for type declarations
 
 **Implementation**:
+
 ```bash
 npm install --save-dev tsup
 ```
 
 **New build configuration** (tsup.config.ts):
+
 ```typescript
 import { defineConfig } from 'tsup';
 
@@ -649,9 +699,9 @@ export default defineConfig([
     clean: true,
     shims: true, // Provides __dirname, __filename shims automatically
     banner: {
-      js: '#!/usr/bin/env node'
+      js: '#!/usr/bin/env node',
     },
-    external: ['better-sqlite3', 'playwright', 'sharp'] // Externalize heavy deps
+    external: ['better-sqlite3', 'playwright', 'sharp'], // Externalize heavy deps
   },
   // Library ESM build
   {
@@ -661,7 +711,7 @@ export default defineConfig([
     outDir: 'dist/src',
     splitting: false,
     treeshake: true,
-    external: ['better-sqlite3', 'playwright', 'sharp']
+    external: ['better-sqlite3', 'playwright', 'sharp'],
   },
   // Library CJS build for compatibility
   {
@@ -670,12 +720,13 @@ export default defineConfig([
     target: 'node20',
     outDir: 'dist/src',
     outExtension: { '.js': '.cjs' },
-    external: ['better-sqlite3', 'playwright', 'sharp']
-  }
+    external: ['better-sqlite3', 'playwright', 'sharp'],
+  },
 ]);
 ```
 
 **Package.json script updates**:
+
 ```json
 {
   "scripts": {
@@ -691,14 +742,16 @@ export default defineConfig([
 ```
 
 **Pros of Option B**:
+
 - **Zero import rewrites**: Keep all 2,709 extensionless imports as-is
-- **Automatic shims**: tsup provides __dirname, __filename shims out of the box
+- **Automatic shims**: tsup provides **dirname, **filename shims out of the box
 - **Tree shaking**: Smaller runtime bundles through dead code elimination
 - **Fast builds**: esbuild-based, much faster than tsc
 - **Source maps**: Debugging works with original TypeScript code
 - **Simplified migration**: No mass code changes required
 
 **Cons of Option B**:
+
 - **Build complexity**: Two-step build process (tsup + tsc for types)
 - **Dev vs prod difference**: Source uses extensionless imports, output has bundled modules
 - **Bundle debugging**: Runtime stack traces point to bundled code (though source maps help)
@@ -706,16 +759,17 @@ export default defineConfig([
 - **CLI distribution**: Need to ensure shims work correctly for CLI execution
 
 **tsconfig.json for Option B**:
+
 ```json
 {
   "compilerOptions": {
-    "module": "NodeNext",           // Still use NodeNext for correct resolution
+    "module": "NodeNext", // Still use NodeNext for correct resolution
     "moduleResolution": "NodeNext",
     "target": "ES2022",
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "declaration": true,            // Types only
-    "emitDeclarationOnly": true,    // Let tsup handle JS
+    "declaration": true, // Types only
+    "emitDeclarationOnly": true, // Let tsup handle JS
     "outDir": "dist",
     "rootDir": "."
   }
@@ -723,13 +777,15 @@ export default defineConfig([
 ```
 
 **Migration impact**:
+
 - **Immediate**: Can flip to ESM package.json without import rewrites
 - **JSON imports**: Still need assert syntax fixes (8 files)
-- **CommonJS patterns**: Still need __dirname, require.main fixes (9 files)
+- **CommonJS patterns**: Still need \_\_dirname, require.main fixes (9 files)
 - **Build scripts**: Still need .cjs renames (2 files)
 - **Testing**: Jest continues to work with source files (no .js suffix mapping needed)
 
 **Recommendation**: Option B is **significantly less risky** and faster to implement
+
 - Estimated timeline: 2-3 days vs 1-2 weeks for Option A
 - Smaller changeset, easier to review and rollback
 - Modern toolchain upgrade (tsup is widely used)
@@ -738,23 +794,26 @@ export default defineConfig([
 #### **Phase 1.4: Script and Tooling Updates (Specific)**
 
 **Build Scripts to Rename:**
+
 ```bash
 mv scripts/generate-constants.js scripts/generate-constants.cjs
 mv scripts/generate-blog-image.js scripts/generate-blog-image.cjs
 ```
 
 **Package.json Script Updates:**
+
 ```json
 {
   "scripts": {
-    "local": "tsx src/main.ts",              // was: ts-node
-    "db:migrate": "tsx src/migrate.ts",       // was: node --require tsx/cjs
+    "local": "tsx src/main.ts", // was: ts-node
+    "db:migrate": "tsx src/migrate.ts", // was: node --require tsx/cjs
     "dev:server": "tsx --watch src/server/index.ts" // nodemon with tsx
   }
 }
 ```
 
 #### **Phase 1.5: Testing Infrastructure (Finalized)**
+
 - **Keep @swc/jest**: Current setup already handles TS and ESM - no changes needed
 - **SWC usage**: Use @swc/jest for tests (fast, ESM-capable), tsx for dev
 - **Optional dev alternative**: `node --loader=@swc-node/register/esm src/main.ts` but tsx is more battle-tested
@@ -770,6 +829,7 @@ mv scripts/generate-blog-image.js scripts/generate-blog-image.cjs
 ### **🎯 UPDATED PHASE PRIORITIES**
 
 #### **Phase 1 (REVISED): Critical Blockers**
+
 1. **JSON import fixes** (8 files) - 1 day
 2. **CJS script renames** - 1 hour
 3. **TypeScript config updates** - 1 hour
@@ -777,11 +837,13 @@ mv scripts/generate-blog-image.js scripts/generate-blog-image.cjs
 5. **Test and validate changes** - 1 day
 
 #### **Phase 2: Package Configuration**
+
 - Update to `"type": "module"`
 - ESM-only exports with major version bump
 - OR conditional exports with CJS wrapper for gentler migration
 
 #### **Phase 3: CommonJS Pattern Migration**
+
 - Replace `require.main === module` (4 files)
 - Replace `__dirname` usage (5 files)
 - Simplify `src/esm.ts` (remove eval() hack)
@@ -789,6 +851,7 @@ mv scripts/generate-blog-image.js scripts/generate-blog-image.cjs
 ### **🚫 DEPENDENCY DECISIONS (Corrected)**
 
 **Based on technical review - these are NOT blockers:**
+
 1. **Chalk v4.1.2**: CJS import from ESM works fine with default import interop (`import chalk from 'chalk'`)
 2. **better-sqlite3**: CJS imports work from ESM (`import Database from 'better-sqlite3'`) - Node ESM supports importing CJS
 3. **Nunjucks**: CJS default namespace import works from ESM - high usage makes switching costly but not necessary
@@ -799,6 +862,7 @@ mv scripts/generate-blog-image.js scripts/generate-blog-image.cjs
 ### **💡 RELEASE STRATEGY RECOMMENDATION**
 
 **Recommended: Dual CJS/ESM Build**
+
 ```json
 {
   "type": "module",
@@ -813,6 +877,7 @@ mv scripts/generate-blog-image.js scripts/generate-blog-image.cjs
 ```
 
 **tsup configuration for dual builds**:
+
 ```typescript
 // tsup.config.ts
 export default defineConfig([
@@ -830,11 +895,12 @@ export default defineConfig([
     outDir: 'dist/src',
     outExtension: { '.js': '.cjs' },
     // ... other options
-  }
+  },
 ]);
 ```
 
 This approach provides:
+
 - Real CJS build (not a broken wrapper)
 - Proper conditional exports
 - Seamless migration path for consumers
@@ -864,7 +930,7 @@ This approach provides:
    - Prepare for Phase 2 (package configuration)
 
 **Estimated Phase 1 Timeline: 2-3 days** (Option B) vs 1-2 weeks (Option A)
-*Option B avoids 2,709 import rewrites while providing automatic ESM shims*
+_Option B avoids 2,709 import rewrites while providing automatic ESM shims_
 
 ---
 
@@ -873,6 +939,7 @@ This approach provides:
 ### **CommonJS Pattern Replacements (Specific Files)**
 
 #### **CLI Detection Pattern (`require.main === module`)**
+
 **Files to update**: `src/main.ts`, `src/migrate.ts`, `src/redteam/strategies/simpleImage.ts`, `src/redteam/strategies/simpleVideo.ts`
 
 ```typescript
@@ -891,6 +958,7 @@ if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
 ```
 
 #### **Directory Resolution (`__dirname`)**
+
 **Files to update**: `src/migrate.ts`, `src/providers/golangCompletion.ts`, `src/python/pythonUtils.ts`, `src/app/vite.config.ts`
 
 ```typescript
@@ -908,6 +976,7 @@ const migrationsFolder = path.join(__dirname, '..', 'drizzle');
 ### **ESM Compatibility Utilities (Consolidated)**
 
 **`src/utils/esm-compat.ts`**
+
 ```typescript
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path'; // Added missing path import
@@ -948,6 +1017,7 @@ export function isMainModule(metaUrl: string): boolean {
 ```
 
 ### **Simplified src/esm.ts (ESM-only)**
+
 ```typescript
 import { pathToFileURL } from 'node:url';
 import { safeResolve } from './util/file.node.js';
@@ -969,29 +1039,34 @@ export async function importModule(modulePath: string, functionName?: string) {
 ## **FINAL IMPLEMENTATION CHECKLIST**
 
 ### **Config Updates (Day 1)**
+
 - [ ] **TypeScript**: Update `tsconfig.json` with `NodeNext` + `emitDeclarationOnly`
 - [ ] **Build scripts**: Rename `scripts/generate-constants.js` → `.cjs` and `scripts/generate-blog-image.js` → `.cjs`
 - [ ] **JSON strategy**: Choose Path A (bundler-inlined) or Path B (JSON modules) and implement consistently
 
 ### **tsup Setup (Day 2)**
+
 - [ ] **Install**: `npm install --save-dev tsup`
 - [ ] **Configure**: Create `tsup.config.ts` with CLI + library dual builds
 - [ ] **Scripts**: Update package.json with tsx dev commands and tsup build
 - [ ] **Test**: Verify CLI binary preserves shebang and chmod +x
 
 ### **CommonJS Pattern Migration (Day 3)**
+
 - [ ] **CLI detection**: Replace `require.main === module` in `src/main.ts`, `src/migrate.ts`, `src/redteam/strategies/simple{Image,Video}.ts`
 - [ ] **Directory resolution**: Replace `__dirname` in `src/migrate.ts`, `src/providers/golangCompletion.ts`, `src/python/pythonUtils.ts`, `src/app/vite.config.ts`
 - [ ] **Module loader**: Simplify `src/esm.ts` - remove eval() and CJS fallback
 - [ ] **JSON imports**: Apply chosen strategy to 8 identified files
 
 ### **ESM Package Transition (Day 4-5)**
+
 - [ ] **Package type**: Update to `"type": "module"` in package.json
 - [ ] **Exports**: Configure dual exports with real CJS build (not wrapper)
 - [ ] **Testing**: @swc/jest should continue working, add JSON mappings if needed
 - [ ] **Validation**: Full test suite + CLI smoke tests + library import verification
 
 ### **Success Criteria**
+
 - [ ] Zero import rewrites needed (tsup handles extensions)
 - [ ] All tests pass with @swc/jest
 - [ ] CLI functionality preserved across all commands

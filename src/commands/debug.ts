@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 
 import chalk from 'chalk';
-import pkg from '../../package.json' assert { type: 'json' };
+import pkg from '../../package.json' with { type: 'json' };
 const { version } = pkg;
 import { getEnvString } from '../envars';
 import logger from '../logger';

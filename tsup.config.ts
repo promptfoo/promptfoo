@@ -11,10 +11,10 @@ export default defineConfig([
     shims: true, // Provides __dirname, __filename shims automatically
     sourcemap: true,
     define: {
-      BUILD_FORMAT: '"esm"'
+      BUILD_FORMAT: '"esm"',
     },
     banner: {
-      js: '#!/usr/bin/env node'
+      js: '#!/usr/bin/env node',
     },
     external: [
       // Externalize heavy deps to avoid bundling
@@ -22,8 +22,8 @@ export default defineConfig([
       /^playwright/,
       /^sharp/,
       // Externalize all node_modules
-      /^[^./]/
-    ]
+      /^[^./]/,
+    ],
   },
   // Library ESM build
   {
@@ -36,14 +36,9 @@ export default defineConfig([
     sourcemap: true,
     shims: true, // Ensure library ESM build has shims
     define: {
-      BUILD_FORMAT: '"esm"'
+      BUILD_FORMAT: '"esm"',
     },
-    external: [
-      /^better-sqlite3/,
-      /^playwright/,
-      /^sharp/,
-      /^[^./]/
-    ]
+    external: [/^better-sqlite3/, /^playwright/, /^sharp/, /^[^./]/],
   },
   // Library CJS build for compatibility
   {
@@ -53,19 +48,14 @@ export default defineConfig([
     outDir: 'dist/src',
     sourcemap: true,
     define: {
-      BUILD_FORMAT: '"cjs"'
+      BUILD_FORMAT: '"cjs"',
     },
     logOverride: {
-      'empty-import-meta': 'silent' // Silence import.meta warnings in CJS builds
+      'empty-import-meta': 'silent', // Silence import.meta warnings in CJS builds
     },
     outExtension() {
-      return { '.js': '.cjs' }
+      return { '.js': '.cjs' };
     },
-    external: [
-      /^better-sqlite3/,
-      /^playwright/,
-      /^sharp/,
-      /^[^./]/
-    ]
-  }
+    external: [/^better-sqlite3/, /^playwright/, /^sharp/, /^[^./]/],
+  },
 ]);
