@@ -52,7 +52,7 @@ const mockEvals = [
     createdAt: Date.now(),
     description: 'Original Description',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-1',
     numTests: 10,
     passRate: 90,
@@ -62,7 +62,7 @@ const mockEvals = [
     createdAt: Date.now(),
     description: 'Another Eval',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-2',
     numTests: 5,
     passRate: 100,
@@ -75,7 +75,7 @@ const mockEvalsWithMultipleDatasets = [
     createdAt: Date.now(),
     description: 'Eval 1 - Dataset 1',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-1',
     numTests: 10,
     passRate: 90,
@@ -85,7 +85,7 @@ const mockEvalsWithMultipleDatasets = [
     createdAt: Date.now(),
     description: 'Eval 2 - Dataset 1',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-2',
     numTests: 5,
     passRate: 100,
@@ -95,7 +95,7 @@ const mockEvalsWithMultipleDatasets = [
     createdAt: Date.now(),
     description: 'Eval 3 - Dataset 2',
     datasetId: 'dataset-2',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-3',
     numTests: 8,
     passRate: 75,
@@ -108,7 +108,7 @@ const mockEvalsWithDifferentDatasets = [
     createdAt: Date.now(),
     description: 'Original Description',
     datasetId: 'dataset-1',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-1',
     numTests: 10,
     passRate: 90,
@@ -118,7 +118,7 @@ const mockEvalsWithDifferentDatasets = [
     createdAt: Date.now(),
     description: 'Another Eval',
     datasetId: 'dataset-2',
-    isRedteam: 0,
+    isRedteam: false,
     label: 'eval-2',
     numTests: 5,
     passRate: 100,
@@ -133,7 +133,9 @@ describe('EvalsDataGrid', () => {
   it('should fetch data on initial mount', async () => {
     const mockResponse = {
       ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+      json: vi
+        .fn()
+        .mockResolvedValue({ data: mockEvals, total: mockEvals.length, limit: 50, offset: 0 }),
     };
     vi.mocked(callApi).mockResolvedValue(mockResponse as any);
 
@@ -145,7 +147,7 @@ describe('EvalsDataGrid', () => {
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
-        '/results',
+        '/results?limit=50&offset=0&sort=createdAt&order=desc',
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
@@ -168,7 +170,9 @@ describe('EvalsDataGrid', () => {
       if (callCount === 1) {
         return {
           ok: true,
-          json: vi.fn().mockResolvedValue({ data: mockEvals }),
+          json: vi
+            .fn()
+            .mockResolvedValue({ data: mockEvals, total: mockEvals.length, limit: 50, offset: 0 }),
         } as any;
       }
 
@@ -247,7 +251,9 @@ describe('EvalsDataGrid', () => {
       if (callCount === 1) {
         return {
           ok: true,
-          json: vi.fn().mockResolvedValue({ data: mockEvals }),
+          json: vi
+            .fn()
+            .mockResolvedValue({ data: mockEvals, total: mockEvals.length, limit: 50, offset: 0 }),
         } as any;
       }
 
@@ -327,7 +333,12 @@ describe('EvalsDataGrid', () => {
   it('should display only evals with the same datasetId as the focused eval when filterByDatasetId is true', async () => {
     const mockResponse = {
       ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvalsWithMultipleDatasets }),
+      json: vi.fn().mockResolvedValue({
+        data: mockEvalsWithMultipleDatasets,
+        total: mockEvalsWithMultipleDatasets.length,
+        limit: 50,
+        offset: 0,
+      }),
     };
     vi.mocked(callApi).mockResolvedValue(mockResponse as any);
 
@@ -339,7 +350,7 @@ describe('EvalsDataGrid', () => {
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
-        '/results',
+        '/results?limit=50&offset=0&sort=createdAt&order=desc',
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
@@ -357,7 +368,9 @@ describe('EvalsDataGrid', () => {
   it('should visually mark the row corresponding to focusedEvalId as focused when focusedEvalId is provided', async () => {
     const mockResponse = {
       ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+      json: vi
+        .fn()
+        .mockResolvedValue({ data: mockEvals, total: mockEvals.length, limit: 50, offset: 0 }),
     };
     vi.mocked(callApi).mockResolvedValue(mockResponse as any);
 
@@ -369,7 +382,7 @@ describe('EvalsDataGrid', () => {
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
-        '/results',
+        '/results?limit=50&offset=0&sort=createdAt&order=desc',
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
@@ -385,7 +398,12 @@ describe('EvalsDataGrid', () => {
   it('should filter data when filterByDatasetId changes from false to true after initial load', async () => {
     const mockResponse = {
       ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvalsWithDifferentDatasets }),
+      json: vi.fn().mockResolvedValue({
+        data: mockEvalsWithDifferentDatasets,
+        total: mockEvalsWithDifferentDatasets.length,
+        limit: 50,
+        offset: 0,
+      }),
     };
     vi.mocked(callApi).mockResolvedValue(mockResponse as any);
 
@@ -397,7 +415,7 @@ describe('EvalsDataGrid', () => {
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
-        '/results',
+        '/results?limit=50&offset=0&sort=createdAt&order=desc',
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
@@ -425,7 +443,9 @@ describe('EvalsDataGrid', () => {
   it('should fetch data on remount without pathname change', async () => {
     const mockResponse = {
       ok: true,
-      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+      json: vi
+        .fn()
+        .mockResolvedValue({ data: mockEvals, total: mockEvals.length, limit: 50, offset: 0 }),
     };
     vi.mocked(callApi).mockResolvedValue(mockResponse as any);
 

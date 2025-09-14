@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
@@ -14,6 +15,7 @@ import {
   type GridCellParams,
   type GridColDef,
   GridCsvExportMenuItem,
+  type GridFilterModel,
   type GridPaginationModel,
   type GridRenderCellParams,
   type GridRowSelectionModel,
@@ -50,7 +52,7 @@ type Eval = {
   datasetId: string;
   description: string | null;
   evalId: string;
-  isRedteam: number;
+  isRedteam: boolean;
   label: string;
   numTests: number;
   passRate: number;
@@ -61,8 +63,6 @@ declare module '@mui/x-data-grid' {
   interface ToolbarPropsOverrides {
     showUtilityButtons: boolean;
     focusQuickFilterOnMount: boolean;
-    quickFilterValue: string;
-    onQuickFilterChange: (value: string) => void;
   }
 }
 
@@ -72,19 +72,12 @@ const GridToolbarExport = () => (
   </GridToolbarExportContainer>
 );
 
-const QuickFilter = forwardRef<
-  HTMLInputElement,
-  GridToolbarQuickFilterProps & { value: string; onQuickFilterChange: (value: string) => void }
->((props, ref) => {
+const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((props, ref) => {
   const theme = useTheme();
-  const { value, onQuickFilterChange, ...otherProps } = props;
-
   return (
     <GridToolbarQuickFilter
-      {...otherProps}
+      {...props}
       inputRef={ref}
-      value={value}
-      onChange={(event) => onQuickFilterChange(event.target.value)}
       sx={{
         '& .MuiInputBase-root': {
           borderRadius: 2,
@@ -100,13 +93,9 @@ QuickFilter.displayName = 'QuickFilter';
 function CustomToolbar({
   showUtilityButtons,
   focusQuickFilterOnMount,
-  quickFilterValue,
-  onQuickFilterChange,
 }: {
   showUtilityButtons: boolean;
   focusQuickFilterOnMount: boolean;
-  quickFilterValue: string;
-  onQuickFilterChange: (value: string) => void;
 }) {
   const theme = useTheme();
   const quickFilterRef = useRef<HTMLInputElement>(null);
@@ -128,7 +117,7 @@ function CustomToolbar({
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      <QuickFilter ref={quickFilterRef} value={quickFilterValue} onQuickFilterChange={onQuickFilterChange} />
+      <QuickFilter ref={quickFilterRef} />
     </GridToolbarContainer>
   );
 }
@@ -169,12 +158,12 @@ export default function EvalsDataGrid({
     pageSize: 50,
   });
 
-  const [sortModel, setSortModel] = useState<GridSortModel>([
-    { field: 'createdAt', sort: 'desc' },
-  ]);
+  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'createdAt', sort: 'desc' }]);
 
-  const [quickFilterText, setQuickFilterText] = useState('');
-  const debouncedQuickFilterText = useDebounce(quickFilterText, 300);
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
+  const quickFilterValues = filterModel.quickFilterValues || [];
+  const searchText = quickFilterValues.join(' ');
+  const debouncedSearchText = useDebounce(searchText, 300);
 
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
     focusedEvalId ? [focusedEvalId] : [],
@@ -196,8 +185,8 @@ export default function EvalsDataGrid({
         params.set('offset', (paginationModel.page * paginationModel.pageSize).toString());
 
         // Search parameter
-        if (debouncedQuickFilterText) {
-          params.set('search', debouncedQuickFilterText);
+        if (debouncedSearchText) {
+          params.set('search', debouncedSearchText);
         }
 
         // Sort parameters
@@ -206,11 +195,7 @@ export default function EvalsDataGrid({
           params.set('order', sortModel[0].sort);
         }
 
-        // Dataset filter
-        if (filterByDatasetId && focusedEvalId) {
-          // We'll need to get the focused eval's datasetId first
-          // For now, we'll handle this in the rows filtering
-        }
+        // Note: Dataset filtering is handled client-side in the rows useMemo
 
         const response = await callApi(`/results?${params.toString()}`, {
           cache: 'no-store',
@@ -243,17 +228,11 @@ export default function EvalsDataGrid({
         }
       }
     },
-    [
-      paginationModel,
-      sortModel,
-      debouncedQuickFilterText,
-      filterByDatasetId,
-      focusedEvalId,
-    ],
+    [paginationModel, sortModel, debouncedSearchText, filterByDatasetId, focusedEvalId],
   );
 
-  // Use React Router's location to detect navigation (removed for server-side pagination)
-  // const location = useLocation();
+  // Track location changes for navigation-based refetching
+  const location = useLocation();
 
   useEffect(() => {
     // Create AbortController for this fetch
@@ -266,20 +245,28 @@ export default function EvalsDataGrid({
     return () => {
       abortController.abort();
     };
-  }, [fetchEvals]); // fetchEvals already includes all dependencies
+  }, [fetchEvals, location]); // Include location to trigger refetch on navigation
 
   /**
    * For server-side pagination, we mostly use the rows as-is from the server.
    * Client-side filtering is minimal since server handles most of it.
+   * Exception: Dataset filtering is done client-side for PR #1 simplicity.
    */
   const rows = useMemo(() => {
-    // For PR #1, we simplify this since most filtering is done server-side
-    return evals;
-  }, [evals]);
+    let filteredEvals = evals;
 
-  const hasRedteamEvals = useMemo(() => {
-    return evals.some(({ isRedteam }) => isRedteam === 1);
-  }, [evals]);
+    // Apply dataset filtering if enabled
+    if (filterByDatasetId && focusedEvalId) {
+      const focusedEval = evals.find((e) => e.evalId === focusedEvalId);
+      if (focusedEval?.datasetId) {
+        filteredEvals = evals.filter((e) => e.datasetId === focusedEval.datasetId);
+      }
+    }
+
+    return filteredEvals;
+  }, [evals, filterByDatasetId, focusedEvalId]);
+
+  const hasRedteamEvals = useMemo(() => evals.some(({ isRedteam }) => !!isRedteam), [evals]);
 
   const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
 
@@ -332,7 +319,7 @@ export default function EvalsDataGrid({
                   { value: true, label: 'Red Team' },
                   { value: false, label: 'Eval' },
                 ],
-                valueGetter: (value: Eval['isRedteam'], row: Eval) => value === 1,
+                valueGetter: (value: Eval['isRedteam']) => Boolean(value),
                 renderCell: (params: GridRenderCellParams<Eval>) => {
                   const isRedteam = params.value as Eval['isRedteam'];
                   const displayType = isRedteam ? 'Red Team' : 'Eval';
@@ -487,12 +474,13 @@ export default function EvalsDataGrid({
         sortModel={sortModel}
         onSortModelChange={setSortModel}
         rowCount={total}
+        // Filter model for server-side search
+        filterModel={filterModel}
+        onFilterModelChange={setFilterModel}
         slotProps={{
           toolbar: {
             showUtilityButtons,
             focusQuickFilterOnMount,
-            quickFilterValue: quickFilterText,
-            onQuickFilterChange: setQuickFilterText,
           },
         }}
         onCellClick={(params) => {
