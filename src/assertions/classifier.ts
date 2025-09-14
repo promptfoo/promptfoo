@@ -18,7 +18,7 @@ export async function handleClassifier({
   const classificationResult = await matchesClassification(
     renderedValue,
     outputString,
-    assertion.threshold ?? 1,
+    (assertion.threshold as number) ?? 1,
     test.options,
   );
 
