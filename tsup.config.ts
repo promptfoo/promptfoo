@@ -82,6 +82,7 @@ export default defineConfig([
     },
     esbuildOptions: (options) => {
       options.logOverride = { 'empty-import-meta': 'silent' };
+      return options;
     },
     outExtension() {
       return { '.js': '.cjs' };
