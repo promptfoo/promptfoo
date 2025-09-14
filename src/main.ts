@@ -79,6 +79,11 @@ export function addCommonOptionsRecursively(command: Command) {
 async function main() {
   initializeRunLogging();
 
+  // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests
+  if (!process.env.PROMPTFOO_DISABLE_UPDATE && typeof process.env.CI !== 'undefined') {
+    process.env.PROMPTFOO_DISABLE_UPDATE = 'true';
+  }
+
   await checkForUpdates();
   await runDbMigrations();
 
