@@ -10,7 +10,6 @@ import { neverGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
 
-
 let ffmpegCache: any = null;
 
 function shouldShowProgressBar(): boolean {
@@ -236,4 +235,3 @@ export async function writeVideoFile(base64Video: string, outputFilePath: string
     throw error;
   }
 }
-
