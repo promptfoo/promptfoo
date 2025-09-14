@@ -12,12 +12,15 @@ export default defineConfig([
     sourcemap: true,
     define: {
       BUILD_FORMAT: '"esm"',
+      'process.env.BUILD_FORMAT': '"esm"',
     },
     banner: {
       js: '#!/usr/bin/env node',
     },
     external: [
-      // Externalize only heavy native deps that must remain external
+      // Externalize all bare module imports so Node resolves CJS deps natively
+      /^[a-z@][^:]*/,
+      // Ensure critical native deps remain external
       'better-sqlite3',
       'playwright',
       'sharp',
@@ -38,8 +41,12 @@ export default defineConfig([
     shims: true, // Ensure library ESM build has shims
     define: {
       BUILD_FORMAT: '"esm"',
+      'process.env.BUILD_FORMAT': '"esm"',
     },
-    external: ['better-sqlite3', 'playwright', 'sharp', '@swc/core', 'esbuild', 'fsevents'],
+    external: [
+      // Externalize all bare module imports so Node resolves CJS deps natively
+      /^[a-z@][^:]*/,
+    ],
   },
   // Library CJS build for compatibility
   {
@@ -50,6 +57,7 @@ export default defineConfig([
     sourcemap: true,
     define: {
       BUILD_FORMAT: '"cjs"',
+      'process.env.BUILD_FORMAT': '"cjs"',
     },
     logOverride: {
       'empty-import-meta': 'silent', // Silence import.meta warnings in CJS builds
@@ -57,6 +65,9 @@ export default defineConfig([
     outExtension() {
       return { '.js': '.cjs' };
     },
-    external: ['better-sqlite3', 'playwright', 'sharp', '@swc/core', 'esbuild', 'fsevents'],
+    external: [
+      // Externalize all bare module imports so Node resolves CJS deps natively
+      /^[a-z@][^:]*/,
+    ],
   },
 ]);

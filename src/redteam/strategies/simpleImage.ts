@@ -178,7 +178,8 @@ async function main() {
     logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
 
     // Check if we're running this directly (not being imported)
-    if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
+    if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
+      if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
       // Write to a file for testing with image viewers
       const fs = await import('fs');
       const outputFilePath = 'test-image.png';
@@ -189,8 +190,9 @@ async function main() {
       // Write binary data to file
       fs.writeFileSync(outputFilePath, imageBuffer);
 
-      logger.info(`Image file written to: ${outputFilePath}`);
-      logger.info(`You can open it with any image viewer to verify the conversion.`);
+        logger.info(`Image file written to: ${outputFilePath}`);
+        logger.info(`You can open it with any image viewer to verify the conversion.`);
+      }
     }
   } catch (error) {
     logger.error(`Error generating image from text: ${error}`);
@@ -199,6 +201,8 @@ async function main() {
 
 // Run the main function if this file is executed directly
 // ESM replacement for require.main === module check
-if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
-  main();
+if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
+  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
+    main();
+  }
 }
