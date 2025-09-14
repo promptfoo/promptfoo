@@ -119,7 +119,7 @@ export function createApp() {
       req: Request<{}, {}, {}, EvalQueryParams>,
       res: Response<PaginatedEvalResponse | { data: EvalSummary[] }>,
     ): Promise<void> => {
-      const { limit, offset, search, sort, order, datasetId } = req.query;
+      const { limit, offset, search, sort, order, datasetId, focusedEvalId } = req.query;
 
       // Validate and sanitize query params
       const allowedSorts = new Set(['createdAt', 'description'] as const);
@@ -133,13 +133,18 @@ export function createApp() {
         : undefined;
       const safeOffset = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : undefined;
 
-      // Check if any pagination parameters are provided
-      const isPaginationRequest =
-        safeLimit !== undefined ||
-        safeOffset !== undefined ||
-        search !== undefined ||
-        safeSort !== undefined ||
-        safeOrder !== undefined;
+      // Check if any pagination/filtering parameters are provided
+      // This approach is more robust as it automatically includes any new pagination-related parameters
+      const paginationParams = [
+        'limit',
+        'offset',
+        'search',
+        'sort',
+        'order',
+        'datasetId',
+        'focusedEvalId',
+      ];
+      const isPaginationRequest = paginationParams.some((param) => req.query[param] !== undefined);
 
       if (isPaginationRequest) {
         // Use new pagination API
@@ -150,6 +155,7 @@ export function createApp() {
           sort: safeSort,
           order: safeOrder,
           datasetId,
+          focusedEvalId,
         });
 
         res.json({

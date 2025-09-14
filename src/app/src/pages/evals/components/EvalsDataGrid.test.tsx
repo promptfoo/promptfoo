@@ -339,7 +339,9 @@ describe('EvalsDataGrid', () => {
 
   it('should display only evals with the same datasetId as the focused eval when filterByDatasetId is true', async () => {
     // Server should filter to only return evals from dataset-1 (same as eval-1)
-    const filteredMockData = mockEvalsWithMultipleDatasets.filter(item => item.datasetId === 'dataset-1');
+    const filteredMockData = mockEvalsWithMultipleDatasets.filter(
+      (item) => item.datasetId === 'dataset-1',
+    );
     const mockResponse = {
       ok: true,
       json: vi.fn().mockResolvedValue({
@@ -416,7 +418,9 @@ describe('EvalsDataGrid', () => {
         offset: 0,
       }),
     };
-    const filteredData = mockEvalsWithDifferentDatasets.filter(item => item.datasetId === 'dataset-1');
+    const filteredData = mockEvalsWithDifferentDatasets.filter(
+      (item) => item.datasetId === 'dataset-1',
+    );
     const mockResponse2 = {
       ok: true,
       json: vi.fn().mockResolvedValue({
@@ -426,7 +430,9 @@ describe('EvalsDataGrid', () => {
         offset: 0,
       }),
     };
-    vi.mocked(callApi).mockResolvedValueOnce(mockResponse1 as any).mockResolvedValueOnce(mockResponse2 as any);
+    vi.mocked(callApi)
+      .mockResolvedValueOnce(mockResponse1 as any)
+      .mockResolvedValueOnce(mockResponse2 as any);
 
     const { rerender } = render(
       <MemoryRouter>

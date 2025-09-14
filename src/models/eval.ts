@@ -927,6 +927,7 @@ export async function getPaginatedEvalSummaries(
     sort = 'createdAt',
     order = 'desc',
     datasetId,
+    focusedEvalId,
   } = params;
 
   // Build base query with joins
@@ -942,11 +943,25 @@ export async function getPaginatedEvalSummaries(
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId));
 
+  // Resolve datasetId from focusedEvalId if provided
+  let effectiveDatasetId = datasetId;
+  if (focusedEvalId && !datasetId) {
+    // Look up the focused eval's datasetId
+    const focusedEvalDataset = db
+      .select({ datasetId: evalsToDatasetsTable.datasetId })
+      .from(evalsTable)
+      .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
+      .where(eq(evalsTable.id, focusedEvalId))
+      .get();
+
+    effectiveDatasetId = focusedEvalDataset?.datasetId;
+  }
+
   // Build where conditions
   const whereConditions = [];
 
-  if (datasetId) {
-    whereConditions.push(eq(evalsToDatasetsTable.datasetId, datasetId));
+  if (effectiveDatasetId) {
+    whereConditions.push(eq(evalsToDatasetsTable.datasetId, effectiveDatasetId));
   }
 
   if (search) {
@@ -993,7 +1008,7 @@ export async function getPaginatedEvalSummaries(
       .offset(offset)
       .all();
   } else {
-    // For passRate and numTests, we need to sort in memory after calculations
+    // Default fallback to createdAt desc for any unhandled sort fields
     results = baseQuery
       .where(whereClause)
       .orderBy(desc(evalsTable.createdAt))
@@ -1032,12 +1047,9 @@ export async function getPaginatedEvalSummaries(
     };
   });
 
-  // Apply in-memory sorting for calculated fields
-  if (sort === 'passRate') {
-    summaries.sort((a, b) => (order === 'asc' ? a.passRate - b.passRate : b.passRate - a.passRate));
-  } else if (sort === 'numTests') {
-    summaries.sort((a, b) => (order === 'asc' ? a.numTests - b.numTests : b.numTests - a.numTests));
-  }
+  // Note: Only database-supported sorting (createdAt, description) is implemented.
+  // Complex calculated fields like passRate and numTests would require fetching
+  // all records for proper global sorting, which is inefficient for large datasets.
 
   return {
     data: summaries,

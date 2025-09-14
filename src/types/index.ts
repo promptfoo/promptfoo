@@ -1210,9 +1210,10 @@ export interface EvalQueryParams {
   limit?: number;
   offset?: number;
   search?: string;
-  sort?: 'createdAt' | 'description' | 'passRate' | 'numTests';
+  sort?: 'createdAt' | 'description';
   order?: 'asc' | 'desc';
   datasetId?: string;
+  focusedEvalId?: string;
 }
 
 export interface PaginatedEvalResponse {
