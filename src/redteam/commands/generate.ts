@@ -31,7 +31,7 @@ import { writePromptfooConfig } from '../../util/config/writer';
 import { getCustomPolicies } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
-import { synthesize } from '..//index';
+import { synthesize } from '../index';
 import {
   ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,
