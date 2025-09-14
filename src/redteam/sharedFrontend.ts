@@ -7,8 +7,8 @@ import {
   type Severity,
 } from './constants';
 
-import type { UnifiedConfig, Vars } from '../types/index.js';
-import type { RedteamPluginObject, SavedRedteamConfig } from './types.js';
+import type { UnifiedConfig, Vars } from '../types/index';
+import type { RedteamPluginObject, SavedRedteamConfig } from './types';
 
 export function getRiskCategorySeverityMap(
   plugins?: RedteamPluginObject[],

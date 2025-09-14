@@ -1,6 +1,6 @@
-import { matchesLlmRubric, matchesAnswerRelevance, matchesGEval } from '../../src/matchers.js';
-import { loadApiProvider } from '../../src/providers/index.js';
-import { DefaultGradingProvider } from '../../src/providers/openai/defaults.js';
+import { matchesLlmRubric, matchesAnswerRelevance, matchesGEval } from '../../src/matchers';
+import { loadApiProvider } from '../../src/providers/index';
+import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('Matcher Token Tracking', () => {
   beforeEach(() => {

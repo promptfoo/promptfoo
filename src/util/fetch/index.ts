@@ -4,15 +4,15 @@ import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
 import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
-import cliState from '../../cliState.js';
-import { VERSION } from '../../constants.js';
-import { getEnvBool, getEnvInt, getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared.js';
-import invariant from '../../util/invariant.js';
-import { sleep } from '../../util/time.js';
-import { sanitizeUrl } from '../sanitizer.js';
-import { monkeyPatchFetch } from './monkeyPatchFetch.js';
+import cliState from '../../cliState';
+import { VERSION } from '../../constants';
+import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
+import { sanitizeUrl } from '../sanitizer';
+import { monkeyPatchFetch } from './monkeyPatchFetch';
 
 // Override global fetch
 global.fetch = monkeyPatchFetch;

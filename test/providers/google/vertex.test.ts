@@ -1,11 +1,11 @@
 import * as fs from 'fs';
 import path from 'path';
 
-import { getCache, isCacheEnabled } from '../../../src/cache.js';
-import cliState from '../../../src/cliState.js';
-import { importModule } from '../../../src/esm.js';
-import * as vertexUtil from '../../../src/providers/google/util.js';
-import { VertexChatProvider } from '../../../src/providers/google/vertex.js';
+import { getCache, isCacheEnabled } from '../../../src/cache';
+import cliState from '../../../src/cliState';
+import { importModule } from '../../../src/esm';
+import * as vertexUtil from '../../../src/providers/google/util';
+import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Mock database

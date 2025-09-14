@@ -2,9 +2,9 @@ import {
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
-} from '../../src/util/tokenUsageUtils.js';
+} from '../../src/util/tokenUsageUtils';
 
-import type { TokenUsage } from '../../src/types/shared.js';
+import type { TokenUsage } from '../../src/types/shared';
 
 describe('tokenUsageUtils', () => {
   describe('createEmptyTokenUsage', () => {

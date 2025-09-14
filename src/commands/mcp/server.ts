@@ -2,21 +2,21 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
-import logger from '../../logger.js';
-import telemetry from '../../telemetry.js';
-import { registerResources } from './resources.js';
-import { registerCompareProvidersTool } from './tools/compareProviders.js';
-import { registerGenerateDatasetTool } from './tools/generateDataset.js';
-import { registerGenerateTestCasesTool } from './tools/generateTestCases.js';
-import { registerGetEvaluationDetailsTool } from './tools/getEvaluationDetails.js';
-import { registerListEvaluationsTool } from './tools/listEvaluations.js';
-import { registerRedteamGenerateTool } from './tools/redteamGenerate.js';
-import { registerRedteamRunTool } from './tools/redteamRun.js';
-import { registerRunAssertionTool } from './tools/runAssertion.js';
-import { registerRunEvaluationTool } from './tools/runEvaluation.js';
-import { registerShareEvaluationTool } from './tools/shareEvaluation.js';
-import { registerTestProviderTool } from './tools/testProvider.js';
-import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig.js';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { registerResources } from './resources';
+import { registerCompareProvidersTool } from './tools/compareProviders';
+import { registerGenerateDatasetTool } from './tools/generateDataset';
+import { registerGenerateTestCasesTool } from './tools/generateTestCases';
+import { registerGetEvaluationDetailsTool } from './tools/getEvaluationDetails';
+import { registerListEvaluationsTool } from './tools/listEvaluations';
+import { registerRedteamGenerateTool } from './tools/redteamGenerate';
+import { registerRedteamRunTool } from './tools/redteamRun';
+import { registerRunAssertionTool } from './tools/runAssertion';
+import { registerRunEvaluationTool } from './tools/runEvaluation';
+import { registerShareEvaluationTool } from './tools/shareEvaluation';
+import { registerTestProviderTool } from './tools/testProvider';
+import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig';
 
 /**
  * Creates an MCP server with tools for interacting with promptfoo

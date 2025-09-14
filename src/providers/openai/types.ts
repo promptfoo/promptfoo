@@ -1,7 +1,7 @@
-import { type OpenAiFunction, type OpenAiTool } from './util.js';
+import { type OpenAiFunction, type OpenAiTool } from './util';
 import type OpenAI from 'openai';
 
-import type { MCPConfig } from '../mcp/types.js';
+import type { MCPConfig } from '../mcp/types';
 
 /**
  * Context provided to function callbacks for assistant providers

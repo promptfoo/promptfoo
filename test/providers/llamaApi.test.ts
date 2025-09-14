@@ -4,9 +4,9 @@ import {
   LLAMA_API_MODELS,
   LLAMA_API_MULTIMODAL_MODELS,
 } from '../../src/providers/llamaApi';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
-import type { ProviderOptions } from '../../src/types/index.js';
+import type { ProviderOptions } from '../../src/types/index';
 
 jest.mock('../../src/providers/openai/chat', () => {
   return {

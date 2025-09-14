@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasSpecificDocumentation } from './providerDocumentationMap.js';
+import { hasSpecificDocumentation } from './providerDocumentationMap';
 
 describe('hasSpecificDocumentation', () => {
   it.each([

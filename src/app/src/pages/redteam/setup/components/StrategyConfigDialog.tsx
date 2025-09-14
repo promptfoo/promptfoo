@@ -16,7 +16,7 @@ import {
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
 
-import type { StrategyCardData } from './strategies/types.js';
+import type { StrategyCardData } from './strategies/types';
 
 const DEFAULT_LANGUAGES: Record<string, string> = {
   bn: 'Bengali',

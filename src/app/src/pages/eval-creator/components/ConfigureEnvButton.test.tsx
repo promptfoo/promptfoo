@@ -4,7 +4,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore } from '@app/stores/evalConfig';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import ConfigureEnvButton from './ConfigureEnvButton.js';
+import ConfigureEnvButton from './ConfigureEnvButton';
 
 const renderWithTheme = (component: React.ReactNode) => {
   const theme = createTheme({ palette: { mode: 'light' } });

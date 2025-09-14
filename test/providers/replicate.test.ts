@@ -1,4 +1,4 @@
-import { disableCache, enableCache, fetchWithCache } from '../../src/cache.js';
+import { disableCache, enableCache, fetchWithCache } from '../../src/cache';
 import {
   DefaultModerationProvider,
   ReplicateImageProvider,

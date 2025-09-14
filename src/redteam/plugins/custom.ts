@@ -1,12 +1,12 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
-import logger from '../../logger.js';
-import { maybeLoadFromExternalFile } from '../../util/file.js';
-import { getNunjucksEngine } from '../../util/templates.js';
-import { RedteamPluginBase } from './base.js';
+import logger from '../../logger';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { getNunjucksEngine } from '../../util/templates';
+import { RedteamPluginBase } from './base';
 
-import type { ApiProvider, Assertion } from '../../types/index.js';
+import type { ApiProvider, Assertion } from '../../types/index';
 
 const CustomPluginDefinitionSchema = z
   .object({

@@ -8,16 +8,16 @@ import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { fromError } from 'zod-validation-error';
-import { readAssertions } from '../../assertions/index.js';
-import { validateAssertions } from '../../assertions/validateAssertions.js';
-import cliState from '../../cliState.js';
-import { filterTests } from '../../commands/eval/filterTests.js';
-import { getEnvBool, isCI } from '../../envars.js';
-import { importModule } from '../../esm.js';
-import logger from '../../logger.js';
-import { readPrompts, readProviderPromptMap } from '../../prompts/index.js';
-import { loadApiProviders } from '../../providers/index.js';
-import telemetry from '../../telemetry.js';
+import { readAssertions } from '../../assertions/index';
+import { validateAssertions } from '../../assertions/validateAssertions';
+import cliState from '../../cliState';
+import { filterTests } from '../../commands/eval/filterTests';
+import { getEnvBool, isCI } from '../../envars';
+import { importModule } from '../../esm';
+import logger from '../../logger';
+import { readPrompts, readProviderPromptMap } from '../../prompts/index';
+import { loadApiProviders } from '../../providers/index';
+import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
   type Prompt,
@@ -30,12 +30,12 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types';
-import { isRunningUnderNpx, readFilters } from '../../util/index.js';
-import { maybeLoadFromExternalFile } from '../../util/file.js';
-import { isJavascriptFile } from '../../util/fileExtensions.js';
-import invariant from '../../util/invariant.js';
-import { PromptSchema } from '../../validators/prompts.js';
-import { readTest, readTests } from '../testCaseReader.js';
+import { isRunningUnderNpx, readFilters } from '../../util/index';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
+import invariant from '../../util/invariant';
+import { PromptSchema } from '../../validators/prompts';
+import { readTest, readTests } from '../testCaseReader';
 
 /**
  * Type guard to check if a test case has vars property

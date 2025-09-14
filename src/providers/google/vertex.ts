@@ -1,17 +1,17 @@
 import path from 'path';
 
-import { getCache, isCacheEnabled } from '../../cache.js';
-import cliState from '../../cliState.js';
-import { getEnvString } from '../../envars.js';
-import { importModule } from '../../esm.js';
-import logger from '../../logger.js';
-import { renderVarsInObject } from '../../util/index.js';
-import { maybeLoadFromExternalFile } from '../../util/file.js';
-import { isJavascriptFile } from '../../util/fileExtensions.js';
-import { isValidJson } from '../../util/json.js';
-import { MCPClient } from '../mcp/client.js';
-import { transformMCPToolsToGoogle } from '../mcp/transform.js';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared.js';
+import { getCache, isCacheEnabled } from '../../cache';
+import cliState from '../../cliState';
+import { getEnvString } from '../../envars';
+import { importModule } from '../../esm';
+import logger from '../../logger';
+import { renderVarsInObject } from '../../util/index';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
+import { isValidJson } from '../../util/json';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToGoogle } from '../mcp/transform';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -31,8 +31,8 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types';
-import type { EnvOverrides } from '../../types/env.js';
-import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types.js';
+import type { EnvOverrides } from '../../types/env';
+import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,

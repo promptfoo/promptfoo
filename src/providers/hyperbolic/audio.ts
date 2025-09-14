@@ -1,11 +1,11 @@
-import { fetchWithCache } from '../../cache.js';
-import { getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import { REQUEST_TIMEOUT_MS } from '../shared.js';
+import { fetchWithCache } from '../../cache';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../shared';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index.js';
-import type { EnvOverrides } from '../../types/env.js';
-import type { ApiProvider } from '../../types/providers.js';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider } from '../../types/providers';
 
 export type HyperbolicAudioOptions = {
   apiKey?: string;

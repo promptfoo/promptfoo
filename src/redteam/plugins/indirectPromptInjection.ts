@@ -1,8 +1,8 @@
 import dedent from 'dedent';
-import invariant from '../../util/invariant.js';
-import { RedteamGraderBase } from './base.js';
+import invariant from '../../util/invariant';
+import { RedteamGraderBase } from './base';
 
-import type { AssertionValue, ResultSuggestion } from '../../types/index.js';
+import type { AssertionValue, ResultSuggestion } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:indirect-prompt-injection';
 

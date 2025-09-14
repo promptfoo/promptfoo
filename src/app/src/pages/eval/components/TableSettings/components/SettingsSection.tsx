@@ -5,7 +5,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import { tokens } from '../tokens.js';
+import { tokens } from '../tokens';
 
 interface SettingsSectionProps {
   title: string;

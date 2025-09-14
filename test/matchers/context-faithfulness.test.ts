@@ -1,5 +1,5 @@
-import { matchesContextFaithfulness } from '../../src/matchers.js';
-import { DefaultGradingProvider } from '../../src/providers/openai/defaults.js';
+import { matchesContextFaithfulness } from '../../src/matchers';
+import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesContextFaithfulness', () => {
   beforeEach(() => {

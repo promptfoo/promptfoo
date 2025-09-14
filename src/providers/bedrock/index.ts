@@ -2,19 +2,19 @@ import type { Agent } from 'http';
 
 import Anthropic from '@anthropic-ai/sdk';
 import dedent from 'dedent';
-import { getCache, isCacheEnabled } from '../../cache.js';
-import { getEnvFloat, getEnvInt, getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import telemetry from '../../telemetry.js';
-import { maybeLoadToolsFromExternalFile } from '../../util/index.js';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils.js';
-import { outputFromMessage, parseMessages } from '../anthropic/util.js';
-import { parseChatPrompt } from '../shared.js';
-import { novaOutputFromMessage, novaParseMessages } from './util.js';
+import { getCache, isCacheEnabled } from '../../cache';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { outputFromMessage, parseMessages } from '../anthropic/util';
+import { parseChatPrompt } from '../shared';
+import { novaOutputFromMessage, novaParseMessages } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
-import type { EnvOverrides } from '../../types/env.js';
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -22,7 +22,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/providers';
-import type { TokenUsage } from '../../types/shared.js';
+import type { TokenUsage } from '../../types/shared';
 
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>

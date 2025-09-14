@@ -1,4 +1,4 @@
-import { FinancialDataLeakagePluginGrader } from '../../../../src/redteam/plugins/financial/financialDataLeakage.js';
+import { FinancialDataLeakagePluginGrader } from '../../../../src/redteam/plugins/financial/financialDataLeakage';
 
 describe('FinancialDataLeakagePluginGrader', () => {
   let grader: FinancialDataLeakagePluginGrader;

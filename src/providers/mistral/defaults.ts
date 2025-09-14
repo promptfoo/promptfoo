@@ -1,4 +1,4 @@
-import { MistralChatCompletionProvider, MistralEmbeddingProvider } from '../mistral.js';
+import { MistralChatCompletionProvider, MistralEmbeddingProvider } from '../mistral';
 
 export const DefaultEmbeddingProvider = new MistralEmbeddingProvider();
 export const DefaultGradingProvider = new MistralChatCompletionProvider('mistral-large-latest');

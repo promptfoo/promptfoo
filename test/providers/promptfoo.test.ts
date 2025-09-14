@@ -1,12 +1,12 @@
-import { fetchWithCache } from '../../src/cache.js';
-import { getEnvString } from '../../src/envars.js';
-import { getUserEmail } from '../../src/globalConfig/accounts.js';
+import { fetchWithCache } from '../../src/cache';
+import { getEnvString } from '../../src/envars';
+import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
   PromptfooChatCompletionProvider,
   PromptfooHarmfulCompletionProvider,
   PromptfooSimulatedUserProvider,
 } from '../../src/providers/promptfoo';
-import { fetchWithRetries } from '../../src/util/fetch/index.js';
+import { fetchWithRetries } from '../../src/util/fetch/index';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/envars');

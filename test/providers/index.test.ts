@@ -5,45 +5,45 @@ import Stream from 'stream';
 
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { clearCache, disableCache, enableCache } from '../../src/cache.js';
-import { importModule } from '../../src/esm.js';
-import logger from '../../src/logger.js';
-import { loadApiProvider, loadApiProviders } from '../../src/providers/index.js';
-import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion.js';
-import { AzureChatCompletionProvider } from '../../src/providers/azure/chat.js';
-import { AzureCompletionProvider } from '../../src/providers/azure/completion.js';
-import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index.js';
-import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex.js';
+import { clearCache, disableCache, enableCache } from '../../src/cache';
+import { importModule } from '../../src/esm';
+import logger from '../../src/logger';
+import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
+import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
+import { AzureCompletionProvider } from '../../src/providers/azure/completion';
+import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
-import { LlamaProvider } from '../../src/providers/llama.js';
+import { LlamaProvider } from '../../src/providers/llama';
 import {
   OllamaChatProvider,
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
-import { OpenAiAssistantProvider } from '../../src/providers/openai/assistant.js';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
-import { OpenAiCompletionProvider } from '../../src/providers/openai/completion.js';
-import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding.js';
-import { PythonProvider } from '../../src/providers/pythonCompletion.js';
+import { OpenAiAssistantProvider } from '../../src/providers/openai/assistant';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
 } from '../../src/providers/replicate';
-import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion.js';
-import { VoyageEmbeddingProvider } from '../../src/providers/voyage.js';
-import { WebhookProvider } from '../../src/providers/webhook.js';
-import RedteamGoatProvider from '../../src/redteam/providers/goat.js';
-import RedteamIterativeProvider from '../../src/redteam/providers/iterative.js';
-import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage.js';
-import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree.js';
+import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
+import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
+import { WebhookProvider } from '../../src/providers/webhook';
+import RedteamGoatProvider from '../../src/redteam/providers/goat';
+import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
+import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
+import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 
-import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index.js';
+import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
 jest.mock('fs');
 

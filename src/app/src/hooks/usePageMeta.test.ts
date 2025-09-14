@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { usePageMeta } from './usePageMeta.js';
+import { usePageMeta } from './usePageMeta';
 
 // Mock meta tag elements
 const createMockMetaElement = (content = '') => ({

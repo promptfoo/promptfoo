@@ -1,6 +1,6 @@
-import { addIterativeJailbreaks } from '../../../src/redteam/strategies/iterative.js';
+import { addIterativeJailbreaks } from '../../../src/redteam/strategies/iterative';
 
-import type { TestCase } from '../../../src/types/index.js';
+import type { TestCase } from '../../../src/types/index';
 
 describe('addIterativeJailbreaks', () => {
   const mockTestCases: TestCase[] = [

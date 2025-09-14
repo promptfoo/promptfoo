@@ -1,6 +1,6 @@
-import { handleContextFaithfulness } from '../../src/assertions/contextFaithfulness.js';
-import * as contextUtils from '../../src/assertions/contextUtils.js';
-import * as matchers from '../../src/matchers.js';
+import { handleContextFaithfulness } from '../../src/assertions/contextFaithfulness';
+import * as contextUtils from '../../src/assertions/contextUtils';
+import * as matchers from '../../src/matchers';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/assertions/contextUtils');

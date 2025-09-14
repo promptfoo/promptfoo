@@ -1,11 +1,11 @@
-import cliState from '../cliState.js';
-import { importModule } from '../esm.js';
-import logger from '../logger.js';
-import { runPython } from '../python/pythonUtils.js';
-import { safeJoin } from './fileNode.js';
-import { isJavascriptFile } from './fileExtensions.js';
+import cliState from '../cliState';
+import { importModule } from '../esm';
+import logger from '../logger';
+import { runPython } from '../python/pythonUtils';
+import { safeJoin } from './fileNode';
+import { isJavascriptFile } from './fileExtensions';
 
-import type { Vars } from '../types/index.js';
+import type { Vars } from '../types/index';
 
 export type TransformContext = object;
 

@@ -12,12 +12,12 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { ErrorBoundary } from 'react-error-boundary';
-import ConfigureEnvButton from './ConfigureEnvButton.js';
-import PromptsSection from './PromptsSection.js';
-import ProviderSelector from './ProviderSelector.js';
-import RunTestSuiteButton from './RunTestSuiteButton.js';
-import TestCasesSection from './TestCasesSection.js';
-import YamlEditor from './YamlEditor.js';
+import ConfigureEnvButton from './ConfigureEnvButton';
+import PromptsSection from './PromptsSection';
+import ProviderSelector from './ProviderSelector';
+import RunTestSuiteButton from './RunTestSuiteButton';
+import TestCasesSection from './TestCasesSection';
+import YamlEditor from './YamlEditor';
 import type { ProviderOptions } from '@promptfoo/types';
 import './EvaluateTestSuiteCreator.css';
 

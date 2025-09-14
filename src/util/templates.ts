@@ -1,8 +1,8 @@
 import nunjucks from 'nunjucks';
-import cliState from '../cliState.js';
-import { getEnvBool } from '../envars.js';
+import cliState from '../cliState';
+import { getEnvBool } from '../envars';
 
-import type { NunjucksFilterMap } from '../types/index.js';
+import type { NunjucksFilterMap } from '../types/index';
 
 /**
  * Get a Nunjucks engine instance with optional filters and configuration.

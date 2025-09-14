@@ -5,10 +5,10 @@ import { parse as csvParse, type Options as CsvOptions } from 'csv-parse/sync';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
-import cliState from '../cliState.js';
-import logger from '../logger.js';
-import { parseFileUrl } from './functions/loadFunction.js';
-import { isJavascriptFile } from './fileExtensions.js';
+import cliState from '../cliState';
+import logger from '../logger';
+import { parseFileUrl } from './functions/loadFunction';
+import { isJavascriptFile } from './fileExtensions';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;

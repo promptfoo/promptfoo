@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { BrowserProvider, createTransformResponse } from '../../src/providers/browser.js';
+import { BrowserProvider, createTransformResponse } from '../../src/providers/browser';
 import type { Page } from 'playwright';
 
 let mockPage: jest.Mocked<Page>;

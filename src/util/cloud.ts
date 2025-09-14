@@ -1,15 +1,15 @@
-import { CLOUD_PROVIDER_PREFIX } from '../constants.js';
-import { cloudConfig } from '../globalConfig/cloud.js';
-import logger from '../logger.js';
-import { ProviderOptionsSchema } from '../validators/providers.js';
-import { fetchWithProxy } from './fetch/index.js';
-import invariant from './invariant.js';
-import { checkServerFeatureSupport } from './server.js';
+import { CLOUD_PROVIDER_PREFIX } from '../constants';
+import { cloudConfig } from '../globalConfig/cloud';
+import logger from '../logger';
+import { ProviderOptionsSchema } from '../validators/providers';
+import { fetchWithProxy } from './fetch/index';
+import invariant from './invariant';
+import { checkServerFeatureSupport } from './server';
 
-import type { Plugin, Severity } from '../redteam/constants.js';
-import type { PoliciesById } from '../redteam/types.js';
-import type { UnifiedConfig } from '../types/index.js';
-import type { ProviderOptions } from '../types/providers.js';
+import type { Plugin, Severity } from '../redteam/constants';
+import type { PoliciesById } from '../redteam/types';
+import type { UnifiedConfig } from '../types/index';
+import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
 const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';

@@ -1,11 +1,11 @@
 import { Command } from 'commander';
-import { getDefaultPort } from '../../../src/constants.js';
-import { redteamSetupCommand } from '../../../src/redteam/commands/setup.js';
-import { startServer } from '../../../src/server/server.js';
-import telemetry from '../../../src/telemetry.js';
-import { setupEnv } from '../../../src/util/index.js';
-import { setConfigDirectoryPath } from '../../../src/util/config/manage.js';
-import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/util/server.js';
+import { getDefaultPort } from '../../../src/constants';
+import { redteamSetupCommand } from '../../../src/redteam/commands/setup';
+import { startServer } from '../../../src/server/server';
+import telemetry from '../../../src/telemetry';
+import { setupEnv } from '../../../src/util/index';
+import { setConfigDirectoryPath } from '../../../src/util/config/manage';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/util/server';
 
 jest.mock('../../../src/server/server');
 jest.mock('../../../src/util/server');

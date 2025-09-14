@@ -1,12 +1,12 @@
-import * as cache from '../src/cache.js';
-import { evaluate as doEvaluate } from '../src/evaluator.js';
-import * as index from '../src/index.js';
-import { evaluate } from '../src/index.js';
-import Eval from '../src/models/eval.js';
-import { readProviderPromptMap } from '../src/prompts/index.js';
-import * as providers from '../src/providers/index.js';
-import { writeMultipleOutputs, writeOutput } from '../src/util/index.js';
-import * as fileUtils from '../src/util/file.js';
+import * as cache from '../src/cache';
+import { evaluate as doEvaluate } from '../src/evaluator';
+import * as index from '../src/index';
+import { evaluate } from '../src/index';
+import Eval from '../src/models/eval';
+import { readProviderPromptMap } from '../src/prompts/index';
+import * as providers from '../src/providers/index';
+import { writeMultipleOutputs, writeOutput } from '../src/util/index';
+import * as fileUtils from '../src/util/file';
 
 jest.mock('../src/cache');
 jest.mock('../src/database', () => ({

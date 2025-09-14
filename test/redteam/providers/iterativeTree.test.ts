@@ -16,11 +16,11 @@ import {
   JUDGE_SYSTEM_PROMPT,
   ON_TOPIC_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
-import { getTargetResponse } from '../../../src/redteam/providers/shared.js';
-import { getNunjucksEngine } from '../../../src/util/templates.js';
+import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import { getNunjucksEngine } from '../../../src/util/templates';
 
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat.js';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree.js';
+import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   AtomicTestCase,

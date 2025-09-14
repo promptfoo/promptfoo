@@ -1,6 +1,6 @@
-import { fetchWithCache } from '../../../src/cache.js';
-import { AzureAssistantProvider } from '../../../src/providers/azure/assistant.js';
-import { sleep } from '../../../src/util/time.js';
+import { fetchWithCache } from '../../../src/cache';
+import { AzureAssistantProvider } from '../../../src/providers/azure/assistant';
+import { sleep } from '../../../src/util/time';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/util/time');

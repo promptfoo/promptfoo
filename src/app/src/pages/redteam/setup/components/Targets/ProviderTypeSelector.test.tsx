@@ -3,10 +3,10 @@ import React from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import ProviderTypeSelector from './ProviderTypeSelector.js';
+import ProviderTypeSelector from './ProviderTypeSelector';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 
-import type { ProviderOptions } from '../../types.js';
+import type { ProviderOptions } from '../../types';
 
 const renderWithTheme = (ui: React.ReactElement) => {
   const theme = createTheme({ palette: { mode: 'light' } });

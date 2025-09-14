@@ -5,7 +5,7 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ResultsView from './ResultsView.js';
+import ResultsView from './ResultsView';
 
 // Mock data
 const mockRecentEvals = [

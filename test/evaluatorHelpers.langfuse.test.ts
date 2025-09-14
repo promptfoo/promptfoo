@@ -1,7 +1,7 @@
-import { renderPrompt } from '../src/evaluatorHelpers.js';
-import * as langfuseIntegration from '../src/integrations/langfuse.js';
+import { renderPrompt } from '../src/evaluatorHelpers';
+import * as langfuseIntegration from '../src/integrations/langfuse';
 
-import type { Prompt } from '../src/types/index.js';
+import type { Prompt } from '../src/types/index';
 
 jest.mock('../src/integrations/langfuse');
 

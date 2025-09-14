@@ -1,16 +1,16 @@
-import { getCache, isCacheEnabled } from '../../cache.js';
-import { getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import { REQUEST_TIMEOUT_MS } from '../shared.js';
-import { AzureGenericProvider } from './generic.js';
+import { getCache, isCacheEnabled } from '../../cache';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../shared';
+import { AzureGenericProvider } from './generic';
 
-import type { EnvVarKey } from '../../envars.js';
+import type { EnvVarKey } from '../../envars';
 import type {
   ApiModerationProvider,
   ModerationFlag,
   ProviderModerationResponse,
 } from '../../types';
-import type { EnvOverrides } from '../../types/env.js';
+import type { EnvOverrides } from '../../types/env';
 
 const AZURE_MODERATION_MODELS = [
   { id: 'text-content-safety', maxTokens: 10000, capabilities: ['text'] },

@@ -1,4 +1,4 @@
-import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm.js';
+import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
 
 describe('LiteLLM Provider', () => {
   describe('createLiteLLMProvider', () => {

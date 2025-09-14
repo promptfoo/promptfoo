@@ -1,6 +1,6 @@
-import { fetchWithCache } from '../../src/cache.js';
-import { LlamaProvider } from '../../src/providers/llama.js';
-import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared.js';
+import { fetchWithCache } from '../../src/cache';
+import { LlamaProvider } from '../../src/providers/llama';
+import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),

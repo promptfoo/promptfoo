@@ -1,6 +1,6 @@
-import { getCache, isCacheEnabled } from '../../src/cache.js';
-import { getEnvString } from '../../src/envars.js';
-import { FalImageGenerationProvider } from '../../src/providers/fal.js';
+import { getCache, isCacheEnabled } from '../../src/cache';
+import { getEnvString } from '../../src/envars';
+import { FalImageGenerationProvider } from '../../src/providers/fal';
 
 // Mock the fal client
 const mockSubscribe = jest.fn();

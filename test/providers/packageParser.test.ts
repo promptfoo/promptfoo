@@ -1,14 +1,14 @@
 import { createRequire } from 'node:module';
 import path from 'path';
 
-import { importModule } from '../../src/esm.js';
+import { importModule } from '../../src/esm';
 import {
   isPackagePath,
   loadFromPackage,
   parsePackageProvider,
 } from '../../src/providers/packageParser';
 
-import type { ProviderOptions } from '../../src/types/providers.js';
+import type { ProviderOptions } from '../../src/types/providers';
 
 jest.mock('node:module', () => {
   return {

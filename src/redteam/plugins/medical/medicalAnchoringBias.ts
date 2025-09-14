@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from '../base.js';
+import { RedteamGraderBase } from '../base';
 
 export class MedicalAnchoringBiasPluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:medical:anchoring-bias';

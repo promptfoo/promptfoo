@@ -3,19 +3,19 @@ import path from 'path';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import cliState from '../../src/cliState.js';
+import cliState from '../../src/cliState';
 import {
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
-} from '../../src/util/file.js';
-import { safeJoin, safeResolve } from '../../src/util/fileNode.js';
+} from '../../src/util/file';
+import { safeJoin, safeResolve } from '../../src/util/fileNode';
 import {
   isAudioFile,
   isImageFile,
   isJavascriptFile,
   isVideoFile,
-} from '../../src/util/fileExtensions.js';
+} from '../../src/util/fileExtensions';
 
 jest.mock('fs', () => ({
   ...jest.requireActual('fs'),

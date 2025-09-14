@@ -1,10 +1,10 @@
 import request from 'supertest';
-import { runDbMigrations } from '../../src/migrate.js';
-import Eval from '../../src/models/eval.js';
-import EvalResult from '../../src/models/evalResult.js';
-import { createApp } from '../../src/server/server.js';
-import invariant from '../../src/util/invariant.js';
-import EvalFactory from '../factories/evalFactory.js';
+import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
+import { createApp } from '../../src/server/server';
+import invariant from '../../src/util/invariant';
+import EvalFactory from '../factories/evalFactory';
 
 describe('eval routes', () => {
   let app: ReturnType<typeof createApp>;

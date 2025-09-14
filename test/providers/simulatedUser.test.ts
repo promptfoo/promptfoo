@@ -1,7 +1,7 @@
-import { SimulatedUser } from '../../src/providers/simulatedUser.js';
-import * as timeUtils from '../../src/util/time.js';
+import { SimulatedUser } from '../../src/providers/simulatedUser';
+import * as timeUtils from '../../src/util/time';
 
-import type { ApiProvider } from '../../src/types/index.js';
+import type { ApiProvider } from '../../src/types/index';
 
 jest.mock('../../src/util/time', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),

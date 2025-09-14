@@ -1,7 +1,7 @@
 import packageJson from '../package.json' with { type: 'json' };
-import { getEnvInt, getEnvString } from './envars.js';
+import { getEnvInt, getEnvString } from './envars';
 
-export * from './providers/constants.js';
+export * from './providers/constants';
 
 export const VERSION = packageJson.version;
 

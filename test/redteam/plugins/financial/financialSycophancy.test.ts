@@ -1,4 +1,4 @@
-import { FinancialSycophancyPluginGrader } from '../../../../src/redteam/plugins/financial/financialSycophancy.js';
+import { FinancialSycophancyPluginGrader } from '../../../../src/redteam/plugins/financial/financialSycophancy';
 
 describe('FinancialSycophancyPluginGrader', () => {
   let grader: FinancialSycophancyPluginGrader;

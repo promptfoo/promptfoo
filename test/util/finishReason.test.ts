@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { normalizeFinishReason } from '../../src/util/finishReason.js';
+import { normalizeFinishReason } from '../../src/util/finishReason';
 
 describe('normalizeFinishReason', () => {
   describe('OpenAI mappings', () => {

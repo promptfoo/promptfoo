@@ -1,11 +1,11 @@
 import * as path from 'path';
 
-import { runAssertion } from '../../src/assertions/index.js';
-import { importModule } from '../../src/esm.js';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
-import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser.js';
+import { runAssertion } from '../../src/assertions/index';
+import { importModule } from '../../src/esm';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
 
-import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index.js';
+import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),

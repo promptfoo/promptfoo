@@ -1,14 +1,14 @@
 import * as fs from 'fs';
 
 import { PythonShell } from 'python-shell';
-import { getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import { runPython } from '../../python/pythonUtils.js';
-import invariant from '../../util/invariant.js';
-import { safeJsonStringify } from '../../util/json.js';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
+import { runPython } from '../../python/pythonUtils';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
 import type { Options as PythonShellOptions } from 'python-shell';
 
-import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types/index.js';
+import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types/index';
 
 /**
  * Python prompt function. Runs a specific function from the python file.

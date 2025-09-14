@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import logger from '../../logger.js';
-import { getTraceStore } from '../../tracing/store.js';
+import logger from '../../logger';
+import { getTraceStore } from '../../tracing/store';
 import type { Request, Response } from 'express';
 
 export const tracesRouter = Router();

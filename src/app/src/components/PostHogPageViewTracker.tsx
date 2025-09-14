@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 import { useLocation } from 'react-router-dom';
-import { usePostHog } from './PostHogContext.js';
+import { usePostHog } from './PostHogContext';
 
 export const PostHogPageViewTracker = () => {
   const location = useLocation();

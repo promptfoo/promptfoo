@@ -1,6 +1,6 @@
 import express from 'express';
-import logger from '../logger.js';
-import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store.js';
+import logger from '../logger';
+import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
 interface OTLPAttribute {
   key: string;

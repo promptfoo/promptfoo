@@ -1,6 +1,6 @@
-import { TokenUsageTracker } from '../../src/util/tokenUsage.js';
+import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
-import type { TokenUsage } from '../../src/types/shared.js';
+import type { TokenUsage } from '../../src/types/shared';
 
 describe('TokenUsageTracker', () => {
   let tracker: TokenUsageTracker;

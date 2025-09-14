@@ -16,7 +16,7 @@ import {
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
-import { useTableStore } from './store.js';
+import { useTableStore } from './store';
 
 type MetricScore = {
   score: number;

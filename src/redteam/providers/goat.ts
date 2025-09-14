@@ -1,19 +1,19 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { VERSION } from '../../constants.js';
-import { renderPrompt } from '../../evaluatorHelpers.js';
-import { getUserEmail } from '../../globalConfig/accounts.js';
-import logger from '../../logger.js';
-import invariant from '../../util/invariant.js';
-import { safeJsonStringify } from '../../util/json.js';
-import { getNunjucksEngine } from '../../util/templates.js';
-import { sleep } from '../../util/time.js';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils.js';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration.js';
-import { getGoalRubric } from './prompts.js';
-import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared.js';
+import { VERSION } from '../../constants';
+import { renderPrompt } from '../../evaluatorHelpers';
+import { getUserEmail } from '../../globalConfig/accounts';
+import logger from '../../logger';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { getGoalRubric } from './prompts';
+import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
 
-import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index.js';
+import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -22,8 +22,8 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/providers';
-import type { BaseRedteamMetadata } from '../types.js';
-import type { Message } from './shared.js';
+import type { BaseRedteamMetadata } from '../types';
+import type { Message } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.

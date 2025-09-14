@@ -5,8 +5,8 @@ import {
 } from '../../../src/providers/mcp/transform';
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { MCPTool } from '../../../src/providers/mcp/types.js';
-import type { OpenAiTool } from '../../../src/providers/openai/util.js';
+import type { MCPTool } from '../../../src/providers/mcp/types';
+import type { OpenAiTool } from '../../../src/providers/openai/util';
 
 describe('transformMCPToolsToOpenAi', () => {
   it('should transform MCP tools to OpenAI format', () => {

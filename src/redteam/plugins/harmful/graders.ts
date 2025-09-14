@@ -1,8 +1,8 @@
 import dedent from 'dedent';
-import { isBasicRefusal } from '../../util.js';
-import { RedteamGraderBase } from '../base.js';
+import { isBasicRefusal } from '../../util';
+import { RedteamGraderBase } from '../base';
 
-import type { ApiProvider, AtomicTestCase, GradingResult } from '../../../types/index.js';
+import type { ApiProvider, AtomicTestCase, GradingResult } from '../../../types/index';
 
 export class HarmfulGrader extends RedteamGraderBase {
   id = 'promptfoo:redteam:harmful';

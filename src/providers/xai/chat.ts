@@ -1,10 +1,10 @@
-import logger from '../../logger.js';
-import { renderVarsInObject } from '../../util/index.js';
-import invariant from '../../util/invariant.js';
-import { OpenAiChatCompletionProvider } from '../openai/chat.js';
+import logger from '../../logger';
+import { renderVarsInObject } from '../../util/index';
+import invariant from '../../util/invariant';
+import { OpenAiChatCompletionProvider } from '../openai/chat';
 
-import type { ApiProvider, ProviderOptions } from '../../types/index.js';
-import type { OpenAiCompletionOptions } from '../openai/types.js';
+import type { ApiProvider, ProviderOptions } from '../../types/index';
+import type { OpenAiCompletionOptions } from '../openai/types';
 
 type XAIConfig = {
   region?: string;

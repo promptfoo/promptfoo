@@ -1,9 +1,9 @@
-import { matchesSimilarity } from '../../src/matchers.js';
-import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults.js';
-import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding.js';
+import { matchesSimilarity } from '../../src/matchers';
+import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
-import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
-import type { GradingConfig } from '../../src/types/index.js';
+import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesSimilarity', () => {
   beforeEach(() => {

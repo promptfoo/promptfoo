@@ -1,7 +1,7 @@
-import { fetchWithCache } from '../cache.js';
-import { REQUEST_TIMEOUT_MS } from './shared.js';
+import { fetchWithCache } from '../cache';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, ProviderResponse } from '../types/index.js';
+import type { ApiProvider, ProviderResponse } from '../types/index';
 
 export class WebhookProvider implements ApiProvider {
   webhookUrl: string;

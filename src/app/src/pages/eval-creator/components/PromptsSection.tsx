@@ -20,7 +20,7 @@ import TableContainer from '@mui/material/TableContainer';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import PromptDialog from './PromptDialog.js';
+import PromptDialog from './PromptDialog';
 import './PromptsSection.css';
 
 const PromptsSection = () => {

@@ -1,9 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { synthesizeFromTestSuite } from '../../../testCase/synthesis.js';
-import type { TestSuite } from '../../../types/index.js';
-import { createToolResponse } from '../lib/utils.js';
+import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
+import type { TestSuite } from '../../../types/index';
+import { createToolResponse } from '../lib/utils';
 
 /**
  * Tool to generate test cases with assertions for existing prompts

@@ -1,5 +1,5 @@
-import type { Plugin } from './plugins.js';
-import type { Strategy } from './strategies.js';
+import type { Plugin } from './plugins';
+import type { Strategy } from './strategies';
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',

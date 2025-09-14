@@ -1,18 +1,18 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { z } from 'zod';
-import cliState from '../../cliState.js';
-import { CLOUD_PROVIDER_PREFIX } from '../../constants.js';
-import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator.js';
-import logger from '../../logger.js';
-import telemetry from '../../telemetry.js';
-import { setupEnv } from '../../util/index.js';
-import { getConfigFromCloud } from '../../util/cloud.js';
-import { doRedteamRun } from '../shared.js';
-import { poisonCommand } from './poison.js';
+import cliState from '../../cliState';
+import { CLOUD_PROVIDER_PREFIX } from '../../constants';
+import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { setupEnv } from '../../util/index';
+import { getConfigFromCloud } from '../../util/cloud';
+import { doRedteamRun } from '../shared';
+import { poisonCommand } from './poison';
 import type { Command } from 'commander';
 
-import type { RedteamRunOptions } from '../types.js';
+import type { RedteamRunOptions } from '../types';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 

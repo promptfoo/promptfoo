@@ -1,12 +1,12 @@
-import { getEnvBool, getEnvString } from '../../../envars.js';
+import { getEnvBool, getEnvString } from '../../../envars';
 import {
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
 } from '../../constants';
-import { getShortPluginId } from '../../util.js';
+import { getShortPluginId } from '../../util';
 
-import type { Assertion, AssertionType, TestCase } from '../../../types/index.js';
+import type { Assertion, AssertionType, TestCase } from '../../../types/index';
 
 export function getHarmfulAssertions(harmCategory: keyof typeof HARM_PLUGINS): Assertion[] {
   const assertionType: AssertionType = `promptfoo:redteam:${harmCategory}`;

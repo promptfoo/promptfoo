@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import DatasetsPage from './page.js';
+import DatasetsPage from './page';
 
 const callApiMock = vi.fn();
 vi.mock('@app/utils/api', () => ({

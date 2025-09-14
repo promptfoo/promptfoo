@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { callApi } from '@app/utils/api';
-import TraceView from './TraceView.js';
+import TraceView from './TraceView';
 
 vi.mock('@app/utils/api');
 

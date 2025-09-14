@@ -1,11 +1,11 @@
 import path from 'path';
 
-import cliState from '../../../src/cliState.js';
-import { importModule } from '../../../src/esm.js';
-import logger from '../../../src/logger.js';
-import { loadStrategy, validateStrategies } from '../../../src/redteam/strategies/index.js';
+import cliState from '../../../src/cliState';
+import { importModule } from '../../../src/esm';
+import logger from '../../../src/logger';
+import { loadStrategy, validateStrategies } from '../../../src/redteam/strategies/index';
 
-import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types/index.js';
+import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types/index';
 
 jest.mock('../../../src/cliState');
 jest.mock('../../../src/esm', () => ({

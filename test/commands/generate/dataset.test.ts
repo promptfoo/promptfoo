@@ -1,13 +1,13 @@
 import fs from 'fs';
 
 import yaml from 'js-yaml';
-import { disableCache } from '../../../src/cache.js';
-import { doGenerateDataset } from '../../../src/commands/generate/dataset.js';
-import telemetry from '../../../src/telemetry.js';
-import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis.js';
-import { resolveConfigs } from '../../../src/util/config/load.js';
+import { disableCache } from '../../../src/cache';
+import { doGenerateDataset } from '../../../src/commands/generate/dataset';
+import telemetry from '../../../src/telemetry';
+import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
+import { resolveConfigs } from '../../../src/util/config/load';
 
-import type { TestSuite, VarMapping } from '../../../src/types/index.js';
+import type { TestSuite, VarMapping } from '../../../src/types/index';
 
 jest.mock('fs');
 jest.mock('js-yaml');

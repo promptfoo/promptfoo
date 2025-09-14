@@ -1,4 +1,4 @@
-import { HeliconeGatewayProvider } from '../../src/providers/helicone.js';
+import { HeliconeGatewayProvider } from '../../src/providers/helicone';
 
 describe('HeliconeGatewayProvider', () => {
   describe('constructor and configuration', () => {

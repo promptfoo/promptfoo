@@ -4,17 +4,17 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import yaml from 'js-yaml';
-import { doEval } from '../commands/eval.js';
-import logger, { setLogCallback, setLogLevel } from '../logger.js';
-import { createShareableUrl } from '../share.js';
-import { isRunningUnderNpx } from '../util/index.js';
-import { checkRemoteHealth } from '../util/apiHealth.js';
-import { loadDefaultConfig } from '../util/config/default.js';
-import { doGenerateRedteam } from './commands/generate.js';
-import { getRemoteHealthUrl } from './remoteGeneration.js';
+import { doEval } from '../commands/eval';
+import logger, { setLogCallback, setLogLevel } from '../logger';
+import { createShareableUrl } from '../share';
+import { isRunningUnderNpx } from '../util/index';
+import { checkRemoteHealth } from '../util/apiHealth';
+import { loadDefaultConfig } from '../util/config/default';
+import { doGenerateRedteam } from './commands/generate';
+import { getRemoteHealthUrl } from './remoteGeneration';
 
-import type Eval from '../models/eval.js';
-import type { RedteamRunOptions } from './types.js';
+import type Eval from '../models/eval';
+import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
   if (options.verbose) {

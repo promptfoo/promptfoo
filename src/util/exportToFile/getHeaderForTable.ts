@@ -1,4 +1,4 @@
-import type Eval from '../../models/eval.js';
+import type Eval from '../../models/eval';
 
 export function getHeaderForTable(eval_: Eval) {
   const varsForHeader = new Set<string>();

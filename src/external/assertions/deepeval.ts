@@ -1,14 +1,14 @@
 // These assertions are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import type { AssertionParams, GradingResult } from '../../types/index.js';
-import invariant from '../../util/invariant.js';
-import { matchesConversationRelevance } from '../matchers/deepeval.js';
-import type { Message } from '../matchers/deepeval.js';
-import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancyTemplate.js';
-import { getAndCheckProvider } from '../../matchers.js';
-import { getDefaultProviders } from '../../providers/defaults.js';
-import { extractJsonObjects } from '../../util/json.js';
-import { createEmptyTokenUsage, accumulateTokenUsage } from '../../util/tokenUsageUtils.js';
+import type { AssertionParams, GradingResult } from '../../types/index';
+import invariant from '../../util/invariant';
+import { matchesConversationRelevance } from '../matchers/deepeval';
+import type { Message } from '../matchers/deepeval';
+import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancyTemplate';
+import { getAndCheckProvider } from '../../matchers';
+import { getDefaultProviders } from '../../providers/defaults';
+import { extractJsonObjects } from '../../util/json';
+import { createEmptyTokenUsage, accumulateTokenUsage } from '../../util/tokenUsageUtils';
 
 const DEFAULT_WINDOW_SIZE = 5;
 

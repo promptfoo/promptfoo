@@ -7,24 +7,24 @@ import { OpenRouter as GatewayOpenRouter } from '@adaline/open-router';
 import { OpenAI as GatewayOpenAI } from '@adaline/openai';
 import { TogetherAI as GatewayTogetherAi } from '@adaline/together-ai';
 import { Vertex as GatewayVertex } from '@adaline/vertex';
-import { getCache, isCacheEnabled } from '../cache.js';
-import { getEnvFloat, getEnvInt, getEnvString } from '../envars.js';
-import logger from '../logger.js';
-import { maybeLoadToolsFromExternalFile } from '../util/index.js';
-import { safeJsonStringify } from '../util/json.js';
-import { AnthropicMessagesProvider } from './anthropic/messages.js';
-import { calculateAnthropicCost } from './anthropic/util.js';
-import { AzureChatCompletionProvider } from './azure/chat.js';
-import { AzureEmbeddingProvider } from './azure/embedding.js';
-import { calculateAzureCost } from './azure/util.js';
-import { AIStudioChatProvider } from './google/ai.studio.js';
-import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex.js';
-import { GroqProvider } from './groq.js';
-import { OpenAiChatCompletionProvider } from './openai/chat.js';
-import { OpenAiEmbeddingProvider } from './openai/embedding.js';
-import { calculateOpenAICost } from './openai/util.js';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared.js';
-import { VoyageEmbeddingProvider } from './voyage.js';
+import { getCache, isCacheEnabled } from '../cache';
+import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
+import logger from '../logger';
+import { maybeLoadToolsFromExternalFile } from '../util/index';
+import { safeJsonStringify } from '../util/json';
+import { AnthropicMessagesProvider } from './anthropic/messages';
+import { calculateAnthropicCost } from './anthropic/util';
+import { AzureChatCompletionProvider } from './azure/chat';
+import { AzureEmbeddingProvider } from './azure/embedding';
+import { calculateAzureCost } from './azure/util';
+import { AIStudioChatProvider } from './google/ai.studio';
+import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
+import { GroqProvider } from './groq';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { calculateOpenAICost } from './openai/util';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { VoyageEmbeddingProvider } from './voyage';
 import type {
   CompleteChatHandlerResponseType,
   Cache as GatewayCache,
@@ -50,8 +50,8 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types';
-import type { EnvOverrides } from '../types/env.js';
-import type { OpenAiCompletionOptions } from './openai/types.js';
+import type { EnvOverrides } from '../types/env';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 // Allows Adaline Gateway to R/W Promptfoo's cache
 export class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {

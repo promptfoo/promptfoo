@@ -1,5 +1,5 @@
-import { matchesGEval } from '../../src/matchers.js';
-import { DefaultGradingProvider } from '../../src/providers/openai/defaults.js';
+import { matchesGEval } from '../../src/matchers';
+import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesGEval', () => {
   let originalCallApi: typeof DefaultGradingProvider.callApi;

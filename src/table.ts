@@ -1,8 +1,8 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
-import { TERMINAL_MAX_WIDTH } from './constants.js';
-import { type EvaluateTable, ResultFailureReason } from './types/index.js';
-import { ellipsize } from './util/text.js';
+import { TERMINAL_MAX_WIDTH } from './constants';
+import { type EvaluateTable, ResultFailureReason } from './types/index';
+import { ellipsize } from './util/text';
 
 export function generateTable(
   evaluateTable: EvaluateTable,

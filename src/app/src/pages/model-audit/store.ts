@@ -2,7 +2,7 @@ import { callApi } from '@app/utils/api';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types.js';
+import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types';
 
 interface RecentScan {
   id: string;

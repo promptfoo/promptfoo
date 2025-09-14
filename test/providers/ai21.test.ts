@@ -1,6 +1,6 @@
-import { fetchWithCache } from '../../src/cache.js';
-import logger from '../../src/logger.js';
-import { AI21ChatCompletionProvider } from '../../src/providers/ai21.js';
+import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
+import { AI21ChatCompletionProvider } from '../../src/providers/ai21';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/logger');

@@ -1,8 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getEnvString } from '../../envars.js';
+import { getEnvString } from '../../envars';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index.js';
-import type { EnvOverrides } from '../../types/env.js';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
 
 /**
  * Base options shared by all Anthropic provider implementations

@@ -14,9 +14,9 @@ import Stack from '@mui/material/Stack';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import SettingsPanel from './components/SettingsPanel.js';
-import { useSettingsState } from './hooks/useSettingsState.js';
-import { tokens } from './tokens.js';
+import SettingsPanel from './components/SettingsPanel';
+import { useSettingsState } from './hooks/useSettingsState';
+import { tokens } from './tokens';
 
 interface SettingsModalProps {
   open: boolean;

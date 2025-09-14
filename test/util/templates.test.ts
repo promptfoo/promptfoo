@@ -1,10 +1,10 @@
 import nunjucks from 'nunjucks';
-import cliState from '../../src/cliState.js';
+import cliState from '../../src/cliState';
 import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
-} from '../../src/util/templates.js';
+} from '../../src/util/templates';
 
 describe('extractVariablesFromTemplate', () => {
   it('should extract simple variables', () => {

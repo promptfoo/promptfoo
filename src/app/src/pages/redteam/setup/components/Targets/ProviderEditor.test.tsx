@@ -3,9 +3,9 @@ import React from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ProviderEditor, { defaultHttpTarget } from './ProviderEditor.js';
+import ProviderEditor, { defaultHttpTarget } from './ProviderEditor';
 
-import type { ProviderOptions } from '../../types.js';
+import type { ProviderOptions } from '../../types';
 
 vi.mock('./ProviderConfigEditor', () => {
   return {

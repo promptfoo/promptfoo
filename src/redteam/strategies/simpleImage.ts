@@ -1,11 +1,11 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { Presets, SingleBar } from 'cli-progress';
-import { getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import invariant from '../../util/invariant.js';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
+import invariant from '../../util/invariant';
 
-import type { TestCase } from '../../types/index.js';
+import type { TestCase } from '../../types/index';
 
 // Helper function to escape XML special characters for SVG
 function escapeXml(unsafe: string): string {

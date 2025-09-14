@@ -1,6 +1,6 @@
-import { addLeetspeak } from '../../../src/redteam/strategies/leetspeak.js';
+import { addLeetspeak } from '../../../src/redteam/strategies/leetspeak';
 
-import type { TestCase } from '../../../src/types/index.js';
+import type { TestCase } from '../../../src/types/index';
 
 describe('addLeetspeak', () => {
   const mockTestCases: TestCase[] = [

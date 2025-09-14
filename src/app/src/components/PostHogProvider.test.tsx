@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import posthog from 'posthog-js';
 import { useUserStore } from '@app/stores/userStore';
-import { PostHogContext } from './PostHogContext.js';
+import { PostHogContext } from './PostHogContext';
 
 vi.mock('posthog-js', () => {
   const mockPosthogInstance = {

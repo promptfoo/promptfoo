@@ -7,7 +7,7 @@ import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
-import { convertEvalDataToCsv } from '../utils/csvExport.js';
+import { convertEvalDataToCsv } from '../utils/csvExport';
 import type { ResultsFile } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {

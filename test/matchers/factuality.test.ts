@@ -1,7 +1,7 @@
-import { matchesFactuality } from '../../src/matchers.js';
-import { DefaultGradingProvider } from '../../src/providers/openai/defaults.js';
+import { matchesFactuality } from '../../src/matchers';
+import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
-import type { GradingConfig } from '../../src/types/index.js';
+import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesFactuality', () => {
   beforeEach(() => {

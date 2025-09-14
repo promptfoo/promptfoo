@@ -1,10 +1,10 @@
-import { VERSION } from '../../../constants.js';
-import { getUserEmail } from '../../../globalConfig/accounts.js';
-import logger from '../../../logger.js';
-import invariant from '../../../util/invariant.js';
-import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants.js';
-import { getRemoteGenerationUrl } from '../../remoteGeneration.js';
-import { messagesToRedteamHistory } from '../shared.js';
+import { VERSION } from '../../../constants';
+import { getUserEmail } from '../../../globalConfig/accounts';
+import logger from '../../../logger';
+import invariant from '../../../util/invariant';
+import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
+import { getRemoteGenerationUrl } from '../../remoteGeneration';
+import { messagesToRedteamHistory } from '../shared';
 
 import type {
   ApiProvider,

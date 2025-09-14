@@ -1,4 +1,4 @@
-import { MedicalHallucinationPluginGrader } from '../../../../src/redteam/plugins/medical/medicalHallucination.js';
+import { MedicalHallucinationPluginGrader } from '../../../../src/redteam/plugins/medical/medicalHallucination';
 
 describe('MedicalHallucinationPluginGrader', () => {
   let grader: MedicalHallucinationPluginGrader;

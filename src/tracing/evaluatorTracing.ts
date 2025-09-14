@@ -1,10 +1,10 @@
 import { randomBytes } from 'crypto';
 
-import { getEnvBool } from '../envars.js';
-import logger from '../logger.js';
-import telemetry from '../telemetry.js';
+import { getEnvBool } from '../envars';
+import logger from '../logger';
+import telemetry from '../telemetry';
 
-import type { TestCase, TestSuite } from '../types/index.js';
+import type { TestCase, TestSuite } from '../types/index';
 
 // Track whether OTLP receiver has been started
 let otlpReceiverStarted = false;

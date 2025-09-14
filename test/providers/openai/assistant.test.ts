@@ -1,8 +1,8 @@
 import OpenAI from 'openai';
-import { disableCache, enableCache } from '../../../src/cache.js';
-import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant.js';
+import { disableCache, enableCache } from '../../../src/cache';
+import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
 
-import type { CallbackContext } from '../../../src/providers/openai/types.js';
+import type { CallbackContext } from '../../../src/providers/openai/types';
 
 jest.mock('openai');
 

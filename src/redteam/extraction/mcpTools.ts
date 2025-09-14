@@ -1,7 +1,7 @@
-import logger from '../../logger.js';
-import { MCPProvider } from '../../providers/mcp/index.js';
+import logger from '../../logger';
+import { MCPProvider } from '../../providers/mcp/index';
 
-import type { ApiProvider } from '../../types/index.js';
+import type { ApiProvider } from '../../types/index';
 
 /**
  * Helper function to check if a provider path indicates an MCP provider

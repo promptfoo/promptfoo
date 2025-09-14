@@ -1,9 +1,9 @@
 import dedent from 'dedent';
-import { maybeLoadFromExternalFile } from '../../util/file.js';
-import invariant from '../../util/invariant.js';
-import { sleep } from '../../util/time.js';
-import { extractGoalFromPrompt } from '../util.js';
-import { RedteamGraderBase, RedteamPluginBase } from './base.js';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
+import { extractGoalFromPrompt } from '../util';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,

@@ -1,6 +1,6 @@
-import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets.js';
-import logger from '../../../src/logger.js';
-import { matchesLlmRubric } from '../../../src/matchers.js';
+import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
+import logger from '../../../src/logger';
+import { matchesLlmRubric } from '../../../src/matchers';
 import {
   UnsafeBenchGrader,
   UnsafeBenchPlugin,

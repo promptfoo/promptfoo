@@ -1,13 +1,13 @@
-import { fetchWithCache } from '../../../src/cache.js';
-import { redteamProviderManager } from '../../../src/redteam/providers/shared.js';
-import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration.js';
+import { fetchWithCache } from '../../../src/cache';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   addMultilingual,
   getConcurrencyLimit,
   translateBatch,
 } from '../../../src/redteam/strategies/multilingual';
 
-import type { TestCase } from '../../../src/types/index.js';
+import type { TestCase } from '../../../src/types/index';
 
 jest.mock('cli-progress', () => ({
   Presets: { shades_classic: {} },

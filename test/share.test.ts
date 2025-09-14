@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { getUserEmail } from '../src/globalConfig/accounts.js';
-import { cloudConfig } from '../src/globalConfig/cloud.js';
+import { getUserEmail } from '../src/globalConfig/accounts';
+import { cloudConfig } from '../src/globalConfig/cloud';
 import {
   createShareableUrl,
   determineShareDomain,
@@ -9,10 +9,10 @@ import {
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
-import { makeRequest } from '../src/util/cloud.js';
+import { makeRequest } from '../src/util/cloud';
 
-import type Eval from '../src/models/eval.js';
-import type EvalResult from '../src/models/evalResult.js';
+import type Eval from '../src/models/eval';
+import type EvalResult from '../src/models/evalResult';
 
 function buildMockEval(): Partial<Eval> {
   return {

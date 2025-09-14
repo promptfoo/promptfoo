@@ -1,9 +1,9 @@
 import path from 'path';
 
-import cliState from '../cliState.js';
-import { importModule } from '../esm.js';
-import logger from '../logger.js';
-import { isJavascriptFile } from '../util/fileExtensions.js';
+import cliState from '../cliState';
+import { importModule } from '../esm';
+import logger from '../logger';
+import { isJavascriptFile } from '../util/fileExtensions';
 
 import type {
   FunctionCall,
@@ -12,7 +12,7 @@ import type {
   FunctionCallResult,
   ToolCall,
 } from './functionCallbackTypes';
-import type { MCPClient } from './mcp/client.js';
+import type { MCPClient } from './mcp/client';
 
 /**
  * Handles function callback execution for AI providers.

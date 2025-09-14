@@ -1,6 +1,6 @@
-import logger from '../logger.js';
-import invariant from '../util/invariant.js';
-import { getNunjucksEngine } from '../util/templates.js';
+import logger from '../logger';
+import invariant from '../util/invariant';
+import { getNunjucksEngine } from '../util/templates';
 
 import type {
   ApiProvider,
@@ -9,7 +9,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils.js';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 
 interface SequenceProviderConfig {
   inputs: string[];

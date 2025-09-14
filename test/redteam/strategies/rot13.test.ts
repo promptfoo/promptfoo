@@ -1,6 +1,6 @@
-import { addRot13 } from '../../../src/redteam/strategies/rot13.js';
+import { addRot13 } from '../../../src/redteam/strategies/rot13';
 
-import type { TestCase } from '../../../src/types/index.js';
+import type { TestCase } from '../../../src/types/index';
 
 describe('addRot13', () => {
   const mockTestCases: TestCase[] = [

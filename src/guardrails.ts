@@ -1,6 +1,6 @@
-import { fetchWithCache } from './cache.js';
-import { getShareApiBaseUrl } from './constants.js';
-import logger from './logger.js';
+import { fetchWithCache } from './cache';
+import { getShareApiBaseUrl } from './constants';
+import logger from './logger';
 
 const API_BASE_URL = `${getShareApiBaseUrl()}/v1`;
 

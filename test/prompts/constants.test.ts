@@ -1,4 +1,4 @@
-import { VALID_FILE_EXTENSIONS } from '../../src/prompts/constants.js';
+import { VALID_FILE_EXTENSIONS } from '../../src/prompts/constants';
 
 describe('VALID_FILE_EXTENSIONS', () => {
   it('should include .j2 extension', () => {

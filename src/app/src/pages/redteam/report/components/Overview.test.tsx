@@ -5,8 +5,8 @@ import { GridLogicOperator, GridFilterModel } from '@mui/x-data-grid';
 import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Overview from './Overview.js';
-import { useReportStore } from './store.js';
+import Overview from './Overview';
+import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 
 vi.mock('./store', () => ({

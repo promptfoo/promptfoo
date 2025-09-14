@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 
-import * as cache from '../../../src/cache.js';
-import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio.js';
-import * as util from '../../../src/providers/google/util.js';
-import { getNunjucksEngineForFilePath } from '../../../src/util/file.js';
-import * as templates from '../../../src/util/templates.js';
+import * as cache from '../../../src/cache';
+import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
+import * as util from '../../../src/providers/google/util';
+import { getNunjucksEngineForFilePath } from '../../../src/util/file';
+import * as templates from '../../../src/util/templates';
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),

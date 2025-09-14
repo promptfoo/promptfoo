@@ -1,14 +1,14 @@
-import { getEnvString } from '../../envars.js';
+import { getEnvString } from '../../envars';
 
-import type { EnvVarKey } from '../../envars.js';
+import type { EnvVarKey } from '../../envars';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types';
-import type { EnvOverrides } from '../../types/env.js';
-import type { OpenAiSharedOptions } from './types.js';
+import type { EnvOverrides } from '../../types/env';
+import type { OpenAiSharedOptions } from './types';
 
 export class OpenAiGenericProvider implements ApiProvider {
   modelName: string;

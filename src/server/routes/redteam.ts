@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import cliState from '../../cliState.js';
-import logger from '../../logger.js';
-import { REDTEAM_MODEL } from '../../redteam/constants.js';
-import { Plugins } from '../../redteam/plugins/index.js';
-import { redteamProviderManager } from '../../redteam/providers/shared.js';
-import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration.js';
-import { doRedteamRun } from '../../redteam/shared.js';
-import { evalJobs } from './eval.js';
+import cliState from '../../cliState';
+import logger from '../../logger';
+import { REDTEAM_MODEL } from '../../redteam/constants';
+import { Plugins } from '../../redteam/plugins/index';
+import { redteamProviderManager } from '../../redteam/providers/shared';
+import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
+import { doRedteamRun } from '../../redteam/shared';
+import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();

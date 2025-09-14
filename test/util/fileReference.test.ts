@@ -2,11 +2,11 @@ import fs from 'fs';
 import path from 'path';
 
 import yaml from 'js-yaml';
-import * as esmModule from '../../src/esm.js';
-import logger from '../../src/logger.js';
-import * as pythonUtils from '../../src/python/pythonUtils.js';
-import { isJavascriptFile } from '../../src/util/fileExtensions.js';
-import { loadFileReference, processConfigFileReferences } from '../../src/util/fileReference.js';
+import * as esmModule from '../../src/esm';
+import logger from '../../src/logger';
+import * as pythonUtils from '../../src/python/pythonUtils';
+import { isJavascriptFile } from '../../src/util/fileExtensions';
+import { loadFileReference, processConfigFileReferences } from '../../src/util/fileReference';
 import type { Logger } from 'winston';
 
 jest.mock('fs', () => ({

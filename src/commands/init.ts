@@ -5,11 +5,11 @@ import confirm from '@inquirer/confirm';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { VERSION } from '../constants.js';
-import logger from '../logger.js';
-import { initializeProject } from '../onboarding.js';
-import telemetry from '../telemetry.js';
-import { isRunningUnderNpx } from '../util/index.js';
+import { VERSION } from '../constants';
+import logger from '../logger';
+import { initializeProject } from '../onboarding';
+import telemetry from '../telemetry';
+import { isRunningUnderNpx } from '../util/index';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';

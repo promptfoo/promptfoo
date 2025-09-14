@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 
-import StrategyStats from './StrategyStats.js';
+import StrategyStats from './StrategyStats';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 

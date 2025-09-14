@@ -9,12 +9,12 @@ import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { getProviderType } from './helpers.js';
-import ProviderConfigEditor from './ProviderConfigEditor.js';
-import ProviderTypeSelector from './ProviderTypeSelector.js';
+import { getProviderType } from './helpers';
+import ProviderConfigEditor from './ProviderConfigEditor';
+import ProviderTypeSelector from './ProviderTypeSelector';
 
-import type { ProviderOptions } from '../../types.js';
-import type { ProviderConfigEditorRef } from './ProviderConfigEditor.js';
+import type { ProviderOptions } from '../../types';
+import type { ProviderConfigEditorRef } from './ProviderConfigEditor';
 
 export function defaultHttpTarget(): ProviderOptions {
   return {

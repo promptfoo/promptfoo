@@ -1,9 +1,9 @@
 import path from 'path';
 
-import { loadFromJavaScriptFile } from './assertions/utils.js';
-import cliState from './cliState.js';
-import { getEnvBool, getEnvString } from './envars.js';
-import logger from './logger.js';
+import { loadFromJavaScriptFile } from './assertions/utils';
+import cliState from './cliState';
+import { getEnvBool, getEnvString } from './envars';
+import logger from './logger';
 import {
   ANSWER_RELEVANCY_GENERATE,
   CONTEXT_FAITHFULNESS_LONGFORM,
@@ -19,18 +19,18 @@ import {
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
 } from './prompts';
-import { loadApiProvider } from './providers/index.js';
-import { getDefaultProviders } from './providers/defaults.js';
-import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants.js';
-import { shouldGenerateRemote } from './redteam/remoteGeneration.js';
-import { doRemoteGrading } from './remoteGrading.js';
-import { doRemoteScoringWithPi } from './remoteScoring.js';
-import { maybeLoadFromExternalFile } from './util/file.js';
-import { isJavascriptFile } from './util/fileExtensions.js';
-import invariant from './util/invariant.js';
-import { extractFirstJsonObject, extractJsonObjects } from './util/json.js';
-import { getNunjucksEngine } from './util/templates.js';
-import { accumulateTokenUsage } from './util/tokenUsageUtils.js';
+import { loadApiProvider } from './providers/index';
+import { getDefaultProviders } from './providers/defaults';
+import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
+import { shouldGenerateRemote } from './redteam/remoteGeneration';
+import { doRemoteGrading } from './remoteGrading';
+import { doRemoteScoringWithPi } from './remoteScoring';
+import { maybeLoadFromExternalFile } from './util/file';
+import { isJavascriptFile } from './util/fileExtensions';
+import invariant from './util/invariant';
+import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { getNunjucksEngine } from './util/templates';
+import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
 import type {
   ApiClassificationProvider,

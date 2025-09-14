@@ -1,4 +1,4 @@
-import { OpenAiGenericProvider } from '../../../src/providers/openai/index.js';
+import { OpenAiGenericProvider } from '../../../src/providers/openai/index';
 
 describe('OpenAI Provider', () => {
   describe('OpenAiGenericProvider', () => {

@@ -1,7 +1,7 @@
-import logger from '../logger.js';
-import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils.js';
+import logger from '../logger';
+import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
 
-import type { TokenUsage } from '../types/shared.js';
+import type { TokenUsage } from '../types/shared';
 
 /**
  * A utility class for tracking token usage across an evaluation

@@ -1,8 +1,8 @@
-import { getEnvString } from '../envars.js';
-import { OpenAiChatCompletionProvider } from './openai/chat.js';
+import { getEnvString } from '../envars';
+import { OpenAiChatCompletionProvider } from './openai/chat';
 
-import type { ProviderOptions } from '../types/index.js';
-import type { OpenAiCompletionOptions } from './openai/types.js';
+import type { ProviderOptions } from '../types/index';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 interface PortkeyProviderOptions extends ProviderOptions {
   config?: OpenAiCompletionOptions & {

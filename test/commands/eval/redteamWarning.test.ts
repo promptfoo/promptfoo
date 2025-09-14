@@ -1,5 +1,5 @@
-import { doEval } from '../../../src/commands/eval.js';
-import logger from '../../../src/logger.js';
+import { doEval } from '../../../src/commands/eval';
+import logger from '../../../src/logger';
 
 // Mock util/config/default.ts
 jest.mock('../../../src/util/config/default', () => ({

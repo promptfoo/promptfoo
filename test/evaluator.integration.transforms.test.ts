@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { evaluate } from '../src/evaluator.js';
-import Eval from '../src/models/eval.js';
+import { evaluate } from '../src/evaluator';
+import Eval from '../src/models/eval';
 
-import type { ApiProvider, TestSuite } from '../src/types/index.js';
+import type { ApiProvider, TestSuite } from '../src/types/index';
 
 // Mock the transform function to track calls
 jest.mock('../src/util/transform', () => ({

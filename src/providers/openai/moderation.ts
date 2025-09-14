@@ -1,6 +1,6 @@
-import { fetchWithCache, getCache, isCacheEnabled } from '../../cache.js';
-import logger from '../../logger.js';
-import { REQUEST_TIMEOUT_MS } from '../shared.js';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 
 import type {

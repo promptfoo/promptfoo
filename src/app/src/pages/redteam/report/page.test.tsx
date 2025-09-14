@@ -5,7 +5,7 @@ import { useUserStore } from '@app/stores/userStore';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ReportPage from './page.js';
+import ReportPage from './page';
 
 vi.mock('@app/hooks/usePageMeta', () => ({
   usePageMeta: vi.fn(),

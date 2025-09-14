@@ -1,7 +1,7 @@
 import { parse } from 'csv-parse/sync';
-import logger from '../../../src/logger.js';
-import { fetchDataset, XSTestPlugin } from '../../../src/redteam/plugins/xstest.js';
-import { fetchWithTimeout } from '../../../src/util/fetch/index.js';
+import logger from '../../../src/logger';
+import { fetchDataset, XSTestPlugin } from '../../../src/redteam/plugins/xstest';
+import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
 jest.mock('fs');
 jest.mock('csv-parse/sync');

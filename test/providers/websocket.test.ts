@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import { createTransformResponse, WebSocketProvider } from '../../src/providers/websocket.js';
+import { createTransformResponse, WebSocketProvider } from '../../src/providers/websocket';
 
 jest.mock('ws');
 

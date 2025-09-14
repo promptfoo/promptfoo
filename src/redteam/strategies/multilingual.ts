@@ -2,17 +2,17 @@ import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
-import { fetchWithCache } from '../../cache.js';
-import cliState from '../../cliState.js';
-import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator.js';
-import { getUserEmail } from '../../globalConfig/accounts.js';
-import logger from '../../logger.js';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared.js';
-import invariant from '../../util/invariant.js';
-import { redteamProviderManager } from '../providers/shared.js';
-import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration.js';
+import { fetchWithCache } from '../../cache';
+import cliState from '../../cliState';
+import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
+import { getUserEmail } from '../../globalConfig/accounts';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import invariant from '../../util/invariant';
+import { redteamProviderManager } from '../providers/shared';
+import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types/index.js';
+import type { TestCase } from '../../types/index';
 
 export const DEFAULT_LANGUAGES = ['bn', 'sw', 'jv']; // Bengali, Swahili, Javanese
 const DEFAULT_BATCH_SIZE = 3; // Default number of languages to process in a single batch

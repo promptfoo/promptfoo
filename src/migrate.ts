@@ -6,8 +6,8 @@ import { resolve } from 'node:path';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { getDb } from './database/index.js';
-import logger from './logger.js';
+import { getDb } from './database/index';
+import logger from './logger';
 
 /**
  * Run migrations on the database, skipping the ones already applied. Also creates the sqlite db if it doesn't exist.

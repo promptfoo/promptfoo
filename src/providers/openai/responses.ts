@@ -1,16 +1,16 @@
-import { fetchWithCache } from '../../cache.js';
-import { getEnvFloat, getEnvInt, getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index.js';
-import { maybeLoadFromExternalFile } from '../../util/file.js';
-import { FunctionCallbackHandler } from '../functionCallbackUtils.js';
-import { REQUEST_TIMEOUT_MS } from '../shared.js';
+import { fetchWithCache } from '../../cache';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
+import logger from '../../logger';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util.js';
+import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index.js';
-import type { EnvOverrides } from '../../types/env.js';
-import type { OpenAiCompletionOptions, ReasoningEffort } from './types.js';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
+import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   private functionCallbackHandler = new FunctionCallbackHandler();

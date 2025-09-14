@@ -11,12 +11,12 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { getIssueFilePath, isCriticalSeverity } from '../utils.js';
-import ChecksSection from './ChecksSection.js';
-import ScanStatistics from './ScanStatistics.js';
-import SecurityFindings from './SecurityFindings.js';
+import { getIssueFilePath, isCriticalSeverity } from '../utils';
+import ChecksSection from './ChecksSection';
+import ScanStatistics from './ScanStatistics';
+import SecurityFindings from './SecurityFindings';
 
-import type { ScanResult } from '../ModelAudit.types.js';
+import type { ScanResult } from '../ModelAudit.types';
 
 interface ResultsTabProps {
   scanResults: ScanResult;

@@ -1,8 +1,8 @@
 import { Command } from 'commander';
-import logger from '../../../src/logger.js';
-import { redteamRunCommand } from '../../../src/redteam/commands/run.js';
-import { doRedteamRun } from '../../../src/redteam/shared.js';
-import { getConfigFromCloud } from '../../../src/util/cloud.js';
+import logger from '../../../src/logger';
+import { redteamRunCommand } from '../../../src/redteam/commands/run';
+import { doRedteamRun } from '../../../src/redteam/shared';
+import { getConfigFromCloud } from '../../../src/util/cloud';
 
 jest.mock('../../../src/cliState', () => ({
   remote: false,

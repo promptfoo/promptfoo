@@ -6,15 +6,15 @@ import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig.js';
-import LoadExampleButton from '../LoadExampleButton.js';
-import PageWrapper from '../PageWrapper.js';
-import Prompts from '../Prompts.js';
-import ProviderEditor from './ProviderEditor.js';
-import TestTargetConfiguration from './TestTargetConfiguration.js';
+import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import LoadExampleButton from '../LoadExampleButton';
+import PageWrapper from '../PageWrapper';
+import Prompts from '../Prompts';
+import ProviderEditor from './ProviderEditor';
+import TestTargetConfiguration from './TestTargetConfiguration';
 import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 
-import type { ProviderOptions } from '../../types.js';
+import type { ProviderOptions } from '../../types';
 
 interface TargetsProps {
   onNext?: () => void;

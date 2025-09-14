@@ -1,4 +1,4 @@
-import logger from '../../../src/logger.js';
+import logger from '../../../src/logger';
 import {
   VLGuardPlugin,
   VLGuardGrader,
@@ -6,10 +6,10 @@ import {
   VALID_CATEGORIES,
   VALID_SUBCATEGORIES,
 } from '../../../src/redteam/plugins/vlguard';
-import * as huggingfaceDatasets from '../../../src/integrations/huggingfaceDatasets.js';
-import * as fetchModule from '../../../src/util/fetch/index.js';
+import * as huggingfaceDatasets from '../../../src/integrations/huggingfaceDatasets';
+import * as fetchModule from '../../../src/util/fetch/index';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index.js';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/logger');
 jest.mock('../../../src/integrations/huggingfaceDatasets');

@@ -1,7 +1,7 @@
 import chalk from 'chalk';
-import { getEnvString } from '../envars.js';
-import logger from '../logger.js';
-import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig.js';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export const CLOUD_API_HOST = 'https://api.promptfoo.app';
 

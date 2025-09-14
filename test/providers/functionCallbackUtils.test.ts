@@ -1,8 +1,8 @@
 import path from 'path';
 
-import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils.js';
+import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
 
-import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes.js';
+import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
 
 // Mock dependencies
 jest.mock('../../src/cliState', () => ({ basePath: '/test/basePath' }));

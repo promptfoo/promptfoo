@@ -1,4 +1,4 @@
-import { calculateAzureCost, throwConfigurationError } from '../../../src/providers/azure/util.js';
+import { calculateAzureCost, throwConfigurationError } from '../../../src/providers/azure/util';
 
 describe('throwConfigurationError', () => {
   it('throws error with formatted message and docs link', () => {

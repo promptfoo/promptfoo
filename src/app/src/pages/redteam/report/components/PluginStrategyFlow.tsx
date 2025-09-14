@@ -6,7 +6,7 @@ import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { type EvaluateResult, type GradingResult } from '@promptfoo/types';
 import { Layer, Rectangle, ResponsiveContainer, Sankey, Tooltip } from 'recharts';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared.js';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 
 interface TestRecord {
   prompt: string;

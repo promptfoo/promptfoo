@@ -1,7 +1,7 @@
-import { gatherFeedback, sendFeedback } from '../src/feedback.js';
-import logger from '../src/logger.js';
-import { fetchWithProxy } from '../src/util/fetch/index.js';
-import * as readlineUtils from '../src/util/readline.js';
+import { gatherFeedback, sendFeedback } from '../src/feedback';
+import logger from '../src/logger';
+import { fetchWithProxy } from '../src/util/fetch/index';
+import * as readlineUtils from '../src/util/readline';
 
 const actualFeedback = jest.requireActual('../src/feedback');
 

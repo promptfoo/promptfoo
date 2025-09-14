@@ -1,11 +1,11 @@
 import * as path from 'path';
 
-import { runAssertion } from '../../src/assertions/index.js';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
-import { runPython } from '../../src/python/pythonUtils.js';
-import { runPythonCode } from '../../src/python/wrapper.js';
+import { runAssertion } from '../../src/assertions/index';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { runPython } from '../../src/python/pythonUtils';
+import { runPythonCode } from '../../src/python/wrapper';
 
-import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index.js';
+import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
 jest.mock('../../src/python/wrapper', () => {
   const actual = jest.requireActual('../../src/python/wrapper');

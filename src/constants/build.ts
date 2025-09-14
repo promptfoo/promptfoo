@@ -2,7 +2,7 @@
 // In production builds, these values come from src/generated/constants.ts
 // In development, they fall back to environment variables
 
-import { getEnvString } from '../envars.js';
+import { getEnvString } from '../envars';
 
 let POSTHOG_KEY: string;
 

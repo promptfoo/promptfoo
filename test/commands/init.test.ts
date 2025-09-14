@@ -1,8 +1,8 @@
 import fs from 'fs/promises';
 
 import { Command } from 'commander';
-import * as init from '../../src/commands/init.js';
-import logger from '../../src/logger.js';
+import * as init from '../../src/commands/init';
+import logger from '../../src/logger';
 
 jest.mock('../../src/redteam/commands/init', () => ({
   redteamInit: jest.fn(),

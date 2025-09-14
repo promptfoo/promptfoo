@@ -1,11 +1,11 @@
 import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { getDefaultShareViewBaseUrl } from '../constants.js';
-import { cloudConfig } from '../globalConfig/cloud.js';
-import logger from '../logger.js';
-import Eval from '../models/eval.js';
-import ModelAudit from '../models/modelAudit.js';
+import { getDefaultShareViewBaseUrl } from '../constants';
+import { cloudConfig } from '../globalConfig/cloud';
+import logger from '../logger';
+import Eval from '../models/eval';
+import ModelAudit from '../models/modelAudit';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
@@ -16,8 +16,8 @@ import {
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../share';
-import telemetry from '../telemetry.js';
-import { loadDefaultConfig } from '../util/config/default.js';
+import telemetry from '../telemetry';
+import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
 
 export function notCloudEnabledShareInstructions(): void {

@@ -2,12 +2,12 @@ import { randomUUID } from 'crypto';
 
 import { PostHog } from 'posthog-node';
 import { z } from 'zod';
-import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, KA_ENDPOINT, R_ENDPOINT, VERSION } from './constants.js';
-import { POSTHOG_KEY } from './constants/build.js';
-import { getEnvBool, getEnvString, isCI } from './envars.js';
-import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts.js';
-import logger from './logger.js';
-import { fetchWithTimeout } from './util/fetch/index.js';
+import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, KA_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
+import { POSTHOG_KEY } from './constants/build';
+import { getEnvBool, getEnvString, isCI } from './envars';
+import { getUserEmail, getUserId, isLoggedIntoCloud } from './globalConfig/accounts';
+import logger from './logger';
+import { fetchWithTimeout } from './util/fetch/index';
 
 export const TelemetryEventSchema = z.object({
   event: z.enum([

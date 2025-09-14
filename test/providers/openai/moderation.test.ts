@@ -1,4 +1,4 @@
-import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache.js';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache';
 import {
   formatModerationInput,
   type ImageInput,

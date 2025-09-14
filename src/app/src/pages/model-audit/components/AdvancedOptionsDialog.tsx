@@ -14,7 +14,7 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
-import type { ScanOptions } from '../ModelAudit.types.js';
+import type { ScanOptions } from '../ModelAudit.types';
 
 interface AdvancedOptionsDialogProps {
   open: boolean;

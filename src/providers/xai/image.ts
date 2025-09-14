@@ -1,13 +1,13 @@
-import { getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import invariant from '../../util/invariant.js';
-import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image.js';
-import { REQUEST_TIMEOUT_MS } from '../shared.js';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
+import invariant from '../../util/invariant';
+import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
+import { REQUEST_TIMEOUT_MS } from '../shared';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index.js';
-import type { EnvOverrides } from '../../types/env.js';
-import type { ApiProvider } from '../../types/providers.js';
-import type { OpenAiSharedOptions } from '../openai/types.js';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider } from '../../types/providers';
+import type { OpenAiSharedOptions } from '../openai/types';
 
 type XaiImageOptions = OpenAiSharedOptions & {
   n?: number;

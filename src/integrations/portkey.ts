@@ -1,5 +1,5 @@
-import { getEnvString } from '../envars.js';
-import invariant from '../util/invariant.js';
+import { getEnvString } from '../envars';
+import invariant from '../util/invariant';
 
 interface PortkeyResponse {
   success: boolean;

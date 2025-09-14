@@ -1,4 +1,4 @@
-import { EchoProvider } from '../../src/providers/echo.js';
+import { EchoProvider } from '../../src/providers/echo';
 
 describe('EchoProvider', () => {
   describe('constructor', () => {

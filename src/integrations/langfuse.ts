@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars.js';
+import { getEnvString } from '../envars';
 
 const langfuseParams = {
   publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),

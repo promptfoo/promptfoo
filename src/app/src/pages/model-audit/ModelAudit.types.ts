@@ -43,7 +43,7 @@ export interface ScanAsset {
 }
 
 // Import the backend type to ensure consistency
-import type { ModelAuditScanResults } from '../../../../types/modelAudit.js';
+import type { ModelAuditScanResults } from '../../../../types/modelAudit';
 
 /**
  * Frontend ScanResult type that aligns with backend ModelAuditScanResults

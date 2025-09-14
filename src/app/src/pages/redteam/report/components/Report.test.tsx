@@ -2,7 +2,7 @@ import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Report from './Report.js';
+import Report from './Report';
 
 // Mock dependencies
 vi.mock('react-router-dom', () => ({
@@ -85,8 +85,8 @@ vi.mock('@app/components/EnterpriseBanner', () => ({
   default: () => null,
 }));
 
-import Overview from './Overview.js';
-import TestSuites from './TestSuites.js';
+import Overview from './Overview';
+import TestSuites from './TestSuites';
 
 describe('Report Component Navigation', () => {
   const mockNavigate = vi.fn();

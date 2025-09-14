@@ -14,9 +14,9 @@ import {
   TestSuiteSchema,
   UnifiedConfigSchema,
   VarsSchema,
-} from '../../src/types/index.js';
+} from '../../src/types/index';
 
-import type { TestSuite } from '../../src/types/index.js';
+import type { TestSuite } from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {

@@ -6,13 +6,13 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types';
-import type { OpenAiCompletionOptions } from './openai/types.js';
-import { OpenAiChatCompletionProvider } from './openai/chat.js';
-import { OpenAiCompletionProvider } from './openai/completion.js';
-import { OpenAiEmbeddingProvider } from './openai/embedding.js';
-import { getEnvString } from '../envars.js';
-import { fetchWithCache } from '../cache.js';
-import logger from '../logger.js';
+import type { OpenAiCompletionOptions } from './openai/types';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { getEnvString } from '../envars';
+import { fetchWithCache } from '../cache';
+import logger from '../logger';
 
 type Model = {
   id: string;

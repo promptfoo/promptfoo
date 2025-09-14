@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import type { ApiProvider, ProviderOptions } from '../types/providers.js';
-import type { Plugin, Severity } from './constants.js';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { Plugin, Severity } from './constants';
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,

@@ -6,33 +6,33 @@ import chokidar from 'chokidar';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
-import { disableCache } from '../cache.js';
-import cliState from '../cliState.js';
-import { getEnvBool, getEnvFloat, getEnvInt } from '../envars.js';
-import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator.js';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts.js';
-import { cloudConfig } from '../globalConfig/cloud.js';
-import logger, { getLogLevel } from '../logger.js';
-import { runDbMigrations } from '../migrate.js';
-import Eval from '../models/eval.js';
-import { loadApiProvider } from '../providers/index.js';
-import { createShareableUrl, isSharingEnabled } from '../share.js';
-import { generateTable } from '../table.js';
-import telemetry from '../telemetry.js';
-import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index.js';
-import { isApiProvider } from '../types/providers.js';
-import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util/index.js';
-import { checkCloudPermissions } from '../util/cloud.js';
-import { clearConfigCache, loadDefaultConfig } from '../util/config/default.js';
-import { resolveConfigs } from '../util/config/load.js';
-import { maybeLoadFromExternalFile } from '../util/file.js';
-import { formatDuration } from '../util/formatDuration.js';
-import invariant from '../util/invariant.js';
-import { TokenUsageTracker } from '../util/tokenUsage.js';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils.js';
-import { filterProviders } from './eval/filterProviders.js';
-import { filterTests } from './eval/filterTests.js';
-import { notCloudEnabledShareInstructions } from './share.js';
+import { disableCache } from '../cache';
+import cliState from '../cliState';
+import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
+import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
+import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import { cloudConfig } from '../globalConfig/cloud';
+import logger, { getLogLevel } from '../logger';
+import { runDbMigrations } from '../migrate';
+import Eval from '../models/eval';
+import { loadApiProvider } from '../providers/index';
+import { createShareableUrl, isSharingEnabled } from '../share';
+import { generateTable } from '../table';
+import telemetry from '../telemetry';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
+import { isApiProvider } from '../types/providers';
+import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
+import { checkCloudPermissions } from '../util/cloud';
+import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { resolveConfigs } from '../util/config/load';
+import { maybeLoadFromExternalFile } from '../util/file';
+import { formatDuration } from '../util/formatDuration';
+import invariant from '../util/invariant';
+import { TokenUsageTracker } from '../util/tokenUsage';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { filterProviders } from './eval/filterProviders';
+import { filterTests } from './eval/filterTests';
+import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
 
 import type {
@@ -43,7 +43,7 @@ import type {
   TokenUsage,
   UnifiedConfig,
 } from '../types';
-import type { FilterOptions } from './eval/filterTests.js';
+import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),

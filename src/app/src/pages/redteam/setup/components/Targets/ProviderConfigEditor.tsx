@@ -1,16 +1,16 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 
 import Box from '@mui/material/Box';
-import AgentFrameworkConfiguration from './AgentFrameworkConfiguration.js';
-import BrowserAutomationConfiguration from './BrowserAutomationConfiguration.js';
-import CommonConfigurationOptions from './CommonConfigurationOptions.js';
-import CustomTargetConfiguration from './CustomTargetConfiguration.js';
-import { AGENT_FRAMEWORKS } from './consts.js';
-import FoundationModelConfiguration from './FoundationModelConfiguration.js';
-import HttpEndpointConfiguration from './HttpEndpointConfiguration.js';
-import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration.js';
+import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
+import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
+import CommonConfigurationOptions from './CommonConfigurationOptions';
+import CustomTargetConfiguration from './CustomTargetConfiguration';
+import { AGENT_FRAMEWORKS } from './consts';
+import FoundationModelConfiguration from './FoundationModelConfiguration';
+import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
-import type { ProviderOptions } from '../../types.js';
+import type { ProviderOptions } from '../../types';
 
 export interface ProviderConfigEditorRef {
   validate: () => boolean;

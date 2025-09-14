@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../../src/cache.js';
+import { fetchWithCache } from '../../src/cache';
 import {
   extractGoalFromPrompt,
   getShortPluginId,

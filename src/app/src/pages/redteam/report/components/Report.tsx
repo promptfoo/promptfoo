@@ -34,17 +34,17 @@ import {
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { useNavigate } from 'react-router-dom';
-import FrameworkCompliance from './FrameworkCompliance.js';
-import Overview from './Overview.js';
+import FrameworkCompliance from './FrameworkCompliance';
+import Overview from './Overview';
 import './Report.css';
 
-import ReportDownloadButton from './ReportDownloadButton.js';
-import ReportSettingsDialogButton from './ReportSettingsDialogButton.js';
-import RiskCategories from './RiskCategories.js';
-import StrategyStats from './StrategyStats.js';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared.js';
-import TestSuites from './TestSuites.js';
-import ToolsDialog from './ToolsDialog.js';
+import ReportDownloadButton from './ReportDownloadButton';
+import ReportSettingsDialogButton from './ReportSettingsDialogButton';
+import RiskCategories from './RiskCategories';
+import StrategyStats from './StrategyStats';
+import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import TestSuites from './TestSuites';
+import ToolsDialog from './ToolsDialog';
 
 import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 

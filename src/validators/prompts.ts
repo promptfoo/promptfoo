@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import type { Prompt, PromptConfig, PromptFunction } from '../types/prompts.js';
-import type { ApiProvider } from '../types/providers.js';
+import type { Prompt, PromptConfig, PromptFunction } from '../types/prompts';
+import type { ApiProvider } from '../types/providers';
 
 // Zod schemas for validation
 export const PromptConfigSchema = z.object({

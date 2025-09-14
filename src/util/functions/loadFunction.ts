@@ -1,10 +1,10 @@
 import path from 'path';
 
-import cliState from '../../cliState.js';
-import { importModule } from '../../esm.js';
-import logger from '../../logger.js';
-import { runPython } from '../../python/pythonUtils.js';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions.js';
+import cliState from '../../cliState';
+import { importModule } from '../../esm';
+import logger from '../../logger';
+import { runPython } from '../../python/pythonUtils';
+import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 

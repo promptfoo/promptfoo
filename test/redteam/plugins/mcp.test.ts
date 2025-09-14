@@ -1,4 +1,4 @@
-import { MCPPluginGrader } from '../../../src/redteam/plugins/mcp.js';
+import { MCPPluginGrader } from '../../../src/redteam/plugins/mcp';
 
 describe('MCPPluginGrader', () => {
   let grader: MCPPluginGrader;

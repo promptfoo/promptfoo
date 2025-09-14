@@ -8,10 +8,10 @@ import Grid from '@mui/material/Grid';
 import { alpha, useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { StatCard } from '../ModelAudit.styles.js';
-import { isCriticalSeverity } from '../utils.js';
+import { StatCard } from '../ModelAudit.styles';
+import { isCriticalSeverity } from '../utils';
 
-import type { ScanResult } from '../ModelAudit.types.js';
+import type { ScanResult } from '../ModelAudit.types';
 
 interface ScanStatisticsProps {
   scanResults: ScanResult;

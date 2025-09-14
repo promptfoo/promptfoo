@@ -11,11 +11,11 @@ import ViewListIcon from '@mui/icons-material/ViewList';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
-import { useResultsViewSettingsStore } from '../../store.js';
-import { tokens } from '../tokens.js';
-import EnhancedRangeSlider from './EnhancedRangeSlider.js';
-import SettingItem from './SettingItem.js';
-import SettingsSection from './SettingsSection.js';
+import { useResultsViewSettingsStore } from '../../store';
+import { tokens } from '../tokens';
+import EnhancedRangeSlider from './EnhancedRangeSlider';
+import SettingItem from './SettingItem';
+import SettingsSection from './SettingsSection';
 
 const SettingsPanel = () => {
   const {

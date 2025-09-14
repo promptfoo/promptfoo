@@ -1,11 +1,11 @@
 import chalk from 'chalk';
-import logger from '../logger.js';
-import Eval, { EvalQueries } from '../models/eval.js';
-import { wrapTable } from '../table.js';
-import telemetry from '../telemetry.js';
-import { printBorder, setupEnv } from '../util/index.js';
-import { sha256 } from '../util/createHash.js';
-import { getPrompts, getTestCases } from '../util/database.js';
+import logger from '../logger';
+import Eval, { EvalQueries } from '../models/eval';
+import { wrapTable } from '../table';
+import telemetry from '../telemetry';
+import { printBorder, setupEnv } from '../util/index';
+import { sha256 } from '../util/createHash';
+import { getPrompts, getTestCases } from '../util/database';
 import type { Command } from 'commander';
 
 export function listCommand(program: Command) {

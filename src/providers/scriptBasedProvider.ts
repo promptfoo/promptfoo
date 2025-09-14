@@ -1,7 +1,7 @@
-import { getResolvedRelativePath } from '../util/file.js';
+import { getResolvedRelativePath } from '../util/file';
 
-import type { LoadApiProviderContext } from '../types/index.js';
-import type { ApiProvider, ProviderOptions } from '../types/providers.js';
+import type { LoadApiProviderContext } from '../types/index';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 /**
  * Creates a factory for script-based providers (exec, golang, python)

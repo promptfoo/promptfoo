@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import NodeCache from 'node-cache';
-import { DEFAULT_QUERY_LIMIT } from '../constants.js';
-import { getDb } from '../database/index.js';
+import { DEFAULT_QUERY_LIMIT } from '../constants';
+import { getDb } from '../database/index';
 import {
   datasetsTable,
   evalResultsTable,
@@ -12,10 +12,10 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
-import { getAuthor } from '../globalConfig/accounts.js';
-import logger from '../logger.js';
-import Eval, { createEvalId } from '../models/eval.js';
-import { generateIdFromPrompt } from '../models/prompt.js';
+import { getAuthor } from '../globalConfig/accounts';
+import logger from '../logger';
+import Eval, { createEvalId } from '../models/eval';
+import { generateIdFromPrompt } from '../models/prompt';
 import {
   type CompletedPrompt,
   type EvaluateSummaryV2,
@@ -27,8 +27,8 @@ import {
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
 } from '../types';
-import invariant from '../util/invariant.js';
-import { sha256 } from './createHash.js';
+import invariant from '../util/invariant';
+import { sha256 } from './createHash';
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,

@@ -1,8 +1,8 @@
 import type { Command } from 'commander';
-import logger from '../../logger.js';
-import telemetry from '../../telemetry.js';
-import { startHttpMcpServer, startStdioMcpServer } from './server.js';
-import type { McpCommandOptions } from './types.js';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { startHttpMcpServer, startStdioMcpServer } from './server';
+import type { McpCommandOptions } from './types';
 
 export function mcpCommand(program: Command): void {
   program
@@ -36,5 +36,5 @@ export function mcpCommand(program: Command): void {
 }
 
 // Re-export server functions for direct use
-export { startHttpMcpServer, startStdioMcpServer, createMcpServer } from './server.js';
-export * from './types.js';
+export { startHttpMcpServer, startStdioMcpServer, createMcpServer } from './server';
+export * from './types';

@@ -15,16 +15,16 @@
  */
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-import { renderPrompt } from '../../evaluatorHelpers.js';
-import logger from '../../logger.js';
-import { PromptfooChatCompletionProvider } from '../../providers/promptfoo.js';
-import invariant from '../../util/invariant.js';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json.js';
-import { getNunjucksEngine } from '../../util/templates.js';
-import { sleep } from '../../util/time.js';
-import { TokenUsageTracker } from '../../util/tokenUsage.js';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils.js';
-import { shouldGenerateRemote } from '../remoteGeneration.js';
+import { renderPrompt } from '../../evaluatorHelpers';
+import logger from '../../logger';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -51,7 +51,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types';
-import type { BaseRedteamMetadata } from '../types.js';
+import type { BaseRedteamMetadata } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 

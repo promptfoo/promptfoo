@@ -1,5 +1,5 @@
-import { disableCache, enableCache, fetchWithCache } from '../../../src/cache.js';
-import { OpenAiEmbeddingProvider } from '../../../src/providers/openai/embedding.js';
+import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
+import { OpenAiEmbeddingProvider } from '../../../src/providers/openai/embedding';
 
 jest.mock('../../../src/cache');
 

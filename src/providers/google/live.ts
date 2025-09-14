@@ -3,13 +3,13 @@ import path from 'path';
 
 import axios from 'axios';
 import WebSocket from 'ws';
-import cliState from '../../cliState.js';
-import { getEnvString } from '../../envars.js';
-import { importModule } from '../../esm.js';
-import logger from '../../logger.js';
-import { validatePythonPath } from '../../python/pythonUtils.js';
-import { isJavascriptFile } from '../../util/fileExtensions.js';
-import { geminiFormatAndSystemInstructions, loadFile } from './util.js';
+import cliState from '../../cliState';
+import { getEnvString } from '../../envars';
+import { importModule } from '../../esm';
+import logger from '../../logger';
+import { validatePythonPath } from '../../python/pythonUtils';
+import { isJavascriptFile } from '../../util/fileExtensions';
+import { geminiFormatAndSystemInstructions, loadFile } from './util';
 
 import type {
   ApiProvider,
@@ -17,8 +17,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types';
-import type { CompletionOptions, FunctionCall } from './types.js';
-import type { GeminiFormat } from './util.js';
+import type { CompletionOptions, FunctionCall } from './types';
+import type { GeminiFormat } from './util';
 
 const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
   if (contents[contentIndex].role != 'user') {

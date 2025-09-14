@@ -10,13 +10,13 @@ import {
   PII_PLUGINS,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   Severity,
-} from '../../src/redteam/constants.js';
+} from '../../src/redteam/constants';
 import {
   pluginOptions,
   RedteamConfigSchema,
   RedteamStrategySchema,
   strategyIdSchema,
-} from '../../src/validators/redteam.js';
+} from '../../src/validators/redteam';
 
 describe('RedteamConfigSchema', () => {
   it('should validate basic config', () => {

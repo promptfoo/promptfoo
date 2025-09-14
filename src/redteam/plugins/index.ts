@@ -1,10 +1,10 @@
-import { fetchWithCache } from '../../cache.js';
-import { VERSION } from '../../constants.js';
-import { getEnvBool } from '../../envars.js';
-import { getUserEmail } from '../../globalConfig/accounts.js';
-import logger from '../../logger.js';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared.js';
-import invariant from '../../util/invariant.js';
+import { fetchWithCache } from '../../cache';
+import { VERSION } from '../../constants';
+import { getEnvBool } from '../../envars';
+import { getUserEmail } from '../../globalConfig/accounts';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import invariant from '../../util/invariant';
 import {
   BIAS_PLUGINS,
   PII_PLUGINS,
@@ -16,42 +16,42 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
-import { getShortPluginId } from '../util.js';
-import { AegisPlugin } from './aegis.js';
-import { type RedteamPluginBase } from './base.js';
-import { BeavertailsPlugin } from './beavertails.js';
-import { ContractPlugin } from './contracts.js';
-import { CrossSessionLeakPlugin } from './crossSessionLeak.js';
-import { CyberSecEvalPlugin } from './cyberseceval.js';
-import { DebugAccessPlugin } from './debugAccess.js';
-import { DivergentRepetitionPlugin } from './divergentRepetition.js';
-import { DoNotAnswerPlugin } from './donotanswer.js';
-import { ExcessiveAgencyPlugin } from './excessiveAgency.js';
-import { HallucinationPlugin } from './hallucination.js';
-import { HarmbenchPlugin } from './harmbench.js';
-import { AlignedHarmfulPlugin } from './harmful/aligned.js';
-import { getHarmfulAssertions } from './harmful/common.js';
-import { getHarmfulTests } from './harmful/unaligned.js';
-import { ImitationPlugin } from './imitation.js';
-import { IntentPlugin } from './intent.js';
-import { OverreliancePlugin } from './overreliance.js';
-import { getPiiLeakTestsForCategory } from './pii.js';
-import { PlinyPlugin } from './pliny.js';
-import { isValidPolicyObject, PolicyPlugin } from './policy.js';
-import { PoliticsPlugin } from './politics.js';
-import { PromptExtractionPlugin } from './promptExtraction.js';
-import { RbacPlugin } from './rbac.js';
-import { ShellInjectionPlugin } from './shellInjection.js';
-import { SqlInjectionPlugin } from './sqlInjection.js';
-import { ToolDiscoveryPlugin } from './toolDiscovery.js';
-import { ToxicChatPlugin } from './toxicChat.js';
-import { UnsafeBenchPlugin } from './unsafebench.js';
-import { UnverifiableClaimsPlugin } from './unverifiableClaims.js';
-import { VLGuardPlugin } from './vlguard.js';
-import { XSTestPlugin } from './xstest.js';
+import { getShortPluginId } from '../util';
+import { AegisPlugin } from './aegis';
+import { type RedteamPluginBase } from './base';
+import { BeavertailsPlugin } from './beavertails';
+import { ContractPlugin } from './contracts';
+import { CrossSessionLeakPlugin } from './crossSessionLeak';
+import { CyberSecEvalPlugin } from './cyberseceval';
+import { DebugAccessPlugin } from './debugAccess';
+import { DivergentRepetitionPlugin } from './divergentRepetition';
+import { DoNotAnswerPlugin } from './donotanswer';
+import { ExcessiveAgencyPlugin } from './excessiveAgency';
+import { HallucinationPlugin } from './hallucination';
+import { HarmbenchPlugin } from './harmbench';
+import { AlignedHarmfulPlugin } from './harmful/aligned';
+import { getHarmfulAssertions } from './harmful/common';
+import { getHarmfulTests } from './harmful/unaligned';
+import { ImitationPlugin } from './imitation';
+import { IntentPlugin } from './intent';
+import { OverreliancePlugin } from './overreliance';
+import { getPiiLeakTestsForCategory } from './pii';
+import { PlinyPlugin } from './pliny';
+import { isValidPolicyObject, PolicyPlugin } from './policy';
+import { PoliticsPlugin } from './politics';
+import { PromptExtractionPlugin } from './promptExtraction';
+import { RbacPlugin } from './rbac';
+import { ShellInjectionPlugin } from './shellInjection';
+import { SqlInjectionPlugin } from './sqlInjection';
+import { ToolDiscoveryPlugin } from './toolDiscovery';
+import { ToxicChatPlugin } from './toxicChat';
+import { UnsafeBenchPlugin } from './unsafebench';
+import { UnverifiableClaimsPlugin } from './unverifiableClaims';
+import { VLGuardPlugin } from './vlguard';
+import { XSTestPlugin } from './xstest';
 
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index.js';
-import type { HarmPlugin } from '../constants.js';
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
+import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
   key: string;

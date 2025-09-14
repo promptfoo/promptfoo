@@ -1,18 +1,18 @@
 import type { Agent } from 'http';
 
-import { getCache, isCacheEnabled } from '../../cache.js';
-import { getEnvInt, getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import telemetry from '../../telemetry.js';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils.js';
-import { AwsBedrockGenericProvider } from './index.js';
+import { getCache, isCacheEnabled } from '../../cache';
+import { getEnvInt, getEnvString } from '../../envars';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { AwsBedrockGenericProvider } from './index';
 import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
-import type { EnvOverrides } from '../../types/env.js';
-import type { ApiProvider, ProviderResponse } from '../../types/providers.js';
+import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider, ProviderResponse } from '../../types/providers';
 
 interface BedrockKnowledgeBaseOptions {
   accessKeyId?: string;

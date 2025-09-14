@@ -1,7 +1,7 @@
-import { matchesLlmRubric } from '../../../src/matchers.js';
-import { ImitationGrader } from '../../../src/redteam/plugins/imitation.js';
+import { matchesLlmRubric } from '../../../src/matchers';
+import { ImitationGrader } from '../../../src/redteam/plugins/imitation';
 
-import type { AtomicTestCase } from '../../../src/types/index.js';
+import type { AtomicTestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),

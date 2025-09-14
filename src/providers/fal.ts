@@ -1,11 +1,11 @@
-import { getCache, isCacheEnabled } from '../cache.js';
-import { getEnvString } from '../envars.js';
-import logger from '../logger.js';
-import { ellipsize } from '../util/text.js';
+import { getCache, isCacheEnabled } from '../cache';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import { ellipsize } from '../util/text';
 import type { Cache } from 'cache-manager';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index.js';
-import type { EnvOverrides } from '../types/env.js';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
+import type { EnvOverrides } from '../types/env';
 
 type FalProviderOptions = {
   apiKey?: string;

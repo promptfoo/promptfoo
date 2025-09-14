@@ -1,4 +1,4 @@
-import type { TestCase } from '../../../types/index.js';
+import type { TestCase } from '../../../types/index';
 
 export async function addInjections(
   testCases: TestCase[],

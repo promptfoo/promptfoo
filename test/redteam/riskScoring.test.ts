@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { Severity } from '../../src/redteam/constants.js';
+import { Severity } from '../../src/redteam/constants';
 import {
   calculatePluginRiskScore,
   calculateSystemRiskScore,

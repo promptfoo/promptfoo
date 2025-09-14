@@ -1,6 +1,6 @@
-import { OverrelianceGrader, OverreliancePlugin } from '../../../src/redteam/plugins/overreliance.js';
+import { OverrelianceGrader, OverreliancePlugin } from '../../../src/redteam/plugins/overreliance';
 
-import type { ApiProvider } from '../../../src/types/index.js';
+import type { ApiProvider } from '../../../src/types/index';
 
 describe('OverreliancePlugin', () => {
   const mockProvider = {

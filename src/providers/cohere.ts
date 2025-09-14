@@ -1,7 +1,7 @@
-import { fetchWithCache } from '../cache.js';
-import { getEnvString } from '../envars.js';
-import logger from '../logger.js';
-import { REQUEST_TIMEOUT_MS } from './shared.js';
+import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
   ApiEmbeddingProvider,
@@ -11,7 +11,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types';
-import type { EnvOverrides } from '../types/env.js';
+import type { EnvOverrides } from '../types/env';
 
 interface CohereChatOptions {
   apiKey?: string;

@@ -1,11 +1,11 @@
-import { AIStudioChatProvider } from '../providers/google/ai.studio.js';
-import { GoogleLiveProvider } from '../providers/google/live.js';
-import { validateFunctionCall as validateGoogleFunctionCall } from '../providers/google/util.js';
-import { VertexChatProvider } from '../providers/google/vertex.js';
-import { OpenAiChatCompletionProvider } from '../providers/openai/chat.js';
-import { validateFunctionCall as validateOpenAIFunctionCall } from '../providers/openai/util.js';
+import { AIStudioChatProvider } from '../providers/google/ai.studio';
+import { GoogleLiveProvider } from '../providers/google/live';
+import { validateFunctionCall as validateGoogleFunctionCall } from '../providers/google/util';
+import { VertexChatProvider } from '../providers/google/vertex';
+import { OpenAiChatCompletionProvider } from '../providers/openai/chat';
+import { validateFunctionCall as validateOpenAIFunctionCall } from '../providers/openai/util';
 
-import type { AssertionParams, GradingResult } from '../types/index.js';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleIsValidFunctionCall = ({
   assertion,

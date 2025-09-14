@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { AbstractTool } from '../../../../src/commands/mcp/lib/baseTool.js';
-import { ValidationError } from '../../../../src/commands/mcp/lib/errors.js';
-import type { ToolResult } from '../../../../src/commands/mcp/lib/types.js';
+import { AbstractTool } from '../../../../src/commands/mcp/lib/baseTool';
+import { ValidationError } from '../../../../src/commands/mcp/lib/errors';
+import type { ToolResult } from '../../../../src/commands/mcp/lib/types';
 
 // Mock MCP server
 const mockMcpServer = {

@@ -1,9 +1,9 @@
-import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets.js';
-import logger from '../../logger.js';
-import { isBasicRefusal } from '../util.js';
-import { RedteamGraderBase, RedteamPluginBase } from './base.js';
+import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
+import logger from '../../logger';
+import { isBasicRefusal } from '../util';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types/index.js';
+import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:aegis';
 export const DATASET_PATH =

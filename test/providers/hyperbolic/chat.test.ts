@@ -5,7 +5,7 @@ import {
   HYPERBOLIC_REASONING_MODELS,
   HyperbolicProvider,
 } from '../../../src/providers/hyperbolic/chat';
-import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat.js';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
 describe('HyperbolicProvider', () => {
   let provider: HyperbolicProvider;

@@ -1,9 +1,9 @@
 import opener from 'opener';
-import { getDefaultPort, VERSION } from '../constants.js';
-import { fetchWithProxy } from './fetch/index.js';
-import logger from '../logger.js';
-import { getRemoteVersionUrl } from '../redteam/remoteGeneration.js';
-import { promptYesNo } from './readline.js';
+import { getDefaultPort, VERSION } from '../constants';
+import { fetchWithProxy } from './fetch/index';
+import logger from '../logger';
+import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
+import { promptYesNo } from './readline';
 
 export enum BrowserBehavior {
   ASK = 0,

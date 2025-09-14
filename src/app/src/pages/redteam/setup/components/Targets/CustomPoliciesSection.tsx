@@ -15,8 +15,8 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useDebounce } from 'use-debounce';
-import { useRedTeamConfig } from '../../hooks/useRedTeamConfig.js';
-import { TestCaseDialog, TestCaseGenerateButton } from '../TestCaseDialog.js';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
+import { TestCaseDialog, TestCaseGenerateButton } from '../TestCaseDialog';
 
 interface PolicyInstance {
   id: string;

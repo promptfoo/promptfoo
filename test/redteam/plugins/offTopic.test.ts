@@ -1,4 +1,4 @@
-import { OffTopicPluginGrader } from '../../../src/redteam/plugins/offTopic.js';
+import { OffTopicPluginGrader } from '../../../src/redteam/plugins/offTopic';
 
 describe('OffTopicPluginGrader', () => {
   let grader: OffTopicPluginGrader;

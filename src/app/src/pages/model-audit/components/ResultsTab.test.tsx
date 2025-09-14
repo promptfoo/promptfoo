@@ -3,12 +3,12 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import ResultsTab from './ResultsTab.js';
-import ScanStatistics from './ScanStatistics.js';
-import SecurityFindings from './SecurityFindings.js';
-import ChecksSection from './ChecksSection.js';
+import ResultsTab from './ResultsTab';
+import ScanStatistics from './ScanStatistics';
+import SecurityFindings from './SecurityFindings';
+import ChecksSection from './ChecksSection';
 
-import type { ScanResult, ScanIssue } from '../ModelAudit.types.js';
+import type { ScanResult, ScanIssue } from '../ModelAudit.types';
 
 vi.mock('./ScanStatistics', () => ({
   default: vi.fn(({ onSeverityClick }) => (

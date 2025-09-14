@@ -1,8 +1,8 @@
 import WebSocket, { type ClientOptions } from 'ws';
-import logger from '../logger.js';
-import invariant from '../util/invariant.js';
-import { safeJsonStringify } from '../util/json.js';
-import { getNunjucksEngine } from '../util/templates.js';
+import logger from '../logger';
+import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
+import { getNunjucksEngine } from '../util/templates';
 
 import type {
   ApiProvider,

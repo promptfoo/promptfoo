@@ -7,7 +7,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import { useNavigate } from 'react-router-dom';
-import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig.js';
+import { EXAMPLE_CONFIG, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 export default function LoadExampleButton() {
   const { setFullConfig } = useRedTeamConfig();

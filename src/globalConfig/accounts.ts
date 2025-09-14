@@ -3,13 +3,13 @@ import { randomUUID } from 'crypto';
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { z } from 'zod';
-import { TERMINAL_MAX_WIDTH } from '../constants.js';
-import { getEnvString, isCI } from '../envars.js';
-import logger from '../logger.js';
-import { fetchWithTimeout } from '../util/fetch/index.js';
-import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig.js';
+import { TERMINAL_MAX_WIDTH } from '../constants';
+import { getEnvString, isCI } from '../envars';
+import logger from '../logger';
+import { fetchWithTimeout } from '../util/fetch/index';
+import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
-import type { GlobalConfig } from '../configTypes.js';
+import type { GlobalConfig } from '../configTypes';
 
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();

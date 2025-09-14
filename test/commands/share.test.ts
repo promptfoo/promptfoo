@@ -5,17 +5,17 @@ import {
   notCloudEnabledShareInstructions,
   shareCommand,
 } from '../../src/commands/share';
-import * as envars from '../../src/envars.js';
-import logger from '../../src/logger.js';
-import Eval from '../../src/models/eval.js';
-import ModelAudit from '../../src/models/modelAudit.js';
+import * as envars from '../../src/envars';
+import logger from '../../src/logger';
+import Eval from '../../src/models/eval';
+import ModelAudit from '../../src/models/modelAudit';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../../src/share';
-import { loadDefaultConfig } from '../../src/util/config/default.js';
+import { loadDefaultConfig } from '../../src/util/config/default';
 
 jest.mock('../../src/share');
 jest.mock('../../src/logger');

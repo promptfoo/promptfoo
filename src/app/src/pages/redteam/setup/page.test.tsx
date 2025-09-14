@@ -4,9 +4,9 @@ import { useToast } from '@app/hooks/useToast';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { useRedTeamConfig } from './hooks/useRedTeamConfig.js';
-import { useSetupState } from './hooks/useSetupState.js';
-import RedTeamSetupPage from './page.js';
+import { useRedTeamConfig } from './hooks/useRedTeamConfig';
+import { useSetupState } from './hooks/useSetupState';
+import RedTeamSetupPage from './page';
 
 // Define these variables outside the test
 const mockNavigate = vi.fn();

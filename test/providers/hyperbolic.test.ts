@@ -1,7 +1,7 @@
-import { HyperbolicAudioProvider } from '../../src/providers/hyperbolic/audio.js';
-import { calculateHyperbolicCost, HyperbolicProvider } from '../../src/providers/hyperbolic/chat.js';
-import { HyperbolicImageProvider } from '../../src/providers/hyperbolic/image.js';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
+import { HyperbolicAudioProvider } from '../../src/providers/hyperbolic/audio';
+import { calculateHyperbolicCost, HyperbolicProvider } from '../../src/providers/hyperbolic/chat';
+import { HyperbolicImageProvider } from '../../src/providers/hyperbolic/image';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
 jest.mock('../../src/logger', () => ({
   debug: jest.fn(),

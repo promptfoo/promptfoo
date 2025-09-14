@@ -6,14 +6,14 @@ import { ExitPromptError } from '@inquirer/core';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { getEnvString } from './envars.js';
-import logger from './logger.js';
-import { redteamInit } from './redteam/commands/init.js';
-import telemetry, { type EventProperties } from './telemetry.js';
-import { isRunningUnderNpx } from './util/index.js';
-import { getNunjucksEngine } from './util/templates.js';
+import { getEnvString } from './envars';
+import logger from './logger';
+import { redteamInit } from './redteam/commands/init';
+import telemetry, { type EventProperties } from './telemetry';
+import { isRunningUnderNpx } from './util/index';
+import { getNunjucksEngine } from './util/templates';
 
-import type { EnvOverrides } from './types/env.js';
+import type { EnvOverrides } from './types/env';
 
 const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 

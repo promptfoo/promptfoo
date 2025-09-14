@@ -1,5 +1,5 @@
-import { fetchWithCache } from '../../../src/cache.js';
-import { OpenAiImageProvider } from '../../../src/providers/openai/image.js';
+import { fetchWithCache } from '../../../src/cache';
+import { OpenAiImageProvider } from '../../../src/providers/openai/image';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');

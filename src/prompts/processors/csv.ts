@@ -1,9 +1,9 @@
 import fs from 'fs';
 
 import { parse, type Options } from 'csv-parse/sync';
-import { getEnvBool, getEnvString } from '../../envars.js';
+import { getEnvBool, getEnvString } from '../../envars';
 
-import type { Prompt } from '../../types/index.js';
+import type { Prompt } from '../../types/index';
 
 type CsvParseOptionsWithColumns<T> = Omit<Options<T>, 'columns'> & {
   columns: Exclude<Options['columns'], undefined | false>;

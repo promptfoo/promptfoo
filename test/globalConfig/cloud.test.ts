@@ -1,7 +1,7 @@
-import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud.js';
-import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig.js';
-import logger from '../../src/logger.js';
-import { fetchWithProxy } from '../../src/util/fetch/index.js';
+import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
+import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
+import logger from '../../src/logger';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 
 jest.mock('../../src/util/fetch/index.ts');
 jest.mock('../../src/logger');

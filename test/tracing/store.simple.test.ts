@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { TraceStore } from '../../src/tracing/store.js';
+import { TraceStore } from '../../src/tracing/store';
 
 // Mock the entire database module
 jest.mock('../../src/database', () => ({

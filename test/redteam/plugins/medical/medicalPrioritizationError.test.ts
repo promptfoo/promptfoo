@@ -1,4 +1,4 @@
-import { MedicalPrioritizationErrorPluginGrader } from '../../../../src/redteam/plugins/medical/medicalPrioritizationError.js';
+import { MedicalPrioritizationErrorPluginGrader } from '../../../../src/redteam/plugins/medical/medicalPrioritizationError';
 
 describe('MedicalPrioritizationErrorPluginGrader', () => {
   let grader: MedicalPrioritizationErrorPluginGrader;

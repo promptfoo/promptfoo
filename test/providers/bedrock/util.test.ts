@@ -1,4 +1,4 @@
-import { novaOutputFromMessage, novaParseMessages } from '../../../src/providers/bedrock/util.js';
+import { novaOutputFromMessage, novaParseMessages } from '../../../src/providers/bedrock/util';
 
 describe('novaOutputFromMessage', () => {
   it('should handle tool use blocks', () => {

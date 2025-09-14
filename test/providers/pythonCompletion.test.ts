@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 
-import { getCache, isCacheEnabled } from '../../src/cache.js';
-import { PythonProvider } from '../../src/providers/pythonCompletion.js';
-import { runPython } from '../../src/python/pythonUtils.js';
+import { getCache, isCacheEnabled } from '../../src/cache';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
+import { runPython } from '../../src/python/pythonUtils';
 
 jest.mock('../../src/python/pythonUtils');
 jest.mock('../../src/cache');

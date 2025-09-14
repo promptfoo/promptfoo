@@ -5,21 +5,21 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
-import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions/index.js';
-import { getCache } from './cache.js';
-import cliState from './cliState.js';
-import { FILE_METADATA_KEY } from './constants.js';
-import { updateSignalFile } from './database/signal.js';
-import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars.js';
-import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers.js';
-import logger from './logger.js';
-import { selectMaxScore } from './matchers.js';
-import { generateIdFromPrompt } from './models/prompt.js';
-import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings.js';
-import { isPromptfooSampleTarget } from './providers/shared.js';
-import { generatePrompts } from './suggestions.js';
-import telemetry from './telemetry.js';
-import { CIProgressReporter } from './progress/ciProgressReporter.js';
+import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions/index';
+import { getCache } from './cache';
+import cliState from './cliState';
+import { FILE_METADATA_KEY } from './constants';
+import { updateSignalFile } from './database/signal';
+import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import logger from './logger';
+import { selectMaxScore } from './matchers';
+import { generateIdFromPrompt } from './models/prompt';
+import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { isPromptfooSampleTarget } from './providers/shared';
+import { generatePrompts } from './suggestions';
+import telemetry from './telemetry';
+import { CIProgressReporter } from './progress/ciProgressReporter';
 import {
   generateTraceContextIfNeeded,
   isOtlpReceiverStarted,
@@ -39,25 +39,25 @@ import {
   type RunEvalOptions,
   type TestSuite,
 } from './types';
-import { isApiProvider } from './types/providers.js';
-import { JsonlFileWriter } from './util/exportToFile/writeToFile.js';
-import { loadFunction, parseFileUrl } from './util/functions/loadFunction.js';
-import invariant from './util/invariant.js';
-import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json.js';
-import { promptYesNo } from './util/readline.js';
-import { sleep } from './util/time.js';
-import { TokenUsageTracker } from './util/tokenUsage.js';
+import { isApiProvider } from './types/providers';
+import { JsonlFileWriter } from './util/exportToFile/writeToFile';
+import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
+import invariant from './util/invariant';
+import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { promptYesNo } from './util/readline';
+import { sleep } from './util/time';
+import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { type TransformContext, TransformInputType, transform } from './util/transform.js';
+import { type TransformContext, TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
-import type Eval from './models/eval.js';
+import type Eval from './models/eval';
 import type {
   EvalConversations,
   EvalRegisters,

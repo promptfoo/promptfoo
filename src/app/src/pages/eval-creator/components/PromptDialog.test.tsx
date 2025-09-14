@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import PromptDialog from './PromptDialog.js';
+import PromptDialog from './PromptDialog';
 
 describe('PromptDialog', () => {
   const mockProps = {

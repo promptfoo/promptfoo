@@ -1,10 +1,10 @@
-import { getDb } from '../../src/database/index.js';
-import { getUserEmail } from '../../src/globalConfig/accounts.js';
-import { runDbMigrations } from '../../src/migrate.js';
-import Eval, { getEvalSummaries } from '../../src/models/eval.js';
-import EvalFactory from '../factories/evalFactory.js';
+import { getDb } from '../../src/database/index';
+import { getUserEmail } from '../../src/globalConfig/accounts';
+import { runDbMigrations } from '../../src/migrate';
+import Eval, { getEvalSummaries } from '../../src/models/eval';
+import EvalFactory from '../factories/evalFactory';
 
-import type { Prompt } from '../../src/types/index.js';
+import type { Prompt } from '../../src/types/index';
 
 jest.mock('../../src/globalConfig/accounts', () => ({
   ...jest.requireActual('../../src/globalConfig/accounts'),

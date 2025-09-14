@@ -8,11 +8,11 @@ import { fileURLToPath } from 'node:url';
 // Use currentDir instead of __dirname to avoid Jest/CJS conflicts
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
-import { getCache, isCacheEnabled } from '../cache.js';
-import logger from '../logger.js';
-import { parsePathOrGlob } from '../util/index.js';
-import { sha256 } from '../util/createHash.js';
-import { safeJsonStringify } from '../util/json.js';
+import { getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
+import { parsePathOrGlob } from '../util/index';
+import { sha256 } from '../util/createHash';
+import { safeJsonStringify } from '../util/json';
 
 import type {
   ApiProvider,

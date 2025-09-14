@@ -1,8 +1,8 @@
-import { handleAnswerRelevance } from '../../src/assertions/answerRelevance.js';
-import { matchesAnswerRelevance } from '../../src/matchers.js';
-import invariant from '../../src/util/invariant.js';
+import { handleAnswerRelevance } from '../../src/assertions/answerRelevance';
+import { matchesAnswerRelevance } from '../../src/matchers';
+import invariant from '../../src/util/invariant';
 
-import type { AssertionValueFunctionContext } from '../../src/types/index.js';
+import type { AssertionValueFunctionContext } from '../../src/types/index';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/util/invariant');

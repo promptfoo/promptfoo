@@ -3,11 +3,11 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import yaml from 'js-yaml';
-import { getUserEmail } from '../../globalConfig/accounts.js';
-import logger from '../../logger.js';
-import telemetry from '../../telemetry.js';
-import { setupEnv } from '../../util/index.js';
-import { getRemoteGenerationUrl } from '../remoteGeneration.js';
+import { getUserEmail } from '../../globalConfig/accounts';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { setupEnv } from '../../util/index';
+import { getRemoteGenerationUrl } from '../remoteGeneration';
 import type { Command } from 'commander';
 
 interface PoisonOptions {

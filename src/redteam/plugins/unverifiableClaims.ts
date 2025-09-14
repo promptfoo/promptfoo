@@ -1,6 +1,6 @@
 import dedent from 'dedent';
-import { RedteamGraderBase, RedteamPluginBase } from './base.js';
-import type { Assertion, AssertionValue, ResultSuggestion, TestCase } from '../../types/index.js';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
+import type { Assertion, AssertionValue, ResultSuggestion, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:unverifiable-claims';
 

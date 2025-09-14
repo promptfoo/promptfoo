@@ -1,4 +1,4 @@
-import { IndirectPromptInjectionGrader } from '../../../src/redteam/plugins/indirectPromptInjection.js';
+import { IndirectPromptInjectionGrader } from '../../../src/redteam/plugins/indirectPromptInjection';
 
 describe('IndirectPromptInjectionGrader', () => {
   let grader: IndirectPromptInjectionGrader;

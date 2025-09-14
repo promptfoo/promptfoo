@@ -1,8 +1,8 @@
 import dedent from 'dedent';
 import z from 'zod';
-import invariant from '../../../util/invariant.js';
-import { RedteamGraderBase } from '../base.js';
-import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './constants.js';
+import invariant from '../../../util/invariant';
+import { RedteamGraderBase } from '../base';
+import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './constants';
 
 export const VarsSchema = z.object({
   purpose: z.string(),

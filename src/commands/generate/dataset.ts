@@ -2,14 +2,14 @@ import * as fs from 'fs';
 
 import chalk from 'chalk';
 import yaml from 'js-yaml';
-import { disableCache } from '../../cache.js';
-import { serializeObjectArrayAsCSV } from '../../csv.js';
-import logger from '../../logger.js';
-import telemetry from '../../telemetry.js';
-import { synthesizeFromTestSuite } from '../../testCase/synthesis.js';
-import { type TestSuite, type UnifiedConfig } from '../../types/index.js';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index.js';
-import { resolveConfigs } from '../../util/config/load.js';
+import { disableCache } from '../../cache';
+import { serializeObjectArrayAsCSV } from '../../csv';
+import logger from '../../logger';
+import telemetry from '../../telemetry';
+import { synthesizeFromTestSuite } from '../../testCase/synthesis';
+import { type TestSuite, type UnifiedConfig } from '../../types/index';
+import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index';
+import { resolveConfigs } from '../../util/config/load';
 import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {

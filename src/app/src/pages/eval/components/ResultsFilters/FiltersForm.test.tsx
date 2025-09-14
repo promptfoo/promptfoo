@@ -2,8 +2,8 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import FiltersForm from './FiltersForm.js';
-import { useTableStore, type ResultsFilter } from '../store.js';
+import FiltersForm from './FiltersForm';
+import { useTableStore, type ResultsFilter } from '../store';
 
 vi.mock('../store', () => ({
   useTableStore: vi.fn(),

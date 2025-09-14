@@ -1,11 +1,11 @@
-import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets.js';
+import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import {
   fetchDataset,
   ToxicChatGrader,
   ToxicChatPlugin,
 } from '../../../src/redteam/plugins/toxicChat';
 
-import type { TestCase } from '../../../src/types/index.js';
+import type { TestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/integrations/huggingfaceDatasets');
 

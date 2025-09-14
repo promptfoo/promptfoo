@@ -12,14 +12,14 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
-import FrameworkCard from './FrameworkCard.js';
+import FrameworkCard from './FrameworkCard';
 import {
   categorizePlugins,
   expandPluginCollections,
   getProgressColor,
 } from './FrameworkComplianceUtils';
-import CSVExporter from './FrameworkCsvExporter.js';
-import { useReportStore } from './store.js';
+import CSVExporter from './FrameworkCsvExporter';
+import { useReportStore } from './store';
 import './FrameworkCompliance.css';
 
 interface FrameworkComplianceProps {

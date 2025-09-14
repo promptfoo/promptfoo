@@ -1,4 +1,4 @@
-import type { RedteamUITarget } from '../types.js';
+import type { RedteamUITarget } from '../types';
 
 export const predefinedTargets: RedteamUITarget[] = [
   { value: '', label: 'Select a target' },

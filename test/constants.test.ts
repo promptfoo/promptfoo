@@ -10,7 +10,7 @@ import {
   TERMINAL_MAX_WIDTH,
   VERSION,
 } from '../src/constants';
-import { REDTEAM_DEFAULTS } from '../src/redteam/constants.js';
+import { REDTEAM_DEFAULTS } from '../src/redteam/constants';
 
 describe('constants', () => {
   beforeEach(() => {

@@ -36,20 +36,20 @@ import yaml from 'js-yaml';
 import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
-import CustomMetrics from './CustomMetrics.js';
-import CustomMetricsDialog from './CustomMetricsDialog.js';
-import EvalOutputCell from './EvalOutputCell.js';
-import EvalOutputPromptDialog from './EvalOutputPromptDialog.js';
-import MarkdownErrorBoundary from './MarkdownErrorBoundary.js';
-import { useResultsViewSettingsStore, useTableStore } from './store.js';
-import TruncatedText from './TruncatedText.js';
+import CustomMetrics from './CustomMetrics';
+import CustomMetricsDialog from './CustomMetricsDialog';
+import EvalOutputCell from './EvalOutputCell';
+import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import MarkdownErrorBoundary from './MarkdownErrorBoundary';
+import { useResultsViewSettingsStore, useTableStore } from './store';
+import TruncatedText from './TruncatedText';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
-import type { TruncatedTextProps } from './TruncatedText.js';
+import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import ButtonGroup from '@mui/material/ButtonGroup';
-import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks.js';
+import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;

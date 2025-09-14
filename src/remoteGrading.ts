@@ -1,10 +1,10 @@
-import { fetchWithCache } from './cache.js';
-import { getUserEmail } from './globalConfig/accounts.js';
-import logger from './logger.js';
-import { REQUEST_TIMEOUT_MS } from './providers/shared.js';
-import { getRemoteGenerationUrl } from './redteam/remoteGeneration.js';
+import { fetchWithCache } from './cache';
+import { getUserEmail } from './globalConfig/accounts';
+import logger from './logger';
+import { REQUEST_TIMEOUT_MS } from './providers/shared';
+import { getRemoteGenerationUrl } from './redteam/remoteGeneration';
 
-import type { GradingResult } from './types/index.js';
+import type { GradingResult } from './types/index';
 
 type RemoteGradingPayload = {
   task: string;

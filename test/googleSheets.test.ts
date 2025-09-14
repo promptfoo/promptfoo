@@ -4,11 +4,11 @@ import {
   fetchCsvFromGoogleSheetUnauthenticated,
   writeCsvToGoogleSheet,
 } from '../src/googleSheets';
-import logger from '../src/logger.js';
-import { fetchWithProxy } from '../src/util/fetch/index.js';
-import { createMockResponse } from './util/utils.js';
+import logger from '../src/logger';
+import { fetchWithProxy } from '../src/util/fetch/index';
+import { createMockResponse } from './util/utils';
 
-import type { CsvRow } from '../src/types/index.js';
+import type { CsvRow } from '../src/types/index';
 
 interface MockSpreadsheets {
   get: jest.Mock;

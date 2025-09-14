@@ -1,14 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 
-import { runAssertion } from '../../src/assertions/index.js';
-import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall.js';
-import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai.js';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
-import { validateFunctionCall } from '../../src/providers/openai/util.js';
-import { maybeLoadToolsFromExternalFile } from '../../src/util/index.js';
+import { runAssertion } from '../../src/assertions/index';
+import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
+import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { validateFunctionCall } from '../../src/providers/openai/util';
+import { maybeLoadToolsFromExternalFile } from '../../src/util/index';
 
-import type { OpenAiTool } from '../../src/providers/openai/util.js';
+import type { OpenAiTool } from '../../src/providers/openai/util';
 import type {
   ApiProvider,
   Assertion,

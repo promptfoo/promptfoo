@@ -8,7 +8,7 @@ import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig.js';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 interface Variable {
   id: string;

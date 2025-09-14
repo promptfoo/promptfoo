@@ -1,7 +1,7 @@
 import dedent from 'dedent';
-import invariant from '../../util/invariant.js';
-import { type Policy, type PolicyObject, PolicyObjectSchema } from '../types.js';
-import { RedteamGraderBase, RedteamPluginBase } from './base.js';
+import invariant from '../../util/invariant';
+import { type Policy, type PolicyObject, PolicyObjectSchema } from '../types';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,

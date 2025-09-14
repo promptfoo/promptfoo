@@ -1,8 +1,8 @@
-import { evaluate } from '../../src/evaluator.js';
-import { getTraceStore } from '../../src/tracing/store.js';
+import { evaluate } from '../../src/evaluator';
+import { getTraceStore } from '../../src/tracing/store';
 
-import type Eval from '../../src/models/eval.js';
-import type { EvaluateOptions, TestSuite } from '../../src/types/index.js';
+import type Eval from '../../src/models/eval';
+import type { EvaluateOptions, TestSuite } from '../../src/types/index';
 
 // Mock dependencies
 jest.mock('../../src/tracing/store');

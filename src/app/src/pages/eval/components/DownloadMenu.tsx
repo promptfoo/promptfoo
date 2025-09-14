@@ -20,8 +20,8 @@ import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types'
 import { removeEmpty } from '@promptfoo/util/objectUtils';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
-import { useToast } from '../../../hooks/useToast.js';
-import { useTableStore as useResultsViewStore } from './store.js';
+import { useToast } from '../../../hooks/useToast';
+import { useTableStore as useResultsViewStore } from './store';
 
 function DownloadMenu() {
   const { table, config, evalId } = useResultsViewStore();

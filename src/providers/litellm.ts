@@ -1,8 +1,8 @@
-import { OpenAiChatCompletionProvider } from './openai/chat.js';
-import { OpenAiCompletionProvider } from './openai/completion.js';
-import { OpenAiEmbeddingProvider } from './openai/embedding.js';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
 
-import type { EnvOverrides } from '../types/env.js';
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -12,7 +12,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import type { OpenAiCompletionOptions } from './openai/types.js';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 type LiteLLMCompletionOptions = OpenAiCompletionOptions;
 

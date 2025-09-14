@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import InfoModal from './InfoModal.js';
+import InfoModal from './InfoModal';
 
 describe('InfoModal', () => {
   const mockOnClose = vi.fn();

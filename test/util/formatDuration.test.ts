@@ -1,4 +1,4 @@
-import { formatDuration } from '../../src/util/formatDuration.js';
+import { formatDuration } from '../../src/util/formatDuration';
 
 describe('formatDuration', () => {
   it('should format seconds only', () => {

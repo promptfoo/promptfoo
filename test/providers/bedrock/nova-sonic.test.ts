@@ -2,8 +2,8 @@ import { TextEncoder } from 'util';
 
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
-import { disableCache, enableCache } from '../../../src/cache.js';
-import { NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic.js';
+import { disableCache, enableCache } from '../../../src/cache';
+import { NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
 
 jest.mock('@smithy/node-http-handler', () => ({
   NodeHttp2Handler: jest.fn(),

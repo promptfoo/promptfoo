@@ -1,11 +1,11 @@
-import { matchesAnswerRelevance } from '../../src/matchers.js';
-import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts/index.js';
+import { matchesAnswerRelevance } from '../../src/matchers';
+import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts/index';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
 
-import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding.js';
+import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 describe('matchesAnswerRelevance', () => {
   beforeEach(() => {

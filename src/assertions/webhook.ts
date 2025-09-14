@@ -1,8 +1,8 @@
-import { getEnvInt } from '../envars.js';
-import { fetchWithRetries } from '../util/fetch/index.js';
-import invariant from '../util/invariant.js';
+import { getEnvInt } from '../envars';
+import { fetchWithRetries } from '../util/fetch/index';
+import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types/index.js';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export async function handleWebhook({
   assertion,

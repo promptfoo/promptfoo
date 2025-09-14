@@ -1,6 +1,6 @@
-import { disableCache, enableCache, fetchWithCache } from '../../../src/cache.js';
-import logger from '../../../src/logger.js';
-import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion.js';
+import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
+import logger from '../../../src/logger';
+import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');

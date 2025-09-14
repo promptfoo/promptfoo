@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { ShiftKeyContext } from '@app/contexts/ShiftKeyContextDef';
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { useShiftKey } from './useShiftKey.js';
+import { useShiftKey } from './useShiftKey';
 
 const createWrapper = (shiftKeyValue: boolean) => {
   return ({ children }: { children: ReactNode }) => (

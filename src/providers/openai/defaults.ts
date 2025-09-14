@@ -1,6 +1,6 @@
-import { OpenAiChatCompletionProvider } from './chat.js';
-import { OpenAiEmbeddingProvider } from './embedding.js';
-import { OpenAiModerationProvider } from './moderation.js';
+import { OpenAiChatCompletionProvider } from './chat';
+import { OpenAiEmbeddingProvider } from './embedding';
+import { OpenAiModerationProvider } from './moderation';
 
 export const DefaultEmbeddingProvider = new OpenAiEmbeddingProvider('text-embedding-3-large');
 export const DefaultGradingProvider = new OpenAiChatCompletionProvider('gpt-4.1-2025-04-14');

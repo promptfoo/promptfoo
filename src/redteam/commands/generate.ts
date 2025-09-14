@@ -8,16 +8,16 @@ import yaml from 'js-yaml';
 import { validate as uuidValidate } from 'uuid';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
-import { disableCache } from '../../cache.js';
-import cliState from '../../cliState.js';
-import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants.js';
-import { getAuthor, getUserEmail } from '../../globalConfig/accounts.js';
-import { cloudConfig } from '../../globalConfig/cloud.js';
-import logger from '../../logger.js';
-import { getProviderIds } from '../../providers/index.js';
-import { isPromptfooSampleTarget } from '../../providers/shared.js';
-import telemetry from '../../telemetry.js';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index.js';
+import { disableCache } from '../../cache';
+import cliState from '../../cliState';
+import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants';
+import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
+import logger from '../../logger';
+import { getProviderIds } from '../../providers/index';
+import { isPromptfooSampleTarget } from '../../providers/shared';
+import telemetry from '../../telemetry';
+import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index';
 import {
   checkCloudPermissions,
   getCloudDatabaseId,
@@ -26,12 +26,12 @@ import {
   getPluginSeverityOverridesFromCloud,
   isCloudProvider,
 } from '../../util/cloud';
-import { resolveConfigs } from '../../util/config/load.js';
-import { writePromptfooConfig } from '../../util/config/writer.js';
-import { getCustomPolicies } from '../../util/generation.js';
-import invariant from '../../util/invariant.js';
-import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam.js';
-import { synthesize } from '..//index.js';
+import { resolveConfigs } from '../../util/config/load';
+import { writePromptfooConfig } from '../../util/config/writer';
+import { getCustomPolicies } from '../../util/generation';
+import invariant from '../../util/invariant';
+import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
+import { synthesize } from '..//index';
 import {
   ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,
@@ -41,12 +41,12 @@ import {
   REDTEAM_MODEL,
   type Severity,
 } from '../constants';
-import { extractMcpToolsInfo } from '../extraction/mcpTools.js';
-import { isValidPolicyObject } from '../plugins/policy.js';
-import { shouldGenerateRemote } from '../remoteGeneration.js';
+import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { isValidPolicyObject } from '../plugins/policy';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index.js';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
 import type {
   PolicyObject,
   RedteamCliGenerateOptions,

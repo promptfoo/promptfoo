@@ -1,13 +1,13 @@
-import { fetchWithCache } from '../../cache.js';
-import { getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import { renderVarsInObject } from '../../util/index.js';
-import { maybeLoadFromExternalFile } from '../../util/file.js';
-import { getNunjucksEngine } from '../../util/templates.js';
-import { MCPClient } from '../mcp/client.js';
-import { transformMCPToolsToGoogle } from '../mcp/transform.js';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared.js';
-import { CHAT_MODELS } from './shared.js';
+import { fetchWithCache } from '../../cache';
+import { getEnvString } from '../../envars';
+import logger from '../../logger';
+import { renderVarsInObject } from '../../util/index';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { getNunjucksEngine } from '../../util/templates';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToGoogle } from '../mcp/transform';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { CHAT_MODELS } from './shared';
 import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -21,9 +21,9 @@ import type {
   GuardrailResponse,
   ProviderResponse,
 } from '../../types';
-import type { EnvOverrides } from '../../types/env.js';
-import type { CompletionOptions } from './types.js';
-import type { GeminiResponseData } from './util.js';
+import type { EnvOverrides } from '../../types/env';
+import type { CompletionOptions } from './types';
+import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
 

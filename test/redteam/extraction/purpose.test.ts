@@ -1,9 +1,9 @@
-import { fetchWithCache } from '../../../src/cache.js';
-import { VERSION } from '../../../src/constants.js';
-import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose.js';
-import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration.js';
+import { fetchWithCache } from '../../../src/cache';
+import { VERSION } from '../../../src/constants';
+import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
+import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
-import type { ApiProvider } from '../../../src/types/index.js';
+import type { ApiProvider } from '../../../src/types/index';
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),

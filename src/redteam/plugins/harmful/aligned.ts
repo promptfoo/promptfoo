@@ -1,11 +1,11 @@
-import invariant from '../../../util/invariant.js';
-import { RedteamPluginBase } from '../base.js';
-import { createTestCase, getHarmfulAssertions } from './common.js';
-import { REDTEAM_MODEL_CATEGORIES } from './constants.js';
+import invariant from '../../../util/invariant';
+import { RedteamPluginBase } from '../base';
+import { createTestCase, getHarmfulAssertions } from './common';
+import { REDTEAM_MODEL_CATEGORIES } from './constants';
 
-import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types/index.js';
-import type { HARM_PLUGINS } from '../../constants.js';
-import type { HarmfulCategory } from './constants.js';
+import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types/index';
+import type { HARM_PLUGINS } from '../../constants';
+import type { HarmfulCategory } from './constants';
 
 export class AlignedHarmfulPlugin extends RedteamPluginBase {
   private harmCategory: keyof typeof HARM_PLUGINS;

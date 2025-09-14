@@ -1,7 +1,7 @@
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LogViewer } from './LogViewer.js';
+import { LogViewer } from './LogViewer';
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({

@@ -9,10 +9,10 @@
  * {@link https://doi.org/10.3115/1073083.1073135}
  */
 
-import invariant from '../util/invariant.js';
-import { getNGrams } from './ngrams.js';
+import invariant from '../util/invariant';
+import { getNGrams } from './ngrams';
 
-import type { AssertionParams, GradingResult } from '../types/index.js';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Calculates the brevity penalty for BLEU score.

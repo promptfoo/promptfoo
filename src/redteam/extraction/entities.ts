@@ -1,10 +1,10 @@
 import dedent from 'dedent';
-import logger from '../../logger.js';
-import { shouldGenerateRemote } from '../remoteGeneration.js';
-import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util.js';
+import logger from '../../logger';
+import { shouldGenerateRemote } from '../remoteGeneration';
+import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
-import type { ApiProvider } from '../../types/index.js';
-import type { RedTeamTask } from './util.js';
+import type { ApiProvider } from '../../types/index';
+import type { RedTeamTask } from './util';
 
 export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
   if (shouldGenerateRemote()) {

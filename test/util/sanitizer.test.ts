@@ -1,4 +1,4 @@
-import { sanitizeBody, sanitizeUrl } from '../../src/util/sanitizer.js';
+import { sanitizeBody, sanitizeUrl } from '../../src/util/sanitizer';
 
 // Mock console.warn to prevent test noise
 const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});

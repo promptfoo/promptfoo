@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
-import ProviderSelector from './ProviderSelector.js';
+import ProviderSelector from './ProviderSelector';
 
 vi.mock('../../../store/providersStore', () => ({
   useProvidersStore: vi.fn(() => ({

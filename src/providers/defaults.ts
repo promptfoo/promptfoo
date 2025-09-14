@@ -1,10 +1,10 @@
-import { getEnvString } from '../envars.js';
-import logger from '../logger.js';
-import { getAnthropicProviders } from './anthropic/defaults.js';
-import { AzureChatCompletionProvider } from './azure/chat.js';
-import { AzureEmbeddingProvider } from './azure/embedding.js';
-import { AzureModerationProvider } from './azure/moderation.js';
-import { hasGoogleDefaultCredentials } from './google/util.js';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import { getAnthropicProviders } from './anthropic/defaults';
+import { AzureChatCompletionProvider } from './azure/chat';
+import { AzureEmbeddingProvider } from './azure/embedding';
+import { AzureModerationProvider } from './azure/moderation';
+import { hasGoogleDefaultCredentials } from './google/util';
 import {
   DefaultGradingProvider as GoogleAiStudioGradingProvider,
   DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
@@ -36,8 +36,8 @@ import {
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
 
-import type { ApiProvider, DefaultProviders } from '../types/index.js';
-import type { EnvOverrides } from '../types/env.js';
+import type { ApiProvider, DefaultProviders } from '../types/index';
+import type { EnvOverrides } from '../types/env';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
   'gradingJsonProvider',

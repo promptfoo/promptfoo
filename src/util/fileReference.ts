@@ -2,10 +2,10 @@ import fs from 'fs';
 import path from 'path';
 
 import yaml from 'js-yaml';
-import { importModule } from '../esm.js';
-import logger from '../logger.js';
-import { runPython } from '../python/pythonUtils.js';
-import { isJavascriptFile } from './fileExtensions.js';
+import { importModule } from '../esm';
+import logger from '../logger';
+import { runPython } from '../python/pythonUtils';
+import { isJavascriptFile } from './fileExtensions';
 
 /**
  * Loads the content from a file reference

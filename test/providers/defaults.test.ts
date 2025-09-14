@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
-import { AzureModerationProvider } from '../../src/providers/azure/moderation.js';
+import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
   setDefaultCompletionProviders,
@@ -12,7 +12,7 @@ import {
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
 } from '../../src/providers/google/ai.studio';
-import { DefaultEmbeddingProvider as GeminiEmbeddingProvider } from '../../src/providers/google/vertex.js';
+import { DefaultEmbeddingProvider as GeminiEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -20,10 +20,10 @@ import {
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from '../../src/providers/mistral/defaults';
-import { DefaultModerationProvider } from '../../src/providers/openai/defaults.js';
+import { DefaultModerationProvider } from '../../src/providers/openai/defaults';
 
-import type { ApiProvider } from '../../src/types/index.js';
-import type { EnvOverrides } from '../../src/types/env.js';
+import type { ApiProvider } from '../../src/types/index';
+import type { EnvOverrides } from '../../src/types/env';
 
 jest.mock('../../src/providers/google/util', () => ({
   hasGoogleDefaultCredentials: jest.fn().mockResolvedValue(false),

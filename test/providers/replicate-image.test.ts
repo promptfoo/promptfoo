@@ -1,5 +1,5 @@
-import { ReplicateImageProvider } from '../../src/providers/replicate.js';
-import { fetchWithCache } from '../../src/cache.js';
+import { ReplicateImageProvider } from '../../src/providers/replicate';
+import { fetchWithCache } from '../../src/cache';
 
 jest.mock('../../src/cache');
 

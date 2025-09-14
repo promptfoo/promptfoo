@@ -56,19 +56,19 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { Link as RouterLink } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
-import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig.js';
-import CustomIntentSection from './CustomIntentPluginSection.js';
-import PageWrapper from './PageWrapper.js';
-import PluginConfigDialog from './PluginConfigDialog.js';
-import PresetCard from './PresetCard.js';
+import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import CustomIntentSection from './CustomIntentPluginSection';
+import PageWrapper from './PageWrapper';
+import PluginConfigDialog from './PluginConfigDialog';
+import PresetCard from './PresetCard';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
-import { CustomPoliciesSection } from './Targets/CustomPoliciesSection.js';
+import { CustomPoliciesSection } from './Targets/CustomPoliciesSection';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
-import type { LocalPluginConfig } from '../types.js';
+import type { LocalPluginConfig } from '../types';
 
 interface PluginsProps {
   onNext: () => void;

@@ -1,20 +1,20 @@
 import path from 'path';
 
 import OpenAI from 'openai';
-import cliState from '../../cliState.js';
-import { importModule } from '../../esm.js';
-import logger from '../../logger.js';
-import { maybeLoadToolsFromExternalFile } from '../../util/index.js';
-import { isJavascriptFile } from '../../util/fileExtensions.js';
-import { sleep } from '../../util/time.js';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from '../shared.js';
+import cliState from '../../cliState';
+import { importModule } from '../../esm';
+import logger from '../../logger';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { isJavascriptFile } from '../../util/fileExtensions';
+import { sleep } from '../../util/time';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { failApiCall, getTokenUsage } from './util.js';
+import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index.js';
-import type { EnvOverrides } from '../../types/env.js';
-import type { AssistantFunctionCallback, CallbackContext, OpenAiSharedOptions } from './types.js';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
+import type { AssistantFunctionCallback, CallbackContext, OpenAiSharedOptions } from './types';
 
 type OpenAiAssistantOptions = OpenAiSharedOptions & {
   modelName?: string;

@@ -1,10 +1,10 @@
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
-import { configCommand } from '../../src/commands/config.js';
-import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts.js';
-import { cloudConfig } from '../../src/globalConfig/cloud.js';
-import logger from '../../src/logger.js';
-import telemetry from '../../src/telemetry.js';
+import { configCommand } from '../../src/commands/config';
+import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
+import { cloudConfig } from '../../src/globalConfig/cloud';
+import logger from '../../src/logger';
+import telemetry from '../../src/telemetry';
 
 jest.mock('../../src/globalConfig/accounts');
 jest.mock('../../src/globalConfig/cloud');

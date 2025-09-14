@@ -1,7 +1,7 @@
-import { matchesModeration } from '../../src/matchers.js';
-import { OpenAiModerationProvider } from '../../src/providers/openai/moderation.js';
-import { ReplicateModerationProvider } from '../../src/providers/replicate.js';
-import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../../src/redteam/constants.js';
+import { matchesModeration } from '../../src/matchers';
+import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
+import { ReplicateModerationProvider } from '../../src/providers/replicate';
+import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../../src/redteam/constants';
 
 describe('matchesModeration', () => {
   const mockModerationResponse = {

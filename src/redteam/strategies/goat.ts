@@ -1,6 +1,6 @@
-import logger from '../../logger.js';
+import logger from '../../logger';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types/index.js';
+import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
 export async function addGoatTestCases(
   testCases: TestCaseWithPlugin[],

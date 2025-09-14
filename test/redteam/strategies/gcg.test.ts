@@ -1,10 +1,10 @@
-import { fetchWithCache } from '../../../src/cache.js';
-import { getUserEmail } from '../../../src/globalConfig/accounts.js';
-import logger from '../../../src/logger.js';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration.js';
-import { addGcgTestCases, CONCURRENCY } from '../../../src/redteam/strategies/gcg.js';
+import { fetchWithCache } from '../../../src/cache';
+import { getUserEmail } from '../../../src/globalConfig/accounts';
+import logger from '../../../src/logger';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { addGcgTestCases, CONCURRENCY } from '../../../src/redteam/strategies/gcg';
 
-import type { TestCase } from '../../../src/types/index.js';
+import type { TestCase } from '../../../src/types/index';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/globalConfig/accounts');

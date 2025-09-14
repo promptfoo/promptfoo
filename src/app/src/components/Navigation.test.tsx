@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import Navigation from './Navigation.js';
+import Navigation from './Navigation';
 
 vi.mock('./InfoModal', () => ({
   default: ({ open }: { open: boolean }) => (open ? <div>InfoModal</div> : null),

@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
 import type { StandaloneEval } from '@promptfoo/util/database';
 
-import History from './History.js';
+import History from './History';
 
 const mockData: StandaloneEval[] = [
   {

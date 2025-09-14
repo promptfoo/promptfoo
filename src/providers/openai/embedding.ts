@@ -1,10 +1,10 @@
-import { fetchWithCache } from '../../cache.js';
-import logger from '../../logger.js';
-import { REQUEST_TIMEOUT_MS } from '../shared.js';
+import { fetchWithCache } from '../../cache';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { getTokenUsage } from './util.js';
+import { getTokenUsage } from './util';
 
-import type { ProviderEmbeddingResponse } from '../../types/index.js';
+import type { ProviderEmbeddingResponse } from '../../types/index';
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {

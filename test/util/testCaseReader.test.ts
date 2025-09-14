@@ -3,20 +3,20 @@ import * as fs from 'fs';
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { testCaseFromCsvRow } from '../../src/csv.js';
-import { getEnvBool, getEnvString } from '../../src/envars.js';
-import { fetchCsvFromGoogleSheet } from '../../src/googleSheets.js';
-import logger from '../../src/logger.js';
-import { loadApiProvider } from '../../src/providers/index.js';
+import { testCaseFromCsvRow } from '../../src/csv';
+import { getEnvBool, getEnvString } from '../../src/envars';
+import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
+import logger from '../../src/logger';
+import { loadApiProvider } from '../../src/providers/index';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
   readTest,
   readTestFiles,
   readTests,
-} from '../../src/util/testCaseReader.js';
+} from '../../src/util/testCaseReader';
 
-import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types/index.js';
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types/index';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 jest.mock('../../src/util/fetch', () => ({

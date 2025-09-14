@@ -19,8 +19,8 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { type GradingResult } from '@promptfoo/types';
-import RiskCategoryDrawer from './RiskCategoryDrawer.js';
-import { useReportStore } from './store.js';
+import RiskCategoryDrawer from './RiskCategoryDrawer';
+import { useReportStore } from './store';
 import './RiskCard.css';
 
 const RiskCard = ({

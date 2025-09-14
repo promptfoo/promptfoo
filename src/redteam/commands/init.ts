@@ -9,16 +9,16 @@ import input from '@inquirer/input';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { getDefaultPort } from '../../constants.js';
-import { getEnvString } from '../../envars.js';
-import { getUserEmail, setUserEmail } from '../../globalConfig/accounts.js';
-import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig.js';
-import logger from '../../logger.js';
-import { startServer } from '../../server/server.js';
-import telemetry, { type EventProperties } from '../../telemetry.js';
-import { isRunningUnderNpx, setupEnv } from '../../util/index.js';
-import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server.js';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates.js';
+import { getDefaultPort } from '../../constants';
+import { getEnvString } from '../../envars';
+import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
+import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
+import logger from '../../logger';
+import { startServer } from '../../server/server';
+import telemetry, { type EventProperties } from '../../telemetry';
+import { isRunningUnderNpx, setupEnv } from '../../util/index';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
   ADDITIONAL_STRATEGIES,
   ALL_PLUGINS,
@@ -29,10 +29,10 @@ import {
   type Strategy,
   subCategoryDescriptions,
 } from '../constants';
-import { doGenerateRedteam } from './generate.js';
+import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 
-import type { ProviderOptions, RedteamPluginObject } from '../../types/index.js';
+import type { ProviderOptions, RedteamPluginObject } from '../../types/index';
 
 const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 

@@ -27,7 +27,7 @@ import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import { SeverityBadge } from '../ModelAudit.styles.js';
+import { SeverityBadge } from '../ModelAudit.styles';
 import {
   getIssueFilePath,
   getSeverityLabel,
@@ -35,7 +35,7 @@ import {
   mapSeverityForFiltering,
 } from '../utils';
 
-import type { ScanIssue, ScanResult } from '../ModelAudit.types.js';
+import type { ScanIssue, ScanResult } from '../ModelAudit.types';
 
 interface SecurityFindingsProps {
   scanResults: ScanResult;

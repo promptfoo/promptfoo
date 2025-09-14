@@ -3,8 +3,8 @@ import { callApi } from '@app/utils/api';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Eval from './Eval.js';
-import { useResultsViewSettingsStore, useTableStore } from './store.js';
+import Eval from './Eval';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 vi.mock('@app/hooks/usePageMeta');

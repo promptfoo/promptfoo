@@ -1,11 +1,11 @@
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
-import { deleteCommand, handleEvalDelete, handleEvalDeleteAll } from '../../src/commands/delete.js';
-import logger from '../../src/logger.js';
-import Eval from '../../src/models/eval.js';
-import * as database from '../../src/util/database.js';
+import { deleteCommand, handleEvalDelete, handleEvalDeleteAll } from '../../src/commands/delete';
+import logger from '../../src/logger';
+import Eval from '../../src/models/eval';
+import * as database from '../../src/util/database';
 
-import type { EvalWithMetadata } from '../../src/types/index.js';
+import type { EvalWithMetadata } from '../../src/types/index';
 
 jest.mock('@inquirer/confirm');
 jest.mock('../../src/util/database');

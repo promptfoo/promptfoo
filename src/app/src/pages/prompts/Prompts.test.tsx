@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { alpha } from '@mui/material';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
-import Prompts from './Prompts.js';
+import Prompts from './Prompts';
 
 vi.mock('./PromptDialog', () => ({
   default: ({

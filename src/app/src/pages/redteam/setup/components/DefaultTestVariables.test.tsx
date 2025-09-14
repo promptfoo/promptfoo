@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import DefaultTestVariables from './DefaultTestVariables.js';
+import DefaultTestVariables from './DefaultTestVariables';
 
 // Mock the useRedTeamConfig hook
 const mockUpdateConfig = vi.fn();

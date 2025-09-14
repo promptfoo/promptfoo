@@ -1,7 +1,7 @@
-import { createLambdaLabsProvider } from '../../src/providers/lambdalabs.js';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
-import { OpenAiCompletionProvider } from '../../src/providers/openai/completion.js';
-import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding.js';
+import { createLambdaLabsProvider } from '../../src/providers/lambdalabs';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 jest.mock('../../src/providers/openai/chat');
 jest.mock('../../src/providers/openai/completion');

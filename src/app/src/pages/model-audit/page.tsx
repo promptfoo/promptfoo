@@ -1,6 +1,6 @@
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import ErrorBoundary from '../../components/ErrorBoundary.js';
-import ModelAudit from './ModelAudit.js';
+import ErrorBoundary from '../../components/ErrorBoundary';
+import ModelAudit from './ModelAudit';
 
 function ModelAuditPageContent() {
   return <ModelAudit />;

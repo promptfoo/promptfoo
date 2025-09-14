@@ -1,23 +1,23 @@
 import path from 'path';
 
-import { fetchWithCache } from '../../cache.js';
-import cliState from '../../cliState.js';
-import { getEnvFloat, getEnvInt, getEnvString } from '../../envars.js';
-import { importModule } from '../../esm.js';
-import logger from '../../logger.js';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index.js';
-import { maybeLoadFromExternalFile } from '../../util/file.js';
-import { isJavascriptFile } from '../../util/fileExtensions.js';
-import { normalizeFinishReason } from '../../util/finishReason.js';
-import { MCPClient } from '../mcp/client.js';
-import { transformMCPToolsToOpenAi } from '../mcp/transform.js';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared.js';
+import { fetchWithCache } from '../../cache';
+import cliState from '../../cliState';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
+import { importModule } from '../../esm';
+import logger from '../../logger';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
+import { normalizeFinishReason } from '../../util/finishReason';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToOpenAi } from '../mcp/transform';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util.js';
+import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index.js';
-import type { EnvOverrides } from '../../types/env.js';
-import type { OpenAiCompletionOptions, ReasoningEffort } from './types.js';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
+import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;

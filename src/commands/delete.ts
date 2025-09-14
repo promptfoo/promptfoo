@@ -1,9 +1,9 @@
 import confirm from '@inquirer/confirm';
-import logger from '../logger.js';
-import Eval from '../models/eval.js';
-import telemetry from '../telemetry.js';
-import { setupEnv } from '../util/index.js';
-import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database.js';
+import logger from '../logger';
+import Eval from '../models/eval';
+import telemetry from '../telemetry';
+import { setupEnv } from '../util/index';
+import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database';
 import type { Command } from 'commander';
 
 export async function handleEvalDelete(evalId: string, envPath?: string) {

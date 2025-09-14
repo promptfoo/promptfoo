@@ -1,8 +1,8 @@
-import { runAssertion } from '../../src/assertions/index.js';
-import { getTraceStore } from '../../src/tracing/store.js';
+import { runAssertion } from '../../src/assertions/index';
+import { getTraceStore } from '../../src/tracing/store';
 
-import type { Assertion, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types/index.js';
-import type { TraceData } from '../../src/types/tracing.js';
+import type { Assertion, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types/index';
+import type { TraceData } from '../../src/types/tracing';
 
 // Mock the trace store
 jest.mock('../../src/tracing/store');

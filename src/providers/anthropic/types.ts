@@ -1,6 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { MCPConfig } from '../mcp/types.js';
+import type { MCPConfig } from '../mcp/types';
 
 export interface AnthropicMessageOptions {
   apiBaseUrl?: string;

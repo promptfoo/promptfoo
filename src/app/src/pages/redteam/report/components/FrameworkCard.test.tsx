@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { Severity } from '@promptfoo/redteam/constants';
-import FrameworkCard from './FrameworkCard.js';
+import FrameworkCard from './FrameworkCard';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('@promptfoo/redteam/constants', async () => {

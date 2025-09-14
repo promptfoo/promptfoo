@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from 'react';
 
 import { fetchUserEmail } from '@app/utils/api';
-import { UserContext } from './UserContextDef.js';
+import { UserContext } from './UserContextDef';
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);

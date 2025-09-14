@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
 
-import cliState from '../../cliState.js';
-import { getEnvBool } from '../../envars.js';
-import logger from '../../logger.js';
-import { OpenAiChatCompletionProvider } from '../../providers/openai/chat.js';
-import { PromptfooChatCompletionProvider } from '../../providers/promptfoo.js';
+import cliState from '../../cliState';
+import { getEnvBool } from '../../envars';
+import logger from '../../logger';
+import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -16,12 +16,12 @@ import {
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types';
-import invariant from '../../util/invariant.js';
-import { safeJsonStringify } from '../../util/json.js';
-import { sleep } from '../../util/time.js';
-import { TokenUsageTracker } from '../../util/tokenUsage.js';
-import { type TransformContext, TransformInputType, transform } from '../../util/transform.js';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants.js';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { type TransformContext, TransformInputType, transform } from '../../util/transform';
+import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 async function loadRedteamProvider({
   provider,

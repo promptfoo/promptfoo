@@ -1,26 +1,26 @@
 import * as path from 'path';
 
 import { Command } from 'commander';
-import { disableCache } from '../../src/cache.js';
+import { disableCache } from '../../src/cache';
 import {
   doEval,
   evalCommand,
   formatTokenUsage,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
-import { evaluate } from '../../src/evaluator.js';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../../src/globalConfig/accounts.js';
-import { cloudConfig } from '../../src/globalConfig/cloud.js';
-import logger from '../../src/logger.js';
-import { runDbMigrations } from '../../src/migrate.js';
-import Eval from '../../src/models/eval.js';
-import { loadApiProvider } from '../../src/providers/index.js';
-import { createShareableUrl, isSharingEnabled } from '../../src/share.js';
-import { checkCloudPermissions, ConfigPermissionError } from '../../src/util/cloud.js';
-import { resolveConfigs } from '../../src/util/config/load.js';
-import { TokenUsageTracker } from '../../src/util/tokenUsage.js';
+import { evaluate } from '../../src/evaluator';
+import { checkEmailStatusOrExit, promptForEmailUnverified } from '../../src/globalConfig/accounts';
+import { cloudConfig } from '../../src/globalConfig/cloud';
+import logger from '../../src/logger';
+import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
+import { loadApiProvider } from '../../src/providers/index';
+import { createShareableUrl, isSharingEnabled } from '../../src/share';
+import { checkCloudPermissions, ConfigPermissionError } from '../../src/util/cloud';
+import { resolveConfigs } from '../../src/util/config/load';
+import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index.js';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');

@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import logger from '../../logger.js';
+import logger from '../../logger';
 import {
   ImageDatasetGraderBase,
   ImageDatasetPluginBase,

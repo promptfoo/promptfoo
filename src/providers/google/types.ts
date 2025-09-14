@@ -1,4 +1,4 @@
-import type { MCPConfig } from '../mcp/types.js';
+import type { MCPConfig } from '../mcp/types';
 
 interface Blob {
   mimeType: string;

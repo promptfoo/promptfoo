@@ -1,7 +1,7 @@
-import cliState from '../cliState.js';
-import { getEnvBool, getEnvString } from '../envars.js';
-import { isLoggedIntoCloud } from '../globalConfig/accounts.js';
-import { CloudConfig } from '../globalConfig/cloud.js';
+import cliState from '../cliState';
+import { getEnvBool, getEnvString } from '../envars';
+import { isLoggedIntoCloud } from '../globalConfig/accounts';
+import { CloudConfig } from '../globalConfig/cloud';
 
 export function getRemoteGenerationUrl(): string {
   // Check env var first

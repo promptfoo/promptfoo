@@ -1,7 +1,7 @@
 import { SingleBar } from 'cli-progress';
-import { fetchWithCache } from '../../../src/cache.js';
-import { redteamProviderManager } from '../../../src/redteam/providers/shared.js';
-import * as remoteGeneration from '../../../src/redteam/remoteGeneration.js';
+import { fetchWithCache } from '../../../src/cache';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import {
   addMathPrompt,
   DEFAULT_MATH_CONCEPTS,
@@ -10,7 +10,7 @@ import {
   generateMathPrompt,
 } from '../../../src/redteam/strategies/mathPrompt';
 
-import type { ApiProvider } from '../../../src/types/providers.js';
+import type { ApiProvider } from '../../../src/types/providers';
 
 jest.mock('cli-progress');
 jest.mock('../../../src/redteam/providers/shared');

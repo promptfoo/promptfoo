@@ -10,9 +10,9 @@ import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
-import EmptyState from './EmptyState.js';
-import ResultsView from './ResultsView.js';
-import { useResultsViewSettingsStore, useTableStore } from './store.js';
+import EmptyState from './EmptyState';
+import ResultsView from './ResultsView';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
 import './Eval.css';
 

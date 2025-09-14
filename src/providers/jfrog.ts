@@ -1,7 +1,7 @@
-import { OpenAiChatCompletionProvider } from './openai/chat.js';
+import { OpenAiChatCompletionProvider } from './openai/chat';
 
-import type { ProviderOptions } from '../types/providers.js';
-import type { OpenAiCompletionOptions } from './openai/types.js';
+import type { ProviderOptions } from '../types/providers';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 type JfrogMlCompletionOptions = OpenAiCompletionOptions & {
   baseUrl?: string;

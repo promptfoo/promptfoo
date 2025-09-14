@@ -2,8 +2,8 @@ import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-import { getCache, isCacheEnabled } from '../../src/cache.js';
-import { GolangProvider } from '../../src/providers/golangCompletion.js';
+import { getCache, isCacheEnabled } from '../../src/cache';
+import { GolangProvider } from '../../src/providers/golangCompletion';
 
 jest.mock('child_process');
 jest.mock('../../src/cache');

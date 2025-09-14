@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 
-import { maybeLoadConfigFromExternalFile } from '../../util/file.js';
+import { maybeLoadConfigFromExternalFile } from '../../util/file';
 
-import type { Prompt } from '../../types/index.js';
+import type { Prompt } from '../../types/index';
 
 /**
  * Processes a JSON file to extract prompts.

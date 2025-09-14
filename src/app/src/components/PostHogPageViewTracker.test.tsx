@@ -2,8 +2,8 @@ import { render } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { usePostHog } from './PostHogContext.js';
-import { PostHogPageViewTracker } from './PostHogPageViewTracker.js';
+import { usePostHog } from './PostHogContext';
+import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
 vi.mock('./PostHogContext', () => ({
   usePostHog: vi.fn(),

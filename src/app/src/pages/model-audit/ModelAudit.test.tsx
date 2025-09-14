@@ -6,10 +6,10 @@ import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ModelAudit from './ModelAudit.js';
-import { useModelAuditStore } from './store.js';
+import ModelAudit from './ModelAudit';
+import { useModelAuditStore } from './store';
 
-import type { ScanResult } from './ModelAudit.types.js';
+import type { ScanResult } from './ModelAudit.types';
 
 vi.mock('@app/utils/api');
 vi.mock('./store');

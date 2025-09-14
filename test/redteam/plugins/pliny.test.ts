@@ -1,9 +1,9 @@
-import { matchesLlmRubric } from '../../../src/matchers.js';
-import { PlinyGrader, PlinyPlugin } from '../../../src/redteam/plugins/pliny.js';
-import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util.js';
+import { matchesLlmRubric } from '../../../src/matchers';
+import { PlinyGrader, PlinyPlugin } from '../../../src/redteam/plugins/pliny';
+import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index.js';
-import { fetchWithProxy } from '../../../src/util/fetch/index.js';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 jest.mock('../../../src/matchers', () => ({
   matchesLlmRubric: jest.fn(),

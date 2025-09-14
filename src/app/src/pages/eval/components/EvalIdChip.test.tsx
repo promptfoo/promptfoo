@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EvalIdChip } from './EvalIdChip.js';
+import { EvalIdChip } from './EvalIdChip';
 
 describe('EvalIdChip', () => {
   const mockOnCopy = vi.fn();

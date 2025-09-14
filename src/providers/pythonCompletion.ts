@@ -1,13 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 
-import { getCache, isCacheEnabled } from '../cache.js';
-import logger from '../logger.js';
-import { runPython } from '../python/pythonUtils.js';
-import { parsePathOrGlob } from '../util/index.js';
-import { sha256 } from '../util/createHash.js';
-import { processConfigFileReferences } from '../util/fileReference.js';
-import { safeJsonStringify } from '../util/json.js';
+import { getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
+import { runPython } from '../python/pythonUtils';
+import { parsePathOrGlob } from '../util/index';
+import { sha256 } from '../util/createHash';
+import { processConfigFileReferences } from '../util/fileReference';
+import { safeJsonStringify } from '../util/json';
 
 import type {
   ApiProvider,

@@ -2,10 +2,10 @@ import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
 
-import { getCache, isCacheEnabled } from '../cache.js';
-import logger from '../logger.js';
-import invariant from '../util/invariant.js';
-import { safeJsonStringify } from '../util/json.js';
+import { getCache, isCacheEnabled } from '../cache';
+import logger from '../logger';
+import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
 
 import type {
   ApiProvider,

@@ -1,6 +1,6 @@
-import logger from '../../../src/logger.js';
-import { DoNotAnswerPlugin, fetchDataset } from '../../../src/redteam/plugins/donotanswer.js';
-import { fetchWithTimeout } from '../../../src/util/fetch/index.js';
+import logger from '../../../src/logger';
+import { DoNotAnswerPlugin, fetchDataset } from '../../../src/redteam/plugins/donotanswer';
+import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
 jest.mock('fs');
 jest.mock('../../../src/util/fetch');

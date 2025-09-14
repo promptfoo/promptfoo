@@ -1,13 +1,13 @@
 import { APIError } from '@anthropic-ai/sdk';
-import { getCache, isCacheEnabled } from '../../cache.js';
-import { getEnvFloat, getEnvInt } from '../../envars.js';
-import logger from '../../logger.js';
-import { maybeLoadToolsFromExternalFile } from '../../util/index.js';
-import { normalizeFinishReason } from '../../util/finishReason.js';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils.js';
-import { MCPClient } from '../mcp/client.js';
-import { transformMCPToolsToAnthropic } from '../mcp/transform.js';
-import { AnthropicGenericProvider } from './generic.js';
+import { getCache, isCacheEnabled } from '../../cache';
+import { getEnvFloat, getEnvInt } from '../../envars';
+import logger from '../../logger';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { normalizeFinishReason } from '../../util/finishReason';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { MCPClient } from '../mcp/client';
+import { transformMCPToolsToAnthropic } from '../mcp/transform';
+import { AnthropicGenericProvider } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
@@ -17,9 +17,9 @@ import {
 } from './util';
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { CallApiContextParams, ProviderResponse } from '../../types/index.js';
-import type { EnvOverrides } from '../../types/env.js';
-import type { AnthropicMessageOptions } from './types.js';
+import type { CallApiContextParams, ProviderResponse } from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
+import type { AnthropicMessageOptions } from './types';
 
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;

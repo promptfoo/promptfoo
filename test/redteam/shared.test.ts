@@ -3,11 +3,11 @@ import * as os from 'os';
 import path from 'path';
 
 import * as yaml from 'js-yaml';
-import { doGenerateRedteam } from '../../src/redteam/commands/generate.js';
-import { doRedteamRun } from '../../src/redteam/shared.js';
-import { checkRemoteHealth } from '../../src/util/apiHealth.js';
-import { loadDefaultConfig } from '../../src/util/config/default.js';
-import FakeDataFactory from '../factories/data/fakeDataFactory.js';
+import { doGenerateRedteam } from '../../src/redteam/commands/generate';
+import { doRedteamRun } from '../../src/redteam/shared';
+import { checkRemoteHealth } from '../../src/util/apiHealth';
+import { loadDefaultConfig } from '../../src/util/config/default';
+import FakeDataFactory from '../factories/data/fakeDataFactory';
 
 jest.mock('../../src/redteam/commands/generate');
 jest.mock('../../src/commands/eval', () => ({

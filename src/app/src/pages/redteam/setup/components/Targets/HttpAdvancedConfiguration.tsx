@@ -40,7 +40,7 @@ import Typography from '@mui/material/Typography';
 import dedent from 'dedent';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
-import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto.js';
+import { convertStringKeyToPem, validatePrivateKey } from '../../utils/crypto';
 import type { ProviderOptions } from '@promptfoo/types';
 
 interface HttpAdvancedConfigurationProps {

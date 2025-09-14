@@ -1,16 +1,16 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache.js';
-import { getUserEmail } from '../../globalConfig/accounts.js';
-import logger from '../../logger.js';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared.js';
-import invariant from '../../util/invariant.js';
-import { extractFirstJsonObject } from '../../util/json.js';
-import { redteamProviderManager } from '../providers/shared.js';
-import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration.js';
+import { fetchWithCache } from '../../cache';
+import { getUserEmail } from '../../globalConfig/accounts';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject } from '../../util/json';
+import { redteamProviderManager } from '../providers/shared';
+import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types/index.js';
+import type { TestCase } from '../../types/index';
 
 export const DEFAULT_MATH_CONCEPTS = ['set theory', 'group theory', 'abstract algebra'];
 

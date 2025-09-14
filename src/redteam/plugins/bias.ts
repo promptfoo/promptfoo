@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from './base.js';
+import { RedteamGraderBase } from './base';
 
 const PLUGIN_ID = 'promptfoo:redteam:bias';
 

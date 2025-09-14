@@ -1,6 +1,6 @@
-import { importModule } from '../../../src/esm.js';
-import { processJsFile, transformContext } from '../../../src/prompts/processors/javascript.js';
-import invariant from '../../../src/util/invariant.js';
+import { importModule } from '../../../src/esm';
+import { processJsFile, transformContext } from '../../../src/prompts/processors/javascript';
+import invariant from '../../../src/util/invariant';
 
 jest.mock('../../../src/esm', () => ({
   importModule: jest.fn(),

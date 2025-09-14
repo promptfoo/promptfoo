@@ -1,16 +1,16 @@
 import fs from 'fs';
 import path from 'path';
 
-import { loadFromJavaScriptFile } from '../../src/assertions/utils.js';
-import cliState from '../../src/cliState.js';
-import { importModule } from '../../src/esm.js';
-import { matchesLlmRubric, renderLlmRubricPrompt } from '../../src/matchers.js';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat.js';
-import { DefaultGradingProvider } from '../../src/providers/openai/defaults.js';
-import * as remoteGrading from '../../src/remoteGrading.js';
-import { TestGrader } from '../util/utils.js';
+import { loadFromJavaScriptFile } from '../../src/assertions/utils';
+import cliState from '../../src/cliState';
+import { importModule } from '../../src/esm';
+import { matchesLlmRubric, renderLlmRubricPrompt } from '../../src/matchers';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+import * as remoteGrading from '../../src/remoteGrading';
+import { TestGrader } from '../util/utils';
 
-import type { ApiProvider, Assertion, GradingConfig } from '../../src/types/index.js';
+import type { ApiProvider, Assertion, GradingConfig } from '../../src/types/index';
 
 jest.mock('../../src/esm', () => ({
   importModule: jest.fn(),

@@ -7,20 +7,20 @@ import path from 'path';
 import httpZ from 'http-z';
 import { Agent } from 'undici';
 import { z } from 'zod';
-import { type FetchWithCacheResult, fetchWithCache } from '../cache.js';
-import cliState from '../cliState.js';
-import { getEnvString } from '../envars.js';
-import { importModule } from '../esm.js';
-import logger from '../logger.js';
-import { renderVarsInObject } from '../util/index.js';
-import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file.js';
-import { isJavascriptFile } from '../util/fileExtensions.js';
-import invariant from '../util/invariant.js';
-import { safeJsonStringify } from '../util/json.js';
-import { sanitizeUrl } from '../util/sanitizer.js';
-import { getNunjucksEngine } from '../util/templates.js';
-import { createEmptyTokenUsage } from '../util/tokenUsageUtils.js';
-import { REQUEST_TIMEOUT_MS } from './shared.js';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
+import cliState from '../cliState';
+import { getEnvString } from '../envars';
+import { importModule } from '../esm';
+import logger from '../logger';
+import { renderVarsInObject } from '../util/index';
+import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
+import { isJavascriptFile } from '../util/fileExtensions';
+import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
+import { sanitizeUrl } from '../util/sanitizer';
+import { getNunjucksEngine } from '../util/templates';
+import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
   ApiProvider,

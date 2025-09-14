@@ -1,11 +1,11 @@
-import { fetchWithCache } from '../../src/cache.js';
+import { fetchWithCache } from '../../src/cache';
 import {
   OllamaChatProvider,
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
 
-import type { CallApiContextParams } from '../../src/types/index.js';
+import type { CallApiContextParams } from '../../src/types/index';
 
 jest.mock('../../src/cache');
 

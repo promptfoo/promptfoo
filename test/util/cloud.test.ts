@@ -1,5 +1,5 @@
-import { cloudConfig } from '../../src/globalConfig/cloud.js';
-import * as cloudModule from '../../src/util/cloud.js';
+import { cloudConfig } from '../../src/globalConfig/cloud';
+import * as cloudModule from '../../src/util/cloud';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
@@ -8,9 +8,9 @@ import {
   getPluginSeverityOverridesFromCloud,
   getProviderFromCloud,
   makeRequest,
-} from '../../src/util/cloud.js';
-import { fetchWithProxy } from '../../src/util/fetch/index.js';
-import { checkServerFeatureSupport } from '../../src/util/server.js';
+} from '../../src/util/cloud';
+import { fetchWithProxy } from '../../src/util/fetch/index';
+import { checkServerFeatureSupport } from '../../src/util/server';
 
 jest.mock('../../src/util/fetch/index.ts');
 jest.mock('../../src/globalConfig/cloud');

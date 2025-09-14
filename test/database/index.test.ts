@@ -8,9 +8,9 @@ import {
   getDbSignalPath,
   isDbOpen,
 } from '../../src/database';
-import { getEnvBool } from '../../src/envars.js';
-import logger from '../../src/logger.js';
-import { getConfigDirectoryPath } from '../../src/util/config/manage.js';
+import { getEnvBool } from '../../src/envars';
+import logger from '../../src/logger';
+import { getConfigDirectoryPath } from '../../src/util/config/manage';
 
 jest.mock('../../src/envars');
 jest.mock('../../src/logger');

@@ -1,14 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 
-import { getUserEmail } from '../../../src/globalConfig/accounts.js';
+import { getUserEmail } from '../../../src/globalConfig/accounts';
 import {
   doPoisonDocuments,
   generatePoisonedDocument,
   getAllFiles,
   poisonDocument,
 } from '../../../src/redteam/commands/poison';
-import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration.js';
+import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
 jest.mock('fs');
 jest.mock('path', () => ({

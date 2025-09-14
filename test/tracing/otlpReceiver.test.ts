@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import request from 'supertest';
-import { OTLPReceiver } from '../../src/tracing/otlpReceiver.js';
+import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
 
-import type { TraceStore } from '../../src/tracing/store.js';
+import type { TraceStore } from '../../src/tracing/store';
 
 // Mock the database
 jest.mock('../../src/database', () => ({

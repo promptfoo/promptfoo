@@ -1,4 +1,4 @@
-import { handleLevenshtein } from '../../src/assertions/levenshtein.js';
+import { handleLevenshtein } from '../../src/assertions/levenshtein';
 
 describe('handleLevenshtein', () => {
   it('should pass when strings are identical', () => {

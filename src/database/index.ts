@@ -3,9 +3,9 @@ import * as path from 'path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
-import { getEnvBool } from '../envars.js';
-import logger from '../logger.js';
-import { getConfigDirectoryPath } from '../util/config/manage.js';
+import { getEnvBool } from '../envars';
+import logger from '../logger';
+import { getConfigDirectoryPath } from '../util/config/manage';
 
 export class DrizzleLogWriter implements LogWriter {
   write(message: string) {

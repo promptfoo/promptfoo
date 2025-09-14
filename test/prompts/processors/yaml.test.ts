@@ -1,9 +1,9 @@
 import * as fs from 'fs';
 
 import dedent from 'dedent';
-import logger from '../../../src/logger.js';
-import { processYamlFile } from '../../../src/prompts/processors/yaml.js';
-import * as fileModule from '../../../src/util/file.js';
+import logger from '../../../src/logger';
+import { processYamlFile } from '../../../src/prompts/processors/yaml';
+import * as fileModule from '../../../src/util/file';
 
 jest.mock('fs');
 jest.mock('../../../src/util/file');

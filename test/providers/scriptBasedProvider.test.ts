@@ -1,8 +1,8 @@
-import { createScriptBasedProviderFactory } from '../../src/providers/scriptBasedProvider.js';
-import { getResolvedRelativePath } from '../../src/util/file.js';
+import { createScriptBasedProviderFactory } from '../../src/providers/scriptBasedProvider';
+import { getResolvedRelativePath } from '../../src/util/file';
 
-import type { LoadApiProviderContext } from '../../src/types/index.js';
-import type { ProviderOptions } from '../../src/types/providers.js';
+import type { LoadApiProviderContext } from '../../src/types/index';
+import type { ProviderOptions } from '../../src/types/providers';
 
 // Mock the getResolvedRelativePath function
 jest.mock('../../src/util/file', () => ({

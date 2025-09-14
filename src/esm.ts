@@ -2,8 +2,8 @@ import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import logger from './logger.js';
-import { safeResolve } from './util/fileNode.js';
+import logger from './logger';
+import { safeResolve } from './util/fileNode';
 
 // Global variable defined by build system
 declare const BUILD_FORMAT: string | undefined;

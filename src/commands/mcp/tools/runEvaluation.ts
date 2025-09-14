@@ -1,12 +1,12 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import logger from '../../../logger.js';
-import type { CommandLineOptions, EvaluateOptions } from '../../../types/index.js';
-import { loadDefaultConfig } from '../../../util/config/default.js';
-import { resolveConfigs } from '../../../util/config/load.js';
-import { doEval } from '../../eval.js';
-import { createToolResponse } from '../utils.js';
+import logger from '../../../logger';
+import type { CommandLineOptions, EvaluateOptions } from '../../../types/index';
+import { loadDefaultConfig } from '../../../util/config/default';
+import { resolveConfigs } from '../../../util/config/load';
+import { doEval } from '../../eval';
+import { createToolResponse } from '../utils';
 
 /**
  * Run an eval from a promptfoo config with optional test case filtering

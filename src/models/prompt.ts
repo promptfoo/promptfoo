@@ -1,7 +1,7 @@
-import { sha256 } from '../util/createHash.js';
+import { sha256 } from '../util/createHash';
 import type { z } from 'zod';
 
-import type { PromptSchema } from '../validators/prompts.js';
+import type { PromptSchema } from '../validators/prompts';
 
 type PromptModel = z.infer<typeof PromptSchema>;
 

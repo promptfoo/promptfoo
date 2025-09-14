@@ -3,11 +3,11 @@ import path from 'path';
 
 import async from 'async';
 import yaml from 'js-yaml';
-import cliState from '../cliState.js';
-import { getEnvInt } from '../envars.js';
-import { handleConversationRelevance } from '../external/assertions/deepeval.js';
-import { matchesConversationRelevance } from '../external/matchers/deepeval.js';
-import logger from '../logger.js';
+import cliState from '../cliState';
+import { getEnvInt } from '../envars';
+import { handleConversationRelevance } from '../external/assertions/deepeval';
+import { matchesConversationRelevance } from '../external/matchers/deepeval';
+import logger from '../logger';
 import {
   matchesAnswerRelevance,
   matchesClassification,
@@ -21,8 +21,8 @@ import {
   matchesSelectBest,
   matchesSimilarity,
 } from '../matchers';
-import { isPackagePath, loadFromPackage } from '../providers/packageParser.js';
-import { runPython } from '../python/pythonUtils.js';
+import { isPackagePath, loadFromPackage } from '../providers/packageParser';
+import { runPython } from '../python/pythonUtils';
 import {
   type ApiProvider,
   type Assertion,
@@ -30,14 +30,14 @@ import {
   type AtomicTestCase,
   type GradingResult,
 } from '../types';
-import { isJavascriptFile } from '../util/fileExtensions.js';
-import invariant from '../util/invariant.js';
-import { getNunjucksEngine } from '../util/templates.js';
-import { transform } from '../util/transform.js';
-import { handleAnswerRelevance } from './answerRelevance.js';
-import { AssertionsResult } from './assertionsResult.js';
-import { handleBleuScore } from './bleu.js';
-import { handleClassifier } from './classifier.js';
+import { isJavascriptFile } from '../util/fileExtensions';
+import invariant from '../util/invariant';
+import { getNunjucksEngine } from '../util/templates';
+import { transform } from '../util/transform';
+import { handleAnswerRelevance } from './answerRelevance';
+import { AssertionsResult } from './assertionsResult';
+import { handleBleuScore } from './bleu';
+import { handleClassifier } from './classifier';
 import {
   handleContains,
   handleContainsAll,
@@ -46,42 +46,42 @@ import {
   handleIContainsAll,
   handleIContainsAny,
 } from './contains';
-import { handleContextFaithfulness } from './contextFaithfulness.js';
-import { handleContextRecall } from './contextRecall.js';
-import { handleContextRelevance } from './contextRelevance.js';
-import { handleCost } from './cost.js';
-import { handleEquals } from './equals.js';
-import { handleFactuality } from './factuality.js';
-import { handleFinishReason } from './finishReason.js';
-import { handleIsValidFunctionCall } from './functionToolCall.js';
-import { handleGEval } from './geval.js';
-import { handleGleuScore } from './gleu.js';
-import { handleGuardrails } from './guardrails.js';
-import { handleContainsHtml, handleIsHtml } from './html.js';
-import { handleJavascript } from './javascript.js';
-import { handleContainsJson, handleIsJson } from './json.js';
-import { handleLatency } from './latency.js';
-import { handleLevenshtein } from './levenshtein.js';
-import { handleLlmRubric } from './llmRubric.js';
-import { handleModelGradedClosedQa } from './modelGradedClosedQa.js';
-import { handleModeration } from './moderation.js';
-import { handleIsValidOpenAiToolsCall } from './openai.js';
-import { handlePerplexity, handlePerplexityScore } from './perplexity.js';
-import { handlePiScorer } from './pi.js';
-import { handlePython } from './python.js';
-import { handleRedteam } from './redteam.js';
-import { handleIsRefusal } from './refusal.js';
-import { handleRegex } from './regex.js';
-import { handleRougeScore } from './rouge.js';
-import { handleSimilar } from './similar.js';
-import { handleContainsSql, handleIsSql } from './sql.js';
-import { handleStartsWith } from './startsWith.js';
-import { handleTraceErrorSpans } from './traceErrorSpans.js';
-import { handleTraceSpanCount } from './traceSpanCount.js';
-import { handleTraceSpanDuration } from './traceSpanDuration.js';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils.js';
-import { handleWebhook } from './webhook.js';
-import { handleIsXml } from './xml.js';
+import { handleContextFaithfulness } from './contextFaithfulness';
+import { handleContextRecall } from './contextRecall';
+import { handleContextRelevance } from './contextRelevance';
+import { handleCost } from './cost';
+import { handleEquals } from './equals';
+import { handleFactuality } from './factuality';
+import { handleFinishReason } from './finishReason';
+import { handleIsValidFunctionCall } from './functionToolCall';
+import { handleGEval } from './geval';
+import { handleGleuScore } from './gleu';
+import { handleGuardrails } from './guardrails';
+import { handleContainsHtml, handleIsHtml } from './html';
+import { handleJavascript } from './javascript';
+import { handleContainsJson, handleIsJson } from './json';
+import { handleLatency } from './latency';
+import { handleLevenshtein } from './levenshtein';
+import { handleLlmRubric } from './llmRubric';
+import { handleModelGradedClosedQa } from './modelGradedClosedQa';
+import { handleModeration } from './moderation';
+import { handleIsValidOpenAiToolsCall } from './openai';
+import { handlePerplexity, handlePerplexityScore } from './perplexity';
+import { handlePiScorer } from './pi';
+import { handlePython } from './python';
+import { handleRedteam } from './redteam';
+import { handleIsRefusal } from './refusal';
+import { handleRegex } from './regex';
+import { handleRougeScore } from './rouge';
+import { handleSimilar } from './similar';
+import { handleContainsSql, handleIsSql } from './sql';
+import { handleStartsWith } from './startsWith';
+import { handleTraceErrorSpans } from './traceErrorSpans';
+import { handleTraceSpanCount } from './traceSpanCount';
+import { handleTraceSpanDuration } from './traceSpanDuration';
+import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import { handleWebhook } from './webhook';
+import { handleIsXml } from './xml';
 
 import type {
   AssertionParams,

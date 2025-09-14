@@ -1,9 +1,9 @@
 import path from 'path';
 
-import { providerMap } from '../../src/providers/registry.js';
+import { providerMap } from '../../src/providers/registry';
 
-import type { LoadApiProviderContext } from '../../src/types/index.js';
-import type { ProviderOptions } from '../../src/types/providers.js';
+import type { LoadApiProviderContext } from '../../src/types/index';
+import type { ProviderOptions } from '../../src/types/providers';
 
 jest.mock('../../src/providers/adaline.gateway', () => ({
   AdalineGatewayChatProvider: jest.fn().mockImplementation((providerName, modelName) => ({

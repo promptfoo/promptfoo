@@ -1,10 +1,10 @@
 import path from 'path';
 
-import { disableCache, enableCache, fetchWithCache } from '../../../src/cache.js';
-import cliState from '../../../src/cliState.js';
-import { importModule } from '../../../src/esm.js';
-import logger from '../../../src/logger.js';
-import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat.js';
+import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
+import cliState from '../../../src/cliState';
+import { importModule } from '../../../src/esm';
+import logger from '../../../src/logger';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/logger');

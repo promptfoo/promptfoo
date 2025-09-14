@@ -1,4 +1,4 @@
-import { getNGrams } from '../../src/assertions/ngrams.js';
+import { getNGrams } from '../../src/assertions/ngrams';
 
 describe('getNGrams', () => {
   it('should generate unigrams correctly', () => {

@@ -1,5 +1,5 @@
-import { loadApiProvider } from '../../../src/providers/index.js';
-import type { ApiProvider } from '../../../src/types/providers.js';
+import { loadApiProvider } from '../../../src/providers/index';
+import type { ApiProvider } from '../../../src/types/providers';
 
 describe('GitHub Models Provider Integration', () => {
   it('should load GitHub provider with default model', async () => {

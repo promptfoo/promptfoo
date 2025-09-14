@@ -1,14 +1,14 @@
-import { fetchWithCache } from '../cache.js';
-import { getEnvString } from '../envars.js';
-import logger from '../logger.js';
-import { OpenAiChatCompletionProvider } from './openai/chat.js';
-import { OpenAiCompletionProvider } from './openai/completion.js';
-import { OpenAiEmbeddingProvider } from './openai/embedding.js';
-import { REQUEST_TIMEOUT_MS } from './shared.js';
+import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, ProviderOptions } from '../types/index.js';
-import type { EnvOverrides } from '../types/env.js';
-import type { OpenAiCompletionOptions } from './openai/types.js';
+import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { EnvOverrides } from '../types/env';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 export interface AimlApiModel {
   id: string;

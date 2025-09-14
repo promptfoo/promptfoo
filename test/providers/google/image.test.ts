@@ -1,5 +1,5 @@
-import { fetchWithCache } from '../../../src/cache.js';
-import { GoogleImageProvider } from '../../../src/providers/google/image.js';
+import { fetchWithCache } from '../../../src/cache';
+import { GoogleImageProvider } from '../../../src/providers/google/image';
 
 jest.mock('../../../src/cache', () => ({
   fetchWithCache: jest.fn(),

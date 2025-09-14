@@ -2,8 +2,8 @@ import { formatDataGridDate } from '@app/utils/date';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useModelAuditStore } from '../store.js';
-import HistoryTab from './HistoryTab.js';
+import { useModelAuditStore } from '../store';
+import HistoryTab from './HistoryTab';
 
 vi.mock('../store');
 

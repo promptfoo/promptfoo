@@ -1,4 +1,4 @@
-import { retryWithDeduplication, sampleArray } from '../../src/util/generation.js';
+import { retryWithDeduplication, sampleArray } from '../../src/util/generation';
 
 describe('retryWithDeduplication', () => {
   it('should collect unique items until target count is reached', async () => {

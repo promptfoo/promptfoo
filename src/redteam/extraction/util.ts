@@ -1,15 +1,15 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import { fetchWithCache } from '../../cache.js';
-import { VERSION } from '../../constants.js';
-import { getEnvBool } from '../../envars.js';
-import { getUserEmail } from '../../globalConfig/accounts.js';
-import logger from '../../logger.js';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared.js';
-import invariant from '../../util/invariant.js';
-import { getRemoteGenerationUrl } from '../remoteGeneration.js';
+import { fetchWithCache } from '../../cache';
+import { VERSION } from '../../constants';
+import { getEnvBool } from '../../envars';
+import { getUserEmail } from '../../globalConfig/accounts';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import invariant from '../../util/invariant';
+import { getRemoteGenerationUrl } from '../remoteGeneration';
 
-import type { ApiProvider } from '../../types/index.js';
+import type { ApiProvider } from '../../types/index';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),

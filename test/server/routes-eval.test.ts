@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { updateResult } from '../../src/util/database.js';
+import { updateResult } from '../../src/util/database';
 
 // Mock dependencies
 jest.mock('../../src/util/database');

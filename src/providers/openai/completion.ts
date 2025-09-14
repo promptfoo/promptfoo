@@ -1,7 +1,7 @@
-import { fetchWithCache } from '../../cache.js';
-import { getEnvFloat, getEnvInt, getEnvString } from '../../envars.js';
-import logger from '../../logger.js';
-import { REQUEST_TIMEOUT_MS } from '../shared.js';
+import { fetchWithCache } from '../../cache';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
+import logger from '../../logger';
+import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import {
   calculateOpenAICost,
@@ -10,9 +10,9 @@ import {
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index.js';
-import type { EnvOverrides } from '../../types/env.js';
-import type { OpenAiCompletionOptions } from './types.js';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types/index';
+import type { EnvOverrides } from '../../types/env';
+import type { OpenAiCompletionOptions } from './types';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = OPENAI_COMPLETION_MODELS;

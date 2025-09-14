@@ -2,7 +2,7 @@ import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Purpose from './Purpose.js';
+import Purpose from './Purpose';
 
 const mockUpdateApplicationDefinition = vi.fn();
 const mockUpdateConfig = vi.fn();

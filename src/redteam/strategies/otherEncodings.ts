@@ -1,4 +1,4 @@
-import type { TestCase } from '../../types/index.js';
+import type { TestCase } from '../../types/index';
 
 /**
  * Convert text to Morse code

@@ -1,5 +1,5 @@
-import { matchesContextRelevance } from '../../src/matchers.js';
-import { DefaultGradingProvider } from '../../src/providers/openai/defaults.js';
+import { matchesContextRelevance } from '../../src/matchers';
+import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesContextRelevance', () => {
   beforeEach(() => {

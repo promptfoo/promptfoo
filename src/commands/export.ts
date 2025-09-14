@@ -2,11 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 
-import logger from '../logger.js';
-import Eval from '../models/eval.js';
-import telemetry from '../telemetry.js';
-import { writeOutput, createOutputMetadata } from '../util/index.js';
-import { getConfigDirectoryPath } from '../util/config/manage.js';
+import logger from '../logger';
+import Eval from '../models/eval';
+import telemetry from '../telemetry';
+import { writeOutput, createOutputMetadata } from '../util/index';
+import { getConfigDirectoryPath } from '../util/config/manage';
 import type { Command } from 'commander';
 
 /**

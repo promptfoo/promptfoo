@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import JsonTextField from './JsonTextField.js';
+import JsonTextField from './JsonTextField';
 
 const renderWithTheme = (component: React.ReactNode) => {
   const theme = createTheme();

@@ -1,8 +1,8 @@
-import { matchesModeration } from '../matchers.js';
-import { parseChatPrompt } from '../providers/shared.js';
-import invariant from '../util/invariant.js';
+import { matchesModeration } from '../matchers';
+import { parseChatPrompt } from '../providers/shared';
+import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types/index.js';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleModeration = async ({
   assertion,

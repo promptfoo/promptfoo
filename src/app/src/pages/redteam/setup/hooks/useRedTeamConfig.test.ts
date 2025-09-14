@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useRedTeamConfig } from './useRedTeamConfig.js';
-import type { Config } from '../types.js';
+import { useRedTeamConfig } from './useRedTeamConfig';
+import type { Config } from '../types';
 
 describe('useRedTeamConfig', () => {
   beforeEach(() => {

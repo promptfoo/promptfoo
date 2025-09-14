@@ -1,4 +1,4 @@
-import { ellipsize } from '../../src/util/text.js';
+import { ellipsize } from '../../src/util/text';
 
 describe('ellipsize', () => {
   it('should not modify string shorter than maxLen', () => {

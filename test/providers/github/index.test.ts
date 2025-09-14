@@ -1,5 +1,5 @@
-import { createGitHubProvider } from '../../../src/providers/github/index.js';
-import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat.js';
+import { createGitHubProvider } from '../../../src/providers/github/index';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
 jest.mock('../../../src/providers/openai/chat');
 

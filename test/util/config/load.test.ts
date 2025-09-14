@@ -4,22 +4,22 @@ import * as path from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import cliState from '../../../src/cliState.js';
-import { isCI } from '../../../src/envars.js';
-import { importModule } from '../../../src/esm.js';
-import logger from '../../../src/logger.js';
-import { readPrompts } from '../../../src/prompts/index.js';
-import { loadApiProviders } from '../../../src/providers/index.js';
-import { type UnifiedConfig } from '../../../src/types/index.js';
-import { isRunningUnderNpx } from '../../../src/util/index.js';
+import cliState from '../../../src/cliState';
+import { isCI } from '../../../src/envars';
+import { importModule } from '../../../src/esm';
+import logger from '../../../src/logger';
+import { readPrompts } from '../../../src/prompts/index';
+import { loadApiProviders } from '../../../src/providers/index';
+import { type UnifiedConfig } from '../../../src/types/index';
+import { isRunningUnderNpx } from '../../../src/util/index';
 import {
   combineConfigs,
   dereferenceConfig,
   readConfig,
   resolveConfigs,
-} from '../../../src/util/config/load.js';
-import { maybeLoadFromExternalFile } from '../../../src/util/file.js';
-import { readTests } from '../../../src/util/testCaseReader.js';
+} from '../../../src/util/config/load';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
+import { readTests } from '../../../src/util/testCaseReader';
 
 jest.mock('../../../src/database', () => ({
   getDb: jest.fn(),

@@ -3,17 +3,17 @@ import { URL } from 'url';
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants.js';
-import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars.js';
-import { getUserEmail, setUserEmail } from './globalConfig/accounts.js';
-import { cloudConfig } from './globalConfig/cloud.js';
-import logger, { isDebugEnabled } from './logger.js';
-import { checkCloudPermissions, makeRequest as makeCloudRequest } from './util/cloud.js';
-import { fetchWithProxy } from './util/fetch/index.js';
+import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
+import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
+import { getUserEmail, setUserEmail } from './globalConfig/accounts';
+import { cloudConfig } from './globalConfig/cloud';
+import logger, { isDebugEnabled } from './logger';
+import { checkCloudPermissions, makeRequest as makeCloudRequest } from './util/cloud';
+import { fetchWithProxy } from './util/fetch/index';
 
-import type Eval from './models/eval.js';
-import type EvalResult from './models/evalResult.js';
-import type ModelAudit from './models/modelAudit.js';
+import type Eval from './models/eval';
+import type EvalResult from './models/evalResult';
+import type ModelAudit from './models/modelAudit';
 
 interface ShareDomainResult {
   domain: string;

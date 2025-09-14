@@ -1,16 +1,16 @@
-import { fetchWithCache } from '../../../src/cache.js';
-import { Plugins } from '../../../src/redteam/plugins/index.js';
-import { BeavertailsPlugin } from '../../../src/redteam/plugins/beavertails.js';
-import { CustomPlugin } from '../../../src/redteam/plugins/custom.js';
-import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval.js';
-import { DoNotAnswerPlugin } from '../../../src/redteam/plugins/donotanswer.js';
-import { HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench.js';
-import { IntentPlugin } from '../../../src/redteam/plugins/intent.js';
-import { PlinyPlugin } from '../../../src/redteam/plugins/pliny.js';
-import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench.js';
-import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration.js';
+import { fetchWithCache } from '../../../src/cache';
+import { Plugins } from '../../../src/redteam/plugins/index';
+import { BeavertailsPlugin } from '../../../src/redteam/plugins/beavertails';
+import { CustomPlugin } from '../../../src/redteam/plugins/custom';
+import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
+import { DoNotAnswerPlugin } from '../../../src/redteam/plugins/donotanswer';
+import { HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
+import { IntentPlugin } from '../../../src/redteam/plugins/intent';
+import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
+import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
+import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 
-import type { ApiProvider } from '../../../src/types/index.js';
+import type { ApiProvider } from '../../../src/types/index';
 
 jest.mock('../../../src/cache');
 jest.mock('../../../src/cliState', () => ({

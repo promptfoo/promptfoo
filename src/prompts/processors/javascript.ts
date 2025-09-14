@@ -1,7 +1,7 @@
-import { importModule } from '../../esm.js';
-import invariant from '../../util/invariant.js';
+import { importModule } from '../../esm';
+import invariant from '../../util/invariant';
 
-import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types/index.js';
+import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types/index';
 
 export const transformContext = (context: {
   vars: Record<string, string | object>;

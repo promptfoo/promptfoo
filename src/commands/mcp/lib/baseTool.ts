@@ -1,8 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ZodSchema } from 'zod';
-import { isMcpError, toMcpError } from './errors.js';
-import type { BaseTool, ToolResult } from './types.js';
-import { createToolResponse } from './utils.js';
+import { isMcpError, toMcpError } from './errors';
+import type { BaseTool, ToolResult } from './types';
+import { createToolResponse } from './utils';
 
 /**
  * Abstract base class for all MCP tools

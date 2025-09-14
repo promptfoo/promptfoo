@@ -1,8 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getEvalSummaries } from '../../../models/eval.js';
-import { evaluationCache, paginate } from '../lib/performance.js';
-import { createToolResponse } from '../lib/utils.js';
+import { getEvalSummaries } from '../../../models/eval';
+import { evaluationCache, paginate } from '../lib/performance';
+import { createToolResponse } from '../lib/utils';
 
 /**
  * Tool to list and browse evaluation runs

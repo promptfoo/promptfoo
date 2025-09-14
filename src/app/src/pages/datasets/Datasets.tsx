@@ -19,7 +19,7 @@ import {
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
 import { Link, useSearchParams } from 'react-router-dom';
-import DatasetDialog from './DatasetDialog.js';
+import DatasetDialog from './DatasetDialog';
 import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
 
 // augment the props for the toolbar slot

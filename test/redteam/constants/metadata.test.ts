@@ -26,8 +26,8 @@ import {
   MEDICAL_PLUGINS,
   PII_PLUGINS,
 } from '../../../src/redteam/constants/plugins';
-import type { Plugin } from '../../../src/redteam/constants/plugins.js';
-import type { Strategy } from '../../../src/redteam/constants/strategies.js';
+import type { Plugin } from '../../../src/redteam/constants/plugins';
+import type { Strategy } from '../../../src/redteam/constants/strategies';
 
 describe('metadata constants', () => {
   describe('Severity enum and display names', () => {

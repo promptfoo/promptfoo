@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { ProviderEnvOverridesSchema } from '../types/env.js';
-import { BaseTokenUsageSchema } from '../types/shared.js';
-import { PromptSchema } from './prompts.js';
-import { NunjucksFilterMapSchema } from './shared.js';
+import { ProviderEnvOverridesSchema } from '../types/env';
+import { BaseTokenUsageSchema } from '../types/shared';
+import { PromptSchema } from './prompts';
+import { NunjucksFilterMapSchema } from './shared';
 
 import type {
   CallApiFunction,

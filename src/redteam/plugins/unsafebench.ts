@@ -1,10 +1,10 @@
 import dedent from 'dedent';
-import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets.js';
-import logger from '../../logger.js';
-import { fetchWithProxy } from '../../util/fetch/index.js';
-import { RedteamGraderBase, RedteamPluginBase } from './base.js';
+import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
+import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index.js';
+import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:unsafebench';
 const DATASET_PATH = 'huggingface://datasets/yiting/UnsafeBench';

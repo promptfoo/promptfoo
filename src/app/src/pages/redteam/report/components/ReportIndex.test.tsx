@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 import { callApi } from '@app/utils/api';
-import ReportIndex from './ReportIndex.js';
+import ReportIndex from './ReportIndex';
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');

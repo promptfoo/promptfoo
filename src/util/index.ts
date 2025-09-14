@@ -9,11 +9,11 @@ import { XMLBuilder } from 'fast-xml-parser';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import * as os from 'os';
-import { TERMINAL_MAX_WIDTH, VERSION } from '../constants.js';
-import { getEnvBool, getEnvString } from '../envars.js';
-import { getDirectory, importModule } from '../esm.js';
-import { writeCsvToGoogleSheet } from '../googleSheets.js';
-import logger from '../logger.js';
+import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
+import { getEnvBool, getEnvString } from '../envars';
+import { getDirectory, importModule } from '../esm';
+import { writeCsvToGoogleSheet } from '../googleSheets';
+import logger from '../logger';
 import {
   type CsvRow,
   type EvaluateResult,
@@ -26,16 +26,16 @@ import {
   ResultFailureReason,
   type TestCase,
 } from '../types';
-import invariant from '../util/invariant.js';
-import { convertTestResultsToTableRow } from './exportToFile/index.js';
-import { getHeaderForTable } from './exportToFile/getHeaderForTable.js';
-import { maybeLoadFromExternalFile } from './file.js';
-import { isJavascriptFile } from './fileExtensions.js';
-import { getNunjucksEngine } from './templates.js';
+import invariant from '../util/invariant';
+import { convertTestResultsToTableRow } from './exportToFile/index';
+import { getHeaderForTable } from './exportToFile/getHeaderForTable';
+import { maybeLoadFromExternalFile } from './file';
+import { isJavascriptFile } from './fileExtensions';
+import { getNunjucksEngine } from './templates';
 
-import type Eval from '../models/eval.js';
-import type EvalResult from '../models/evalResult.js';
-import type { Vars } from '../types/index.js';
+import type Eval from '../models/eval';
+import type EvalResult from '../models/evalResult';
+import type { Vars } from '../types/index';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass

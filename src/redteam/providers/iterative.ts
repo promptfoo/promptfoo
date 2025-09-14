@@ -1,15 +1,15 @@
 import dedent from 'dedent';
-import { getEnvInt } from '../../envars.js';
-import { renderPrompt } from '../../evaluatorHelpers.js';
-import logger from '../../logger.js';
-import { PromptfooChatCompletionProvider } from '../../providers/promptfoo.js';
-import invariant from '../../util/invariant.js';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json.js';
-import { getNunjucksEngine } from '../../util/templates.js';
-import { sleep } from '../../util/time.js';
-import { TokenUsageTracker } from '../../util/tokenUsage.js';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils.js';
-import { shouldGenerateRemote } from '../remoteGeneration.js';
+import { getEnvInt } from '../../envars';
+import { renderPrompt } from '../../evaluatorHelpers';
+import logger from '../../logger';
+import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,

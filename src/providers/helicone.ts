@@ -1,8 +1,8 @@
-import { OpenAiChatCompletionProvider } from './openai/chat.js';
-import { getEnvString } from '../envars.js';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { getEnvString } from '../envars';
 
-import type { ProviderOptions } from '../types/index.js';
-import type { OpenAiCompletionOptions } from './openai/types.js';
+import type { ProviderOptions } from '../types/index';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 export interface HeliconeGatewayOptions extends OpenAiCompletionOptions {
   /** Base URL for the Helicone AI Gateway instance (defaults to http://localhost:8080) */

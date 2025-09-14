@@ -1,9 +1,9 @@
-import { filterTestsByResults } from '../../../src/commands/eval/filterTestsUtil.js';
-import Eval from '../../../src/models/eval.js';
-import { ResultFailureReason } from '../../../src/types/index.js';
-import * as util from '../../../src/util/index.js';
+import { filterTestsByResults } from '../../../src/commands/eval/filterTestsUtil';
+import Eval from '../../../src/models/eval';
+import { ResultFailureReason } from '../../../src/types/index';
+import * as util from '../../../src/util/index';
 
-import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index.js';
+import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';
 
 jest.mock('../../../src/models/eval', () => ({
   findById: jest.fn(),

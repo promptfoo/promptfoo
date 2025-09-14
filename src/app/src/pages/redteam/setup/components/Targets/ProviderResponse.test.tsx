@@ -3,7 +3,7 @@ import React from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import ProviderResponse from './ProviderResponse.js';
+import ProviderResponse from './ProviderResponse';
 
 const renderWithTheme = (ui: React.ReactElement) => {
   const theme = createTheme();
