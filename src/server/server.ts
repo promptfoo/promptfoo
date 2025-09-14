@@ -15,7 +15,7 @@ import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { getEvalSummaries } from '../models/eval';
+import Eval, { getEvalSummaries, getPaginatedEvalSummaries } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
@@ -41,7 +41,7 @@ import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary } from '../types';
+import type { EvalQueryParams, EvalSummary, PaginatedEvalResponse } from '../types';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -111,15 +111,46 @@ export function createApp() {
 
   /**
    * Fetches summaries of all evals, optionally for a given dataset.
+   * Supports pagination with query parameters: limit, offset, search, sort, order
    */
   app.get(
     '/api/results',
     async (
-      req: Request<{}, {}, {}, { datasetId?: string }>,
-      res: Response<{ data: EvalSummary[] }>,
+      req: Request<{}, {}, {}, EvalQueryParams>,
+      res: Response<PaginatedEvalResponse | { data: EvalSummary[] }>,
     ): Promise<void> => {
-      const previousResults = await getEvalSummaries(req.query.datasetId);
-      res.json({ data: previousResults });
+      const { limit, offset, search, sort, order, datasetId } = req.query;
+
+      // Check if any pagination parameters are provided
+      const isPaginationRequest =
+        limit !== undefined ||
+        offset !== undefined ||
+        search !== undefined ||
+        sort !== undefined ||
+        order !== undefined;
+
+      if (isPaginationRequest) {
+        // Use new pagination API
+        const result = await getPaginatedEvalSummaries({
+          limit: limit ? Number(limit) : undefined,
+          offset: offset ? Number(offset) : undefined,
+          search,
+          sort,
+          order,
+          datasetId,
+        });
+
+        res.json({
+          data: result.data,
+          total: result.total,
+          limit: limit ? Number(limit) : 50,
+          offset: offset ? Number(offset) : 0,
+        });
+      } else {
+        // Legacy API - maintain backward compatibility
+        const previousResults = await getEvalSummaries(datasetId);
+        res.json({ data: previousResults });
+      }
     },
   );
 

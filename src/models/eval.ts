@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import { updateSignalFile } from '../database/signal';
@@ -22,6 +22,7 @@ import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import {
   type CompletedPrompt,
+  type EvalQueryParams,
   type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
@@ -906,4 +907,144 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
     };
   });
+}
+
+/**
+ * Get a paginated list of eval summaries with server-side filtering, sorting, and search.
+ *
+ * @param params - Query parameters for pagination, filtering, and search.
+ * @returns Paginated eval results with total count.
+ */
+export async function getPaginatedEvalSummaries(
+  params: EvalQueryParams,
+): Promise<{ data: EvalSummary[]; total: number }> {
+  const db = getDb();
+
+  const {
+    limit = 50,
+    offset = 0,
+    search = '',
+    sort = 'createdAt',
+    order = 'desc',
+    datasetId,
+  } = params;
+
+  // Build base query with joins
+  const baseQuery = db
+    .select({
+      evalId: evalsTable.id,
+      createdAt: evalsTable.createdAt,
+      description: evalsTable.description,
+      datasetId: evalsToDatasetsTable.datasetId,
+      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
+      prompts: evalsTable.prompts,
+    })
+    .from(evalsTable)
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId));
+
+  // Build where conditions
+  const whereConditions = [];
+
+  if (datasetId) {
+    whereConditions.push(eq(evalsToDatasetsTable.datasetId, datasetId));
+  }
+
+  if (search) {
+    whereConditions.push(
+      sql`(
+        ${evalsTable.description} LIKE ${`%${search}%`} OR
+        ${evalsTable.id} LIKE ${`%${search}%`}
+      )`,
+    );
+  }
+
+  const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+  // Get total count
+  const countQuery = db
+    .select({ count: sql<number>`count(*)` })
+    .from(evalsTable)
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
+    .where(whereClause);
+
+  const [countResult] = countQuery.all();
+  const total = countResult?.count || 0;
+
+  // Get paginated results
+  let results: any[];
+
+  // Apply sorting - we'll do most sorting in memory for complex calculated fields
+  if (sort === 'createdAt') {
+    results = baseQuery
+      .where(whereClause)
+      .orderBy(order === 'asc' ? evalsTable.createdAt : desc(evalsTable.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all();
+  } else if (sort === 'description') {
+    results = baseQuery
+      .where(whereClause)
+      .orderBy(
+        order === 'asc'
+          ? sql`${evalsTable.description} COLLATE NOCASE`
+          : sql`${evalsTable.description} COLLATE NOCASE DESC`,
+      )
+      .limit(limit)
+      .offset(offset)
+      .all();
+  } else {
+    // For passRate and numTests, we need to sort in memory after calculations
+    results = baseQuery
+      .where(whereClause)
+      .orderBy(desc(evalsTable.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all();
+  }
+
+  // Transform to EvalSummary format
+  const summaries: EvalSummary[] = results.map((result) => {
+    const passCount =
+      result.prompts?.reduce((memo: number, prompt: any) => {
+        return memo + (prompt.metrics?.testPassCount ?? 0);
+      }, 0) ?? 0;
+
+    const testCounts = result.prompts?.map((p: any) => {
+      return (
+        (p.metrics?.testPassCount ?? 0) +
+        (p.metrics?.testFailCount ?? 0) +
+        (p.metrics?.testErrorCount ?? 0)
+      );
+    }) ?? [0];
+
+    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
+    const testRunCount = testCount * (result.prompts?.length ?? 0);
+
+    return {
+      evalId: result.evalId,
+      createdAt: result.createdAt,
+      description: result.description,
+      numTests: testCount,
+      datasetId: result.datasetId,
+      isRedteam: result.isRedteam,
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
+      label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+    };
+  });
+
+  // Apply in-memory sorting for calculated fields
+  if (sort === 'passRate') {
+    summaries.sort((a, b) =>
+      order === 'asc' ? a.passRate - b.passRate : b.passRate - a.passRate,
+    );
+  } else if (sort === 'numTests') {
+    summaries.sort((a, b) =>
+      order === 'asc' ? a.numTests - b.numTests : b.numTests - a.numTests,
+    );
+  }
+
+  return {
+    data: summaries,
+    total,
+  };
 }
