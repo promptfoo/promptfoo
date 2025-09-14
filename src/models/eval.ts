@@ -954,7 +954,7 @@ export async function getPaginatedEvalSummaries(
       .where(eq(evalsTable.id, focusedEvalId))
       .get();
 
-    effectiveDatasetId = focusedEvalDataset?.datasetId;
+    effectiveDatasetId = focusedEvalDataset?.datasetId || undefined;
   }
 
   // Build where conditions

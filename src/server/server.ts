@@ -144,7 +144,9 @@ export function createApp() {
         'datasetId',
         'focusedEvalId',
       ];
-      const isPaginationRequest = paginationParams.some((param) => req.query[param] !== undefined);
+      const isPaginationRequest = paginationParams.some(
+        (param) => req.query[param as keyof EvalQueryParams] !== undefined,
+      );
 
       if (isPaginationRequest) {
         // Use new pagination API
