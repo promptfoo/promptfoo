@@ -1,6 +1,24 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig([
+  // Server (ESM only) - stable path for workflows
+  {
+    entry: { 'server/index': 'src/server/index.ts' },
+    format: ['esm'],
+    target: 'node20',
+    outDir: 'dist/src',
+    splitting: false,
+    shims: true,
+    sourcemap: true,
+    define: {
+      BUILD_FORMAT: '"esm"',
+      'process.env.BUILD_FORMAT': '"esm"',
+    },
+    external: [
+      // Externalize all bare module imports so Node resolves CJS deps natively
+      /^[a-z@][^:]*/,
+    ],
+  },
   // CLI binary (ESM only)
   {
     entry: ['src/main.ts'],
@@ -61,6 +79,9 @@ export default defineConfig([
     },
     logOverride: {
       'empty-import-meta': 'silent', // Silence import.meta warnings in CJS builds
+    },
+    esbuildOptions: (options) => {
+      options.logOverride = { 'empty-import-meta': 'silent' };
     },
     outExtension() {
       return { '.js': '.cjs' };

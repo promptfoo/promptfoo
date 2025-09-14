@@ -6,7 +6,13 @@ import util from 'util';
 import { fileURLToPath } from 'node:url';
 
 // Use currentDir instead of __dirname to avoid Jest/CJS conflicts
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
+// Guard import.meta usage for dual CJS/ESM builds
+const currentDir = (() => {
+  if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
+    return path.dirname(fileURLToPath(import.meta.url));
+  }
+  return __dirname;
+})();
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';

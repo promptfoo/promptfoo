@@ -3,7 +3,13 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
 // Use currentDir instead of __dirname to avoid Jest/CJS conflicts
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
+// Guard import.meta usage for dual CJS/ESM builds
+const currentDir = (() => {
+  if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
+    return path.dirname(fileURLToPath(import.meta.url));
+  }
+  return __dirname;
+})();
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database/index';
@@ -36,9 +42,11 @@ export async function runDbMigrations(): Promise<void> {
 }
 
 // ESM replacement for require.main === module check
-if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
-  // Run migrations and exit with appropriate code
-  runDbMigrations()
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1));
+if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
+  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
+    // Run migrations and exit with appropriate code
+    runDbMigrations()
+      .then(() => process.exit(0))
+      .catch(() => process.exit(1));
+  }
 }

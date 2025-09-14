@@ -180,15 +180,15 @@ async function main() {
     // Check if we're running this directly (not being imported)
     if (typeof process.env.BUILD_FORMAT === 'undefined' || process.env.BUILD_FORMAT === 'esm') {
       if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
-      // Write to a file for testing with image viewers
-      const fs = await import('fs');
-      const outputFilePath = 'test-image.png';
+        // Write to a file for testing with image viewers
+        const fs = await import('fs');
+        const outputFilePath = 'test-image.png';
 
-      // Decode base64 back to binary
-      const imageBuffer = Buffer.from(base64Image, 'base64');
+        // Decode base64 back to binary
+        const imageBuffer = Buffer.from(base64Image, 'base64');
 
-      // Write binary data to file
-      fs.writeFileSync(outputFilePath, imageBuffer);
+        // Write binary data to file
+        fs.writeFileSync(outputFilePath, imageBuffer);
 
         logger.info(`Image file written to: ${outputFilePath}`);
         logger.info(`You can open it with any image viewer to verify the conversion.`);
