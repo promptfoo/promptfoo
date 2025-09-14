@@ -1133,18 +1133,41 @@ export interface ResultsFile {
 }
 
 // The eval results list returned by the server and used for the eval picker
+export type EvalType = 'eval' | 'redteam' | 'modelaudit';
+
 export interface ResultLightweight {
   evalId: string;
   datasetId: string | null;
   createdAt: number;
   description: string | null;
   numTests: number;
+  // Legacy field for backward compatibility
   isRedteam?: boolean;
+  // New unified type field
+  type?: EvalType;
 }
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
 export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
+
+// Pagination and filtering types for evals endpoint
+export interface EvalQueryParams {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  sort?: 'createdAt' | 'description' | 'passRate' | 'numTests' | 'type';
+  order?: 'asc' | 'desc';
+  datasetId?: string;
+  type?: EvalType;
+}
+
+export interface PaginatedEvalResponse {
+  data: EvalSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
 
 export interface OutputMetadata {
   promptfooVersion: string;

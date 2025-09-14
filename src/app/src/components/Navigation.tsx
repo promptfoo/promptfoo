@@ -66,7 +66,18 @@ const NavSection = styled(Box)({
 
 function NavLink({ href, label }: { href: string; label: string }) {
   const location = useLocation();
-  const isActive = location.pathname.startsWith(href);
+
+  // Special handling for Model Audit to activate on both /model-audit and /model-audit/:id
+  let isActive: boolean;
+  if (href === '/model-audit') {
+    isActive =
+      location.pathname === '/model-audit' ||
+      (location.pathname.startsWith('/model-audit/') &&
+        !location.pathname.startsWith('/model-audit/setup') &&
+        !location.pathname.startsWith('/model-audit/history'));
+  } else {
+    isActive = location.pathname.startsWith(href);
+  }
 
   return (
     <NavButton component={RouterLink} to={href} className={isActive ? 'active' : ''}>
@@ -75,14 +86,14 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-type ActiveMenu = 'create' | 'evals' | null;
+type ActiveMenu = 'create' | 'evals' | 'audit' | null;
 
 // Shared constants
 const DROPDOWN_CLOSE_DELAY = 150;
 
 // Custom hook for delayed menu close functionality
 function useDelayedClose(
-  menuType: 'create' | 'evals',
+  menuType: 'create' | 'evals' | 'audit',
   setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>,
 ) {
   const closeTimerRef = React.useRef<number | null>(null);
@@ -145,7 +156,7 @@ function CreateDropdown({
     scheduleClose();
   };
 
-  const isActive = ['/setup', '/redteam/setup'].some((route) =>
+  const isActive = ['/setup', '/redteam/setup', '/model-audit/setup'].some((route) =>
     location.pathname.startsWith(route),
   );
 
@@ -159,6 +170,11 @@ function CreateDropdown({
       href: '/redteam/setup',
       label: 'Red Team',
       description: 'Set up security testing scenarios',
+    },
+    {
+      href: '/model-audit/setup',
+      label: 'Model Audit',
+      description: 'Configure and run a model security scan',
     },
   ];
 
@@ -471,6 +487,180 @@ function EvalsDropdown({
   );
 }
 
+function _ModelAuditDropdown({
+  activeMenu,
+  setActiveMenu,
+}: {
+  activeMenu: ActiveMenu;
+  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>;
+}) {
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const location = useLocation();
+  const { scheduleClose, cancelClose } = useDelayedClose('audit', setActiveMenu);
+
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+    setActiveMenu('audit');
+  };
+
+  const handleClose = () => {
+    setActiveMenu(null);
+  };
+
+  const handleMouseEnter = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+    setActiveMenu('audit');
+  };
+
+  const handleMouseLeave = () => {
+    scheduleClose();
+  };
+
+  const isActive = ['/model-audit'].some((route) => location.pathname.startsWith(route));
+
+  const menuItems = [
+    {
+      href: '/model-audit',
+      label: 'New Scan',
+      description: 'Run a new model security scan',
+    },
+    {
+      href: '/model-audit/history',
+      label: 'Scan History',
+      description: 'Browse and manage previous scans',
+    },
+  ];
+
+  const isOpen = activeMenu === 'audit';
+
+  return (
+    <Box
+      onMouseLeave={handleMouseLeave}
+      onMouseEnter={cancelClose}
+      sx={{ position: 'relative', display: 'inline-block' }}
+    >
+      <Button
+        onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        endIcon={
+          <ExpandMoreIcon
+            sx={{
+              transform: isOpen ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.3s',
+              fontSize: '1rem',
+              opacity: 0.5,
+            }}
+          />
+        }
+        sx={{
+          color: 'text.primary',
+          position: 'relative',
+          borderRadius: isOpen ? '4px 4px 0 0' : '4px',
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            backgroundColor: 'action.hover',
+          },
+          ...(isOpen && {
+            backgroundColor: 'background.paper',
+            boxShadow: (theme) =>
+              `0 -2px 8px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
+            zIndex: 1301,
+          }),
+          ...(isActive && {
+            backgroundColor: 'action.selected',
+          }),
+        }}
+      >
+        Model Audit
+      </Button>
+      <Popper
+        anchorEl={anchorEl}
+        open={isOpen}
+        placement="bottom-start"
+        sx={{ zIndex: 1300 }}
+        modifiers={[
+          {
+            name: 'offset',
+            options: {
+              offset: [0, -1],
+            },
+          },
+        ]}
+      >
+        <Box sx={{ pt: 1 }}>
+          <Paper
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+            elevation={3}
+            sx={{
+              width: 320,
+              maxWidth: '90vw',
+              borderRadius: '0 0 8px 8px',
+              overflow: 'hidden',
+              position: 'relative',
+              boxShadow: (theme) =>
+                `0 4px 20px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.15)'}`,
+            }}
+          >
+            <MenuList sx={{ py: 1 }}>
+              {menuItems.map((item) => (
+                <MenuItem
+                  key={item.href}
+                  component={RouterLink}
+                  to={item.href}
+                  onClick={handleClose}
+                  sx={{
+                    py: 1.5,
+                    px: 2.5,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    minHeight: 'auto',
+                    whiteSpace: 'normal',
+                    transition: 'background-color 0.2s ease',
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                    '&:not(:last-child)': {
+                      borderBottom: '1px solid',
+                      borderBottomColor: 'divider',
+                    },
+                  }}
+                >
+                  <Box sx={{ width: '100%' }}>
+                    <Box
+                      sx={{
+                        fontSize: '0.875rem',
+                        fontWeight: 500,
+                        color: 'text.primary',
+                        mb: 0.25,
+                        letterSpacing: '-0.01em',
+                      }}
+                    >
+                      {item.label}
+                    </Box>
+                    <Box
+                      sx={{
+                        fontSize: '0.8125rem',
+                        color: 'text.secondary',
+                        lineHeight: 1.4,
+                        whiteSpace: 'normal',
+                        opacity: 0.8,
+                      }}
+                    >
+                      {item.description}
+                    </Box>
+                  </Box>
+                </MenuItem>
+              ))}
+            </MenuList>
+          </Paper>
+        </Box>
+      </Popper>
+    </Box>
+  );
+}
+
 export default function Navigation({
   darkMode,
   onToggleDarkMode,
@@ -493,10 +683,10 @@ export default function Navigation({
             <Logo />
             <CreateDropdown activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
             <EvalsDropdown activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
+            <NavLink href="/model-audit" label="Model Audit" />
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
             <NavLink href="/history" label="History" />
-            <NavLink href="/model-audit" label="Model Audit" />
           </NavSection>
           <NavSection>
             <IconButton onClick={handleModalToggle} color="inherit">

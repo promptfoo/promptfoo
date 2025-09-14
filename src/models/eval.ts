@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database';
 import { updateSignalFile } from '../database/signal';
@@ -11,6 +11,7 @@ import {
   evalsToDatasetsTable,
   evalsToPromptsTable,
   evalsToTagsTable,
+  modelAuditsTable,
   promptsTable,
   tagsTable,
 } from '../database/tables';
@@ -22,7 +23,6 @@ import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import {
   type CompletedPrompt,
-  type EvalQueryParams,
   type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
@@ -44,7 +44,7 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageU
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
 
-import type { EvalResultsFilterMode } from '../types';
+import type { EvalResultsFilterMode, EvalType } from '../types';
 
 interface FilteredCountRow {
   count: number | null;
@@ -905,48 +905,85 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       isRedteam: result.isRedteam,
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+      type: result.isRedteam ? 'redteam' : 'eval',
     };
   });
 }
 
-/**
- * Get a paginated list of eval summaries with server-side filtering, sorting, and search.
- *
- * @param params - Query parameters for pagination, filtering, and search.
- * @returns Paginated eval results with total count.
- */
-export async function getPaginatedEvalSummaries(
-  params: EvalQueryParams,
-): Promise<{ data: EvalSummary[]; total: number }> {
+export async function getModelAuditSummaries(): Promise<EvalSummary[]> {
   const db = getDb();
 
-  const {
-    limit = 50,
-    offset = 0,
-    search = '',
-    sort = 'createdAt',
-    order = 'desc',
-    datasetId,
-    focusedEvalId,
-  } = params;
-
-  // Build base query with joins
-  const baseQuery = db
+  const results = db
     .select({
-      evalId: evalsTable.id,
-      createdAt: evalsTable.createdAt,
-      description: evalsTable.description,
-      datasetId: evalsToDatasetsTable.datasetId,
-      isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
-      prompts: evalsTable.prompts,
+      id: modelAuditsTable.id,
+      createdAt: modelAuditsTable.createdAt,
+      name: modelAuditsTable.name,
+      modelPath: modelAuditsTable.modelPath,
+      hasErrors: modelAuditsTable.hasErrors,
+      totalChecks: modelAuditsTable.totalChecks,
+      passedChecks: modelAuditsTable.passedChecks,
+      failedChecks: modelAuditsTable.failedChecks,
     })
-    .from(evalsTable)
-    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId));
+    .from(modelAuditsTable)
+    .orderBy(desc(modelAuditsTable.createdAt))
+    .all();
 
-  // Resolve datasetId from focusedEvalId if provided
+  return results.map((result) => {
+    const passRate =
+      result.totalChecks && result.passedChecks
+        ? (result.passedChecks / result.totalChecks) * 100
+        : 0;
+
+    const scanName = result.name || `Model Audit ${result.id.slice(-8)}`;
+    const description = `${scanName} - ${result.modelPath}`;
+
+    return {
+      evalId: result.id,
+      createdAt: result.createdAt,
+      description: description,
+      numTests: result.totalChecks || 0,
+      datasetId: null, // Model audits don't have datasets
+      isRedteam: false, // For backward compatibility
+      type: 'modelaudit' as const,
+      passRate: passRate,
+      label: scanName,
+    };
+  });
+}
+
+export async function getAllEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
+  const [evalSummaries, modelAuditSummaries] = await Promise.all([
+    getEvalSummaries(datasetId),
+    getModelAuditSummaries(),
+  ]);
+
+  // Combine and sort by creation date (most recent first)
+  return [...evalSummaries, ...modelAuditSummaries].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function getPaginatedEvalSummaries({
+  limit = 50,
+  offset = 0,
+  search,
+  sort = 'createdAt',
+  order = 'desc',
+  datasetId,
+  focusedEvalId,
+  type,
+}: {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  sort?: 'createdAt' | 'description' | 'passRate' | 'numTests' | 'type';
+  order?: 'asc' | 'desc';
+  datasetId?: string;
+  focusedEvalId?: string;
+  type?: EvalType;
+}): Promise<{ data: EvalSummary[]; total: number }> {
+  // Handle focusedEvalId for Phase 1 compatibility
   let effectiveDatasetId = datasetId;
   if (focusedEvalId && !datasetId) {
-    // Look up the focused eval's datasetId
+    const db = getDb();
     const focusedEvalDataset = db
       .select({ datasetId: evalsToDatasetsTable.datasetId })
       .from(evalsTable)
@@ -957,102 +994,68 @@ export async function getPaginatedEvalSummaries(
     effectiveDatasetId = focusedEvalDataset?.datasetId || undefined;
   }
 
-  // Build where conditions
-  const whereConditions = [];
+  // Get all summaries (unified approach for model audit integration)
+  let allSummaries = await getAllEvalSummaries(effectiveDatasetId);
 
-  if (effectiveDatasetId) {
-    whereConditions.push(eq(evalsToDatasetsTable.datasetId, effectiveDatasetId));
+  // Apply type filter
+  if (type) {
+    allSummaries = allSummaries.filter((summary) => {
+      const summaryType = summary.type || (summary.isRedteam ? 'redteam' : 'eval');
+      return summaryType === type;
+    });
   }
 
+  // Apply search filter
   if (search) {
-    whereConditions.push(
-      sql`(
-        ${evalsTable.description} LIKE ${`%${search}%`} OR
-        ${evalsTable.id} LIKE ${`%${search}%`}
-      )`,
+    const searchLower = search.toLowerCase();
+    allSummaries = allSummaries.filter(
+      (summary) =>
+        summary.evalId.toLowerCase().includes(searchLower) ||
+        (summary.description && summary.description.toLowerCase().includes(searchLower)) ||
+        summary.label.toLowerCase().includes(searchLower),
     );
   }
 
-  const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+  // Apply sorting
+  allSummaries.sort((a, b) => {
+    let aVal: any, bVal: any;
 
-  // Get total count
-  const countQuery = db
-    .select({ count: sql<number>`count(DISTINCT ${evalsTable.id})` })
-    .from(evalsTable)
-    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .where(whereClause);
+    switch (sort) {
+      case 'description':
+        aVal = a.description || '';
+        bVal = b.description || '';
+        break;
+      case 'passRate':
+        aVal = a.passRate;
+        bVal = b.passRate;
+        break;
+      case 'numTests':
+        aVal = a.numTests;
+        bVal = b.numTests;
+        break;
+      case 'type':
+        aVal = a.type || (a.isRedteam ? 'redteam' : 'eval');
+        bVal = b.type || (b.isRedteam ? 'redteam' : 'eval');
+        break;
+      case 'createdAt':
+      default:
+        aVal = a.createdAt;
+        bVal = b.createdAt;
+        break;
+    }
 
-  const [countResult] = countQuery.all();
-  const total = countResult?.count || 0;
-
-  // Get paginated results
-  let results: any[];
-
-  // Apply sorting - we'll do most sorting in memory for complex calculated fields
-  if (sort === 'createdAt') {
-    results = baseQuery
-      .where(whereClause)
-      .orderBy(order === 'asc' ? evalsTable.createdAt : desc(evalsTable.createdAt))
-      .limit(limit)
-      .offset(offset)
-      .all();
-  } else if (sort === 'description') {
-    results = baseQuery
-      .where(whereClause)
-      .orderBy(
-        order === 'asc'
-          ? sql`${evalsTable.description} COLLATE NOCASE`
-          : sql`${evalsTable.description} COLLATE NOCASE DESC`,
-      )
-      .limit(limit)
-      .offset(offset)
-      .all();
-  } else {
-    // Default fallback to createdAt desc for any unhandled sort fields
-    results = baseQuery
-      .where(whereClause)
-      .orderBy(desc(evalsTable.createdAt))
-      .limit(limit)
-      .offset(offset)
-      .all();
-  }
-
-  // Transform to EvalSummary format
-  const summaries: EvalSummary[] = results.map((result) => {
-    const passCount =
-      result.prompts?.reduce((memo: number, prompt: any) => {
-        return memo + (prompt.metrics?.testPassCount ?? 0);
-      }, 0) ?? 0;
-
-    const testCounts = result.prompts?.map((p: any) => {
-      return (
-        (p.metrics?.testPassCount ?? 0) +
-        (p.metrics?.testFailCount ?? 0) +
-        (p.metrics?.testErrorCount ?? 0)
-      );
-    }) ?? [0];
-
-    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
-    const testRunCount = testCount * (result.prompts?.length ?? 0);
-
-    return {
-      evalId: result.evalId,
-      createdAt: result.createdAt,
-      description: result.description,
-      numTests: testCount,
-      datasetId: result.datasetId,
-      isRedteam: result.isRedteam,
-      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
-      label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
-    };
+    if (order === 'asc') {
+      return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+    } else {
+      return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
+    }
   });
 
-  // Note: Only database-supported sorting (createdAt, description) is implemented.
-  // Complex calculated fields like passRate and numTests would require fetching
-  // all records for proper global sorting, which is inefficient for large datasets.
+  const total = allSummaries.length;
+  const paginatedData = allSummaries.slice(offset, offset + limit);
 
   return {
-    data: summaries,
+    data: paginatedData,
     total,
   };
 }

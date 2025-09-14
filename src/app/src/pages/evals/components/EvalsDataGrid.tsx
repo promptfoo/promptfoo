@@ -47,15 +47,25 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
+type EvalType = 'eval' | 'redteam' | 'modelaudit';
+
 type Eval = {
   createdAt: number;
-  datasetId: string;
+  datasetId: string | null;
   description: string | null;
   evalId: string;
-  isRedteam: boolean;
+  isRedteam: number; // Legacy field for backward compatibility
+  type?: EvalType; // New unified type field
   label: string;
   numTests: number;
   passRate: number;
+};
+
+type PaginatedEvalResponse = {
+  data: Eval[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 // augment the props for the toolbar slot
@@ -63,6 +73,8 @@ declare module '@mui/x-data-grid' {
   interface ToolbarPropsOverrides {
     showUtilityButtons: boolean;
     focusQuickFilterOnMount: boolean;
+    quickFilterValue: string;
+    onQuickFilterChange: (value: string) => void;
   }
 }
 
@@ -93,9 +105,13 @@ QuickFilter.displayName = 'QuickFilter';
 function CustomToolbar({
   showUtilityButtons,
   focusQuickFilterOnMount,
+  quickFilterValue,
+  onQuickFilterChange,
 }: {
   showUtilityButtons: boolean;
   focusQuickFilterOnMount: boolean;
+  quickFilterValue: string;
+  onQuickFilterChange: (value: string) => void;
 }) {
   const theme = useTheme();
   const quickFilterRef = useRef<HTMLInputElement>(null);
@@ -105,6 +121,25 @@ function CustomToolbar({
       quickFilterRef.current.focus();
     }
   }, [focusQuickFilterOnMount]);
+
+  const QuickFilterWithState = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>(
+    (props, ref) => (
+      <GridToolbarQuickFilter
+        {...props}
+        inputRef={ref}
+        value={quickFilterValue}
+        onChange={(event) => onQuickFilterChange(event.target.value)}
+        sx={{
+          '& .MuiInputBase-root': {
+            borderRadius: 2,
+            backgroundColor: theme.palette.background.paper,
+          },
+        }}
+      />
+    ),
+  );
+
+  QuickFilterWithState.displayName = 'QuickFilterWithState';
 
   return (
     <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
@@ -117,7 +152,7 @@ function CustomToolbar({
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      <QuickFilter ref={quickFilterRef} />
+      <QuickFilterWithState ref={quickFilterRef} />
     </GridToolbarContainer>
   );
 }
@@ -152,6 +187,10 @@ export default function EvalsDataGrid({
   const [error, setError] = useState<Error | null>(null);
   const [total, setTotal] = useState(0);
 
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
+    focusedEvalId ? [focusedEvalId] : [],
+  );
+
   // Server-side state management
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
     page: 0,
@@ -160,17 +199,11 @@ export default function EvalsDataGrid({
 
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'createdAt', sort: 'desc' }]);
 
-  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
-  const quickFilterValues = filterModel.quickFilterValues || [];
-  const searchText = quickFilterValues.join(' ');
-  const debouncedSearchText = useDebounce(searchText, 300);
-
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
-    focusedEvalId ? [focusedEvalId] : [],
-  );
+  const [quickFilterValue, setQuickFilterValue] = useState('');
+  const debouncedSearchText = useDebounce(quickFilterValue, 300);
 
   /**
-   * Fetch evals from the API with server-side pagination.
+   * Fetch evals from the API with server-side pagination, sorting, and filtering.
    */
   const fetchEvals = useCallback(
     async (signal: AbortSignal) => {
@@ -184,7 +217,7 @@ export default function EvalsDataGrid({
         params.set('limit', paginationModel.pageSize.toString());
         params.set('offset', (paginationModel.page * paginationModel.pageSize).toString());
 
-        // Search parameter
+        // Search parameter (prefer debouncedSearchText for server-side filtering)
         if (debouncedSearchText) {
           params.set('search', debouncedSearchText);
         }
@@ -209,15 +242,17 @@ export default function EvalsDataGrid({
           throw new Error('Failed to fetch evals');
         }
 
-        const body = (await response.json()) as {
-          data: Eval[];
-          total: number;
-          limit: number;
-          offset: number;
-        };
+        const body = (await response.json()) as PaginatedEvalResponse | { data: Eval[] };
 
-        setEvals(body.data);
-        setTotal(body.total);
+        // Handle both paginated and legacy responses
+        if ('total' in body) {
+          setEvals(body.data);
+          setTotal(body.total);
+        } else {
+          setEvals(body.data);
+          setTotal(body.data.length);
+        }
+
         setError(null);
       } catch (error) {
         // Don't set error state if the request was aborted
@@ -241,7 +276,7 @@ export default function EvalsDataGrid({
     // Create AbortController for this fetch
     const abortController = new AbortController();
 
-    // Fetch evals whenever pagination, sort, or search changes
+    // Fetch evals whenever pagination, sort, search, or navigation changes
     fetchEvals(abortController.signal);
 
     // Cleanup: abort any in-flight request when dependencies change or component unmounts
@@ -256,9 +291,34 @@ export default function EvalsDataGrid({
    */
   const rows = useMemo(() => evals, [evals]);
 
-  const hasRedteamEvals = useMemo(() => evals.some(({ isRedteam }) => !!isRedteam), [evals]);
+  const hasMultipleTypes = useMemo(() => {
+    // Check if we have more than one type of eval/scan
+    const types = new Set(
+      evals.map((eval_) => {
+        // Use new type field if available, otherwise fall back to isRedteam logic
+        if (eval_.type) {
+          return eval_.type;
+        }
+        return eval_.isRedteam === 1 ? 'redteam' : 'eval';
+      }),
+    );
+    return types.size > 1;
+  }, [evals]);
 
-  const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
+  const handleCellClick = useCallback(
+    (params: GridCellParams<Eval>) => {
+      const evalType = params.row.type || (params.row.isRedteam === 1 ? 'redteam' : 'eval');
+
+      if (evalType === 'modelaudit') {
+        // Navigate to model audit result page
+        window.location.href = `/model-audit/${params.row.evalId}`;
+      } else {
+        // Use the existing callback for regular evals and redteam
+        onEvalSelected(params.row.evalId);
+      }
+    },
+    [onEvalSelected],
+  );
 
   const columns: GridColDef<Eval>[] = useMemo(
     () =>
@@ -268,25 +328,32 @@ export default function EvalsDataGrid({
           headerName: 'ID',
           flex: 0.5,
           minWidth: 120,
-          renderCell: (params: GridRenderCellParams<Eval>) =>
-            params.row.evalId === focusedEvalId ? (
+          renderCell: (params: GridRenderCellParams<Eval>) => {
+            const evalType = params.row.type || (params.row.isRedteam === 1 ? 'redteam' : 'eval');
+            const href =
+              evalType === 'modelaudit'
+                ? `/model-audit/${params.row.evalId}`
+                : `/eval/${params.row.evalId}`;
+
+            return params.row.evalId === focusedEvalId ? (
               params.row.evalId
             ) : (
               <Link
-                href={`/eval/${params.row.evalId}`}
+                href={href}
                 /**
                  * Prevent the default behavior of the link, which is to navigate to the href.
-                 * Instead, we want to call the onEvalSelected callback which may or may not navigate.
+                 * Instead, we want to call the handleCellClick function which handles navigation properly.
                  */
                 onClick={(e) => {
                   e.preventDefault();
-                  onEvalSelected(params.row.evalId);
+                  handleCellClick(params);
                   return false;
                 }}
               >
                 {params.row.evalId}
               </Link>
-            ),
+            );
+          },
         },
         {
           field: 'createdAt',
@@ -297,22 +364,68 @@ export default function EvalsDataGrid({
           },
           valueFormatter: (value: Eval['createdAt']) => formatDataGridDate(value),
         },
-        // Only show the redteam column if there are redteam evals.
-        ...(hasRedteamEvals
+        // Show the type column if there are multiple types
+        ...(hasMultipleTypes
           ? [
               {
-                field: 'isRedteam',
+                field: 'type',
                 headerName: 'Type',
-                flex: 0.5,
+                flex: 0.7,
                 type: 'singleSelect',
                 valueOptions: [
-                  { value: true, label: 'Red Team' },
-                  { value: false, label: 'Eval' },
+                  { value: 'eval', label: 'Eval' },
+                  { value: 'redteam', label: 'Red Team' },
+                  { value: 'modelaudit', label: 'Model Audit' },
                 ],
-                valueGetter: (value: Eval['isRedteam']) => Boolean(value),
+                valueGetter: (value: Eval['type'], row: Eval) => {
+                  // Use new type field if available, otherwise fall back to isRedteam logic
+                  if (row.type) {
+                    return row.type;
+                  }
+                  return row.isRedteam === 1 ? 'redteam' : 'eval';
+                },
                 renderCell: (params: GridRenderCellParams<Eval>) => {
-                  const isRedteam = params.value as Eval['isRedteam'];
-                  const displayType = isRedteam ? 'Red Team' : 'Eval';
+                  const evalType = params.value as EvalType;
+                  const typeLabels = {
+                    eval: 'Eval',
+                    redteam: 'Red Team',
+                    modelaudit: 'Model Audit',
+                  };
+                  const displayType = typeLabels[evalType] || 'Unknown';
+
+                  const getTypeColor = (type: EvalType) => {
+                    switch (type) {
+                      case 'redteam':
+                        return {
+                          border: 'error.light',
+                          text: 'error.main',
+                          bg: (theme: any) => alpha(theme.palette.error.main, 0.1),
+                        };
+                      case 'modelaudit':
+                        return {
+                          border: 'warning.light',
+                          text: 'warning.main',
+                          bg: (theme: any) => alpha(theme.palette.warning.main, 0.1),
+                        };
+                      default: // eval
+                        return {
+                          border: (theme: any) =>
+                            theme.palette.mode === 'dark'
+                              ? theme.palette.grey[600]
+                              : theme.palette.text.disabled,
+                          text: (theme: any) =>
+                            theme.palette.mode === 'dark'
+                              ? theme.palette.grey[300]
+                              : theme.palette.text.secondary,
+                          bg: (theme: any) =>
+                            theme.palette.mode === 'dark'
+                              ? theme.palette.grey[800]
+                              : theme.palette.grey[50],
+                        };
+                    }
+                  };
+
+                  const colors = getTypeColor(evalType);
 
                   return (
                     <Chip
@@ -320,21 +433,12 @@ export default function EvalsDataGrid({
                       size="small"
                       variant="outlined"
                       sx={(theme) => ({
-                        borderColor: isRedteam
-                          ? theme.palette.error.light
-                          : theme.palette.mode === 'dark'
-                            ? theme.palette.grey[600]
-                            : theme.palette.text.disabled,
-                        color: isRedteam
-                          ? theme.palette.error.main
-                          : theme.palette.mode === 'dark'
-                            ? theme.palette.grey[300]
-                            : theme.palette.text.secondary,
-                        bgcolor: isRedteam
-                          ? alpha(theme.palette.error.main, 0.1)
-                          : theme.palette.mode === 'dark'
-                            ? theme.palette.grey[800]
-                            : theme.palette.grey[50],
+                        borderColor:
+                          typeof colors.border === 'function'
+                            ? colors.border(theme)
+                            : colors.border,
+                        color: typeof colors.text === 'function' ? colors.text(theme) : colors.text,
+                        bgcolor: typeof colors.bg === 'function' ? colors.bg(theme) : colors.bg,
                         fontWeight: 500,
                         '& .MuiChip-label': {
                           px: 1.5,
@@ -391,7 +495,7 @@ export default function EvalsDataGrid({
           sortable: false,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
-    [focusedEvalId, onEvalSelected, hasRedteamEvals],
+    [focusedEvalId, onEvalSelected, hasMultipleTypes, handleCellClick],
   );
 
   return (
@@ -466,13 +570,12 @@ export default function EvalsDataGrid({
         sortModel={sortModel}
         onSortModelChange={setSortModel}
         rowCount={total}
-        // Filter model for server-side search
-        filterModel={filterModel}
-        onFilterModelChange={setFilterModel}
         slotProps={{
           toolbar: {
             showUtilityButtons,
             focusQuickFilterOnMount,
+            quickFilterValue,
+            onQuickFilterChange: setQuickFilterValue,
           },
         }}
         onCellClick={(params) => {

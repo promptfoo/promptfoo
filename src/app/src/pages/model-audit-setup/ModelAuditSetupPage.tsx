@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { callApi } from '@app/utils/api';
 import {
@@ -10,29 +10,27 @@ import {
 import {
   Alert,
   Box,
-  Button,
+  Breadcrumbs,
   CircularProgress,
   Container,
-  Fade,
   IconButton,
   Link,
   Paper,
   Stack,
-  Tab,
-  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material';
-import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
-import ConfigurationTab from './components/ConfigurationTab';
-import ResultsTab from './components/ResultsTab';
-import ScannedFilesDialog from './components/ScannedFilesDialog';
-import { useModelAuditConfigStore } from './stores';
+import { Link as RouterLink } from 'react-router-dom';
 
-import type { ScanResult } from './ModelAudit.types';
+import AdvancedOptionsDialog from '../model-audit/components/AdvancedOptionsDialog';
+import ConfigurationTab from '../model-audit/components/ConfigurationTab';
+import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
+import { useModelAuditConfigStore } from '../model-audit/stores';
 
-export default function ModelAudit() {
-  const [activeTab, setActiveTab] = useState(0);
+import type { ScanResult } from '../model-audit/ModelAudit.types';
+
+export default function ModelAuditSetupPage() {
+  const navigate = useNavigate();
   const {
     // State
     paths,
@@ -87,12 +85,15 @@ export default function ModelAudit() {
       }
 
       setScanResults(data);
-      setActiveTab(1); // Switch to Results tab
       addRecentScan(paths); // Add to recent scans
 
-      // If scan was persisted, user can view it in history
+      // If scan was persisted, navigate to the result page
       if (data.persisted && data.auditId) {
         console.log(`Scan saved to history with ID: ${data.auditId}`);
+        navigate(`/model-audit/history/${data.auditId}`);
+      } else {
+        // Show non-persisted results on this page
+        console.log('Scan completed but not persisted');
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
@@ -120,13 +121,23 @@ export default function ModelAudit() {
     >
       <Container maxWidth="xl">
         <Paper elevation={0} sx={{ p: { xs: 3, md: 5 }, mb: 4 }}>
+          {/* Breadcrumb Navigation */}
+          <Box sx={{ mb: 3 }}>
+            <Breadcrumbs aria-label="breadcrumb">
+              <Link component={RouterLink} to="/model-audit" underline="hover" color="inherit">
+                Model Audit
+              </Link>
+              <Typography color="text.primary">Setup</Typography>
+            </Breadcrumbs>
+          </Box>
+
           <Stack direction="row" alignItems="center" mb={4}>
             <Box>
               <Typography variant="h4" gutterBottom fontWeight="bold">
-                Model Audit
+                Model Audit Setup
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                Scan ML models for security vulnerabilities.{' '}
+                Configure and run a model security scan.{' '}
                 <Link href="https://www.promptfoo.dev/docs/model-audit/" target="_blank">
                   Learn more
                 </Link>
@@ -167,91 +178,60 @@ export default function ModelAudit() {
             </Box>
           </Stack>
 
-          <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
-            <Tab label="Configuration" />
-            <Tab label="Results" disabled={!scanResults} />
-          </Tabs>
-
-          <Button
-            component={RouterLink}
-            to="/model-audit/history"
-            variant="outlined"
-            sx={{ mt: 2 }}
-          >
-            View Scan History
-          </Button>
-
           {error && (
-            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
+            <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
               {error}
             </Alert>
           )}
 
-          <Box sx={{ mt: 3 }}>
-            <Fade in={activeTab === 0} unmountOnExit>
+          {/* Non-persisted results display */}
+          {scanResults && !scanResults.persisted && (
+            <Alert severity="info" sx={{ mb: 3 }}>
               <Box>
-                <ConfigurationTab
-                  paths={paths}
-                  isScanning={isScanning}
-                  onAddPath={(path) => {
-                    setPaths([...paths, path]);
-                  }}
-                  onRemovePath={handleRemovePath}
-                  onShowOptions={() => setShowOptionsDialog(true)}
-                  onScan={handleScan}
-                  error={error}
-                  onClearError={() => setError(null)}
-                  currentWorkingDir={installationStatus.cwd || ''}
-                  installationStatus={installationStatus}
-                />
+                <Typography variant="subtitle2" gutterBottom>
+                  Scan completed successfully!
+                </Typography>
+                <Typography variant="body2">
+                  The scan results are displayed below. To save results for later viewing, enable
+                  persistence in your configuration.
+                </Typography>
               </Box>
-            </Fade>
+            </Alert>
+          )}
 
-            <Fade in={activeTab === 1} unmountOnExit>
-              <Box>
-                {scanResults && (
-                  <>
-                    {/* Success message with history link */}
-                    {scanResults.persisted && scanResults.auditId && (
-                      <Alert severity="success" sx={{ mb: 3 }}>
-                        <Box>
-                          Scan completed and saved to history!{' '}
-                          <Link
-                            component={RouterLink}
-                            to={`/model-audit/history/${scanResults.auditId}`}
-                            sx={{ fontWeight: 'medium' }}
-                          >
-                            View in History
-                          </Link>
-                        </Box>
-                      </Alert>
-                    )}
-                    <ResultsTab
-                      scanResults={scanResults}
-                      onShowFilesDialog={() => setShowFilesDialog(true)}
-                    />
-                  </>
-                )}
-              </Box>
-            </Fade>
-          </Box>
-        </Paper>
-
-        <AdvancedOptionsDialog
-          open={showOptionsDialog}
-          onClose={() => setShowOptionsDialog(false)}
-          scanOptions={scanOptions}
-          onOptionsChange={setScanOptions}
-        />
-
-        {scanResults && (
-          <ScannedFilesDialog
-            open={showFilesDialog}
-            onClose={() => setShowFilesDialog(false)}
-            scanResults={scanResults}
+          <ConfigurationTab
             paths={paths}
+            isScanning={isScanning}
+            onAddPath={(path) => {
+              setPaths([...paths, path]);
+            }}
+            onRemovePath={handleRemovePath}
+            onShowOptions={() => setShowOptionsDialog(true)}
+            onScan={handleScan}
+            error={error}
+            onClearError={() => setError(null)}
+            currentWorkingDir={installationStatus.cwd || ''}
+            installationStatus={installationStatus}
+            scanResults={scanResults}
+            onShowFilesDialog={() => setShowFilesDialog(true)}
           />
-        )}
+
+          <AdvancedOptionsDialog
+            open={showOptionsDialog}
+            onClose={() => setShowOptionsDialog(false)}
+            scanOptions={scanOptions}
+            onOptionsChange={setScanOptions}
+          />
+
+          {scanResults && (
+            <ScannedFilesDialog
+              open={showFilesDialog}
+              onClose={() => setShowFilesDialog(false)}
+              scanResults={scanResults}
+              paths={paths}
+            />
+          )}
+        </Paper>
       </Container>
     </Box>
   );

@@ -15,7 +15,7 @@ import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { getEvalSummaries, getPaginatedEvalSummaries } from '../models/eval';
+import Eval, { getEvalSummaries, getAllEvalSummaries, getPaginatedEvalSummaries } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
@@ -41,7 +41,7 @@ import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalQueryParams, EvalSummary, PaginatedEvalResponse } from '../types';
+import type { EvalSummary, EvalQueryParams, PaginatedEvalResponse, EvalType } from '../types';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -110,8 +110,8 @@ export function createApp() {
   });
 
   /**
-   * Fetches summaries of all evals, optionally for a given dataset.
-   * Supports pagination with query parameters: limit, offset, search, sort, order
+   * Fetches summaries of all evals, with optional pagination, filtering, and sorting.
+   * Supports model audits, redteam, and regular evals with unified API.
    */
   app.get(
     '/api/results',
@@ -119,22 +119,24 @@ export function createApp() {
       req: Request<{}, {}, {}, EvalQueryParams>,
       res: Response<PaginatedEvalResponse | { data: EvalSummary[] }>,
     ): Promise<void> => {
-      const { limit, offset, search, sort, order, datasetId, focusedEvalId } = req.query;
+      const { limit, offset, search, sort, order, datasetId, focusedEvalId, type } = req.query;
 
-      // Validate and sanitize query params
-      const allowedSorts = new Set(['createdAt', 'description'] as const);
+      // Validate and sanitize query params - enhanced for model audit support
+      const allowedSorts = new Set(['createdAt', 'description', 'passRate', 'numTests', 'type'] as const);
       const allowedOrders = new Set(['asc', 'desc'] as const);
+      const allowedTypes = new Set(['eval', 'redteam', 'modelaudit'] as const);
+
       const safeSort = allowedSorts.has(sort as any)
-        ? (sort as 'createdAt' | 'description')
+        ? (sort as 'createdAt' | 'description' | 'passRate' | 'numTests' | 'type')
         : undefined;
       const safeOrder = allowedOrders.has(order as any) ? (order as 'asc' | 'desc') : undefined;
+      const safeType = allowedTypes.has(type as any) ? (type as EvalType) : undefined;
       const safeLimit = Number.isFinite(Number(limit))
         ? Math.max(1, Math.min(100, Number(limit)))
         : undefined;
       const safeOffset = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : undefined;
 
       // Check if any pagination/filtering parameters are provided
-      // This approach is more robust as it automatically includes any new pagination-related parameters
       const paginationParams = [
         'limit',
         'offset',
@@ -143,13 +145,14 @@ export function createApp() {
         'order',
         'datasetId',
         'focusedEvalId',
+        'type',
       ];
       const isPaginationRequest = paginationParams.some(
         (param) => req.query[param as keyof EvalQueryParams] !== undefined,
       );
 
       if (isPaginationRequest) {
-        // Use new pagination API
+        // Use new pagination API with enhanced parameters
         const result = await getPaginatedEvalSummaries({
           limit: safeLimit,
           offset: safeOffset,
@@ -158,6 +161,7 @@ export function createApp() {
           order: safeOrder,
           datasetId,
           focusedEvalId,
+          type: safeType,
         });
 
         res.json({
@@ -168,7 +172,7 @@ export function createApp() {
         });
       } else {
         // Legacy API - maintain backward compatibility
-        const previousResults = await getEvalSummaries(datasetId);
+        const previousResults = await getAllEvalSummaries(datasetId);
         res.json({ data: previousResults });
       }
     },
