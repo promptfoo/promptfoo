@@ -13,12 +13,10 @@ declare const BUILD_FORMAT: string | undefined;
  */
 export function getDirectory(): string {
   // Guard import.meta usage for CJS builds
-  if (typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'cjs') {
-    // In CJS builds, use __dirname which is shimmed by tsup
-    return __dirname;
+  if (process.env.BUILD_FORMAT === 'esm') {
+    return path.dirname(fileURLToPath(import.meta.url));
   }
-  // In ESM builds, use import.meta.url
-  return path.dirname(fileURLToPath(import.meta.url));
+  return __dirname;
 }
 
 /**
