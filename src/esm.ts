@@ -5,6 +5,9 @@ import path from 'node:path';
 import logger from './logger.js';
 import { safeResolve } from './util/fileNode.js';
 
+// Global variable defined by build system
+declare const BUILD_FORMAT: string | undefined;
+
 /**
  * ESM replacement for __dirname - guarded for dual CJS/ESM builds
  */
