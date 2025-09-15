@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { runAssertion } from '../../src/assertions';
+import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
-import { fetchWithRetries } from '../../src/util/fetch';
+import { fetchWithRetries } from '../../src/util/fetch/index';
 import { TestGrader } from '../util/utils';
 
 import type {
@@ -13,7 +13,7 @@ import type {
   AtomicTestCase,
   GradingResult,
   ProviderResponse,
-} from '../../src/types';
+} from '../../src/types/index';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),

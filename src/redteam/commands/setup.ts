@@ -2,7 +2,7 @@ import { getDefaultPort } from '../../constants';
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry from '../../telemetry';
-import { setupEnv } from '../../util';
+import { setupEnv } from '../../util/index';
 import { setConfigDirectoryPath } from '../../util/config/manage';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import type { Command } from 'commander';

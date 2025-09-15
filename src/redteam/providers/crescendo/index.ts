@@ -34,7 +34,7 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
-} from '../../../types';
+} from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
 

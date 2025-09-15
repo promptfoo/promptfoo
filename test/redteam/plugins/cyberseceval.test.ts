@@ -1,5 +1,5 @@
 import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
-import { fetchWithTimeout } from '../../../src/util/fetch';
+import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
 import type { ApiProvider } from '../../../src/types';
 

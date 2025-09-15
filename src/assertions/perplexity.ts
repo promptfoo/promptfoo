@@ -1,4 +1,4 @@
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export function handlePerplexity({ logProbs, assertion }: AssertionParams): GradingResult {
   if (!logProbs || logProbs.length === 0) {

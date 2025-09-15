@@ -1,6 +1,6 @@
 import { handleTraceSpanCount } from '../../src/assertions/traceSpanCount';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types';
+import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
 const mockProvider: ApiProvider = {

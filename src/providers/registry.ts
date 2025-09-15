@@ -49,7 +49,6 @@ import {
   HuggingfaceTokenExtractionProvider,
 } from './huggingface';
 import { JfrogMlChatCompletionProvider } from './jfrog';
-import { createLambdaLabsProvider } from './lambdalabs';
 import { LlamaProvider } from './llama';
 import {
   LocalAiChatProvider,
@@ -92,7 +91,7 @@ import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
 import { createLlamaApiProvider } from './llamaApi';
 
-import type { LoadApiProviderContext } from '../types';
+import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 interface ProviderFactory {
@@ -1231,19 +1230,6 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('lambdalabs:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createLambdaLabsProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
     },
   },
 ];

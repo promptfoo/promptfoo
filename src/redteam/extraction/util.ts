@@ -9,7 +9,7 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
-import type { ApiProvider } from '../../types';
+import type { ApiProvider } from '../../types/index';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),

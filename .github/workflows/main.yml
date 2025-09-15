@@ -19,7 +19,7 @@ env:
 jobs:
   test:
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}
-    timeout-minutes: 8
+    timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

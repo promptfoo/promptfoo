@@ -40,7 +40,7 @@ jest.mock('../../src/redteam/remoteGeneration', () => ({
 }));
 
 // Import the mocked fetchWithProxy for use in tests
-import * as fetchModule from '../../src/util/fetch';
+import * as fetchModule from '../../src/util/fetch/index';
 
 const mockFetchWithProxy = fetchModule.fetchWithProxy as jest.MockedFunction<
   typeof fetchModule.fetchWithProxy

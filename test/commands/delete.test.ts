@@ -5,7 +5,7 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import * as database from '../../src/util/database';
 
-import type { EvalWithMetadata } from '../../src/types';
+import type { EvalWithMetadata } from '../../src/types/index';
 
 jest.mock('@inquirer/confirm');
 jest.mock('../../src/util/database');

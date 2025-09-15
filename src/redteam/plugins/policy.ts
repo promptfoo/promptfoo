@@ -10,7 +10,7 @@ import type {
   GradingResult,
   PluginConfig,
   TestCase,
-} from '../../types';
+} from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 

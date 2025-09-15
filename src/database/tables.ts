@@ -18,7 +18,7 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
 
@@ -64,6 +64,9 @@ export const evalsTable = sqliteTable(
     config: text('config', { mode: 'json' }).$type<Partial<UnifiedConfig>>().notNull(),
     prompts: text('prompts', { mode: 'json' }).$type<CompletedPrompt[]>(),
     vars: text('vars', { mode: 'json' }).$type<string[]>(),
+    runtimeOptions: text('runtime_options', { mode: 'json' }).$type<
+      Partial<import('../types').EvaluateOptions>
+    >(),
     isRedteam: integer('is_redteam', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => ({

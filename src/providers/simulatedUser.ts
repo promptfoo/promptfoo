@@ -12,7 +12,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 
 export type Message = {
   role: 'user' | 'assistant' | 'system';

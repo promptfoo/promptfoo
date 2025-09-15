@@ -1,10 +1,10 @@
 import OpenAI from 'openai';
-import { renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
 
-import type { TokenUsage } from '../../types';
+import type { TokenUsage } from '../../types/index';
 import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
