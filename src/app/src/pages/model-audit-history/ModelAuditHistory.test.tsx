@@ -6,7 +6,7 @@ import { callApi } from '@app/utils/api';
 
 vi.mock('@app/utils/api');
 
-describe.skip('ModelAuditHistory', () => {
+describe('ModelAuditHistory', () => {
   const mockCallApi = vi.mocked(callApi);
 
   const scans = [

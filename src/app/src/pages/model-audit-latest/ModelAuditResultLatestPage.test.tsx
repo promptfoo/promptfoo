@@ -14,7 +14,7 @@ vi.mock('../model-audit/components/ResultsTab', () => ({
   ),
 }));
 
-describe.skip('ModelAuditResultLatestPage', () => {
+describe('ModelAuditResultLatestPage', () => {
   const mockCallApi = vi.mocked(callApi);
 
   const latestScan = {
@@ -57,8 +57,8 @@ describe.skip('ModelAuditResultLatestPage', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Latest Scan Results')).toBeInTheDocument();
-      expect(screen.getByText(/Latest Scan/)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 4, name: 'Latest Scan Results' })).toBeInTheDocument();
+      expect(screen.getByText('Latest Scan • /path/to/latest/model')).toBeInTheDocument();
       expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans/latest', expect.any(Object));
     });
   });
@@ -87,8 +87,8 @@ describe.skip('ModelAuditResultLatestPage', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Latest Scan Results')).toBeInTheDocument();
-      expect(screen.getByText(/Fallback Scan/)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 4, name: 'Latest Scan Results' })).toBeInTheDocument();
+      expect(screen.getByText('Fallback Scan • /path/to/fallback/model')).toBeInTheDocument();
       expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans/latest', expect.any(Object));
       expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans?limit=1', expect.any(Object));
     });
@@ -118,7 +118,7 @@ describe.skip('ModelAuditResultLatestPage', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Failed to fetch latest scan')).toBeInTheDocument();
+      expect(screen.getByText('API Error')).toBeInTheDocument();
     });
   });
 

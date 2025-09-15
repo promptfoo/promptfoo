@@ -22,7 +22,7 @@ vi.mock('@app/pages/model-audit/components/ResultsTab', () => ({
   ),
 }));
 
-describe.skip('ModelAuditResult', () => {
+describe('ModelAuditResult', () => {
   const mockCallApi = vi.mocked(callApi);
   const mockNavigate = vi.fn();
   vi.mocked(useNavigate).mockReturnValue(mockNavigate);
@@ -66,7 +66,8 @@ describe.skip('ModelAuditResult', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Scan 1')).toBeInTheDocument();
+      // Target the main heading specifically (h4 element)
+      expect(screen.getByRole('heading', { level: 4, name: 'Scan 1' })).toBeInTheDocument();
       expect(screen.getByText('Test Author')).toBeInTheDocument();
       expect(screen.getByText('8 / 10')).toBeInTheDocument();
       expect(screen.getByTestId('results-tab')).toBeInTheDocument();
@@ -83,7 +84,7 @@ describe.skip('ModelAuditResult', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Failed to fetch scan details')).toBeInTheDocument();
+      expect(screen.getByText('API Error')).toBeInTheDocument();
     });
   });
 
@@ -120,7 +121,9 @@ describe.skip('ModelAuditResult', () => {
       fireEvent.click(screen.getByLabelText('Delete scan permanently'));
     });
     await waitFor(() => {
-      expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans/1', { method: 'DELETE' });
+      expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans/1',
+        expect.objectContaining({ method: 'DELETE' })
+      );
       expect(mockNavigate).toHaveBeenCalledWith('/model-audit/history');
     });
   });
@@ -137,6 +140,7 @@ describe.skip('ModelAuditResult', () => {
     await waitFor(() => {
       fireEvent.click(screen.getByLabelText('Download scan results as JSON'));
     });
+    // Just verify the URL methods were called - DOM manipulation can be unreliable in tests
     expect(mockCreateObjectURL).toHaveBeenCalled();
     expect(mockRevokeObjectURL).toHaveBeenCalled();
   });
@@ -175,7 +179,8 @@ describe.skip('ModelAuditResult', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Scan 1')).toBeInTheDocument();
+      // Target the main heading specifically (h4 element)
+      expect(screen.getByRole('heading', { level: 4, name: 'Scan 1' })).toBeInTheDocument();
       expect(screen.queryByText('Test Author')).not.toBeInTheDocument();
       expect(screen.queryByText('8 / 10')).not.toBeInTheDocument();
     });

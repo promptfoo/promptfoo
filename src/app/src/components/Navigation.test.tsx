@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import Navigation from './Navigation';
@@ -45,63 +45,65 @@ describe('Navigation', () => {
     expect(createButton).toBeInTheDocument();
   });
 
-  it.skip('activates the Model Audit NavLink on relevant paths', () => {
-    // Test /model-audit path
-    const { rerender } = render(
+  it('activates the Model Audit NavLink on /model-audit path', () => {
+    render(
       <MemoryRouter initialEntries={['/model-audit']}>
         <Navigation darkMode={false} onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
-    let modelAuditLink = screen.getByText('Model Audit', { selector: 'a' });
+    const navBar = screen.getByRole('banner');
+    const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(modelAuditLink).toHaveClass('active');
+  });
 
-    // Test /model-audit/123 path (should be active)
-    rerender(
+  it('activates the Model Audit NavLink on /model-audit/:id path', () => {
+    render(
       <MemoryRouter initialEntries={['/model-audit/123']}>
         <Navigation darkMode={false} onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
-    modelAuditLink = screen.getByText('Model Audit', { selector: 'a' });
+    const navBar = screen.getByRole('banner');
+    const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(modelAuditLink).toHaveClass('active');
+  });
 
-    // Test /model-audit/setup path (should NOT be active for the top-level NavLink)
-    rerender(
+  it('does not activate Model Audit NavLink on /model-audit/setup path', () => {
+    render(
       <MemoryRouter initialEntries={['/model-audit/setup']}>
         <Navigation darkMode={false} onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
-    // The issue was using a broad selector that found the dropdown item instead of the NavLink
-    // The dropdown item /model-audit/setup would show as active, but the NavLink should not
-    const allLinks = screen.getAllByText('Model Audit', { selector: 'a' });
-    const topLevelNavLink = allLinks.find((link) => link.getAttribute('href') === '/model-audit');
+    const navBar = screen.getByRole('banner');
+    const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(topLevelNavLink).toBeDefined();
+    expect(topLevelNavLink).toHaveAttribute('href', '/model-audit');
     expect(topLevelNavLink).not.toHaveClass('active');
+  });
 
-    // Test /model-audit/history path (should NOT be active for the top-level NavLink)
-    rerender(
+  it('does not activate Model Audit NavLink on /model-audit/history path', () => {
+    render(
       <MemoryRouter initialEntries={['/model-audit/history']}>
         <Navigation darkMode={false} onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
-    const allLinksHistory = screen.getAllByText('Model Audit', { selector: 'a' });
-    const topLevelNavLinkHistory = allLinksHistory.find(
-      (link) => link.getAttribute('href') === '/model-audit',
-    );
-    expect(topLevelNavLinkHistory).toBeDefined();
-    expect(topLevelNavLinkHistory).not.toHaveClass('active');
+    const navBar = screen.getByRole('banner');
+    const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
+    expect(topLevelNavLink).toBeDefined();
+    expect(topLevelNavLink).toHaveAttribute('href', '/model-audit');
+    expect(topLevelNavLink).not.toHaveClass('active');
+  });
 
-    // Test /model-audit/history/123 path (should NOT be active - this is for viewing specific scans)
-    rerender(
+  it('does not activate Model Audit NavLink on /model-audit/history/:id path', () => {
+    render(
       <MemoryRouter initialEntries={['/model-audit/history/123']}>
         <Navigation darkMode={false} onToggleDarkMode={() => {}} />
       </MemoryRouter>,
     );
-    const allLinksHistoryId = screen.getAllByText('Model Audit', { selector: 'a' });
-    const topLevelNavLinkHistoryId = allLinksHistoryId.find(
-      (link) => link.getAttribute('href') === '/model-audit',
-    );
-    expect(topLevelNavLinkHistoryId).toBeDefined();
-    expect(topLevelNavLinkHistoryId).not.toHaveClass('active');
+    const navBar = screen.getByRole('banner');
+    const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
+    expect(topLevelNavLink).toBeDefined();
+    expect(topLevelNavLink).toHaveAttribute('href', '/model-audit');
+    expect(topLevelNavLink).not.toHaveClass('active');
   });
 
   describe('Create Dropdown', () => {

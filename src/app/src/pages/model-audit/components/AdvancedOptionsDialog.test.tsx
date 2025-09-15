@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AdvancedOptionsDialog from './AdvancedOptionsDialog';
 
-describe.skip('AdvancedOptionsDialog', () => {
+describe('AdvancedOptionsDialog', () => {
   const mockOnClose = vi.fn();
   const mockOnOptionsChange = vi.fn();
 
@@ -80,7 +80,14 @@ describe.skip('AdvancedOptionsDialog', () => {
       />,
     );
     expect(screen.getByText('pattern1')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Delete pattern1/i }));
+    // Find the Chip component containing 'pattern1' and trigger its delete
+    const pattern1Text = screen.getByText('pattern1');
+    const chipContainer = pattern1Text.closest('[role="button"]');
+    // Look for the delete icon within the chip (MUI uses a cancel/close icon)
+    const deleteIcon = chipContainer?.querySelector('svg');
+    if (deleteIcon) {
+      fireEvent.click(deleteIcon);
+    }
     expect(screen.queryByText('pattern1')).not.toBeInTheDocument();
     expect(screen.getByText('pattern2')).toBeInTheDocument();
   });
