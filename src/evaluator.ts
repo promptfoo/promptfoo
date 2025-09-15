@@ -5,7 +5,7 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
-import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
+import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions/index';
 import { getCache } from './cache';
 import cliState from './cliState';
 import { FILE_METADATA_KEY } from './constants';
@@ -38,7 +38,7 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
-} from './types';
+} from './types/index';
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -65,7 +65,7 @@ import type {
   ScoringFunction,
   TokenUsage,
   Vars,
-} from './types';
+} from './types/index';
 
 /**
  * Manages a single progress bar for the evaluation

@@ -4,7 +4,7 @@ import {
   SageMakerEmbeddingProvider,
 } from '../src/providers/sagemaker';
 
-import type { LoadApiProviderContext } from '../src/types';
+import type { LoadApiProviderContext } from '../src/types/index';
 
 // Mock the transform utility
 jest.mock('../src/util/transform', () => ({

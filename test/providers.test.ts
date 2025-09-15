@@ -13,7 +13,7 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
 
-import type { ProviderOptions } from '../src/types';
+import type { ProviderOptions } from '../src/types/index';
 
 jest.mock('fs');
 jest.mock('js-yaml');

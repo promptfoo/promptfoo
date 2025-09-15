@@ -1,4 +1,4 @@
-import type { UnifiedConfig } from './types';
+import type { UnifiedConfig } from './types/index';
 
 interface CliState {
   basePath?: string;

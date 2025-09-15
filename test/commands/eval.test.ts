@@ -20,7 +20,7 @@ import { checkCloudPermissions, ConfigPermissionError } from '../../src/util/clo
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 jest.mock('../../src/cache');
 jest.mock('../../src/evaluator');

@@ -43,7 +43,7 @@ import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 
-import type { ProviderFunction, ProviderOptionsMap } from '../../src/types';
+import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
 jest.mock('fs');
 

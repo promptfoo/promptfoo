@@ -14,7 +14,7 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
-import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types';
+import { type ApiProvider, type Prompt, ResultFailureReason, type TestSuite } from '../src/types/index';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
