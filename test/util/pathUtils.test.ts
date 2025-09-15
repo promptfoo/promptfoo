@@ -22,6 +22,16 @@ describe('pathUtils', () => {
       expect(safeResolve('some/base/path', fileUrl)).toBe(fileUrl);
     });
 
+    it('returns Windows file URL unchanged', () => {
+      const windowsFileUrl = 'file://C:/path/file.txt';
+      expect(safeResolve('some/base/path', windowsFileUrl)).toBe(windowsFileUrl);
+    });
+
+    it('returns HTTP URLs unchanged', () => {
+      const httpUrl = 'https://example.com/file.txt';
+      expect(safeResolve('some/base/path', httpUrl)).toBe(httpUrl);
+    });
+
     it('resolves relative paths', () => {
       const expected = path.resolve('base/path', 'relative/file.txt');
       expect(safeResolve('base/path', 'relative/file.txt')).toBe(expected);
@@ -50,6 +60,16 @@ describe('pathUtils', () => {
     it('returns file URL unchanged', () => {
       const fileUrl = getFileUrl('absolute/path/file.txt');
       expect(safeJoin('some/base/path', fileUrl)).toBe(fileUrl);
+    });
+
+    it('returns Windows file URL unchanged', () => {
+      const windowsFileUrl = 'file://C:/path/file.txt';
+      expect(safeJoin('some/base/path', windowsFileUrl)).toBe(windowsFileUrl);
+    });
+
+    it('returns HTTP URLs unchanged', () => {
+      const httpUrl = 'https://example.com/file.txt';
+      expect(safeJoin('some/base/path', httpUrl)).toBe(httpUrl);
     });
 
     it('joins relative paths', () => {
