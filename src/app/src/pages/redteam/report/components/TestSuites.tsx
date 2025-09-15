@@ -37,6 +37,9 @@ import {
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
 
+const isKnownSeverity = (value: unknown): value is Severity =>
+  Object.values(Severity).includes(value as Severity);
+
 interface TestSuitesProps {
   evalId: string;
   categoryStats: PluginCategoryStatsByPluginId;
@@ -90,8 +93,30 @@ const TestSuites = ({
 
   const rows = React.useMemo(() => {
     return Object.entries(categoryStats)
-      .filter(([_, { stats }]) => stats.total > 0)
-      .map(([pluginName, { stats, metadata }]) => {
+      .filter(([, pluginData]) => pluginData?.stats?.total > 0)
+      .map(([pluginName, pluginData]) => {
+        const stats = pluginData?.stats;
+        const metadata = pluginData?.metadata;
+        if (!stats) {
+          return {
+            id: pluginName,
+            pluginName,
+            type: metadata?.type ?? '',
+            description: metadata?.description ?? '',
+            severity: 'unknown',
+            passRate: 0,
+            passRateWithFilter: 0,
+            attackSuccessRate: 0,
+            total: 0,
+            successfulAttacks: 0,
+            riskScore: 0,
+            complexityScore: 0,
+            worstStrategy: 'none',
+          };
+        }
+
+        const severity = isKnownSeverity(metadata?.severity) ? metadata!.severity : 'unknown';
+        const severityForRisk = severity === 'unknown' ? Severity.Low : severity;
         // Calculate risk score with details
         const riskDetails = (() => {
           // Prepare test results using the helper function
@@ -114,7 +139,7 @@ const TestSuites = ({
           // Calculate risk score once and extract values
           const riskScoreResult = calculatePluginRiskScore(
             pluginName,
-            metadata.severity,
+            severityForRisk,
             testResults,
           );
           return {
@@ -127,12 +152,12 @@ const TestSuites = ({
         return {
           id: pluginName,
           pluginName,
-          type: metadata.type,
-          description: metadata.description,
-          severity: metadata.severity,
-          passRate: (stats.pass / stats.total) * 100,
-          passRateWithFilter: (stats.passWithFilter / stats.total) * 100,
-          attackSuccessRate: ((stats.total - stats.pass) / stats.total) * 100,
+          type: metadata?.type ?? '',
+          description: metadata?.description ?? '',
+          severity,
+          passRate: stats.total > 0 ? (stats.pass / stats.total) * 100 : 0,
+          passRateWithFilter: stats.total > 0 ? (stats.passWithFilter / stats.total) * 100 : 0,
+          attackSuccessRate: stats.total > 0 ? ((stats.total - stats.pass) / stats.total) * 100 : 0,
           total: stats.total,
           successfulAttacks: stats.total - stats.pass,
           riskScore: riskDetails.riskScore,
@@ -193,7 +218,7 @@ const TestSuites = ({
       subCategory.successfulAttacks,
       subCategory.total,
       subCategory.attackSuccessRate.toFixed(2) + '%',
-      subCategory.severity,
+      severityDisplayNames[subCategory.severity as Severity] ?? 'Unknown',
     ]);
 
     // Combine headers and data with proper escaping for CSV
@@ -363,20 +388,25 @@ const TestSuites = ({
       headerName: 'Severity',
       type: 'singleSelect',
       flex: 0.5,
-      valueFormatter: (value: Severity) => severityDisplayNames[value],
-      valueOptions: Object.values(Severity).map((severity) => ({
-        value: severity,
-        label: severityDisplayNames[severity],
-      })),
+      valueFormatter: ({ value }) =>
+        severityDisplayNames[value as Severity] ?? 'Unknown',
+      valueOptions: [
+        ...Object.values(Severity).map((severity) => ({
+          value: severity,
+          label: severityDisplayNames[severity],
+        })),
+        { value: 'unknown', label: 'Unknown' },
+      ],
       cellClassName: (params) => `vuln-${params.value.toLowerCase()} vuln`,
-      sortComparator: (v1: Severity, v2: Severity) => {
+      sortComparator: (v1, v2) => {
         const severityOrder: Record<string, number> = {
           [Severity.Critical]: 4,
           [Severity.High]: 3,
           [Severity.Medium]: 2,
           [Severity.Low]: 1,
+          unknown: 0,
         };
-        return severityOrder[v1] - severityOrder[v2];
+        return (severityOrder[v1 as string] ?? 0) - (severityOrder[v2 as string] ?? 0);
       },
     },
     {
