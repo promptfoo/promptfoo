@@ -458,7 +458,7 @@ export async function deleteEval(evalId: string) {
  * Deletes evals by their IDs.
  * @param ids - The IDs of the evals to delete.
  */
-export async function deleteEvals(ids: string[]) {
+export function deleteEvals(ids: string[]) {
   const db = getDb();
   db.transaction(() => {
     db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
