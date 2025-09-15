@@ -485,10 +485,14 @@ describe('Python file references', () => {
       providerResponse: { output: '0' },
     };
 
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
     it('should FAIL when score=0 and no threshold', async () => {
       const assertion: Assertion = {
         type: 'python',
-        value: 'return 0',
+        value: '0',
       };
 
       const result: GradingResult = await runAssertion({
@@ -503,7 +507,7 @@ describe('Python file references', () => {
     it('should PASS when score=0 and threshold=0', async () => {
       const assertion: Assertion = {
         type: 'python',
-        value: 'return 0',
+        value: '0',
         threshold: 0,
       };
 
@@ -519,7 +523,7 @@ describe('Python file references', () => {
     it('should FAIL when score=0 and threshold=0.1', async () => {
       const assertion: Assertion = {
         type: 'python',
-        value: 'return 0',
+        value: '0',
         threshold: 0.1,
       };
 

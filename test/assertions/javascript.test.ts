@@ -746,7 +746,7 @@ describe('JavaScript file references', () => {
     it('should FAIL when score=0 and no threshold (default behavior)', async () => {
       const assertion: Assertion = {
         type: 'javascript',
-        value: 'return 0;',
+        value: '0',
       };
 
       const result: GradingResult = await runAssertion({
@@ -761,7 +761,7 @@ describe('JavaScript file references', () => {
     it('should PASS when score=0 and threshold=0 (explicit zero threshold)', async () => {
       const assertion: Assertion = {
         type: 'javascript',
-        value: 'return 0;',
+        value: '0',
         threshold: 0,
       };
 
@@ -777,7 +777,7 @@ describe('JavaScript file references', () => {
     it('should FAIL when score=0 and threshold=0.1', async () => {
       const assertion: Assertion = {
         type: 'javascript',
-        value: 'return 0;',
+        value: '0',
         threshold: 0.1,
       };
 
@@ -793,7 +793,7 @@ describe('JavaScript file references', () => {
     it('should PASS when score=1 and threshold=0', async () => {
       const assertion: Assertion = {
         type: 'javascript',
-        value: 'return 1;',
+        value: '1',
         threshold: 0,
       };
 
@@ -810,7 +810,7 @@ describe('JavaScript file references', () => {
     it('should PASS when score=1 and no threshold', async () => {
       const assertion: Assertion = {
         type: 'javascript',
-        value: 'return 1;',
+        value: '1',
       };
 
       const result: GradingResult = await runAssertion({
@@ -826,12 +826,12 @@ describe('JavaScript file references', () => {
     it('should handle threshold=0 differently from threshold=undefined', async () => {
       const assertionWithoutThreshold: Assertion = {
         type: 'javascript',
-        value: 'return 0;',
+        value: '0',
       };
 
       const assertionWithZeroThreshold: Assertion = {
         type: 'javascript',
-        value: 'return 0;',
+        value: '0',
         threshold: 0,
       };
 
@@ -870,7 +870,7 @@ describe('JavaScript file references', () => {
       for (const testCase of testCases) {
         const assertion: Assertion = {
           type: 'javascript',
-          value: 'return 0;',
+          value: '0',
           threshold: testCase.threshold as any,
         };
 
