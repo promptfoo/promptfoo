@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
 
 import chalk from 'chalk';
@@ -8,9 +8,6 @@ import { getConfigDirectoryPath } from './util/config/manage';
 import { sanitizeBody, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
-
-// Modern Node.js fs.promises API
-const fsPromises = fs.promises;
 
 type LogCallback = (message: string) => void;
 export let globalLogCallback: LogCallback | null = null;
