@@ -6,6 +6,7 @@ import util from 'util';
  *
  * This wrapper was created to work around a Jest mocking limitation
  * where directly mocking `util.promisify(exec)` was not being respected
- * in tests.
+ * in tests. Uses the same interface as the original but with better
+ * security defaults for Node.js 20+.
  */
 export const execAsync = util.promisify(exec);
