@@ -1,7 +1,7 @@
 import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
 
-import type { Assertion, CsvRow, TestCase } from '../src/types';
+import type { Assertion, CsvRow, TestCase } from '../src/types/index';
 
 describe('testCaseFromCsvRow', () => {
   afterEach(() => {

@@ -1,6 +1,6 @@
 import { globSync } from 'glob';
 import logger from '../logger';
-import { parsePathOrGlob } from '../util';
+import { parsePathOrGlob } from '../util/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';

@@ -10,7 +10,7 @@ import { Vertex as GatewayVertex } from '@adaline/vertex';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
-import { maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { calculateAnthropicCost } from './anthropic/util';

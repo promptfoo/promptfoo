@@ -21,7 +21,7 @@ import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import { checkCloudPermissions } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';

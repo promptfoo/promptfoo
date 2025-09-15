@@ -1,4 +1,4 @@
-import type { Assertion } from '../../src/types';
+import type { Assertion } from '../../src/types/index';
 import { runAssertions } from '../../src/assertions';
 
 describe('max-score assertion integration', () => {

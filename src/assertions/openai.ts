@@ -1,5 +1,5 @@
 import { validateFunctionCall } from '../providers/openai/util';
-import { maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util/index';
 import invariant from '../util/invariant';
 
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
