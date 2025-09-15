@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
@@ -19,7 +19,7 @@ import type {
   PluginConfig,
   ResultSuggestion,
   TestCase,
-} from '../../types';
+} from '../../types/index';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.

@@ -6,7 +6,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { RedteamPluginBase } from './base';
 
-import type { ApiProvider, Assertion } from '../../types';
+import type { ApiProvider, Assertion } from '../../types/index';
 
 const CustomPluginDefinitionSchema = z
   .object({

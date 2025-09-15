@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 
 import { eq, lt } from 'drizzle-orm';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 

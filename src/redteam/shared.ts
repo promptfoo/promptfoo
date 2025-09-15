@@ -7,7 +7,7 @@ import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import { createShareableUrl } from '../share';
-import { isRunningUnderNpx } from '../util';
+import { isRunningUnderNpx } from '../util/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { doGenerateRedteam } from './commands/generate';
