@@ -30,7 +30,7 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { isRunningUnderNpx, readFilters } from '../../util';
+import { isRunningUnderNpx, readFilters } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';
