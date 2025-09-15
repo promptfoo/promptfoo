@@ -20,7 +20,7 @@ import {
   type Prompt,
   type TestCase,
   type TestSuite,
-} from './types';
+} from './types/index';
 import { renderVarsInObject } from './util/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import invariant from './util/invariant';

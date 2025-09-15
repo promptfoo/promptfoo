@@ -13,7 +13,7 @@ import type {
   AtomicTestCase,
   GradingResult,
   ProviderResponse,
-} from '../../src/types';
+} from '../../src/types/index';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),

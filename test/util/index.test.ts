@@ -11,7 +11,7 @@ import {
   type EvaluateResult,
   ResultFailureReason,
   type TestCase,
-} from '../../src/types';
+} from '../../src/types/index';
 import {
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,

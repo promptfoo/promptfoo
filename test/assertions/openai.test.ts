@@ -15,7 +15,7 @@ import type {
   AssertionValueFunctionContext,
   AtomicTestCase,
   GradingResult,
-} from '../../src/types';
+} from '../../src/types/index';
 
 jest.mock('fs');
 jest.mock('path', () => ({

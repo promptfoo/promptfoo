@@ -42,7 +42,7 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
-} from './types';
+} from './types/index';
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -69,7 +69,7 @@ import type {
   ScoringFunction,
   TokenUsage,
   Vars,
-} from './types';
+} from './types/index';
 
 /**
  * Manages a single progress bar for the evaluation

@@ -45,7 +45,7 @@ import type {
   ProviderType,
   ProviderTypeMap,
   TokenUsage,
-} from './types';
+} from './types/index';
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {
