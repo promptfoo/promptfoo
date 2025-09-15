@@ -62,6 +62,12 @@ export default function ModelAuditSetupPage() {
   }, [checkInstallation]);
 
   const handleScan = async () => {
+    // Validate that at least one path is selected
+    if (paths.length === 0) {
+      setError('Please add at least one path to scan.');
+      return;
+    }
+
     setIsScanning(true);
     setError(null);
 

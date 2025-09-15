@@ -65,10 +65,12 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
     set({ isLoadingHistory: true, historyError: null });
 
     try {
-      // Build query parameters
+      // Build query parameters (normalize negative values)
+      const normalizedPageSize = Math.max(0, pageSize);
+      const normalizedCurrentPage = Math.max(0, currentPage);
       const params = new URLSearchParams({
-        limit: pageSize.toString(),
-        offset: (currentPage * pageSize).toString(),
+        limit: normalizedPageSize.toString(),
+        offset: (normalizedCurrentPage * normalizedPageSize).toString(),
       });
 
       if (searchQuery.trim()) {

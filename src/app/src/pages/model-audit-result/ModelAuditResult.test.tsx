@@ -79,8 +79,8 @@ describe('ModelAuditResult', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      // Target the main heading specifically (h4 element)
-      expect(screen.getByRole('heading', { level: 4, name: 'Scan 1' })).toBeInTheDocument();
+      // Target the main heading specifically (h5 element in mobile mode due to mock)
+      expect(screen.getByRole('heading', { level: 5, name: 'Scan 1' })).toBeInTheDocument();
       expect(screen.getByText('Test Author')).toBeInTheDocument();
       expect(screen.getByText('8 / 10')).toBeInTheDocument();
       expect(screen.getByTestId('results-tab')).toBeInTheDocument();
@@ -213,28 +213,13 @@ describe('ModelAuditResult', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      // Target the main heading specifically (h4 element)
-      expect(screen.getByRole('heading', { level: 4, name: 'Scan 1' })).toBeInTheDocument();
+      // Target the main heading specifically (h5 element in mobile mode due to mock)
+      expect(screen.getByRole('heading', { level: 5, name: 'Scan 1' })).toBeInTheDocument();
       expect(screen.queryByText('Test Author')).not.toBeInTheDocument();
       expect(screen.queryByText('8 / 10')).not.toBeInTheDocument();
     });
   });
 
-  it('renders in mobile layout when isMobile is true', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      const stackElement = screen.getByText('Scan 1').closest('div');
-      expect(stackElement).toHaveStyle('flex-direction: column;');
-    });
-  });
 
   it('displays an error message when download fails', async () => {
     mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);

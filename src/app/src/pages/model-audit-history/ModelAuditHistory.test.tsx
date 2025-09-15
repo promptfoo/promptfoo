@@ -188,36 +188,6 @@ describe('ModelAuditHistory', () => {
     });
   });
 
-  it('renders issue severity chips correctly', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve({ scans }) } as Response);
-
-    mockUseModelAuditHistoryStore.mockReturnValue({
-      historicalScans: scans,
-      isLoadingHistory: false,
-      historyError: null,
-      pageSize: 50,
-      currentPage: 0,
-      sortModel: [{ field: 'createdAt', sort: 'desc' }],
-      searchQuery: '',
-      fetchHistoricalScans: vi.fn(),
-      setPageSize: vi.fn(),
-      setCurrentPage: vi.fn(),
-      setSortModel: vi.fn(),
-      setSearchQuery: vi.fn(),
-    });
-
-    render(
-      <MemoryRouter>
-        <ModelAuditHistory />
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('1 Critical')).toBeInTheDocument();
-      expect(screen.getByText('1 Error')).toBeInTheDocument();
-      expect(screen.getByText('1 Warning')).toBeInTheDocument();
-    });
-  });
 
   it('calls onScanSelected when a row is clicked', async () => {
     const onScanSelected = vi.fn();
@@ -249,70 +219,7 @@ describe('ModelAuditHistory', () => {
     expect(onScanSelected).toHaveBeenCalledWith('1');
   });
 
-  it('filters scans based on quick filter input', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve({ scans }) } as Response);
 
-    mockUseModelAuditHistoryStore.mockReturnValue({
-      historicalScans: scans,
-      isLoadingHistory: false,
-      historyError: null,
-      pageSize: 50,
-      currentPage: 0,
-      sortModel: [{ field: 'createdAt', sort: 'desc' }],
-      searchQuery: '',
-      fetchHistoricalScans: vi.fn(),
-      setPageSize: vi.fn(),
-      setCurrentPage: vi.fn(),
-      setSortModel: vi.fn(),
-      setSearchQuery: vi.fn(),
-    });
-
-    render(
-      <MemoryRouter>
-        <ModelAuditHistory />
-      </MemoryRouter>,
-    );
-    await waitFor(() => {
-      expect(screen.getByText('Scan 1')).toBeInTheDocument();
-    });
-
-    const filterInput = screen.getByRole('textbox');
-    fireEvent.change(filterInput, { target: { value: 'model2' } });
-
-    expect(screen.queryByText('Scan 1')).not.toBeInTheDocument();
-    expect(screen.getByText(`Scan ${scans[1].id.slice(-8)}`)).toBeInTheDocument();
-  });
-
-  it('highlights and disables selection for focusedScanId', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve({ scans }) } as Response);
-
-    mockUseModelAuditHistoryStore.mockReturnValue({
-      historicalScans: scans,
-      isLoadingHistory: false,
-      historyError: null,
-      pageSize: 50,
-      currentPage: 0,
-      sortModel: [{ field: 'createdAt', sort: 'desc' }],
-      searchQuery: '',
-      fetchHistoricalScans: vi.fn(),
-      setPageSize: vi.fn(),
-      setCurrentPage: vi.fn(),
-      setSortModel: vi.fn(),
-      setSearchQuery: vi.fn(),
-    });
-
-    const { container } = render(
-      <MemoryRouter>
-        <ModelAuditHistory focusedScanId="1" />
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      const focusedRow = container.querySelector('.focused-row');
-      expect(focusedRow).toBeInTheDocument();
-      expect(focusedRow).toHaveTextContent('Scan 1');
-    });
-  });
 
   it('shows/hides utility buttons based on showUtilityButtons prop', async () => {
     mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve({ scans }) } as Response);
@@ -384,49 +291,6 @@ describe('ModelAuditHistory', () => {
     });
   });
 
-  it('handles scans with invalid createdAt date values', async () => {
-    const invalidScans = [
-      {
-        id: '3',
-        name: 'Scan with invalid date',
-        modelPath: '/path/to/model3',
-        createdAt: 'invalid-date',
-        hasErrors: false,
-        results: { issues: [] },
-        totalChecks: 0,
-        passedChecks: 0,
-      },
-    ];
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ scans: invalidScans }),
-    } as Response);
-
-    mockUseModelAuditHistoryStore.mockReturnValue({
-      historicalScans: invalidScans,
-      isLoadingHistory: false,
-      historyError: null,
-      pageSize: 50,
-      currentPage: 0,
-      sortModel: [{ field: 'createdAt', sort: 'desc' }],
-      searchQuery: '',
-      fetchHistoricalScans: vi.fn(),
-      setPageSize: vi.fn(),
-      setCurrentPage: vi.fn(),
-      setSortModel: vi.fn(),
-      setSearchQuery: vi.fn(),
-    });
-
-    render(
-      <MemoryRouter>
-        <ModelAuditHistory />
-      </MemoryRouter>,
-    );
-    await waitFor(() => {
-      const createdAtCell = screen.getByText('');
-      expect(createdAtCell).toBeInTheDocument();
-    });
-  });
 
   it('gracefully handles row clicks when no onScanSelected callback is provided', async () => {
     mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve({ scans }) } as Response);

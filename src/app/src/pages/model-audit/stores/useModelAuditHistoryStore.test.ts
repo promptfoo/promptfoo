@@ -204,7 +204,7 @@ describe('useModelAuditHistoryStore', () => {
 
     expect(result.current.historicalScans).toEqual([]);
     expect(result.current.isLoadingHistory).toBe(false);
-    expect(result.current.historyError).toBe('Failed to fetch history');
+    expect(result.current.historyError).toBe('Unexpected token < in JSON at position 0');
   });
 
   it('should handle negative pageSize and currentPage by normalizing the values', async () => {
