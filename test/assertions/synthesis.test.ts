@@ -6,7 +6,7 @@ import {
 } from '../../src/assertions/synthesis';
 import { loadApiProvider } from '../../src/providers';
 
-import type { TestCase } from '../../src/types';
+import type { TestCase } from '../../src/types/index';
 
 jest.mock('../../src/providers', () => ({
   loadApiProvider: jest.fn(),

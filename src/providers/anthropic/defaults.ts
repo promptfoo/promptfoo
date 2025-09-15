@@ -1,6 +1,6 @@
 import { AnthropicMessagesProvider } from './messages';
 
-import type { DefaultProviders, ProviderResponse } from '../../types';
+import type { DefaultProviders, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 
 // Default model to use for all default providers

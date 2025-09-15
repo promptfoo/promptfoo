@@ -2,7 +2,7 @@ import { handleContextRecall } from '../../src/assertions/contextRecall';
 import * as contextUtils from '../../src/assertions/contextUtils';
 import * as matchers from '../../src/matchers';
 
-import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types';
+import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types/index';
 
 jest.mock('../../src/matchers');
 jest.mock('../../src/assertions/contextUtils');

@@ -32,7 +32,7 @@ import {
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 
-import type { ProviderOptions, RedteamPluginObject } from '../../types';
+import type { ProviderOptions, RedteamPluginObject } from '../../types/index';
 
 const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 

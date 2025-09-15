@@ -7,7 +7,7 @@ import { synthesizeFromTestSuite } from '../../assertions/synthesis';
 import { disableCache } from '../../cache';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { type TestSuite, type UnifiedConfig } from '../../types';
+import { type TestSuite, type UnifiedConfig } from '../../types/index';
 import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
 import { resolveConfigs } from '../../util/config/load';
 import type { Command } from 'commander';

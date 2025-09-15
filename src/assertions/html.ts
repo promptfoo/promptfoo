@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 // Patterns that indicate HTML content
 const HTML_PATTERNS = {

@@ -8,7 +8,7 @@ import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
-import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../types';
+import { isProviderOptions, type TestCase, type TestCaseWithPlugin } from '../types/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';

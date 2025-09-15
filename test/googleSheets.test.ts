@@ -8,7 +8,7 @@ import logger from '../src/logger';
 import { fetchWithProxy } from '../src/util/fetch';
 import { createMockResponse } from './util/utils';
 
-import type { CsvRow } from '../src/types';
+import type { CsvRow } from '../src/types/index';
 
 interface MockSpreadsheets {
   get: jest.Mock;

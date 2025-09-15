@@ -19,7 +19,7 @@ import {
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
 } from './prompts';
-import { loadApiProvider } from './providers';
+import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
@@ -45,7 +45,7 @@ import type {
   ProviderType,
   ProviderTypeMap,
   TokenUsage,
-} from './types';
+} from './types/index';
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {

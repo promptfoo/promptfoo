@@ -1,7 +1,7 @@
 import { type Option as sqlParserOption } from 'node-sql-parser';
 import { coerceString } from './utils';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleIsSql = async ({
   assertion,

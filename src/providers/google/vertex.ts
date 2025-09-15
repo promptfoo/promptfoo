@@ -30,7 +30,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {

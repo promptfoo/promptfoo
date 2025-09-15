@@ -1,6 +1,6 @@
 // These assertions are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import type { AssertionParams, GradingResult } from '../../types';
+import type { AssertionParams, GradingResult } from '../../types/index';
 import invariant from '../../util/invariant';
 import { matchesConversationRelevance } from '../matchers/deepeval';
 import type { Message } from '../matchers/deepeval';

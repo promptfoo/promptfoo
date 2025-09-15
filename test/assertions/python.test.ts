@@ -5,7 +5,7 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { runPython } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 
-import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types';
+import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
 jest.mock('../../src/python/wrapper', () => {
   const actual = jest.requireActual('../../src/python/wrapper');
