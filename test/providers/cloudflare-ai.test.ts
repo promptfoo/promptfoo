@@ -8,7 +8,7 @@ import {
 } from '../../src/providers/cloudflare-ai';
 import { loadApiProviders } from '../../src/providers/index';
 
-import type { ProviderOptionsMap } from '../../src/types';
+import type { ProviderOptionsMap } from '../../src/types/index';
 
 jest.mock('fs');
 

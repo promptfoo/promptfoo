@@ -8,7 +8,11 @@ import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 
 export class AzureCompletionProvider extends AzureGenericProvider {
   async callApi(
@@ -44,7 +48,6 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       ...(this.config.passthrough || {}),
     };
 
-    logger.debug(`Calling Azure API: ${JSON.stringify(body)}`);
     let data;
     let cached = false;
     try {
@@ -71,7 +74,6 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
       // Handle content filter errors (HTTP 400 with content_filter code)
       if (data.error) {

@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 
-import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
 import select from '@inquirer/select';
@@ -11,7 +10,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
-import { isRunningUnderNpx } from './util';
+import { isRunningUnderNpx } from './util/index';
 import { getNunjucksEngine } from './util/templates';
 
 import type { EnvOverrides } from './types/env';
@@ -292,10 +291,6 @@ async function askForPermissionToOverwrite({
     default: false,
   });
 
-  if (required && !hasPermissionToWrite) {
-    throw new Error(`User did not grant permission to overwrite ${relativePath}`);
-  }
-
   return hasPermissionToWrite;
 }
 
@@ -324,7 +319,11 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       });
 
       if (!hasPermissionToWrite) {
-        logger.info(`⏩ Skipping ${relativePath}`);
+        if (required) {
+          logger.warn(`⚠️ Skipping required file ${relativePath} - configuration may be incomplete`);
+        } else {
+          logger.info(`⏩ Skipping ${relativePath}`);
+        }
         return;
       }
     }
@@ -430,6 +429,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
           'anthropic:messages:claude-3-7-sonnet-20250219',
         ],
       },
+      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro'] },
       {
         name: '[HuggingFace] Llama, Phi, Gemma, ...',
         value: [
@@ -455,6 +455,17 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         value: ['https://example.com/api/generate'],
       },
       {
+        name: '[Azure] OpenAI, DeepSeek, Llama, ...',
+        value: [
+          {
+            id: 'azure:chat:deploymentNameHere',
+            config: {
+              apiHost: 'xxxxxxxx.openai.azure.com',
+            },
+          },
+        ],
+      },
+      {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
         value: ['bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0'],
       },
@@ -462,7 +473,6 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         name: '[Cohere] Command R, Command R+, ...',
         value: ['cohere:command-r', 'cohere:command-r-plus'],
       },
-      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro'] },
       {
         name: '[Ollama] Llama, Qwen, Phi, ...',
         value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],
@@ -480,14 +490,15 @@ export async function createDummyFiles(directory: string | null, interactive: bo
      * The potential of the object type here is given by the agent action conditional
      * for openai as a value choice
      */
-    const providerChoices: (string | object)[] = (
-      await checkbox({
-        message: 'Which model providers would you like to use?',
-        choices,
-        loop: false,
-        pageSize: process.stdout.rows - 6,
-      })
-    ).flat();
+    const providerChoice = await select({
+      message: 'Which model provider would you like to use?',
+      choices,
+      loop: false,
+      pageSize: process.stdout.rows - 6,
+    });
+    const providerChoices: (string | object)[] = Array.isArray(providerChoice)
+      ? providerChoice
+      : [providerChoice];
 
     recordOnboardingStep('choose providers', {
       value: providerChoices.map((choice) =>

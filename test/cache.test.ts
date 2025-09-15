@@ -12,12 +12,12 @@ jest.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: jest.fn().mockReturnValue('/mock/config/path'),
 }));
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithRetries: jest.fn(),
 }));
 
 // Mock fetch with retries
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithRetries: jest.fn().mockImplementation(async (url, options) => {
     const result = await global.fetch(url, options);
     return result;

@@ -1,7 +1,7 @@
-import { fetchWithTimeout } from '../src/fetch';
 import { Telemetry } from '../src/telemetry';
+import { fetchWithTimeout } from '../src/util/fetch/index';
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
@@ -17,6 +17,7 @@ jest.mock('../src/globalConfig/globalConfig', () => ({
 }));
 
 jest.mock('../src/constants', () => ({
+  ...jest.requireActual('../src/constants'),
   VERSION: '1.0.0',
 }));
 
@@ -417,7 +418,7 @@ describe('Telemetry', () => {
       jest.resetModules();
 
       // Re-mock fetchWithTimeout
-      jest.doMock('../src/fetch', () => ({
+      jest.doMock('../src/util/fetch', () => ({
         fetchWithTimeout: jest.fn().mockRejectedValue(mockError),
       }));
 
@@ -475,11 +476,11 @@ describe('Telemetry', () => {
       jest.resetModules();
 
       // Re-mock fetchWithTimeout
-      jest.doMock('../src/fetch', () => ({
+      jest.doMock('../src/util/fetch', () => ({
         fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
       }));
 
-      const { fetchWithTimeout } = await import('../src/fetch');
+      const { fetchWithTimeout } = await import('../src/util/fetch');
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
 

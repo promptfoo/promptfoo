@@ -6,7 +6,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -23,7 +23,18 @@ import RiskCategoryDrawer from './RiskCategoryDrawer';
 import { useReportStore } from './store';
 import './RiskCard.css';
 
-const RiskCard: React.FC<{
+const RiskCard = ({
+  title,
+  subtitle,
+  progressValue,
+  numTestsPassed,
+  numTestsFailed,
+  testTypes,
+  evalId,
+  failuresByPlugin,
+  passesByPlugin,
+  strategyStats,
+}: {
   title: string;
   subtitle: string;
   progressValue: number;
@@ -40,17 +51,6 @@ const RiskCard: React.FC<{
     { prompt: string; output: string; gradingResult?: GradingResult }[]
   >;
   strategyStats: Record<string, { pass: number; total: number }>;
-}> = ({
-  title,
-  subtitle,
-  progressValue,
-  numTestsPassed,
-  numTestsFailed,
-  testTypes,
-  evalId,
-  failuresByPlugin,
-  passesByPlugin,
-  strategyStats,
 }) => {
   const { showPercentagesOnRiskCards, pluginPassRateThreshold } = useReportStore();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -79,7 +79,9 @@ const RiskCard: React.FC<{
           }}
         >
           <Grid
-            size={{ xs: 12, md: 6 }}
+            item
+            xs={12}
+            md={6}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -136,7 +138,7 @@ const RiskCard: React.FC<{
               {numTestsPassed}/{numTestsPassed + numTestsFailed} passed
             </Typography>
           </Grid>
-          <Grid size={{ xs: 6, md: 4 }}>
+          <Grid item xs={6} md={4}>
             <List dense>
               {filteredTestTypes.map((test, index) => {
                 const percentage = test.numPassed / (test.numPassed + test.numFailed);

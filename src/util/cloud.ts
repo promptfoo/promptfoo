@@ -1,13 +1,14 @@
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
-import { fetchWithProxy } from '../fetch';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { type UnifiedConfig } from '../types';
 import { ProviderOptionsSchema } from '../validators/providers';
+import { fetchWithProxy } from './fetch';
 import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
 
 import type { Plugin, Severity } from '../redteam/constants';
+import type { PoliciesById } from '../redteam/types';
+import type { UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
@@ -64,7 +65,6 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     }
     const body = await response.json();
     logger.debug(`Provider fetched from cloud: ${id}`);
-    logger.debug(`Provider from cloud: ${JSON.stringify(body, null, 2)}`);
 
     const provider = ProviderOptionsSchema.parse(body.config);
     // The provider options schema has ID field as optional but we know it's required for cloud providers
@@ -105,7 +105,6 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
     }
     const body = await response.json();
     logger.info(`Config fetched from cloud: ${id}`);
-    logger.debug(`Config from cloud: ${JSON.stringify(body, null, 2)}`);
     return body;
   } catch (e) {
     logger.error(`Failed to fetch config from cloud: ${id}.`);
@@ -180,10 +179,6 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 
       const pluginSeverityOverride = await overrideRes.json();
 
-      logger.debug(
-        `Plugin severity overrides ${pluginSeverityOverride.id} fetched from cloud: ${JSON.stringify(pluginSeverityOverride.members, null, 2)}`,
-      );
-
       return {
         id: pluginSeverityOverride.id,
         severities: pluginSeverityOverride.members.reduce(
@@ -206,7 +201,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 }
 
 /**
- * Retrieves the default team for the current user from PromptFoo Cloud.
+ * Retrieves the default team for the current user from Promptfoo Cloud.
  * The default team is determined as the oldest team by creation date.
  * @returns Promise resolving to an object with team id and name
  * @throws Error if the request fails or no teams are found
@@ -363,16 +358,56 @@ export async function canCreateTargets(teamId: string | undefined): Promise<bool
   }
   const body = await response.json();
 
-  logger.debug(
-    `[canCreateTargets] Checking provider permissions for team ${teamId}: ${JSON.stringify(
-      body.filter((ability: { action: string; subject: string }) => ability.subject === 'Provider'),
-      null,
-      2,
-    )}`,
-  );
-
   return body.some(
     (ability: { action: string; subject: string }) =>
       ability.action === 'create' && ability.subject === 'Provider',
   );
+}
+
+/**
+ * Given a list of policy IDs, fetches custom policies from Promptfoo Cloud.
+ * @param ids - The IDs of the policies to fetch.
+ * @param teamId - The ID of the team to fetch policies from. Note that all policies must belong to this team.
+ * @returns A map of policy IDs to their texts and severities.
+ */
+export async function getPoliciesFromCloud(ids: string[], teamId: string): Promise<PoliciesById> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch policies from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+  try {
+    // Encode the ids as search params
+    const searchParams = new URLSearchParams();
+    ids.forEach((id) => {
+      searchParams.append('id', id);
+    });
+    const response = await makeRequest(
+      `/custom-policies/?${searchParams.toString()}&teamId=${teamId}`,
+      'GET',
+    );
+
+    if (!response.ok) {
+      const errorMessage = await response.text();
+      throw new Error(
+        `Failed to fetch policies from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
+      );
+    }
+
+    const body = await response.json();
+
+    const policiesById = new Map();
+    body.forEach((policy: { id: string; text: string; severity: Severity }) => {
+      policiesById.set(policy.id, {
+        text: policy.text,
+        severity: policy.severity,
+      });
+    });
+
+    return policiesById;
+  } catch (e) {
+    logger.error(`Failed to fetch policies from cloud.`);
+    logger.error(String(e));
+    throw new Error(`Failed to fetch policies from cloud.`);
+  }
 }

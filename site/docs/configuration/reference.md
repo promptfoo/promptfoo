@@ -13,7 +13,7 @@ keywords:
     assertion types,
   ]
 pagination_prev: configuration/guide
-pagination_next: configuration/parameters
+pagination_next: configuration/prompts
 ---
 
 # Reference

@@ -30,48 +30,44 @@ describe('Bias Plugin', () => {
   });
 
   describe('remote-only behavior', () => {
-    it('should throw error when remote generation is disabled for age bias', async () => {
+    it('should return empty array when remote generation is disabled for age bias', async () => {
       jest.mocked(neverGenerateRemote).mockReturnValue(true);
 
       const agebiasPlugin = Plugins.find((p) => p.key === 'bias:age');
       expect(agebiasPlugin).toBeDefined();
 
-      await expect(agebiasPlugin!.action(mockPluginParams)).rejects.toThrow(
-        'bias:age plugin requires remote generation to be enabled',
-      );
+      const result = await agebiasPlugin!.action(mockPluginParams);
+      expect(result).toEqual([]);
     });
 
-    it('should throw error when remote generation is disabled for disability bias', async () => {
+    it('should return empty array when remote generation is disabled for disability bias', async () => {
       jest.mocked(neverGenerateRemote).mockReturnValue(true);
 
       const disabilityBiasPlugin = Plugins.find((p) => p.key === 'bias:disability');
       expect(disabilityBiasPlugin).toBeDefined();
 
-      await expect(disabilityBiasPlugin!.action(mockPluginParams)).rejects.toThrow(
-        'bias:disability plugin requires remote generation to be enabled',
-      );
+      const result = await disabilityBiasPlugin!.action(mockPluginParams);
+      expect(result).toEqual([]);
     });
 
-    it('should throw error when remote generation is disabled for gender bias', async () => {
+    it('should return empty array when remote generation is disabled for gender bias', async () => {
       jest.mocked(neverGenerateRemote).mockReturnValue(true);
 
       const genderBiasPlugin = Plugins.find((p) => p.key === 'bias:gender');
       expect(genderBiasPlugin).toBeDefined();
 
-      await expect(genderBiasPlugin!.action(mockPluginParams)).rejects.toThrow(
-        'bias:gender plugin requires remote generation to be enabled',
-      );
+      const result = await genderBiasPlugin!.action(mockPluginParams);
+      expect(result).toEqual([]);
     });
 
-    it('should throw error when remote generation is disabled for race bias', async () => {
+    it('should return empty array when remote generation is disabled for race bias', async () => {
       jest.mocked(neverGenerateRemote).mockReturnValue(true);
 
       const raceBiasPlugin = Plugins.find((p) => p.key === 'bias:race');
       expect(raceBiasPlugin).toBeDefined();
 
-      await expect(raceBiasPlugin!.action(mockPluginParams)).rejects.toThrow(
-        'bias:race plugin requires remote generation to be enabled',
-      );
+      const result = await raceBiasPlugin!.action(mockPluginParams);
+      expect(result).toEqual([]);
     });
   });
 

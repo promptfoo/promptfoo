@@ -11,6 +11,7 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import { Grid2 } from '@mui/material';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -21,7 +22,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Link from '@mui/material/Link';
@@ -41,6 +42,7 @@ import {
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  MCP_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
   OWASP_API_TOP_10_MAPPING,
@@ -339,6 +341,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'Guardrails Evaluation',
       plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
+    },
+    {
+      name: 'MCP',
+      plugins: new Set(MCP_PLUGINS),
     },
     {
       name: 'Harmful',
@@ -688,7 +694,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                 Presets
               </Typography>
 
-              <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid2 container spacing={2} sx={{ mb: 3 }}>
                 {presets.map((preset) => {
                   const isSelected =
                     preset.name === 'Custom'
@@ -696,7 +702,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                       : preset.name === currentlySelectedPreset?.name;
                   return (
                     <Grid
-                      size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
+                      item
+                      xs={12}
+                      sm={6}
+                      md={4}
+                      lg={3}
                       key={preset.name}
                       sx={{ minWidth: '200px' }}
                     >
@@ -709,7 +719,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                     </Grid>
                   );
                 })}
-              </Grid>
+              </Grid2>
             </Box>
 
             {/* Search and Filter section */}

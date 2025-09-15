@@ -1,4 +1,4 @@
-import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types';
+import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index';
 import invariant from '../util/invariant';
 
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {

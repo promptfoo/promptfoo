@@ -1,5 +1,3 @@
-import React from 'react';
-
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
@@ -11,6 +9,7 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
+import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
@@ -42,7 +41,7 @@ interface FrameworkCardProps {
   idx: number;
 }
 
-const FrameworkCard: React.FC<FrameworkCardProps> = ({
+const FrameworkCard = ({
   framework,
   isCompliant,
   frameworkSeverity,
@@ -52,7 +51,8 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
   sortedNonCompliantPlugins,
   getPluginPassRate,
   idx,
-}) => {
+}: FrameworkCardProps) => {
+  const theme = useTheme();
   const sortedPlugins = sortedNonCompliantPlugins(nonCompliantPlugins);
   const breakInside = idx === 0 ? 'undefined' : 'avoid';
   return (
@@ -90,7 +90,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                   label={frameworkSeverity}
                   size="small"
                   sx={{
-                    backgroundColor: getSeverityColor(frameworkSeverity),
+                    backgroundColor: getSeverityColor(frameworkSeverity, theme),
                     color: 'white',
                     fontWeight: 'bold',
                   }}
@@ -233,7 +233,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                             <ListItem
                               key={plugin}
                               sx={{
-                                borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
+                                borderLeft: `3px solid ${getSeverityColor(pluginSeverity, theme)}`,
                                 pl: 2,
                                 mb: 0.5,
                                 bgcolor: 'rgba(0, 0, 0, 0.02)',
@@ -299,7 +299,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                             <ListItem
                               key={plugin}
                               sx={{
-                                borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
+                                borderLeft: `3px solid ${getSeverityColor(pluginSeverity, theme)}`,
                                 pl: 2,
                                 mb: 0.5,
                                 bgcolor: 'rgba(0, 0, 0, 0.01)',
@@ -368,7 +368,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                                 <ListItem
                                   key={plugin}
                                   sx={{
-                                    borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
+                                    borderLeft: `3px solid ${getSeverityColor(pluginSeverity, theme)}`,
                                     pl: 2,
                                     mb: 0.5,
                                     bgcolor: 'rgba(0, 0, 0, 0.01)',
@@ -464,7 +464,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                     <ListItem
                       key={plugin}
                       sx={{
-                        borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
+                        borderLeft: `3px solid ${getSeverityColor(pluginSeverity, theme)}`,
                         pl: 2,
                         mb: 0.5,
                         bgcolor: 'rgba(0, 0, 0, 0.02)',
@@ -543,7 +543,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                       <ListItem
                         key={plugin}
                         sx={{
-                          borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
+                          borderLeft: `3px solid ${getSeverityColor(pluginSeverity, theme)}`,
                           pl: 2,
                           mb: 0.5,
                           bgcolor: 'rgba(0, 0, 0, 0.01)',
@@ -613,7 +613,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                       <ListItem
                         key={plugin}
                         sx={{
-                          borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
+                          borderLeft: `3px solid ${getSeverityColor(pluginSeverity, theme)}`,
                           pl: 2,
                           mb: 0.5,
                           bgcolor: 'rgba(0, 0, 0, 0.01)',

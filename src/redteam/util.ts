@@ -250,8 +250,6 @@ export async function extractGoalFromPrompt(
     ...(pluginDescription && { pluginContext: pluginDescription }),
   };
 
-  logger.debug(`Extracting goal from prompt. Request URL: ${getRemoteGenerationUrl()}`);
-  logger.debug(`Request body: ${JSON.stringify(requestBody, null, 2)}`);
   try {
     const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),

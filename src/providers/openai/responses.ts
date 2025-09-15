@@ -1,14 +1,18 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
@@ -254,8 +258,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    logger.debug(`Calling OpenAI Responses API: ${JSON.stringify(body)}`);
-
     // Calculate timeout for deep research models
     let timeout = REQUEST_TIMEOUT_MS;
     if (isDeepResearchModel) {
@@ -288,6 +290,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         timeout,
         'json',
         context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       ));
 
       if (status < 200 || status >= 300) {
@@ -305,7 +308,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       };
     }
 
-    logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
     if (data.error) {
       await data.deleteFromCache?.();
       return {

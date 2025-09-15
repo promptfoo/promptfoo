@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type React from 'react';
 
+import { callApi } from '@app/utils/api';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import EditIcon from '@mui/icons-material/Edit';
@@ -27,14 +28,12 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { ErrorBoundary } from 'react-error-boundary';
-import { callApi } from '@app/utils/api';
 import { ellipsize } from '../../../../../util/text';
 import TraceView from '../../../components/traces/TraceView';
 import ChatMessages, { type Message } from './ChatMessages';
 import Citations from './Citations';
 import { useTableStore } from './store';
-
-import type { GradingResult } from './types';
+import type { GradingResult } from '@promptfoo/types';
 
 // Common style object for copy buttons
 const copyButtonSx = {
@@ -355,6 +354,7 @@ export default function EvalOutputPromptDialog({
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
+  const [showTraceSection, setShowTraceSection] = useState(true);
   const { addFilter, resetFilters } = useTableStore();
 
   useEffect(() => {
@@ -365,6 +365,10 @@ export default function EvalOutputPromptDialog({
     setReplayOutput(null);
     setReplayError(null);
   }, [prompt]);
+
+  useEffect(() => {
+    setShowTraceSection(true);
+  }, [evaluationId]);
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -593,12 +597,16 @@ export default function EvalOutputPromptDialog({
         <AssertionResults gradingResults={gradingResults} />
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
         {evaluationId && (
-          <Box mt={2}>
+          <Box mt={2} sx={{ display: showTraceSection ? 'block' : 'none' }}>
             <Typography variant="subtitle1" sx={subtitleTypographySx}>
               Trace Timeline
             </Typography>
             <ErrorBoundary fallback={<Alert severity="error">Error loading traces</Alert>}>
-              <TraceView evaluationId={evaluationId} testCaseId={testCaseId} />
+              <TraceView
+                evaluationId={evaluationId}
+                testCaseId={testCaseId}
+                onVisibilityChange={setShowTraceSection}
+              />
             </ErrorBoundary>
           </Box>
         )}

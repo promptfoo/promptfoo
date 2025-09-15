@@ -1,11 +1,11 @@
 import * as path from 'path';
 
-import { runAssertion } from '../../src/assertions';
+import { runAssertion } from '../../src/assertions/index';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
 
-import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types';
+import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
 jest.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: jest.fn().mockReturnValue(false),
@@ -24,8 +24,8 @@ jest.mock('node:module', () => {
   };
 });
 
-jest.mock('../../src/fetch', () => {
-  const actual = jest.requireActual('../../src/fetch');
+jest.mock('../../src/util/fetch/index.ts', () => {
+  const actual = jest.requireActual('../../src/util/fetch/index.ts');
   return {
     ...actual,
     fetchWithRetries: jest.fn(actual.fetchWithRetries),

@@ -6,7 +6,7 @@ import {
 } from '../../src/providers/llamaApi';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
-import type { ProviderOptions } from '../../src/types';
+import type { ProviderOptions } from '../../src/types/index';
 
 jest.mock('../../src/providers/openai/chat', () => {
   return {

@@ -3,7 +3,7 @@ import React from 'react';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import {
@@ -27,10 +27,7 @@ interface FrameworkComplianceProps {
   strategyStats: Record<string, { pass: number; total: number }>;
 }
 
-const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
-  categoryStats,
-  strategyStats,
-}) => {
+const FrameworkCompliance = ({ categoryStats, strategyStats }: FrameworkComplianceProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const getNonCompliantPlugins = React.useCallback(
@@ -230,7 +227,7 @@ const FrameworkCompliance: React.FC<FrameworkComplianceProps> = ({
               const frameworkSeverity = getFrameworkSeverity(framework);
 
               return (
-                <Grid size={{ xs: 12, sm: 6, md: 4 }} key={framework}>
+                <Grid item xs={12} sm={6} md={4} key={framework}>
                   <FrameworkCard
                     framework={framework}
                     isCompliant={isCompliant}

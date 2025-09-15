@@ -5,7 +5,7 @@ import type {
   AssertionValueFunctionContext,
   AtomicTestCase,
   GradingResult,
-} from '../../src/types';
+} from '../../src/types/index';
 
 const assertion: Assertion = {
   type: 'is-refusal',

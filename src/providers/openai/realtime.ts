@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { OpenAiGenericProvider } from '.';
 import { OPENAI_REALTIME_MODELS } from './util';
 
@@ -9,7 +9,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions } from './types';
 
@@ -91,6 +91,33 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
   }
 
+  // Build base WebSocket URL from configured API base URL
+  private getWebSocketBase(): string {
+    const base = this.getApiUrl();
+    // Convert scheme and strip trailing slashes
+    const wsBase = base.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
+    return wsBase.replace(/\/+$/, '');
+  }
+
+  // Build WebSocket URL for realtime model endpoint
+  private getWebSocketUrl(modelName: string): string {
+    const wsBase = this.getWebSocketBase();
+    return `${wsBase}/realtime?model=${encodeURIComponent(modelName)}`;
+  }
+
+  // Build WebSocket URL for client-secret based socket initialization
+  private getClientSecretSocketUrl(clientSecret: string): string {
+    const wsBase = this.getWebSocketBase();
+    return `${wsBase}/realtime/socket?client_secret=${encodeURIComponent(clientSecret)}`;
+  }
+
+  // Compute Origin header from apiBaseUrl (match scheme and host)
+  private getWebSocketOrigin(): string {
+    const u = new URL(this.getApiUrl());
+    const scheme = u.protocol === 'http:' ? 'http:' : 'https:';
+    return `${scheme}//${u.host}`;
+  }
+
   // Add method to reset audio state
   private resetAudioState(): void {
     this.lastAudioItemId = null;
@@ -159,14 +186,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       );
 
       // The WebSocket URL needs to include the client secret
-      const wsUrl = `wss://api.openai.com/v1/realtime/socket?client_secret=${encodeURIComponent(clientSecret)}`;
+      const wsUrl = this.getClientSecretSocketUrl(clientSecret);
       logger.debug(`Connecting to WebSocket URL: ${wsUrl.slice(0, 60)}...`);
 
       // Add WebSocket options to bypass potential network issues
       const wsOptions = {
         headers: {
           'User-Agent': 'promptfoo Realtime API Client',
-          Origin: 'https://api.openai.com',
+          Origin: this.getWebSocketOrigin(),
         },
         handshakeTimeout: 10000,
         perMessageDeflate: false,
@@ -767,7 +794,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       logger.debug(`Establishing direct WebSocket connection to OpenAI Realtime API`);
 
       // Construct URL with model parameter
-      const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.modelName)}`;
+      const wsUrl = this.getWebSocketUrl(this.modelName);
       logger.debug(`Connecting to WebSocket URL: ${wsUrl}`);
 
       // Add WebSocket options with required headers
@@ -776,7 +803,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           Authorization: `Bearer ${this.getApiKey()}`,
           'OpenAI-Beta': 'realtime=v1',
           'User-Agent': 'promptfoo Realtime API Client',
-          Origin: 'https://api.openai.com',
+          Origin: this.getWebSocketOrigin(),
         },
         handshakeTimeout: 10000,
         perMessageDeflate: false,
@@ -1205,7 +1232,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         this.setupMessageHandlers(prompt, resolve, reject);
       } else {
         // Create new connection
-        const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.modelName)}`;
+        const wsUrl = this.getWebSocketUrl(this.modelName);
         logger.debug(`Connecting to WebSocket URL: ${wsUrl}`);
 
         // Add WebSocket options with required headers
@@ -1214,7 +1241,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             Authorization: `Bearer ${this.getApiKey()}`,
             'OpenAI-Beta': 'realtime=v1',
             'User-Agent': 'promptfoo Realtime API Client',
-            Origin: 'https://api.openai.com',
+            Origin: this.getWebSocketOrigin(),
           },
           handshakeTimeout: 10000,
           perMessageDeflate: false,

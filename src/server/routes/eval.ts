@@ -8,6 +8,7 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
+import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
@@ -169,7 +170,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const { id } = req.params;
   const limit = Number(req.query.limit) || 50;
   const offset = Number(req.query.offset) || 0;
-  const filterMode = String(req.query.filterMode || 'all');
+  const filterMode = EvalResultsFilterMode.parse(req.query.filterMode) ?? 'all';
   const searchText = req.query.search ? String(req.query.search) : '';
   const filters = Array.isArray(req.query.filter)
     ? req.query.filter

@@ -22,7 +22,7 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
-import logger, { setLogLevel } from './logger';
+import logger, { initializeRunLogging, setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
@@ -33,7 +33,7 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
 import { checkForUpdates } from './updates';
-import { setupEnv } from './util';
+import { setupEnv } from './util/index';
 import { loadDefaultConfig } from './util/config/default';
 
 /**
@@ -73,6 +73,8 @@ export function addCommonOptionsRecursively(command: Command) {
 }
 
 async function main() {
+  initializeRunLogging();
+
   await checkForUpdates();
   await runDbMigrations();
 
