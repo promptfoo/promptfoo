@@ -16,7 +16,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;

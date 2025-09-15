@@ -18,7 +18,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
   ResultFailureReason,
-} from '../types';
+} from '../types/index';
 
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(

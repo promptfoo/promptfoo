@@ -28,7 +28,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 
 /**
  * Escapes string values in variables for safe JSON template substitution.

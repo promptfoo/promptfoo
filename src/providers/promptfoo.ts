@@ -15,7 +15,7 @@ import type {
   PluginConfig,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 interface PromptfooHarmfulCompletionOptions {

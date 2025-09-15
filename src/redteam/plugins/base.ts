@@ -19,7 +19,7 @@ import type {
   PluginConfig,
   ResultSuggestion,
   TestCase,
-} from '../../types';
+} from '../../types/index';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.

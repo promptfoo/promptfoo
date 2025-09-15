@@ -42,7 +42,7 @@ import type {
   TestSuite,
   TokenUsage,
   UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({

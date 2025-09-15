@@ -25,7 +25,7 @@ import type {
   TestCase,
   TestCaseWithVarsFile,
   TestSuiteConfig,
-} from '../types';
+} from '../types/index';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],

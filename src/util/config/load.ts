@@ -29,8 +29,8 @@ import {
   type TestSuite,
   type UnifiedConfig,
   UnifiedConfigSchema,
-} from '../../types';
-import { isRunningUnderNpx, readFilters } from '../../util/index';
+} from '../../types/index';
+import { isRunningUnderNpx, readFilters } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';

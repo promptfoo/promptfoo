@@ -4,7 +4,7 @@ import { fromError } from 'zod-validation-error';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
-import { setupEnv } from '../util/index';
+import { setupEnv } from '../util';
 import { resolveConfigs } from '../util/config/load';
 import type { Command } from 'commander';
 
