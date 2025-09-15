@@ -6,7 +6,7 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { OpenAiCompletionOptions } from './openai/types';
 

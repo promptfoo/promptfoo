@@ -75,6 +75,7 @@ vi.mock('@promptfoo/redteam/constants', () => ({
   FOUNDATION_PLUGINS: ['bola'],
   GUARDRAILS_EVALUATION_PLUGINS: ['harmful:hate'],
   HARM_PLUGINS: { 'harmful:hate': 'hate', 'harmful:self-harm': 'self-harm' },
+  MCP_PLUGINS: [], // Added MCP_PLUGINS export
   NIST_AI_RMF_MAPPING: {},
   OWASP_LLM_TOP_10_MAPPING: {},
   OWASP_LLM_RED_TEAM_MAPPING: {},

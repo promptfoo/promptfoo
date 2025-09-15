@@ -13,7 +13,7 @@ interface PostHogProviderProps {
   children: React.ReactNode;
 }
 
-export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) => {
+export const PostHogProvider = ({ children }: PostHogProviderProps) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const { email, userId, fetchEmail, fetchUserId } = useUserStore();
 

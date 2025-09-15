@@ -204,9 +204,6 @@
                             "JFROG_API_KEY": {
                               "type": "string"
                             },
-                            "LAMBDA_API_KEY": {
-                              "type": "string"
-                            },
                             "LANGFUSE_HOST": {
                               "type": "string"
                             },

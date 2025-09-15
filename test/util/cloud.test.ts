@@ -9,7 +9,7 @@ import {
   getProviderFromCloud,
   makeRequest,
 } from '../../src/util/cloud';
-import { fetchWithProxy } from '../../src/util/fetch';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
 
 jest.mock('../../src/util/fetch/index.ts');

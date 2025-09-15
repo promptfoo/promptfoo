@@ -1,5 +1,5 @@
 import { Telemetry } from '../src/telemetry';
-import { fetchWithTimeout } from '../src/util/fetch';
+import { fetchWithTimeout } from '../src/util/fetch/index';
 
 jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),

@@ -19,13 +19,13 @@ interface ProviderConfigDialogProps {
   onSave: (providerId: string, config: Record<string, any>) => void;
 }
 
-const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
+const ProviderConfigDialog = ({
   open,
   providerId,
   config = {},
   onClose,
   onSave,
-}) => {
+}: ProviderConfigDialogProps) => {
   const [localConfig, setLocalConfig] = useState<Record<string, any>>(config);
   const isAzureProvider = providerId.startsWith('azure:');
 

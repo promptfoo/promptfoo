@@ -40,40 +40,35 @@ jest.mock('../../src/redteam/remoteGeneration', () => ({
 }));
 
 // Import the mocked fetchWithProxy for use in tests
-import * as fetch from '../../src/util/fetch';
+import * as fetchModule from '../../src/util/fetch/index';
 
-// Properly mock fetch
-const originalFetch = global.fetch;
-const mockFetch = jest.fn();
+const mockFetchWithProxy = fetchModule.fetchWithProxy as jest.MockedFunction<
+  typeof fetchModule.fetchWithProxy
+>;
 
 describe('Server Utilities', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Setup global.fetch as a Jest mock
-    global.fetch = mockFetch;
-    mockFetch.mockReset();
-  });
-
-  afterEach(() => {
-    global.fetch = originalFetch;
   });
 
   describe('checkServerRunning', () => {
     it('should return true when server is running with matching version', async () => {
-      mockFetch.mockResolvedValueOnce({
+      mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({ status: 'OK', version: VERSION }),
-      });
+      } as Response);
 
       const result = await checkServerRunning();
 
-      expect(mockFetch).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/health`);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        `http://localhost:${getDefaultPort()}/health`,
+      );
       expect(result).toBe(true);
     });
 
     it('should return false when server status is not OK', async () => {
-      mockFetch.mockResolvedValueOnce({
+      mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({ status: 'ERROR', version: VERSION }),
-      });
+      } as Response);
 
       const result = await checkServerRunning();
 
@@ -81,9 +76,9 @@ describe('Server Utilities', () => {
     });
 
     it('should return false when server version does not match', async () => {
-      mockFetch.mockResolvedValueOnce({
+      mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({ status: 'OK', version: 'wrong-version' }),
-      });
+      } as Response);
 
       const result = await checkServerRunning();
 
@@ -91,25 +86,25 @@ describe('Server Utilities', () => {
     });
 
     it('should return false when fetch throws an error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('Connection refused'));
 
       const result = await checkServerRunning();
 
       expect(result).toBe(false);
       expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to check server health'),
+        expect.stringContaining('No existing server found'),
       );
     });
 
     it('should use custom port when provided', async () => {
       const customPort = 4000;
-      mockFetch.mockResolvedValueOnce({
+      mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({ status: 'OK', version: VERSION }),
-      });
+      } as Response);
 
       await checkServerRunning(customPort);
 
-      expect(mockFetch).toHaveBeenCalledWith(`http://localhost:${customPort}/health`);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(`http://localhost:${customPort}/health`);
     });
   });
 
@@ -195,13 +190,13 @@ describe('Server Utilities', () => {
       const requiredDate = '2024-01-01T00:00:00Z';
       const serverBuildDate = '2024-06-15T10:30:00Z';
 
-      jest.mocked(fetch.fetchWithProxy).mockResolvedValueOnce({
+      mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({ buildDate: serverBuildDate, version: '1.0.0' }),
       } as Response);
 
       const result = await checkServerFeatureSupport(featureName, requiredDate);
 
-      expect(fetch.fetchWithProxy).toHaveBeenCalledWith('https://api.promptfoo.app/version', {
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.promptfoo.app/version', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -217,7 +212,7 @@ describe('Server Utilities', () => {
       const requiredDate = '2024-06-01T00:00:00Z';
       const serverBuildDate = '2024-01-15T10:30:00Z';
 
-      jest.mocked(fetch.fetchWithProxy).mockResolvedValueOnce({
+      mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({ buildDate: serverBuildDate, version: '1.0.0' }),
       } as Response);
 
@@ -232,7 +227,7 @@ describe('Server Utilities', () => {
     });
 
     it('should return false when no version info available', async () => {
-      jest.mocked(fetch.fetchWithProxy).mockResolvedValueOnce({
+      mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({}),
       } as Response);
 
@@ -251,7 +246,7 @@ describe('Server Utilities', () => {
       const result = await checkServerFeatureSupport(featureName, '2024-01-01T00:00:00Z');
 
       expect(result).toBe(true);
-      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
       expect(logger.debug).toHaveBeenCalledWith(
         expect.stringContaining(
           `No remote URL available for ${featureName}, assuming local server supports it`,
@@ -260,7 +255,7 @@ describe('Server Utilities', () => {
     });
 
     it('should return false when fetchWithProxy throws an error', async () => {
-      jest.mocked(fetch.fetchWithProxy).mockRejectedValueOnce(new Error('Network error'));
+      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
 
       const result = await checkServerFeatureSupport(featureName, '2024-01-01T00:00:00Z');
 
@@ -276,7 +271,7 @@ describe('Server Utilities', () => {
       const requiredDate = '2024-01-01T00:00:00Z';
       const serverBuildDate = '2024-06-15T10:30:00Z';
 
-      jest.mocked(fetch.fetchWithProxy).mockResolvedValue({
+      mockFetchWithProxy.mockResolvedValue({
         json: async () => ({ buildDate: serverBuildDate, version: '1.0.0' }),
       } as Response);
 
@@ -288,7 +283,7 @@ describe('Server Utilities', () => {
       expect(result1).toBe(true);
       expect(result2).toBe(true);
       // fetchWithProxy should only be called once due to caching
-      expect(fetch.fetchWithProxy).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
     });
 
     it('should handle different feature names with separate cache entries', async () => {
@@ -296,8 +291,7 @@ describe('Server Utilities', () => {
       const feature2 = 'feature-two';
       const requiredDate = '2024-01-01T00:00:00Z';
 
-      jest
-        .mocked(fetch.fetchWithProxy)
+      mockFetchWithProxy
         .mockResolvedValueOnce({
           json: async () => ({ buildDate: '2024-06-15T10:30:00Z', version: '1.0.0' }),
         } as Response)
@@ -310,14 +304,14 @@ describe('Server Utilities', () => {
 
       expect(result1).toBe(true);
       expect(result2).toBe(false);
-      expect(fetch.fetchWithProxy).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
     });
 
     it('should handle timezone differences correctly', async () => {
       const requiredDate = '2024-06-01T00:00:00Z'; // UTC
       const serverBuildDate = '2024-06-01T08:00:00+08:00'; // Same moment in different timezone
 
-      jest.mocked(fetch.fetchWithProxy).mockResolvedValueOnce({
+      mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({ buildDate: serverBuildDate, version: '1.0.0' }),
       } as Response);
 
