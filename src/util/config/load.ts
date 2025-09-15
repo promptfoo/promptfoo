@@ -8,7 +8,7 @@ import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { fromError } from 'zod-validation-error';
-import { readAssertions } from '../../assertions';
+import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
 import { filterTests } from '../../commands/eval/filterTests';
@@ -16,7 +16,7 @@ import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts';
-import { loadApiProviders } from '../../providers';
+import { loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
