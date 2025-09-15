@@ -200,11 +200,13 @@ export default class ModelAudit {
         orderByClause = order === 'asc' ? asc(modelAuditsTable.name) : desc(modelAuditsTable.name);
         break;
       case 'status':
-        orderByClause = order === 'asc' ? asc(modelAuditsTable.hasErrors) : desc(modelAuditsTable.hasErrors);
+        orderByClause =
+          order === 'asc' ? asc(modelAuditsTable.hasErrors) : desc(modelAuditsTable.hasErrors);
         break;
       case 'createdAt':
       default:
-        orderByClause = order === 'asc' ? asc(modelAuditsTable.createdAt) : desc(modelAuditsTable.createdAt);
+        orderByClause =
+          order === 'asc' ? asc(modelAuditsTable.createdAt) : desc(modelAuditsTable.createdAt);
         break;
     }
 
