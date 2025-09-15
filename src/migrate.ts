@@ -8,7 +8,9 @@ declare const BUILD_FORMAT: string | undefined;
 // Use currentDir instead of __dirname to avoid Jest/CJS conflicts
 // Guard import.meta usage for dual CJS/ESM builds
 const currentDir = (() => {
-  if (process.env.BUILD_FORMAT === 'esm') {
+  // Check if BUILD_FORMAT is available at compile time, otherwise check typeof for runtime
+  const isESM = typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'esm';
+  if (isESM) {
     return path.dirname(fileURLToPath(import.meta.url));
   }
   return __dirname;
@@ -45,8 +47,15 @@ export async function runDbMigrations(): Promise<void> {
 }
 
 // ESM replacement for require.main === module check
-if (process.env.BUILD_FORMAT === 'esm') {
-  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
+// Check if BUILD_FORMAT is available at compile time, otherwise check typeof for runtime
+const isESM = typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'esm';
+if (isESM) {
+  const currentModulePath = resolve(fileURLToPath(import.meta.url));
+  const mainModulePath = resolve(process.argv[1]);
+  const isMainModule = currentModulePath === mainModulePath;
+  // Only run if this specific migrate module is being executed directly, not when imported by main.js
+  const isMigrateModuleMainExecution = isMainModule && currentModulePath.endsWith('migrate.js');
+  if (isMigrateModuleMainExecution) {
     // Run migrations and exit with appropriate code
     runDbMigrations()
       .then(() => process.exit(0))
