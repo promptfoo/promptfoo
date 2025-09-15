@@ -65,7 +65,6 @@ function Dropdown({
         label={label}
         disabled={disabled}
         sx={{
-          backgroundColor: 'background.paper',
           '& .MuiSelect-select': {
             py: 1,
           },
@@ -115,7 +114,6 @@ function DebouncedTextField({
       value={localValue}
       onChange={(e) => setLocalValue(e.target.value)}
       sx={{
-        backgroundColor: 'background.paper',
         '& .MuiInputBase-input': {
           py: 1,
         },
@@ -257,8 +255,9 @@ function Filter({
         display: 'flex',
         gap: 1.5,
         alignItems: 'center',
-        p: 1,
+        p: 1.5,
         borderRadius: 1,
+        overflow: 'hidden',
         '&:hover': {
           backgroundColor: 'action.hover',
         },
@@ -277,7 +276,16 @@ function Filter({
         <CloseIcon fontSize="small" />
       </IconButton>
 
-      <Box sx={{ display: 'flex', gap: 1.5, flex: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 1.5,
+          flex: 1,
+          alignItems: 'center',
+          flexWrap: 'nowrap',
+          minWidth: 0,
+        }}
+      >
         {index !== 0 &&
           (() => {
             // Get the filter with sortIndex === 1 to determine the logic operator for all filters
@@ -362,7 +370,7 @@ function Filter({
           width={150}
         />
 
-        <Box sx={{ flex: 1, minWidth: 250 }}>
+        <Box sx={{ flex: 1, minWidth: 200, maxWidth: 300 }}>
           {value.type === 'metric' ||
           value.type === 'plugin' ||
           value.type === 'strategy' ||
@@ -516,8 +524,8 @@ export default function FiltersForm({
       PaperProps={{
         sx: {
           mt: 1,
-          minWidth: 600,
-          maxWidth: '90vw',
+          minWidth: { xs: 400, sm: 600 },
+          maxWidth: { xs: '95vw', sm: '90vw' },
           maxHeight: '80vh',
           overflow: 'hidden',
           display: 'flex',
