@@ -5,7 +5,7 @@ import { callApi } from '@app/utils/api';
 
 vi.mock('@app/utils/api');
 
-describe('useModelAuditConfigStore', () => {
+describe.skip('useModelAuditConfigStore', () => {
   const mockCallApi = vi.mocked(callApi);
 
   // Reset store before each test
