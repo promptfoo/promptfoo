@@ -253,7 +253,22 @@ export abstract class RedteamPluginBase {
       // Handle inference refusals. Result is thrown rather than returning an empty array in order to
       // catch and show a explanatory error message.
       if (isBasicRefusal(generatedPrompts)) {
-        throw new Error(`Prompt generation rejected for ${this.constructor.name}`);
+        let message = `${this.provider.id()} returned a refusal during inference for ${this.constructor.name} test case generation.`;
+        // We don't know exactly why the prompt was refused, but we can provide hints to the user based on the values which were
+        // included in the context window during inference.
+        const context: Record<string, string> = {};
+        if (this.purpose) {
+          context.purpose = this.purpose;
+        }
+        if (this.config.examples) {
+          context.examples = this.config.examples.join(', ');
+        }
+
+        if (context) {
+          message += ` User-configured values were included in inference and may have been deemed harmful: ${JSON.stringify(context)}. Check these and retry.`;
+        }
+
+        throw new Error(message);
       }
 
       return parseGeneratedPrompts(generatedPrompts);
