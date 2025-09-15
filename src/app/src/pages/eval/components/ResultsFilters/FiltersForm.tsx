@@ -314,13 +314,13 @@ function Filter({
               : []),
             { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' },
             // Show plugin and strategy filters if there are any options available i.e. these are redteam eval results.
-            ...(filters.options.plugin.length > 0
+            ...((filters.options.plugin?.length ?? 0) > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.plugin, value: 'plugin' }]
               : []),
-            ...(filters.options.strategy.length > 0
+            ...((filters.options.strategy?.length ?? 0) > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.strategy, value: 'strategy' }]
               : []),
-            ...(filters.options.severity.length > 0
+            ...((filters.options.severity?.length ?? 0) > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.severity, value: 'severity' }]
               : []),
           ]}
@@ -460,11 +460,11 @@ export default function FiltersForm({
     let defaultType: ResultsFilter['type'] = 'metadata';
     if (filters.options.metric.length > 0) {
       defaultType = 'metric';
-    } else if (filters.options.plugin.length > 1) {
+    } else if ((filters.options.plugin?.length ?? 0) > 1) {
       defaultType = 'plugin';
-    } else if (filters.options.strategy.length > 1) {
+    } else if ((filters.options.strategy?.length ?? 0) > 1) {
       defaultType = 'strategy';
-    } else if (filters.options.severity.length > 0) {
+    } else if ((filters.options.severity?.length ?? 0) > 0) {
       defaultType = 'severity';
     }
 

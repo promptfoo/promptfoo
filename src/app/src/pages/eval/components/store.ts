@@ -46,15 +46,7 @@ function isRedteamEvaluation(config?: Partial<UnifiedConfig> | null): boolean {
   return Boolean(config?.redteam);
 }
 
-function extractUniqueStrategyIds(
-  strategies?: Array<string | { id: string }> | null,
-  isRedteam?: boolean,
-): string[] {
-  // If not a redteam evaluation, return empty array (no strategy options should be shown)
-  if (!isRedteam) {
-    return [];
-  }
-
+function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
   const strategyIds =
     strategies?.map((strategy) => (typeof strategy === 'string' ? strategy : strategy.id)) ?? [];
 
@@ -81,7 +73,7 @@ function buildRedteamFilterOptions(config?: Partial<UnifiedConfig> | null): {
       config?.redteam?.plugins?.map((plugin) =>
         typeof plugin === 'string' ? plugin : plugin.id,
       ) ?? [],
-    strategy: extractUniqueStrategyIds(config?.redteam?.strategies, isRedteam),
+    strategy: extractUniqueStrategyIds(config?.redteam?.strategies),
     severity: computeAvailableSeverities(config?.redteam?.plugins),
   };
 }
@@ -240,7 +232,11 @@ interface TableState {
      * The options for each filter type.
      */
     options: {
-      [key in ResultsFilterType]: string[];
+      metric: string[];
+      metadata: string[];
+      plugin?: string[];
+      strategy?: string[];
+      severity?: string[];
     };
   };
 }
@@ -504,9 +500,6 @@ export const useTableStore = create<TableState>()((set, get) => ({
     options: {
       metric: [],
       metadata: [],
-      plugin: [],
-      strategy: [],
-      severity: [],
     },
   },
 
