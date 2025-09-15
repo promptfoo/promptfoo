@@ -25,7 +25,6 @@ jest.mock('fs', () => ({
 jest.mock('glob');
 
 describe('file utilities', () => {
-
   describe('isJavascriptFile', () => {
     it('identifies JavaScript and TypeScript files', () => {
       expect(isJavascriptFile('test.js')).toBe(true);
