@@ -2,7 +2,7 @@ import { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { normalizeFinishReason } from '../../util/finishReason';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
@@ -17,7 +17,7 @@ import {
 } from './util';
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { CallApiContextParams, ProviderResponse } from '../../types';
+import type { CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { AnthropicMessageOptions } from './types';
 

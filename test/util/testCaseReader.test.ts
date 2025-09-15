@@ -7,7 +7,7 @@ import { testCaseFromCsvRow } from '../../src/csv';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import logger from '../../src/logger';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
@@ -16,7 +16,7 @@ import {
   readTests,
 } from '../../src/util/testCaseReader';
 
-import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types';
+import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types/index';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 jest.mock('../../src/util/fetch', () => ({
@@ -1451,6 +1451,34 @@ describe('loadTestsFromGlob', () => {
     expect(result[0].description).toEqual(resolvedContent[0].description);
     expect(result[0].vars).toEqual(resolvedContent[0].vars);
     expect(result[0].assert).toEqual(resolvedContent[0].assert);
+  });
+
+  it('should preserve Python assertion file references when loading YAML tests', async () => {
+    // This test verifies the fix for issue #5519
+    const yamlContentWithPythonAssertion = [
+      {
+        vars: { name: 'Should PASS' },
+        assert: [
+          {
+            type: 'python',
+            value: 'file://good_assertion.py',
+          },
+        ],
+      },
+    ];
+
+    jest.mocked(globSync).mockReturnValue(['tests.yaml']);
+    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(yamlContentWithPythonAssertion));
+
+    // Mock maybeLoadConfigFromExternalFile to preserve Python files in assertion contexts
+    const mockMaybeLoadConfig =
+      jest.requireMock('../../src/util/file').maybeLoadConfigFromExternalFile;
+    mockMaybeLoadConfig.mockReturnValue(yamlContentWithPythonAssertion);
+
+    const result = await loadTestsFromGlob('tests.yaml');
+
+    expect(mockMaybeLoadConfig).toHaveBeenCalledWith(yamlContentWithPythonAssertion);
+    expect((result[0].assert![0] as any).value).toBe('file://good_assertion.py'); // Should remain as file reference
   });
 });
 

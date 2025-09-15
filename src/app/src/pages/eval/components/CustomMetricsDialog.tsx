@@ -30,7 +30,7 @@ interface MetricRow {
   [key: string]: any; // For dynamic prompt columns
 }
 
-const MetricsTable: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   const { table, filters, addFilter } = useTableStore();
   const theme = useTheme();
 

@@ -5,7 +5,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { PersistentPythonManager } from '../python/persistentPythonManager';
 import { runPython } from '../python/pythonUtils';
-import { parsePathOrGlob } from '../util';
+import { parsePathOrGlob } from '../util/index';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { safeJsonStringify } from '../util/json';
@@ -17,7 +17,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;

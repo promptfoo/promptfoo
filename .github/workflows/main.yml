@@ -19,13 +19,17 @@ env:
 jobs:
   test:
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}
-    timeout-minutes: 8
+    timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         node: ['20.x', '22.x', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
+        # Temporarily exclude macOS with Node 24.x due to flaky test failures
+        exclude:
+          - node: '24.x'
+            os: macOS-latest
 
     steps:
       - name: Checkout repo

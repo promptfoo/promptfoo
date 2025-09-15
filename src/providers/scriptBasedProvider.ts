@@ -1,6 +1,6 @@
 import { getResolvedRelativePath } from '../util/file';
 
-import type { LoadApiProviderContext } from '../types';
+import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 /**

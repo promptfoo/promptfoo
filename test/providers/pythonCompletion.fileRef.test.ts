@@ -4,7 +4,7 @@ import path from 'path';
 import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { runPython } from '../../src/python/pythonUtils';
-import { parsePathOrGlob } from '../../src/util';
+import { parsePathOrGlob } from '../../src/util/index';
 import { processConfigFileReferences } from '../../src/util/fileReference';
 import type { Logger } from 'winston';
 

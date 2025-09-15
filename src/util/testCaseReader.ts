@@ -13,7 +13,7 @@ import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
 import logger from '../logger';
-import { loadApiProvider } from '../providers';
+import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { maybeLoadConfigFromExternalFile } from './file';
@@ -25,7 +25,7 @@ import type {
   TestCase,
   TestCaseWithVarsFile,
   TestSuiteConfig,
-} from '../types';
+} from '../types/index';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
