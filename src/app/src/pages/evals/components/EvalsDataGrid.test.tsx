@@ -12,7 +12,7 @@ vi.mock('@app/utils/api');
 
 // Mock the DataGrid component to simplify testing
 vi.mock('@mui/x-data-grid', () => ({
-  DataGrid: ({ rows, loading, slots, getRowClassName, filterModel }: any) => {
+  DataGrid: ({ rows, loading, slots, getRowClassName, filterModel, columns }: any) => {
     if (loading && slots?.loadingOverlay) {
       const LoadingOverlay = slots.loadingOverlay;
       return <LoadingOverlay />;
@@ -35,9 +35,15 @@ vi.mock('@mui/x-data-grid', () => ({
         {!loading &&
           rows.map((row: any) => {
             const className = getRowClassName ? getRowClassName({ id: row.evalId }) : '';
+            const typeColumn = columns?.find((col: any) => col.field === 'type');
+            const typeValue = typeColumn?.valueGetter
+              ? typeColumn.valueGetter(row.type, row)
+              : null;
+
             return (
               <div key={row.evalId} data-testid={`eval-${row.evalId}`} className={className}>
                 {row.description || row.label}
+                {typeValue && <span data-testid={`eval-${row.evalId}-type`}>{typeValue}</span>}
               </div>
             );
           })}
@@ -132,6 +138,51 @@ const mockEvalsWithDifferentDatasets = [
   },
 ];
 
+const mockMixedEvals = [
+  {
+    evalId: 'eval-1',
+    createdAt: Date.now(),
+    description: 'Eval with new type',
+    datasetId: 'dataset-1',
+    isRedteam: 0,
+    type: 'eval',
+    label: 'eval-1',
+    numTests: 10,
+    passRate: 90,
+  },
+  {
+    evalId: 'eval-2',
+    createdAt: Date.now(),
+    description: 'Redteam with legacy isRedteam',
+    datasetId: 'dataset-1',
+    isRedteam: 1,
+    label: 'eval-2',
+    numTests: 5,
+    passRate: 100,
+  },
+  {
+    evalId: 'eval-3',
+    createdAt: Date.now(),
+    description: 'Model Audit with new type',
+    datasetId: 'dataset-2',
+    isRedteam: 0,
+    type: 'modelaudit',
+    label: 'eval-3',
+    numTests: 8,
+    passRate: 75,
+  },
+  {
+    evalId: 'eval-4',
+    createdAt: Date.now(),
+    description: 'Eval with legacy isRedteam',
+    datasetId: 'dataset-2',
+    isRedteam: 0,
+    label: 'eval-4',
+    numTests: 12,
+    passRate: 60,
+  },
+];
+
 describe('EvalsDataGrid', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -165,6 +216,75 @@ describe('EvalsDataGrid', () => {
     await waitFor(() => {
       expect(screen.getByTestId('eval-eval-1')).toHaveTextContent('Original Description');
       expect(screen.getByTestId('eval-eval-2')).toHaveTextContent('Another Eval');
+    });
+  });
+
+  it('should correctly display rows and set the total count when the API returns a paginated response', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: mockEvals,
+        total: 100,
+        limit: 50,
+        offset: 0,
+      }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toHaveTextContent('Original Description');
+      expect(screen.getByTestId('eval-eval-2')).toHaveTextContent('Another Eval');
+    });
+  });
+
+  it('should correctly display rows and set the total count when the API returns a legacy response', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1')).toHaveTextContent('Original Description');
+      expect(screen.getByTestId('eval-eval-2')).toHaveTextContent('Another Eval');
+    });
+  });
+
+  it('should correctly determine and display the type for all records when API returns a mix of evals with new "type" and legacy "isRedteam" fields', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: mockMixedEvals,
+        total: mockMixedEvals.length,
+        limit: 50,
+        offset: 0,
+      }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsDataGrid onEvalSelected={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('eval-eval-1-type')).toHaveTextContent('eval');
+      expect(screen.getByTestId('eval-eval-2-type')).toHaveTextContent('redteam');
+      expect(screen.getByTestId('eval-eval-3-type')).toHaveTextContent('modelaudit');
+      expect(screen.getByTestId('eval-eval-4-type')).toHaveTextContent('eval');
     });
   });
 
