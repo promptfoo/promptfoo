@@ -345,9 +345,9 @@ describe('useTableStore', () => {
       });
 
       const state = useTableStore.getState();
-      expect(state.filters.options.strategy).toEqual([]);
-      expect(state.filters.options.plugin).toEqual([]);
-      expect(state.filters.options.severity).toEqual([]);
+      expect(state.filters.options.strategy).toBeUndefined();
+      expect(state.filters.options.plugin).toBeUndefined();
+      expect(state.filters.options.severity).toBeUndefined();
     });
 
     it('should populate strategy options including basic when redteam config is present in fetchEvalData', async () => {
@@ -428,7 +428,9 @@ describe('useTableStore', () => {
       });
 
       const state = useTableStore.getState();
-      expect(state.filters.options.strategy).toEqual([]);
+      expect(state.filters.options.strategy).toBeUndefined();
+      expect(state.filters.options.plugin).toBeUndefined();
+      expect(state.filters.options.severity).toBeUndefined();
     });
 
     it('should populate strategy options when setTableFromResultsFile receives redteam config', () => {

@@ -62,18 +62,14 @@ function extractUniqueStrategyIds(
 }
 
 function buildRedteamFilterOptions(config?: Partial<UnifiedConfig> | null): {
-  plugin: string[];
-  strategy: string[];
-  severity: string[];
+  plugin?: string[];
+  strategy?: string[];
+  severity?: string[];
 } {
   const isRedteam = isRedteamEvaluation(config);
 
   if (!isRedteam) {
-    return {
-      plugin: [],
-      strategy: [],
-      severity: [],
-    };
+    return {};
   }
 
   return {
