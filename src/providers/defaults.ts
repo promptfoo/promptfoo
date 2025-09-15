@@ -36,7 +36,7 @@ import {
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from './openai/defaults';
 
-import type { ApiProvider, DefaultProviders } from '../types';
+import type { ApiProvider, DefaultProviders } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [

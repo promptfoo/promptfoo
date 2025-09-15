@@ -8,7 +8,7 @@ import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { neverGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 let ffmpegCache: any = null;
 

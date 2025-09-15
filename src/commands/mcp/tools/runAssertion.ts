@@ -3,7 +3,7 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import { runAssertions } from '../../../assertions';
 import logger from '../../../logger';
-import type { Assertion, AtomicTestCase } from '../../../types';
+import type { Assertion, AtomicTestCase } from '../../../types/index';
 import { createToolResponse } from '../utils';
 
 /**

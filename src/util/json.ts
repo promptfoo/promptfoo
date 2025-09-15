@@ -4,7 +4,7 @@ import yaml from 'js-yaml';
 import { getEnvBool, getEnvString } from '../envars';
 import invariant from '../util/invariant';
 
-import type { EvaluateResult, ResultFailureReason } from '../types';
+import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
 let ajvInstance: Ajv | null = null;
 
