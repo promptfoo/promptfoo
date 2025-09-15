@@ -2,8 +2,8 @@ import dedent from 'dedent';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
@@ -249,6 +249,13 @@ export abstract class RedteamPluginBase {
         );
         return [];
       }
+
+      // Handle inference refusals. Result is thrown rather than returning an empty array in order to
+      // catch and show a explanatory error message.
+      if (isBasicRefusal(generatedPrompts)) {
+        throw new Error(`Prompt generation rejected for ${this.constructor.name}`);
+      }
+
       return parseGeneratedPrompts(generatedPrompts);
     };
     const allPrompts = await retryWithDeduplication(generatePrompts, n);
