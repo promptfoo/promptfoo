@@ -53,34 +53,6 @@ interface TestIndexRow {
   test_idx: number;
 }
 
-/**
- * Sanitizes runtime options to ensure only JSON-serializable data is persisted.
- * Removes non-serializable fields like AbortSignal, functions, and symbols.
- */
-function sanitizeRuntimeOptions(
-  options?: Partial<import('../types').EvaluateOptions>,
-): Partial<import('../types').EvaluateOptions> | undefined {
-  if (!options) {
-    return undefined;
-  }
-
-  // Create a deep copy to avoid mutating the original
-  const sanitized = { ...options };
-
-  // Remove known non-serializable fields
-  delete (sanitized as any).abortSignal;
-
-  // Remove any function or symbol values
-  for (const key in sanitized) {
-    const value = (sanitized as any)[key];
-    if (typeof value === 'function' || typeof value === 'symbol') {
-      delete (sanitized as any)[key];
-    }
-  }
-
-  return sanitized;
-}
-
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
@@ -139,7 +111,6 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
-  runtimeOptions?: Partial<import('../types').EvaluateOptions>;
 
   static async latest() {
     const db = getDb();
@@ -188,7 +159,6 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
-      runtimeOptions: (eval_ as any).runtimeOptions,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -235,7 +205,6 @@ export default class Eval {
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
-      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -255,7 +224,6 @@ export default class Eval {
           config,
           results: {},
           vars: opts?.vars || [],
-          runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
         })
         .run();
 
@@ -334,13 +302,7 @@ export default class Eval {
       }
     });
 
-    return new Eval(config, {
-      id: evalId,
-      author: opts?.author,
-      createdAt,
-      persisted: true,
-      runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
-    });
+    return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
   }
 
   constructor(
@@ -354,7 +316,6 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
-      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -368,7 +329,6 @@ export default class Eval {
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
-    this.runtimeOptions = opts?.runtimeOptions;
   }
 
   version() {
@@ -398,7 +358,6 @@ export default class Eval {
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
-      runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
     };
 
     if (this.useOldResults()) {

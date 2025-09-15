@@ -9,9 +9,6 @@ interface CliState {
 
   // Indicates we're running in web UI mode
   webUI?: boolean;
-
-  // Indicates an evaluation is running in resume mode
-  resume?: boolean;
 }
 
 const state: CliState = {};

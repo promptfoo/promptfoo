@@ -169,23 +169,6 @@ export default class EvalResult {
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 
-  /**
-   * Returns a set of completed (testIdx,promptIdx) pairs for a given eval.
-   * Key format: `${testIdx}:${promptIdx}`
-   */
-  static async getCompletedIndexPairs(evalId: string): Promise<Set<string>> {
-    const db = getDb();
-    const rows = await db
-      .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
-      .from(evalResultsTable)
-      .where(eq(evalResultsTable.evalId, evalId));
-    const ret = new Set<string>();
-    for (const r of rows) {
-      ret.add(`${r.testIdx}:${r.promptIdx}`);
-    }
-    return ret;
-  }
-
   // This is a generator that yields batches of results from the database
   // These are batched by test Id, not just results to ensure we get all results for a given test
   static async *findManyByEvalIdBatched(
