@@ -1,4 +1,4 @@
-import { runAssertions } from '../../src/assertions';
+import { runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';

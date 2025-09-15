@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { runAssertion } from '../../src/assertions';
+import { runAssertion } from '../../src/assertions/index';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
