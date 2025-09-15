@@ -165,11 +165,17 @@ function DownloadMenu() {
     const headers = [
       ...table.head.vars,
       ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+      // Add conversation-related headers
+      'Conversation Strategy',
+      'Turn Count',
+      'Conversation Summary',
+      'Final Prompt',
+      'Full Conversation',
     ];
     csvRows.push(headers);
 
     table.body.forEach((row) => {
-      const rowValues = [
+      const baseValues = [
         ...row.vars,
         ...row.outputs
           .filter((output): output is EvaluateTableOutput => output != null)
@@ -182,7 +188,20 @@ function DownloadMenu() {
                   : '[ERROR] ') + text,
           ),
       ];
-      csvRows.push(rowValues);
+
+      // Add conversation data from the first output (assuming single provider for conversation data)
+      const firstOutput = row.outputs.find((output): output is EvaluateTableOutput => output != null);
+      const conversationData = firstOutput?.conversationData;
+
+      const conversationValues = [
+        conversationData?.strategy || '',
+        conversationData?.turnCount?.toString() || '0',
+        conversationData?.summary || '',
+        conversationData?.finalPrompt || '',
+        conversationData?.messages ? JSON.stringify(conversationData.messages) : '',
+      ];
+
+      csvRows.push([...baseValues, ...conversationValues]);
     });
 
     const output = csvStringify(csvRows);
@@ -222,6 +241,49 @@ function DownloadMenu() {
     const yamlContent = yaml.dump(humanEvalCases);
     const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
     openDownloadDialog(blob, `${evalId}-human-eval-cases.yaml`);
+    handleClose();
+  };
+
+  const downloadConversationJson = () => {
+    if (!table) {
+      showToast('No table data', 'error');
+      return;
+    }
+
+    const conversationData = table.body.map((row, index) => {
+      const result = {
+        testId: index + 1,
+        testCase: {
+          vars: row.test.vars,
+          assert: row.test.assert,
+          metadata: row.test.metadata,
+        },
+        conversations: row.outputs
+          .filter((output): output is EvaluateTableOutput => output != null)
+          .map((output, outputIndex) => ({
+            provider: table.head.prompts[outputIndex]?.provider || 'unknown',
+            providerLabel: table.head.prompts[outputIndex]?.label || 'unknown',
+            pass: output.pass,
+            score: output.score,
+            cost: output.cost,
+            latencyMs: output.latencyMs,
+            conversationData: output.conversationData || {
+              messages: [],
+              finalPrompt: '',
+              strategy: 'Unknown',
+              turnCount: 0,
+              summary: '',
+            },
+            gradingResult: output.gradingResult,
+          }))
+      };
+      return result;
+    });
+
+    const blob = new Blob([JSON.stringify(conversationData, null, 2)], {
+      type: 'application/json'
+    });
+    openDownloadDialog(blob, `${evalId}-conversations.json`);
     handleClose();
   };
 
@@ -279,12 +341,15 @@ function DownloadMenu() {
             downloadTable();
             break;
           case '5':
-            downloadBurpPayloads();
+            downloadConversationJson();
             break;
           case '6':
-            downloadDpoJson();
+            downloadBurpPayloads();
             break;
           case '7':
+            downloadDpoJson();
+            break;
+          case '8':
             downloadHumanEvalTestCases();
             break;
         }
@@ -468,6 +533,16 @@ function DownloadMenu() {
               fullWidth
             >
               Download Table JSON
+            </Button>
+
+            <Button
+              onClick={downloadConversationJson}
+              startIcon={<DownloadIcon />}
+              variant="outlined"
+              color="primary"
+              fullWidth
+            >
+              Download Conversation History JSON
             </Button>
 
             <Divider />
