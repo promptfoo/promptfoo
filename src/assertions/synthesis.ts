@@ -7,7 +7,7 @@ import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';
 import type { SingleBar } from 'cli-progress';
 
-import type { ApiProvider, Assertion, TestCase, TestSuite } from '../types';
+import type { ApiProvider, Assertion, TestCase, TestSuite } from '../types/index';
 
 interface SynthesizeOptions {
   instructions?: string;

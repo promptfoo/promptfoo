@@ -46,7 +46,7 @@ import { isValidPolicyObject } from '../plugins/policy';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types';
+import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
 import type {
   PolicyObject,
   RedteamCliGenerateOptions,

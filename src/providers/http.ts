@@ -17,6 +17,7 @@ import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../u
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { safeResolve } from '../util/pathUtils';
 import { sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -28,7 +29,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -403,14 +404,6 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
 }
 
 /**
- * Helper function to resolve file paths relative to basePath if they are relative,
- * otherwise use them as-is if they are absolute
- */
-function resolveFilePath(filePath: string): string {
-  return path.isAbsolute(filePath) ? filePath : path.resolve(cliState.basePath || '', filePath);
-}
-
-/**
  * Detects if a string is likely base64-encoded
  */
 function isBase64(str: string): boolean {
@@ -448,7 +441,7 @@ export async function generateSignature(
     switch (authType) {
       case 'pem': {
         if (signatureAuth.privateKeyPath) {
-          const resolvedPath = resolveFilePath(signatureAuth.privateKeyPath);
+          const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
           privateKey = fs.readFileSync(resolvedPath, 'utf8');
         } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
@@ -492,7 +485,7 @@ export async function generateSignature(
           keystoreData = Buffer.from(content, 'base64');
         } else if (signatureAuth.keystorePath) {
           // Use file path (existing behavior)
-          const resolvedPath = resolveFilePath(signatureAuth.keystorePath);
+          const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.keystorePath);
           keystoreData = fs.readFileSync(resolvedPath);
         } else {
           throw new Error(
@@ -586,7 +579,7 @@ export async function generateSignature(
               });
             } else {
               // Use file path (existing behavior)
-              const resolvedPath = resolveFilePath(signatureAuth.pfxPath);
+              const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
               logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
               try {
                 const stat = await fs.promises.stat(resolvedPath);
@@ -622,7 +615,7 @@ export async function generateSignature(
           } catch (err) {
             if (err instanceof Error) {
               if (err.message.includes('ENOENT') && signatureAuth.pfxPath) {
-                const resolvedPath = resolveFilePath(signatureAuth.pfxPath);
+                const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
                 throw new Error(`PFX file not found: ${resolvedPath}`);
               }
               if (err.message.includes('invalid') || err.message.includes('decrypt')) {
@@ -645,8 +638,8 @@ export async function generateSignature(
               );
             } else {
               // Use file paths (existing behavior)
-              const resolvedCertPath = resolveFilePath(signatureAuth.certPath);
-              const resolvedKeyPath = resolveFilePath(signatureAuth.keyPath);
+              const resolvedCertPath = safeResolve(cliState.basePath || '', signatureAuth.certPath);
+              const resolvedKeyPath = safeResolve(cliState.basePath || '', signatureAuth.keyPath);
               logger.debug(
                 `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
               );
@@ -1371,7 +1364,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
   if (tlsConfig.ca) {
     tlsOptions.ca = tlsConfig.ca;
   } else if (tlsConfig.caPath) {
-    const resolvedPath = resolveFilePath(tlsConfig.caPath);
+    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.caPath);
     tlsOptions.ca = fs.readFileSync(resolvedPath, 'utf8');
     logger.debug(`[HTTP Provider] Loaded CA certificate from ${resolvedPath}`);
   }
@@ -1404,7 +1397,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
         keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
       } else if ((tlsConfig as any).jksPath) {
         // Use file path
-        const resolvedPath = resolveFilePath((tlsConfig as any).jksPath);
+        const resolvedPath = safeResolve(cliState.basePath || '', (tlsConfig as any).jksPath);
         logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
         keystoreData = fs.readFileSync(resolvedPath);
       } else {
@@ -1454,7 +1447,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
     if (tlsConfig.cert) {
       tlsOptions.cert = tlsConfig.cert;
     } else if (tlsConfig.certPath) {
-      const resolvedPath = resolveFilePath(tlsConfig.certPath);
+      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.certPath);
       tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
       logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
     }
@@ -1463,7 +1456,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
     if (tlsConfig.key) {
       tlsOptions.key = tlsConfig.key;
     } else if (tlsConfig.keyPath) {
-      const resolvedPath = resolveFilePath(tlsConfig.keyPath);
+      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.keyPath);
       tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
       logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
     }
@@ -1488,7 +1481,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
     }
   } else if (tlsConfig.pfxPath) {
-    const resolvedPath = resolveFilePath(tlsConfig.pfxPath);
+    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.pfxPath);
     tlsOptions.pfx = fs.readFileSync(resolvedPath);
     logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
   }
