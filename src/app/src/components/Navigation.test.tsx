@@ -45,6 +45,37 @@ describe('Navigation', () => {
     expect(createButton).toBeInTheDocument();
   });
 
+  it('calls onToggleDarkMode when the dark mode toggle is clicked', () => {
+    const onToggleDarkMode = vi.fn();
+    render(
+      <MemoryRouter>
+        <Navigation darkMode={false} onToggleDarkMode={onToggleDarkMode} />
+      </MemoryRouter>,
+    );
+    const darkModeToggle = screen.getByRole('button', {
+      name: /switch to dark mode/i,
+    });
+    fireEvent.click(darkModeToggle);
+    expect(onToggleDarkMode).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders appropriately on mobile viewport sizes', () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(320);
+
+    render(
+      <MemoryRouter>
+        <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Create')).toBeInTheDocument();
+    expect(screen.getByText('Results')).toBeInTheDocument();
+    expect(screen.getByText('Model Audit')).toBeInTheDocument();
+    expect(screen.getByText('Prompts')).toBeInTheDocument();
+    expect(screen.getByText('Datasets')).toBeInTheDocument();
+    expect(screen.getByText('History')).toBeInTheDocument();
+  });
+
   it('activates the Model Audit NavLink on /model-audit path', () => {
     render(
       <MemoryRouter initialEntries={['/model-audit']}>
@@ -268,6 +299,21 @@ describe('Navigation', () => {
 
       allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
       topLevelModelAuditLink = allModelAuditLinks.find(
+        (link) => link.getAttribute('href') === '/model-audit',
+      );
+      expect(topLevelModelAuditLink).toBeDefined();
+      expect(topLevelModelAuditLink).not.toHaveClass('active');
+    });
+
+    it('does not activate Model Audit NavLink on deeply nested paths under excluded routes like /model-audit/history/details/123', () => {
+      render(
+        <MemoryRouter initialEntries={['/model-audit/history/details/123']}>
+          <Navigation darkMode={false} onToggleDarkMode={() => {}} />
+        </MemoryRouter>,
+      );
+
+      const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
+      const topLevelModelAuditLink = allModelAuditLinks.find(
         (link) => link.getAttribute('href') === '/model-audit',
       );
       expect(topLevelModelAuditLink).toBeDefined();

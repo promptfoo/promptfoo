@@ -14,7 +14,11 @@ describe('useModelAuditHistoryStore', () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       modelPath: '/path/to/model1',
-      results: { issues: [] },
+      results: {
+        issues: [],
+        path: '/path/to/model1',
+        success: true,
+      },
       hasErrors: false,
     },
     {
@@ -22,7 +26,11 @@ describe('useModelAuditHistoryStore', () => {
       createdAt: Date.now() - 1000,
       updatedAt: Date.now() - 1000,
       modelPath: '/path/to/model2',
-      results: { issues: [] },
+      results: {
+        issues: [],
+        path: '/path/to/model2',
+        success: false,
+      },
       hasErrors: true,
     },
   ];
@@ -105,6 +113,130 @@ describe('useModelAuditHistoryStore', () => {
 
     expect(result.current.historicalScans).toEqual(mockScans); // Should not be deleted from state
     expect(result.current.historyError).toBe('Failed to delete');
+  });
+
+  it('should handle search queries with special characters by encoding them', async () => {
+    const searchQuery = 'test&query=with?special characters';
+    const encodedSearchQuery = encodeURIComponent(searchQuery);
+
+    mockCallApi.mockImplementation((url: string) => {
+      expect(url).toContain(`search=${encodedSearchQuery}`);
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ scans: mockScans }),
+      } as Response);
+    });
+
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+
+    act(() => {
+      result.current.setSearchQuery(searchQuery);
+    });
+
+    await act(async () => {
+      await result.current.fetchHistoricalScans();
+    });
+  });
+
+  it('should handle API responses with malformed scan objects', async () => {
+    const malformedScan = {
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      modelPath: '/path/to/model1',
+      results: {
+        issues: [],
+        path: '/path/to/model1',
+        success: true,
+      },
+      hasErrors: false,
+      id: 'generated-id',
+    };
+
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          scans: [malformedScan],
+        }),
+    } as Response);
+
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+
+    await act(async () => {
+      await result.current.fetchHistoricalScans();
+    });
+
+    expect(result.current.historicalScans).toEqual([malformedScan]);
+    expect(result.current.isLoadingHistory).toBe(false);
+    expect(result.current.historyError).toBeNull();
+  });
+
+  it('should handle delete non-existent historical scan gracefully', async () => {
+    mockCallApi.mockResolvedValue({ ok: true } as Response);
+
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+
+    await act(async () => {
+      useModelAuditHistoryStore.setState({ historicalScans: mockScans });
+    });
+
+    const initialScans = result.current.historicalScans;
+
+    await act(async () => {
+      await result.current.deleteHistoricalScan('3');
+    });
+
+    expect(result.current.historicalScans).toEqual(initialScans);
+    expect(result.current.historyError).toBeNull();
+  });
+
+  it('should handle non-JSON API responses', async () => {
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.reject(new Error('Unexpected token < in JSON at position 0')),
+    } as Response);
+
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+
+    await act(async () => {
+      await result.current.fetchHistoricalScans();
+    });
+
+    expect(result.current.historicalScans).toEqual([]);
+    expect(result.current.isLoadingHistory).toBe(false);
+    expect(result.current.historyError).toBe('Failed to fetch history');
+  });
+
+  it('should handle negative pageSize and currentPage by normalizing the values', async () => {
+    let calledWithNegativeValues = false;
+    mockCallApi.mockImplementation(async (path: string) => {
+      const url = new URL(`http://localhost${path}`);
+      const limit = parseInt(url.searchParams.get('limit') || '0');
+      const offset = parseInt(url.searchParams.get('offset') || '0');
+
+      if (limit < 0 || offset < 0) {
+        calledWithNegativeValues = true;
+      }
+
+      return {
+        ok: true,
+        json: () => Promise.resolve({ scans: mockScans }),
+      } as Response;
+    });
+
+    const { result } = renderHook(() => useModelAuditHistoryStore());
+
+    act(() => {
+      result.current.setPageSize(-25);
+      result.current.setCurrentPage(-1);
+    });
+
+    await act(async () => {
+      await result.current.fetchHistoricalScans();
+    });
+
+    expect(calledWithNegativeValues).toBe(false);
+    expect(mockCallApi).toHaveBeenCalled();
   });
 
   it('should set page size', () => {

@@ -22,6 +22,19 @@ vi.mock('@app/pages/model-audit/components/ResultsTab', () => ({
   ),
 }));
 
+vi.mock('@mui/material', async () => {
+  const actual = await vi.importActual('@mui/material');
+  return {
+    ...actual,
+    useMediaQuery: vi.fn(() => true),
+    useTheme: vi.fn(() => ({
+      breakpoints: {
+        down: vi.fn(() => true),
+      },
+    })),
+  };
+});
+
 describe('ModelAuditResult', () => {
   const mockCallApi = vi.mocked(callApi);
   const mockNavigate = vi.fn();
@@ -128,6 +141,27 @@ describe('ModelAuditResult', () => {
     });
   });
 
+  it('handles delete operation fails', async () => {
+    mockCallApi.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(scan) } as Response);
+    mockCallApi.mockRejectedValueOnce(new Error('Failed to delete scan from API'));
+
+    render(
+      <MemoryRouter initialEntries={['/scans/1']}>
+        <Routes>
+          <Route path="/scans/:id" element={<ModelAuditResult />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      fireEvent.click(screen.getByLabelText('Delete scan permanently'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to delete scan from API')).toBeInTheDocument();
+    });
+  });
+
   it('handles download button click', async () => {
     mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);
     render(
@@ -183,6 +217,45 @@ describe('ModelAuditResult', () => {
       expect(screen.getByRole('heading', { level: 4, name: 'Scan 1' })).toBeInTheDocument();
       expect(screen.queryByText('Test Author')).not.toBeInTheDocument();
       expect(screen.queryByText('8 / 10')).not.toBeInTheDocument();
+    });
+  });
+
+  it('renders in mobile layout when isMobile is true', async () => {
+    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);
+    render(
+      <MemoryRouter initialEntries={['/scans/1']}>
+        <Routes>
+          <Route path="/scans/:id" element={<ModelAuditResult />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      const stackElement = screen.getByText('Scan 1').closest('div');
+      expect(stackElement).toHaveStyle('flex-direction: column;');
+    });
+  });
+
+  it('displays an error message when download fails', async () => {
+    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);
+    mockCreateObjectURL.mockImplementation(() => {
+      throw new Error('Failed to create object URL');
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/scans/1']}>
+        <Routes>
+          <Route path="/scans/:id" element={<ModelAuditResult />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      fireEvent.click(screen.getByLabelText('Download scan results as JSON'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to download scan results')).toBeInTheDocument();
     });
   });
 });

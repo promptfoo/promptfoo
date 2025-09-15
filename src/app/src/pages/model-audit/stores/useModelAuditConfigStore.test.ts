@@ -72,6 +72,25 @@ describe('useModelAuditConfigStore', () => {
     });
   });
 
+  it('should handle checkInstallation success with installed: false', async () => {
+    const { result } = renderHook(() => useModelAuditConfigStore());
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ installed: false, cwd: null }),
+    } as Response);
+
+    await act(async () => {
+      await result.current.checkInstallation();
+    });
+
+    expect(result.current.installationStatus).toEqual({
+      checking: false,
+      installed: false,
+      error: null,
+      cwd: null,
+    });
+  });
+
   it('should handle checkInstallation failure', async () => {
     const { result } = renderHook(() => useModelAuditConfigStore());
     mockCallApi.mockRejectedValue(new Error('Installation check failed'));
@@ -107,5 +126,44 @@ describe('useModelAuditConfigStore', () => {
     });
 
     expect(result.current.isScanning).toBe(true);
+  });
+
+  it('should clear all recent scans', () => {
+    const { result } = renderHook(() => useModelAuditConfigStore());
+
+    act(() => {
+      result.current.addRecentScan([{ path: '/test1', type: 'file', name: 'test1' }]);
+      result.current.addRecentScan([{ path: '/test2', type: 'file', name: 'test2' }]);
+    });
+
+    expect(result.current.recentScans.length).toBe(2);
+
+    act(() => {
+      result.current.clearRecentScans();
+    });
+
+    expect(result.current.recentScans).toEqual([]);
+  });
+
+  it('should set scan results and clear error', () => {
+    const { result } = renderHook(() => useModelAuditConfigStore());
+    const scanResults = {
+      passed: 5,
+      failed: 2,
+      errors: [],
+      alerts: [],
+      results: [],
+      version: '1.0.0',
+      path: '',
+      success: true,
+      issues: [],
+    };
+
+    act(() => {
+      result.current.setScanResults(scanResults);
+    });
+
+    expect(result.current.scanResults).toEqual(scanResults);
+    expect(result.current.error).toBeNull();
   });
 });
