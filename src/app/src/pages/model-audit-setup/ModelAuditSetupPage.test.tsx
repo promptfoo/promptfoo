@@ -198,13 +198,110 @@ describe('ModelAuditSetupPage', () => {
       // expect(mockSetShowOptionsDialog).toHaveBeenCalledWith(true);
     });
   });
+
+  it('prevents starting a scan when the tool is not installed', () => {
+    mockUseModelAuditConfigStore.mockReturnValue({
+      ...defaultStoreState,
+      installationStatus: { checking: false, installed: false, error: 'Not installed', cwd: null },
+      paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <ModelAuditSetupPage />
+      </MemoryRouter>,
+    );
+
+    const startScanButton = screen.getByText('Start Security Scan');
+    expect(startScanButton).toBeInTheDocument();
+    expect(startScanButton).toBeDisabled();
+  });
+
+  it('handles a timeout during scan', async () => {
+    mockUseModelAuditConfigStore.mockReturnValue({
+      ...defaultStoreState,
+      paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
+    } as any);
+
+    mockCallApi.mockImplementation(() => {
+      return new Promise((_, reject) =>
+        setTimeout(() => {
+          reject(new Error('Request timed out'));
+        }, 100),
+      );
+    });
+
+    render(
+      <MemoryRouter>
+        <ModelAuditSetupPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByText('Start Security Scan'));
+
+    await waitFor(() => {
+      expect(mockSetIsScanning).toHaveBeenCalledWith(true);
+    });
+
+    await waitFor(
+      () => {
+        expect(mockSetError).toHaveBeenCalledWith('Request timed out');
+        expect(mockSetIsScanning).toHaveBeenCalledWith(false);
+      },
+      { timeout: 500 },
+    );
+  });
+
+  it('handles API response with missing persisted property', async () => {
+    mockUseModelAuditConfigStore.mockReturnValue({
+      ...defaultStoreState,
+      paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
+    } as any);
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ auditId: '123' }),
+    } as Response);
+
+    render(
+      <MemoryRouter>
+        <ModelAuditSetupPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByText('Start Security Scan'));
+
+    await waitFor(() => {
+      expect(mockSetIsScanning).toHaveBeenCalledWith(true);
+      expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scan', expect.any(Object));
+      expect(mockSetScanResults).toHaveBeenCalledWith({ auditId: '123' });
+      expect(mockAddRecentScan).toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(mockSetIsScanning).toHaveBeenCalledWith(false);
+    });
+  });
+
+  it('prevents starting a scan when no paths are selected', () => {
+    render(
+      <MemoryRouter>
+        <ModelAuditSetupPage />
+      </MemoryRouter>,
+    );
+
+    const startScanButton = screen.getByText('Start Security Scan');
+    fireEvent.click(startScanButton);
+
+    expect(mockSetIsScanning).not.toHaveBeenCalled();
+    expect(mockSetError).toHaveBeenCalledWith('Please add at least one path to scan.');
+  });
 });
 
 // Mock ConfigurationTab to allow testing interactions
 vi.mock('../model-audit/components/ConfigurationTab', () => ({
   default: (props: any) => (
     <div data-testid="configuration-tab">
-      <button onClick={props.onScan}>Start Security Scan</button>
+      <button onClick={props.onScan} disabled={props.installationStatus?.installed === false}>
+        Start Security Scan
+      </button>
       <button onClick={props.onShowOptions}>Show Options</button>
     </div>
   ),
