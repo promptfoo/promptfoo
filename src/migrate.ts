@@ -33,8 +33,20 @@ export async function runDbMigrations(): Promise<void> {
     setImmediate(() => {
       try {
         const db = getDb();
-        const migrationsFolder = path.join(currentDir, '..', 'drizzle');
-        logger.debug(`Running database migrations...`);
+
+        // Handle different deployment scenarios for migration folder location
+        let migrationsFolder: string;
+        if (currentDir.includes('dist/src')) {
+          // When running from bundled server (e.g., dist/src/server/index.js)
+          // Navigate to project root and find drizzle folder
+          const projectRoot = currentDir.split('dist/src')[0];
+          migrationsFolder = path.join(projectRoot, 'drizzle');
+        } else {
+          // When running from source (e.g., src/migrate.ts)
+          migrationsFolder = path.join(currentDir, '..', 'drizzle');
+        }
+
+        logger.debug(`Running database migrations from: ${migrationsFolder}`);
         migrate(db, { migrationsFolder });
         logger.debug('Database migrations completed');
         resolve();
