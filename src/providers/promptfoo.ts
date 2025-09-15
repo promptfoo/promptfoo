@@ -5,7 +5,7 @@ import {
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
 } from '../redteam/remoteGeneration';
-import { fetchWithRetries } from '../util/fetch';
+import { fetchWithRetries } from '../util/fetch/index';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
