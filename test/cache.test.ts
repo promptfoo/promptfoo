@@ -83,19 +83,21 @@ const mockedFetchResponse = (
 describe('cache configuration', () => {
   const originalEnv = process.env;
   let mkdirSyncMock: jest.SpyInstance;
-  let existsSyncMock: jest.SpyInstance;
+  let accessSyncMock: jest.SpyInstance;
 
   beforeEach(() => {
     jest.resetModules();
     process.env = { ...originalEnv };
     mkdirSyncMock = jest.spyOn(fs, 'mkdirSync').mockImplementation();
-    existsSyncMock = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+    accessSyncMock = jest.spyOn(fs, 'accessSync').mockImplementation(() => {
+      throw new Error('ENOENT: no such file or directory');
+    });
   });
 
   afterEach(() => {
     process.env = originalEnv;
     mkdirSyncMock.mockRestore();
-    existsSyncMock.mockRestore();
+    accessSyncMock.mockRestore();
   });
 
   it('should use memory cache in test environment', async () => {
@@ -132,7 +134,7 @@ describe('cache configuration', () => {
   });
 
   it('should handle cache directory creation when it exists', async () => {
-    existsSyncMock.mockReturnValue(true);
+    accessSyncMock.mockImplementation(() => {}); // No error means directory exists
     process.env.NODE_ENV = 'production';
 
     const cacheModule = await import('../src/cache');

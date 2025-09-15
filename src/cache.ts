@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
 
 import cacheManager from 'cache-manager';
@@ -23,7 +23,10 @@ export function getCache() {
     if (cacheType === 'disk' && enabled) {
       cachePath =
         getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
-      if (!fs.existsSync(cachePath)) {
+      // Modern Node.js pattern: use fs.existsSync and fs.mkdirSync with proper error handling
+      try {
+        fs.accessSync(cachePath);
+      } catch {
         logger.info(`Creating cache folder at ${cachePath}.`);
         fs.mkdirSync(cachePath, { recursive: true });
       }
