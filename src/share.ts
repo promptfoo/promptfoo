@@ -492,7 +492,7 @@ export async function hasModelAuditBeenShared(audit: ModelAudit): Promise<boolea
         );
     }
   } catch (e) {
-    logger.error(`[hasModelAuditBeenShared]: error checking if model audit has been shared: ${e}`);
+    logger.debug(`[hasModelAuditBeenShared]: error checking if model audit has been shared: ${e}`);
     return false;
   }
 }
