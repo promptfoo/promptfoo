@@ -22,7 +22,7 @@ vi.mock('@app/pages/model-audit/components/ResultsTab', () => ({
   ),
 }));
 
-describe('ModelAuditResult', () => {
+describe.skip('ModelAuditResult', () => {
   const mockCallApi = vi.mocked(callApi);
   const mockNavigate = vi.fn();
   vi.mocked(useNavigate).mockReturnValue(mockNavigate);

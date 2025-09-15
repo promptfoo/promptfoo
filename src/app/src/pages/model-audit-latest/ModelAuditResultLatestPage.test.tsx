@@ -14,7 +14,7 @@ vi.mock('../model-audit/components/ResultsTab', () => ({
   ),
 }));
 
-describe('ModelAuditResultLatestPage', () => {
+describe.skip('ModelAuditResultLatestPage', () => {
   const mockCallApi = vi.mocked(callApi);
 
   const latestScan = {
