@@ -1552,5 +1552,49 @@ describe('useTableStore', () => {
 
       expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'bias']);
     });
+
+    it('should allow metadata filtering on plugin/strategy/severity fields for non-redteam evaluations', () => {
+      // This test documents that metadata filtering (field/value pairs) is separate
+      // from redteam filtering (predefined types). Users can still filter on metadata
+      // fields named "plugin", "strategy", or "severity" using metadata filters.
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: { providers: [] }, // No redteam config
+        results: { results: [] } as any,
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      } as any;
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      const state = useTableStore.getState();
+
+      // Redteam-specific filter types should not be available
+      expect(state.filters.options.plugin).toBeUndefined();
+      expect(state.filters.options.strategy).toBeUndefined();
+      expect(state.filters.options.severity).toBeUndefined();
+
+      // But metadata filtering is still available for any field names
+      expect(state.filters.options.metadata).toEqual([]);
+
+      // User can still add metadata filters for fields named "plugin", "strategy", etc.
+      act(() => {
+        useTableStore.getState().addFilter({
+          type: 'metadata',
+          field: 'plugin',
+          operator: 'equals',
+          value: 'my-custom-plugin',
+        });
+      });
+
+      const updatedState = useTableStore.getState();
+      const metadataFilter = Object.values(updatedState.filters.values)[0];
+      expect(metadataFilter?.type).toBe('metadata');
+      expect(metadataFilter?.field).toBe('plugin');
+      expect(metadataFilter?.value).toBe('my-custom-plugin');
+    });
   });
 });

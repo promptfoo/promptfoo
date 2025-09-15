@@ -68,6 +68,10 @@ function buildRedteamFilterOptions(config?: Partial<UnifiedConfig> | null): {
 } {
   const isRedteam = isRedteamEvaluation(config);
 
+  // For non-redteam evaluations, don't provide redteam-specific filter options.
+  // Note: This is separate from metadata filtering - if users have metadata fields
+  // named "plugin", "strategy", or "severity", they can still filter on them using
+  // the metadata filter type (which uses field/value pairs).
   if (!isRedteam) {
     return {};
   }
