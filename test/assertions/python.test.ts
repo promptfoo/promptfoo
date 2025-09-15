@@ -476,4 +476,60 @@ describe('Python file references', () => {
     expect(pythonResult).not.toHaveProperty('componentResults');
     expect(pythonResult).not.toHaveProperty('tokensUsed');
   });
+
+  describe('Python threshold edge cases', () => {
+    const baseParams = {
+      prompt: 'test',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '0' },
+    };
+
+    it('should FAIL when score=0 and no threshold', async () => {
+      const assertion: Assertion = {
+        type: 'python',
+        value: 'return 0',
+      };
+
+      const result: GradingResult = await runAssertion({
+        ...baseParams,
+        assertion,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+    });
+
+    it('should PASS when score=0 and threshold=0', async () => {
+      const assertion: Assertion = {
+        type: 'python',
+        value: 'return 0',
+        threshold: 0,
+      };
+
+      const result: GradingResult = await runAssertion({
+        ...baseParams,
+        assertion,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0);
+    });
+
+    it('should FAIL when score=0 and threshold=0.1', async () => {
+      const assertion: Assertion = {
+        type: 'python',
+        value: 'return 0',
+        threshold: 0.1,
+      };
+
+      const result: GradingResult = await runAssertion({
+        ...baseParams,
+        assertion,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+    });
+  });
 });

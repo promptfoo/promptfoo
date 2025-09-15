@@ -2100,6 +2100,48 @@ describe('runAssertion', () => {
         reason: 'Perplexity 1.28 is greater than threshold 0.2',
       });
     });
+
+    it('should PASS when no threshold is specified (default behavior)', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true); // No threshold = always pass
+    });
+
+    it('should respect threshold=0 as a valid threshold', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      // Perplexity will be > 0, so with threshold=0, should fail
+      expect(result.pass).toBe(false);
+    });
   });
 
   describe('perplexity-score assertion', () => {
@@ -2145,6 +2187,48 @@ describe('runAssertion', () => {
         pass: false,
         reason: 'Perplexity score 0.44 is less than threshold 0.5',
       });
+    });
+
+    it('should PASS when no threshold is specified for perplexity-score', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity-score',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true); // No threshold = always pass
+    });
+
+    it('should respect threshold=0 as valid for perplexity-score', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: jest.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity-score',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      // Perplexity score will be > 0, so should pass with threshold=0
+      expect(result.pass).toBe(true);
     });
   });
 
