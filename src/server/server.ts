@@ -122,12 +122,14 @@ export function createApp() {
       const { limit, offset, search, sort, order, datasetId, focusedEvalId } = req.query;
 
       // Validate and sanitize query params
-      const allowedSorts = new Set(['createdAt', 'description'] as const);
-      const allowedOrders = new Set(['asc', 'desc'] as const);
-      const safeSort = allowedSorts.has(sort as any)
-        ? (sort as 'createdAt' | 'description')
+      const allowedSorts = ['createdAt', 'description'] as const;
+      const allowedOrders = ['asc', 'desc'] as const;
+      const safeSort = allowedSorts.includes(sort as string)
+        ? (sort as typeof allowedSorts[number])
         : undefined;
-      const safeOrder = allowedOrders.has(order as any) ? (order as 'asc' | 'desc') : undefined;
+      const safeOrder = allowedOrders.includes(order as string)
+        ? (order as typeof allowedOrders[number])
+        : undefined;
       const safeLimit = Number.isFinite(Number(limit))
         ? Math.max(1, Math.min(100, Number(limit)))
         : undefined;
