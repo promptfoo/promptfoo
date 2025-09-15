@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq, like, or } from 'drizzle-orm';
 import { getDb } from '../database';
 import { modelAuditsTable } from '../database/tables';
 import logger from '../logger';
@@ -165,6 +165,70 @@ export default class ModelAudit {
       .all();
 
     return results.map((r) => new ModelAudit({ ...r, persisted: true }));
+  }
+
+  static async getManyWithPagination(params: {
+    limit: number;
+    offset: number;
+    search?: string;
+    sort?: 'name' | 'status' | 'createdAt';
+    order?: 'asc' | 'desc';
+  }): Promise<{ audits: ModelAudit[]; total: number }> {
+    const db = getDb();
+    const { limit, offset, search, sort = 'createdAt', order = 'desc' } = params;
+
+    // Build WHERE conditions for search
+    const searchConditions = [];
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim().toLowerCase()}%`;
+      searchConditions.push(
+        or(
+          like(modelAuditsTable.id, searchTerm),
+          like(modelAuditsTable.name, searchTerm),
+          like(modelAuditsTable.modelPath, searchTerm),
+          like(modelAuditsTable.author, searchTerm),
+        ),
+      );
+    }
+
+    const whereClause = searchConditions.length > 0 ? and(...searchConditions) : undefined;
+
+    // Build ORDER BY clause
+    let orderByClause;
+    switch (sort) {
+      case 'name':
+        orderByClause = order === 'asc' ? asc(modelAuditsTable.name) : desc(modelAuditsTable.name);
+        break;
+      case 'status':
+        orderByClause = order === 'asc' ? asc(modelAuditsTable.hasErrors) : desc(modelAuditsTable.hasErrors);
+        break;
+      case 'createdAt':
+      default:
+        orderByClause = order === 'asc' ? asc(modelAuditsTable.createdAt) : desc(modelAuditsTable.createdAt);
+        break;
+    }
+
+    // Get total count for pagination
+    const [{ count: total }] = await db
+      .select({ count: count() })
+      .from(modelAuditsTable)
+      .where(whereClause)
+      .all();
+
+    // Get paginated results
+    const results = await db
+      .select()
+      .from(modelAuditsTable)
+      .where(whereClause)
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset)
+      .all();
+
+    return {
+      audits: results.map((r) => new ModelAudit({ ...r, persisted: true })),
+      total,
+    };
   }
 
   static async getLatest(limit: number = 10): Promise<ModelAudit[]> {

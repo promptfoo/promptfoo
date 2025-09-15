@@ -482,53 +482,18 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
 
     const { limit, offset, search, sort, order } = queryResult.data;
 
-    // For now, use basic implementation until ModelAudit supports server-side features
-    const audits = await ModelAudit.getMany(limit + offset);
-
-    // Apply client-side filtering for search (temporary until server-side implementation)
-    let filteredAudits = audits;
-    if (search) {
-      filteredAudits = audits.filter(
-        (audit) =>
-          audit.id.toLowerCase().includes(search.toLowerCase()) ||
-          (audit.name && audit.name.toLowerCase().includes(search.toLowerCase())) ||
-          audit.modelPath.toLowerCase().includes(search.toLowerCase()) ||
-          (audit.author && audit.author.toLowerCase().includes(search.toLowerCase())),
-      );
-    }
-
-    // Apply client-side sorting (temporary until server-side implementation)
-    filteredAudits.sort((a, b) => {
-      let aVal: any, bVal: any;
-      switch (sort) {
-        case 'name':
-          aVal = a.name || '';
-          bVal = b.name || '';
-          break;
-        case 'status':
-          aVal = a.hasErrors ? 'error' : 'clean';
-          bVal = b.hasErrors ? 'error' : 'clean';
-          break;
-        case 'createdAt':
-        default:
-          aVal = a.createdAt;
-          bVal = b.createdAt;
-          break;
-      }
-
-      if (order === 'asc') {
-        return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-      } else {
-        return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
-      }
+    // Use server-side pagination, search, and sorting for proper performance
+    const { audits, total } = await ModelAudit.getManyWithPagination({
+      limit,
+      offset,
+      search,
+      sort,
+      order,
     });
 
-    // Apply pagination
-    const paginatedAudits = filteredAudits.slice(offset, offset + limit);
-
     const response = ZScansResponse.parse({
-      scans: paginatedAudits.map((audit) => audit.toJSON()),
-      total: filteredAudits.length,
+      scans: audits.map((audit) => audit.toJSON()),
+      total,
     });
 
     res.json(response);
