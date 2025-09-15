@@ -12,7 +12,7 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 

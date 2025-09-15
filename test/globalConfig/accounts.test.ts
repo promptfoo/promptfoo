@@ -18,7 +18,7 @@ import {
 } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import telemetry from '../../src/telemetry';
-import { fetchWithTimeout } from '../../src/util/fetch';
+import { fetchWithTimeout } from '../../src/util/fetch/index';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 jest.mock('../../src/util/fetch', () => ({

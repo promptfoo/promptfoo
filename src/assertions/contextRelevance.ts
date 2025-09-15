@@ -2,7 +2,7 @@ import { matchesContextRelevance } from '../matchers';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Handles context-relevance assertions by evaluating whether the provided context

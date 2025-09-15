@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import NodeCache from 'node-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import {
   datasetsTable,
   evalResultsTable,
@@ -26,7 +26,7 @@ import {
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
 

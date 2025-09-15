@@ -1,4 +1,4 @@
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
 
 interface TraceErrorSpansValue {

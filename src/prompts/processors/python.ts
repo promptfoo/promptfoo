@@ -8,7 +8,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import type { Options as PythonShellOptions } from 'python-shell';
 
-import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types';
+import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types/index';
 
 /**
  * Python prompt function. Runs a specific function from the python file.

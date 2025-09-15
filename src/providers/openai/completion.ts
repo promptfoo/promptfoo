@@ -10,7 +10,11 @@ import {
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions } from './types';
 

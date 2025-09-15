@@ -2,7 +2,7 @@ import Clone from 'rfdc';
 import { z } from 'zod';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';

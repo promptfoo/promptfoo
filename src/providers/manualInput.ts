@@ -1,7 +1,7 @@
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 
-import type { ApiProvider, ProviderResponse } from '../types';
+import type { ApiProvider, ProviderResponse } from '../types/index';
 
 interface ManualInputProviderOptions {
   id?: string;
