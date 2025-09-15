@@ -88,7 +88,7 @@ async function fetchRemoteTestCases(
     email: getUserEmail(),
   });
   try {
-    const { data, status } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -100,20 +100,7 @@ async function fetchRemoteTestCases(
       REQUEST_TIMEOUT_MS,
     );
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
-      // Parse error message with schema {error: string, message: string}
-      let errorDisplay: string;
-      if (data && typeof data === 'object' && 'error' in data && 'message' in data) {
-        if (data.error === 'Internal Server Error') {
-          errorDisplay = data.message as string;
-          // If present, remove the "Plugin action execution failed:" prefix
-          errorDisplay = errorDisplay.replace('Plugin action execution failed:', '');
-        } else {
-          errorDisplay = JSON.stringify(data);
-        }
-      } else {
-        errorDisplay = JSON.stringify(data);
-      }
-      logger.error(`Error generating test cases for ${key}: ${errorDisplay}`);
+      logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
     }
     const ret = (data as { result: TestCase[] }).result;
