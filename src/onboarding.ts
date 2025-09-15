@@ -161,7 +161,7 @@ class CustomApiProvider {
     // Add your custom API logic here
     // Use options like: \`this.config.temperature\`, \`this.config.max_tokens\`, etc.
 
-    console.log('Vars for this test case:', JSON.stringify(context.vars));
+    logger.info('Vars for this test case:', JSON.stringify(context.vars));
 
     return {
       // Required
