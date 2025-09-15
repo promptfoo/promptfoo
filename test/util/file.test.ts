@@ -9,7 +9,7 @@ import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
 } from '../../src/util/file';
-import { safeJoin, safeResolve } from '../../src/util/file.node';
+import { safeJoin, safeResolve } from '../../src/util/file';
 import {
   isAudioFile,
   isImageFile,
