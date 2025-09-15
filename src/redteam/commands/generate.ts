@@ -14,10 +14,10 @@ import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { getProviderIds } from '../../providers';
+import { getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
+import { isRunningUnderNpx, printBorder, setupEnv } from '../../util/index';
 import {
   checkCloudPermissions,
   getCloudDatabaseId,

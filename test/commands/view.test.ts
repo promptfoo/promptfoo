@@ -3,7 +3,7 @@ import { viewCommand } from '../../src/commands/view';
 import { getDefaultPort } from '../../src/constants';
 import { startServer } from '../../src/server/server';
 import telemetry from '../../src/telemetry';
-import { setupEnv } from '../../src/util';
+import { setupEnv } from '../../src/util/index';
 import { setConfigDirectoryPath } from '../../src/util/config/manage';
 import { BrowserBehavior } from '../../src/util/server';
 

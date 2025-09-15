@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';

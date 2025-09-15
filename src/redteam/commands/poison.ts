@@ -6,7 +6,7 @@ import yaml from 'js-yaml';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { setupEnv } from '../../util';
+import { setupEnv } from '../../util/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 import type { Command } from 'commander';
 

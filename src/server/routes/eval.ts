@@ -9,7 +9,7 @@ import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { EvalResultsFilterMode } from '../../types/index';
-import { deleteEval, updateResult, writeResultsToDatabase } from '../../util/database';
+import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 import type { Request, Response } from 'express';
@@ -531,5 +531,23 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
     res.json({ message: 'Eval deleted successfully' });
   } catch {
     res.status(500).json({ error: 'Failed to delete eval' });
+  }
+});
+
+/**
+ * Bulk delete evals.
+ */
+evalRouter.delete('/', (req: Request, res: Response) => {
+  const ids = req.body.ids;
+  if (!Array.isArray(ids)) {
+    res.status(400).json({ error: 'Ids must be an array' });
+    return;
+  }
+
+  try {
+    deleteEvals(ids);
+    res.status(204).send();
+  } catch {
+    res.status(500).json({ error: 'Failed to delete evals' });
   }
 });
