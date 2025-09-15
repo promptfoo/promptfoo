@@ -7,12 +7,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ModelAudit from './ModelAudit';
-import { useModelAuditStore } from './store';
+import { useModelAuditConfigStore } from './stores';
 
 import type { ScanResult } from './ModelAudit.types';
 
 vi.mock('@app/utils/api');
-vi.mock('./store');
+vi.mock('./stores');
 
 vi.mock('./components/ResultsTab', () => ({
   default: ({
@@ -37,7 +37,7 @@ const theme = createTheme();
 
 describe('ModelAudit', () => {
   const mockCallApi = vi.mocked(callApi);
-  const mockUseModelAuditStore = vi.mocked(useModelAuditStore);
+  const mockUseModelAuditConfigStore = vi.mocked(useModelAuditConfigStore);
   const mockAddRecentScan = vi.fn();
   const mockCheckInstallation = vi.fn();
 
@@ -116,7 +116,7 @@ describe('ModelAudit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCheckInstallation.mockResolvedValue(undefined);
-    mockUseModelAuditStore.mockReturnValue(getDefaultStoreState());
+    mockUseModelAuditConfigStore.mockReturnValue(getDefaultStoreState());
 
     // Mock successful API responses
     mockCallApi.mockImplementation(async (path: string) => {
@@ -184,7 +184,7 @@ describe('ModelAudit', () => {
     });
 
     it('should display installation status in header', () => {
-      mockUseModelAuditStore.mockReturnValue({
+      mockUseModelAuditConfigStore.mockReturnValue({
         ...getDefaultStoreState(),
         installationStatus: {
           checking: false,
@@ -207,7 +207,7 @@ describe('ModelAudit', () => {
     });
 
     it('should call `checkInstallation` when the user clicks the refresh (IconButton) in the header when installationStatus.installed is false', async () => {
-      mockUseModelAuditStore.mockReturnValue({
+      mockUseModelAuditConfigStore.mockReturnValue({
         ...getDefaultStoreState(),
         installationStatus: {
           checking: false,
@@ -238,7 +238,7 @@ describe('ModelAudit', () => {
 
     it('should display the error message from `installationStatus.error` in the tooltip when installationStatus.installed is false and error is set', () => {
       const errorMessage = 'Failed to connect to server.';
-      mockUseModelAuditStore.mockReturnValue({
+      mockUseModelAuditConfigStore.mockReturnValue({
         ...getDefaultStoreState(),
         installationStatus: {
           checking: false,
@@ -286,7 +286,7 @@ describe('ModelAudit', () => {
       expect(screen.getByText('Configuration')).toBeInTheDocument();
 
       // Mock the store with the added path
-      mockUseModelAuditStore.mockReturnValue({
+      mockUseModelAuditConfigStore.mockReturnValue({
         ...getDefaultStoreState(),
         paths: [{ path: '/test/model.safetensors', type: 'file', name: 'model.safetensors' }],
         addPath: mockAddPath,
@@ -319,7 +319,7 @@ describe('ModelAudit', () => {
       });
 
       // Mock successful scan completion
-      mockUseModelAuditStore.mockReturnValue({
+      mockUseModelAuditConfigStore.mockReturnValue({
         ...getDefaultStoreState(),
         scanResults: mockScanResults,
         activeTab: 1,
@@ -343,7 +343,7 @@ describe('ModelAudit', () => {
     it('should open and close the ScannedFilesDialog when requested', async () => {
       const mockSetShowFilesDialog = vi.fn();
 
-      mockUseModelAuditStore.mockReturnValue({
+      mockUseModelAuditConfigStore.mockReturnValue({
         ...getDefaultStoreState(),
         scanResults: mockScanResults,
         activeTab: 1,
