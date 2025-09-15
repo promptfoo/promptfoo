@@ -252,7 +252,7 @@ export default function EvalsDataGrid({
 
   // Reset to first page when search or sort changes (only if not already on page 0)
   useEffect(() => {
-    setPaginationModel((prev) => prev.page !== 0 ? ({ ...prev, page: 0 }) : prev);
+    setPaginationModel((prev) => (prev.page !== 0 ? { ...prev, page: 0 } : prev));
   }, [debouncedSearchText, sortModel]);
 
   /**
