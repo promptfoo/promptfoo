@@ -337,9 +337,9 @@ describe('Plugins', () => {
     // Test the mock setup - verify the constants were mocked correctly
     // The mock is set up at the top of the file with the correct plugins
     const expectedGatedPlugins = ['beavertails', 'unsafebench', 'aegis'];
-    
+
     // This test verifies our mock is working and contains the expected plugins
-    expectedGatedPlugins.forEach(plugin => {
+    expectedGatedPlugins.forEach((plugin) => {
       expect(expectedGatedPlugins).toContain(plugin);
     });
     expect(expectedGatedPlugins).toHaveLength(3);
