@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { promisify } from 'util';
 
 import chalk from 'chalk';
 import winston from 'winston';
@@ -8,6 +9,13 @@ import { getConfigDirectoryPath } from './util/config/manage';
 import { sanitizeBody, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
+
+// Promisified fs operations for Node.js 20+ modernization
+const fsAccess = promisify(fs.access);
+const fsMkdir = promisify(fs.mkdir);
+const fsReaddir = promisify(fs.readdir);
+const fsStat = promisify(fs.stat);
+const fsUnlink = promisify(fs.unlink);
 
 type LogCallback = (message: string) => void;
 export let globalLogCallback: LogCallback | null = null;
@@ -180,35 +188,47 @@ export function isDebugEnabled(): boolean {
 /**
  * Creates log directory and cleans up old log files
  */
-function setupLogDirectory(): string {
+async function setupLogDirectory(): Promise<string> {
   const configDir = getConfigDirectoryPath(true);
   const logDir = path.join(configDir, 'logs');
 
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
+  try {
+    await fsAccess(logDir);
+  } catch {
+    await fsMkdir(logDir, { recursive: true });
   }
 
   // Clean up old log files
   try {
-    const logFiles = fs
-      .readdirSync(logDir)
-      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
-      .map((file) => ({
-        name: file,
-        path: path.join(logDir, file),
-        mtime: fs.statSync(path.join(logDir, file)).mtime,
-      }))
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
+    const files = await fsReaddir(logDir);
+    const logFiles = await Promise.all(
+      files
+        .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
+        .map(async (file) => {
+          const filePath = path.join(logDir, file);
+          const stats = await fsStat(filePath);
+          return {
+            name: file,
+            path: filePath,
+            mtime: stats.mtime,
+          };
+        }),
+    );
+
+    logFiles.sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
 
     // Remove old files
     if (logFiles.length >= MAX_LOG_FILES) {
-      logFiles.slice(MAX_LOG_FILES).forEach((file) => {
-        try {
-          fs.unlinkSync(file.path);
-        } catch (error) {
-          logger.warn(`Error removing old log file: ${file.name} ${error}`);
-        }
-      });
+      const filesToRemove = logFiles.slice(MAX_LOG_FILES);
+      await Promise.all(
+        filesToRemove.map(async (file) => {
+          try {
+            await fsUnlink(file.path);
+          } catch (error) {
+            logger.warn(`Error removing old log file: ${file.name} ${error}`);
+          }
+        }),
+      );
     }
   } catch (error) {
     logger.warn(`Error cleaning up old log files: ${error}`);
@@ -220,8 +240,8 @@ function setupLogDirectory(): string {
 /**
  * Creates a new log file for the current CLI run
  */
-function createRunLogFile(): string {
-  const logDir = setupLogDirectory();
+async function createRunLogFile(): Promise<string> {
+  const logDir = await setupLogDirectory();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').split('.')[0];
   const logFile = path.join(logDir, `promptfoo-${timestamp}.log`);
   return logFile;
@@ -233,13 +253,13 @@ let runLogTransport: winston.transports.FileTransportInstance | null = null;
 /**
  * Initialize per-run logging
  */
-export function initializeRunLogging(): void {
+export async function initializeRunLogging(): Promise<void> {
   if (runLogTransport) {
     return;
   }
 
   try {
-    const logFile = createRunLogFile();
+    const logFile = await createRunLogFile();
     runLogTransport = new winston.transports.File({
       filename: logFile,
       level: 'debug', // Capture all levels in the file
