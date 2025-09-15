@@ -42,10 +42,6 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   return Array.from(metrics).sort();
 }
 
-function isRedteamEvaluation(config?: Partial<UnifiedConfig> | null): boolean {
-  return Boolean(config?.redteam);
-}
-
 function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
   const strategyIds =
     strategies?.map((strategy) => (typeof strategy === 'string' ? strategy : strategy.id)) ?? [];
@@ -53,12 +49,15 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
   return Array.from(new Set([...strategyIds, 'basic']));
 }
 
-function buildRedteamFilterOptions(config?: Partial<UnifiedConfig> | null): {
-  plugin?: string[];
-  strategy?: string[];
-  severity?: string[];
-} {
-  const isRedteam = isRedteamEvaluation(config);
+/**
+ * The `plugin`, `strategy`, and `severity` filter options are only available for redteam evaluations.
+ * This function conditionally constructs these based on whether the evaluation was a red team. If it was not,
+ * it returns an empty object.
+ */
+function buildRedteamFilterOptions(
+  config?: Partial<UnifiedConfig> | null,
+): { plugin: string[]; strategy: string[]; severity: string[] } | {} {
+  const isRedteam = Boolean(config?.redteam);
 
   // For non-redteam evaluations, don't provide redteam-specific filter options.
   // Note: This is separate from metadata filtering - if users have metadata fields
@@ -234,6 +233,7 @@ interface TableState {
     options: {
       metric: string[];
       metadata: string[];
+      // Redteam-specific filter options are only available for redteam evaluations.
       plugin?: string[];
       strategy?: string[];
       severity?: string[];
