@@ -1,5 +1,5 @@
 import { desc, eq } from 'drizzle-orm';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { modelAuditsTable } from '../database/tables';
 import logger from '../logger';
 import { randomSequence } from '../util/createHash';

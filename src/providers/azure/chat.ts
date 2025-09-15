@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import invariant from '../../util/invariant';

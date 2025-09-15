@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,

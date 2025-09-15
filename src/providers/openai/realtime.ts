@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { OpenAiGenericProvider } from '.';
 import { OPENAI_REALTIME_MODELS } from './util';
 
