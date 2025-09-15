@@ -124,12 +124,14 @@ export function createApp() {
       // Validate and sanitize query params
       const allowedSorts = ['createdAt', 'description'] as const;
       const allowedOrders = ['asc', 'desc'] as const;
-      const safeSort = typeof sort === 'string' && allowedSorts.includes(sort as any)
-        ? (sort as 'createdAt' | 'description')
-        : undefined;
-      const safeOrder = typeof order === 'string' && allowedOrders.includes(order as any)
-        ? (order as 'asc' | 'desc')
-        : undefined;
+      const safeSort =
+        typeof sort === 'string' && allowedSorts.includes(sort as any)
+          ? (sort as 'createdAt' | 'description')
+          : undefined;
+      const safeOrder =
+        typeof order === 'string' && allowedOrders.includes(order as any)
+          ? (order as 'asc' | 'desc')
+          : undefined;
       const safeLimit = Number.isFinite(Number(limit))
         ? Math.max(1, Math.min(100, Number(limit)))
         : undefined;
