@@ -630,6 +630,72 @@ describe('FiltersForm', () => {
         }),
       );
     });
+
+    it('should default to metadata filter for standard evaluations (no strategy options)', () => {
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: {},
+          options: {
+            metric: [], // No metrics available
+            metadata: [],
+            plugin: [], // No plugins
+            strategy: [], // No strategies - key change
+            severity: [],
+          },
+          appliedCount: 0,
+        },
+        addFilter: mockAddFilter,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        removeAllFilters: mockRemoveAllFilters,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      } as any);
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={vi.fn()} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      expect(mockAddFilter).toHaveBeenCalledWith({
+        type: 'metadata', // Should default to metadata when no other options
+        operator: 'equals',
+        value: '',
+      });
+    });
+
+    it('should show strategy options and default to strategy for redteam evaluations', () => {
+      mockedUseTableStore.mockReturnValue({
+        filters: {
+          values: {},
+          options: {
+            metric: [],
+            metadata: [],
+            plugin: [], // No plugins so it goes to next option
+            strategy: ['jailbreak', 'basic'], // Multiple strategies available
+            severity: ['high', 'medium'],
+          },
+          appliedCount: 0,
+        },
+        addFilter: mockAddFilter,
+        updateFilter: mockUpdateFilter,
+        removeFilter: mockRemoveFilter,
+        removeAllFilters: mockRemoveAllFilters,
+        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      } as any);
+
+      render(
+        <WithTheme>
+          <FiltersForm open={true} onClose={vi.fn()} anchorEl={anchorEl} />
+        </WithTheme>,
+      );
+
+      expect(mockAddFilter).toHaveBeenCalledWith({
+        type: 'strategy', // Should default to strategy when available
+        operator: 'equals',
+        value: '',
+      });
+    });
   });
 
   it('should ensure dropdown menus are fully visible and functional with overflow hidden', async () => {
