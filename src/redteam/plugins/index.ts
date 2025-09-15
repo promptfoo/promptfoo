@@ -50,7 +50,7 @@ import { UnverifiableClaimsPlugin } from './unverifiableClaims';
 import { VLGuardPlugin } from './vlguard';
 import { XSTestPlugin } from './xstest';
 
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
 import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {

@@ -8,7 +8,7 @@ import { extractJsonObjects } from '../util/json';
 import { extractVariablesFromTemplates } from '../util/templates';
 import type { SingleBar } from 'cli-progress';
 
-import type { ApiProvider, TestCase, TestSuite, VarMapping } from '../types';
+import type { ApiProvider, TestCase, TestSuite, VarMapping } from '../types/index';
 
 interface SynthesizeOptions {
   instructions?: string;

@@ -20,7 +20,7 @@ import type {
   CallApiContextParams,
   GuardrailResponse,
   ProviderResponse,
-} from '../../types';
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';

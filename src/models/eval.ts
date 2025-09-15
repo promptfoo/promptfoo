@@ -33,7 +33,7 @@ import {
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile';
@@ -43,7 +43,7 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageU
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
 
-import type { EvalResultsFilterMode } from '../types';
+import type { EvalResultsFilterMode } from '../types/index';
 
 interface FilteredCountRow {
   count: number | null;

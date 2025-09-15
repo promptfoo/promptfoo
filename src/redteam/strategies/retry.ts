@@ -4,7 +4,7 @@ import { evalResultsTable } from '../../database/tables';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types';
+import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
 export function deduplicateTests(tests: TestCase[]): TestCase[] {
   const seen = new Set<string>();

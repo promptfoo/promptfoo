@@ -25,7 +25,7 @@ import {
   OutputFileExtension,
   ResultFailureReason,
   type TestCase,
-} from '../types';
+} from '../types/index';
 import invariant from '../util/invariant';
 import { convertTestResultsToTableRow } from './exportToFile';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
@@ -35,7 +35,7 @@ import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
-import type { Vars } from '../types';
+import type { Vars } from '../types/index';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass

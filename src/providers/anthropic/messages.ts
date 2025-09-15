@@ -17,7 +17,7 @@ import {
 } from './util';
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { CallApiContextParams, ProviderResponse } from '../../types';
+import type { CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { AnthropicMessageOptions } from './types';
 

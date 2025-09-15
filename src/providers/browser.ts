@@ -11,7 +11,7 @@ import type {
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 
 const nunjucks = getNunjucksEngine();
 

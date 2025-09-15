@@ -5,7 +5,7 @@ import { getDb } from '../database';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
-import { type EvaluateResult } from '../types';
+import { type EvaluateResult } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { getCurrentTimestamp } from '../util/time';
@@ -18,7 +18,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
   ResultFailureReason,
-} from '../types';
+} from '../types/index';
 
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(

@@ -5,7 +5,7 @@ import { runPython } from '../python/pythonUtils';
 import { safeJoin } from './file.node';
 import { isJavascriptFile } from './fileExtensions';
 
-import type { Vars } from '../types';
+import type { Vars } from '../types/index';
 
 export type TransformContext = object;
 
