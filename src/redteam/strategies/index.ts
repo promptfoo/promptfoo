@@ -1,11 +1,10 @@
-import path from 'path';
-
 import chalk from 'chalk';
 import dedent from 'dedent';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { safeJoin } from '../../util/pathUtils';
 import { isCustomStrategy } from '../constants/strategies';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -342,8 +341,7 @@ export async function loadStrategy(strategyPath: string): Promise<Strategy> {
       throw new Error(`Custom strategy file must be a JavaScript file: ${filePath}`);
     }
 
-    const basePath = cliState.basePath || process.cwd();
-    const modulePath = path.isAbsolute(filePath) ? filePath : path.join(basePath, filePath);
+    const modulePath = safeJoin(cliState.basePath || process.cwd(), filePath);
     const CustomStrategy = (await importModule(modulePath)) as Strategy;
 
     // Validate that the custom strategy implements the Strategy interface

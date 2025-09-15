@@ -31,6 +31,7 @@ import { convertTestResultsToTableRow } from './exportToFile/index';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
@@ -482,10 +483,7 @@ export function parsePathOrGlob(
   }
 
   const isPathPattern = stats?.isDirectory() || /[*?{}\[\]]/.test(filePath); // glob pattern
-  const safeFilename = path.relative(
-    basePath,
-    path.isAbsolute(filename) ? filename : path.resolve(basePath, filename),
-  );
+  const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
   return {
     extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
     filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),
