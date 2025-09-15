@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import NodeCache from 'node-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import {
   datasetsTable,
   evalResultsTable,

@@ -27,7 +27,7 @@ import {
   type TestCase,
 } from '../types/index';
 import invariant from '../util/invariant';
-import { convertTestResultsToTableRow } from './exportToFile';
+import { convertTestResultsToTableRow } from './exportToFile/index';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';

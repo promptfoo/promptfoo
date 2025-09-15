@@ -1,5 +1,5 @@
 import Eval from '../../models/eval';
-import { readOutput, resultIsForTestCase } from '../../util';
+import { readOutput, resultIsForTestCase } from '../../util/index';
 
 import type { EvaluateResult, TestSuite } from '../../types/index';
 

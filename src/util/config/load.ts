@@ -15,7 +15,7 @@ import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { readPrompts, readProviderPromptMap } from '../../prompts';
+import { readPrompts, readProviderPromptMap } from '../../prompts/index';
 import { loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
@@ -30,7 +30,7 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { isRunningUnderNpx, readFilters } from '../../util';
+import { isRunningUnderNpx, readFilters } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';
