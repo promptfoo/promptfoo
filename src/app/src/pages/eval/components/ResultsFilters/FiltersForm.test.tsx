@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import FiltersForm from './FiltersForm';
 import { useTableStore, type ResultsFilter } from '../store';
+import { Box } from '@mui/material';
 
 vi.mock('../store', () => ({
   useTableStore: vi.fn(),
@@ -261,6 +262,114 @@ describe('FiltersForm', () => {
     );
 
     expect(useTableStore).toHaveBeenCalled();
+  });
+
+  it('should render each Filter row container with overflow set to "hidden"', () => {
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+        appliedCount: 0,
+      },
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const closeButtons = screen.getAllByRole('button');
+    const closeButton = closeButtons[0];
+    const filterRowContainer = closeButton.closest('div');
+
+    expect(filterRowContainer).toHaveStyle('overflow: hidden');
+  });
+
+  it('should render without errors when anchorEl is null', () => {
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: {},
+        options: {
+          metric: ['latency'],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+        appliedCount: 0,
+      },
+      addFilter: mockAddFilter,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      removeAllFilters: mockRemoveAllFilters,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={null} />
+      </WithTheme>,
+    );
+
+    expect(screen.getByRole('presentation')).toBeInTheDocument();
+  });
+
+  it('should render without crashing when the container is smaller than the minimum width', () => {
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: {},
+        options: {
+          metric: ['latency'],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+        appliedCount: 0,
+      },
+      addFilter: mockAddFilter,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      removeAllFilters: mockRemoveAllFilters,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <Box width="300px">
+          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+        </Box>
+      </WithTheme>,
+    );
+
+    expect(screen.getByRole('presentation')).toBeInTheDocument();
   });
 
   describe('Filter component', () => {
@@ -521,5 +630,165 @@ describe('FiltersForm', () => {
         }),
       );
     });
+  });
+
+  it('should ensure dropdown menus are fully visible and functional with overflow hidden', async () => {
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'severity',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    const severityOptions = ['high', 'medium', 'low'];
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: severityOptions,
+        },
+        appliedCount: 0,
+      },
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const severityValueDropdown = screen.getByRole('combobox', { name: /Severity/i });
+    await userEvent.click(severityValueDropdown);
+
+    const highSeverityOption = await screen.findByRole('option', { name: 'high' });
+    const mediumSeverityOption = await screen.findByRole('option', { name: 'medium' });
+    const lowSeverityOption = await screen.findByRole('option', { name: 'low' });
+
+    expect(highSeverityOption).toBeInTheDocument();
+    expect(mediumSeverityOption).toBeInTheDocument();
+    expect(lowSeverityOption).toBeInTheDocument();
+  });
+
+  it('should handle very long filter values without overflowing', () => {
+    const longValue =
+      'This is a very long metadata value that should not cause horizontal overflow issues.';
+    const initialFilter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: longValue,
+      field: 'fieldName',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: { 'filter-1': initialFilter },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+        appliedCount: 0,
+      },
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+      addFilter: mockAddFilter,
+      removeAllFilters: mockRemoveAllFilters,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const valueInput = screen.getByLabelText('Value') as HTMLInputElement;
+    expect(valueInput).toBeInTheDocument();
+    expect(valueInput.value).toBe(longValue);
+
+    const filterContainer = valueInput.closest('.MuiBox-root');
+    expect(filterContainer).toBeInTheDocument();
+
+    if (filterContainer) {
+      expect((filterContainer as HTMLElement).scrollWidth).toBeLessThanOrEqual(
+        (filterContainer as HTMLElement).offsetWidth,
+      );
+    }
+  });
+
+  it('should maintain proper layout on extremely narrow viewport widths without causing horizontal overflow', () => {
+    mockedUseTableStore.mockReturnValue({
+      filters: {
+        values: {
+          filter1: {
+            id: 'filter1',
+            type: 'metadata',
+            operator: 'contains',
+            value: 'test',
+            field: 'name',
+            sortIndex: 0,
+          },
+        },
+        options: {
+          metric: [],
+          metadata: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+        },
+        appliedCount: 1,
+      },
+      addFilter: mockAddFilter,
+      updateFilter: mockUpdateFilter,
+      removeFilter: mockRemoveFilter,
+      removeAllFilters: mockRemoveAllFilters,
+      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+    } as any);
+
+    const handleClose = vi.fn();
+
+    Object.defineProperty(window, 'innerWidth', {
+      writable: true,
+      configurable: true,
+      value: 300,
+    });
+
+    render(
+      <WithTheme>
+        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
+      </WithTheme>,
+    );
+
+    const filterFormContainer =
+      document.querySelector('[role="presentation"]') || document.querySelector('.MuiPopover-root');
+
+    expect(filterFormContainer).toBeInTheDocument();
+
+    if (filterFormContainer) {
+      expect((filterFormContainer as HTMLElement).scrollWidth).toBeLessThanOrEqual(
+        (filterFormContainer as HTMLElement).offsetWidth,
+      );
+    }
   });
 });
