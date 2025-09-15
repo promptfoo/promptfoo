@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import logger from '../logger';
-import { loadApiProvider } from '../providers';
+import { loadApiProvider } from '../providers/index';
 import { getDefaultProviders } from '../providers/defaults';
 import { retryWithDeduplication, sampleArray } from '../util/generation';
 import invariant from '../util/invariant';

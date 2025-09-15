@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
@@ -37,7 +37,7 @@ import {
 } from '../types/index';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
-import { convertTestResultsToTableRow } from '../util/exportToFile';
+import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';

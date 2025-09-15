@@ -132,6 +132,36 @@ describe('EvalOutputCell', () => {
     expect(passedMetadata.testKey).toBe('testValue');
   });
 
+  it('handles enter key press to open dialog', async () => {
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    const promptButton = screen.getByText('🔎');
+    expect(promptButton).toBeInTheDocument();
+    promptButton.focus();
+    await userEvent.keyboard('{enter}');
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    expect(dialogComponent).toBeInTheDocument();
+
+    // Check that metadata is passed correctly
+    const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
+    expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('handles keyboard navigation between buttons', async () => {
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    const promptButton = screen.getByText('🔎');
+    expect(promptButton).toBeInTheDocument();
+    promptButton.focus();
+    await userEvent.tab();
+    expect(document.activeElement).toHaveTextContent('👍');
+    await userEvent.tab();
+    expect(document.activeElement).toHaveTextContent('👎');
+    await userEvent.tab();
+    expect(document.activeElement).toHaveTextContent('🔢');
+    await userEvent.tab();
+    expect(document.activeElement).toHaveTextContent('✏️');
+  });
+
   it('preserves existing metadata citations', async () => {
     const propsWithMetadataCitations = {
       ...defaultProps,

@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type {

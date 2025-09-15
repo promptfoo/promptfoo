@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import { version } from '../../package.json';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { printBorder } from '../util';
+import { printBorder } from '../util/index';
 import { resolveConfigs } from '../util/config/load';
 import type { Command } from 'commander';
 

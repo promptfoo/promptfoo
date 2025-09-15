@@ -354,6 +354,7 @@ export default function EvalOutputPromptDialog({
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
+  const [showTraceSection, setShowTraceSection] = useState(true);
   const { addFilter, resetFilters } = useTableStore();
 
   useEffect(() => {
@@ -364,6 +365,10 @@ export default function EvalOutputPromptDialog({
     setReplayOutput(null);
     setReplayError(null);
   }, [prompt]);
+
+  useEffect(() => {
+    setShowTraceSection(true);
+  }, [evaluationId]);
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -592,12 +597,16 @@ export default function EvalOutputPromptDialog({
         <AssertionResults gradingResults={gradingResults} />
         {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
         {evaluationId && (
-          <Box mt={2}>
+          <Box mt={2} sx={{ display: showTraceSection ? 'block' : 'none' }}>
             <Typography variant="subtitle1" sx={subtitleTypographySx}>
               Trace Timeline
             </Typography>
             <ErrorBoundary fallback={<Alert severity="error">Error loading traces</Alert>}>
-              <TraceView evaluationId={evaluationId} testCaseId={testCaseId} />
+              <TraceView
+                evaluationId={evaluationId}
+                testCaseId={testCaseId}
+                onVisibilityChange={setShowTraceSection}
+              />
             </ErrorBoundary>
           </Box>
         )}

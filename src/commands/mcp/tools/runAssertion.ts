@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { runAssertions } from '../../../assertions';
+import { runAssertions } from '../../../assertions/index';
 import logger from '../../../logger';
 import type { Assertion, AtomicTestCase } from '../../../types/index';
 import { createToolResponse } from '../utils';

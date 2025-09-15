@@ -1,5 +1,5 @@
 import { getEnvInt } from '../envars';
-import { fetchWithRetries } from '../util/fetch';
+import { fetchWithRetries } from '../util/fetch/index';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
