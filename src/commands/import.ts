@@ -22,7 +22,7 @@ export function importCommand(program: Command) {
           logger.debug('Importing v3 eval');
           const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
             id: evalData.id,
-            createdAt: evalData.createdAt,
+            createdAt: new Date(evalData.createdAt),
             author: evalData.author || 'Unknown',
           });
           await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);

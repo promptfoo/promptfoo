@@ -146,6 +146,9 @@ export function exportCommand(program: Command) {
           const metadata = createOutputMetadata(result);
           const jsonData = JSON.stringify(
             {
+              id: result.id,
+              createdAt: new Date(result.createdAt).toISOString(),
+              author: result.author,
               evalId: result.id,
               results: summary,
               config: result.config,
