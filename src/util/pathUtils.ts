@@ -1,25 +1,33 @@
 /**
- * Node-only file utilities.
- * Application tests were failing when trying to import this module possibly
- * because of an older version of polyfilled of node:url.
- *
- * TODO:vedant Fix this hack one day
+ * Path resolution utilities that work with both regular paths and file:// URLs
  */
 import { fileURLToPath } from 'node:url';
 import path from 'path';
 
+/**
+ * Check if a file path is absolute, handling both regular paths and URLs
+ * @param filePath - The file path to check
+ * @returns True if the path is absolute
+ */
 function isAbsolute(filePath: string): boolean {
-  try {
-    // Handle both Windows and POSIX file URL formats
-    // Windows: file://C:/path or file:///C:/path
-    // POSIX: file:///path
-    if (filePath.startsWith('file://')) {
-      return path.isAbsolute(fileURLToPath(filePath));
-    }
-    return path.isAbsolute(filePath);
-  } catch {
+  if (!filePath) {
     return false;
   }
+
+  // Treat any URL scheme as absolute to avoid mangling URLs in join/resolve
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(filePath)) {
+    if (filePath.startsWith('file://')) {
+      try {
+        return path.isAbsolute(fileURLToPath(filePath));
+      } catch {
+        // Handle non-standard but common variants like file://C:/...
+        return true;
+      }
+    }
+    return true; // e.g., http(s)://, data://, etc.
+  }
+
+  return path.isAbsolute(filePath);
 }
 
 /**
