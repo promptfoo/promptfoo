@@ -403,7 +403,6 @@ export async function doGenerateRedteam(
     );
   }
 
-
   const {
     testCases: redteamTests,
     purpose,
@@ -422,7 +421,6 @@ export async function doGenerateRedteam(
     showProgressBar: options.progressBar !== false,
     testGenerationInstructions: augmentedTestGenerationInstructions,
   } as SynthesizeOptions);
-
 
   if (redteamTests.length === 0) {
     logger.warn('No test cases generated. Please check for errors and try again.');
