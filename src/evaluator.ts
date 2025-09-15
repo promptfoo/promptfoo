@@ -5,7 +5,11 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
-import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions/index';
+import {
+  MODEL_GRADED_ASSERTION_TYPES,
+  runAssertions,
+  runCompareAssertion,
+} from './assertions/index';
 import { getCache } from './cache';
 import cliState from './cliState';
 import { FILE_METADATA_KEY } from './constants';
