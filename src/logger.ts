@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { promisify } from 'util';
 
 import chalk from 'chalk';
 import winston from 'winston';
@@ -10,12 +9,8 @@ import { sanitizeBody, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
 
-// Promisified fs operations for Node.js 20+ modernization
-const fsAccess = promisify(fs.access);
-const fsMkdir = promisify(fs.mkdir);
-const fsReaddir = promisify(fs.readdir);
-const fsStat = promisify(fs.stat);
-const fsUnlink = promisify(fs.unlink);
+// Modern Node.js fs.promises API
+const fsPromises = fs.promises;
 
 type LogCallback = (message: string) => void;
 export let globalLogCallback: LogCallback | null = null;
@@ -193,20 +188,20 @@ async function setupLogDirectory(): Promise<string> {
   const logDir = path.join(configDir, 'logs');
 
   try {
-    await fsAccess(logDir);
+    await fsPromises.access(logDir);
   } catch {
-    await fsMkdir(logDir, { recursive: true });
+    await fsPromises.mkdir(logDir, { recursive: true });
   }
 
   // Clean up old log files
   try {
-    const files = await fsReaddir(logDir);
+    const files = await fsPromises.readdir(logDir);
     const logFiles = await Promise.all(
       files
         .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
         .map(async (file) => {
           const filePath = path.join(logDir, file);
-          const stats = await fsStat(filePath);
+          const stats = await fsPromises.stat(filePath);
           return {
             name: file,
             path: filePath,
@@ -223,7 +218,7 @@ async function setupLogDirectory(): Promise<string> {
       await Promise.all(
         filesToRemove.map(async (file) => {
           try {
-            await fsUnlink(file.path);
+            await fsPromises.unlink(file.path);
           } catch (error) {
             logger.warn(`Error removing old log file: ${file.name} ${error}`);
           }
