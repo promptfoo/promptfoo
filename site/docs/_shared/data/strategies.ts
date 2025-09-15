@@ -311,6 +311,17 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/other-encodings/#emoji-encoding',
   },
   {
+    category: 'Custom',
+    strategy: 'layer',
+    displayName: 'Layer',
+    description: 'Compose multiple strategies',
+    longDescription:
+      'Compose multiple red team strategies sequentially (e.g., multilingual → rot13) to create sophisticated attack chains',
+    cost: 'Variable',
+    asrIncrease: 'Cumulative',
+    link: '/docs/red-team/strategies/layer/',
+  },
+  {
     category: 'Regression',
     strategy: 'retry',
     displayName: 'Retry',
