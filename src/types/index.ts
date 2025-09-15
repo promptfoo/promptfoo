@@ -306,13 +306,6 @@ export interface EvaluateTableOutput {
     transcript?: string;
     format?: string;
   };
-  conversationData?: {
-    messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
-    finalPrompt: string;
-    strategy: string;
-    turnCount: number;
-    summary: string;
-  };
 }
 
 export interface EvaluateTableRow {

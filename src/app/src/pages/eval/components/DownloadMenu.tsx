@@ -21,6 +21,7 @@ import { removeEmpty } from '@promptfoo/util/objectUtils';
 import { stringify as csvStringify } from 'csv-stringify/browser/esm/sync';
 import yaml from 'js-yaml';
 import { useToast } from '../../../hooks/useToast';
+import { hasAnyConversations, hasConversationData, normalizeConversationData } from '../../../utils/conversationExport';
 import { useTableStore as useResultsViewStore } from './store';
 
 function DownloadMenu() {
@@ -165,17 +166,11 @@ function DownloadMenu() {
     const headers = [
       ...table.head.vars,
       ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-      // Add conversation-related headers
-      'Conversation Strategy',
-      'Turn Count',
-      'Conversation Summary',
-      'Final Prompt',
-      'Full Conversation',
     ];
     csvRows.push(headers);
 
     table.body.forEach((row) => {
-      const baseValues = [
+      const rowValues = [
         ...row.vars,
         ...row.outputs
           .filter((output): output is EvaluateTableOutput => output != null)
@@ -188,20 +183,7 @@ function DownloadMenu() {
                   : '[ERROR] ') + text,
           ),
       ];
-
-      // Add conversation data from the first output (assuming single provider for conversation data)
-      const firstOutput = row.outputs.find((output): output is EvaluateTableOutput => output != null);
-      const conversationData = firstOutput?.conversationData;
-
-      const conversationValues = [
-        conversationData?.strategy || '',
-        conversationData?.turnCount?.toString() || '0',
-        conversationData?.summary || '',
-        conversationData?.finalPrompt || '',
-        conversationData?.messages ? JSON.stringify(conversationData.messages) : '',
-      ];
-
-      csvRows.push([...baseValues, ...conversationValues]);
+      csvRows.push(rowValues);
     });
 
     const output = csvStringify(csvRows);
@@ -250,40 +232,112 @@ function DownloadMenu() {
       return;
     }
 
-    const conversationData = table.body.map((row, index) => {
-      const result = {
-        testId: index + 1,
-        testCase: {
-          vars: row.test.vars,
-          assert: row.test.assert,
-          metadata: row.test.metadata,
-        },
-        conversations: row.outputs
+    // Only process rows that actually have conversation data
+    const conversationData = table.body
+      .map((row, index) => {
+        const conversationsWithData = row.outputs
           .filter((output): output is EvaluateTableOutput => output != null)
-          .map((output, outputIndex) => ({
-            provider: table.head.prompts[outputIndex]?.provider || 'unknown',
-            providerLabel: table.head.prompts[outputIndex]?.label || 'unknown',
-            pass: output.pass,
-            score: output.score,
-            cost: output.cost,
-            latencyMs: output.latencyMs,
-            conversationData: output.conversationData || {
-              messages: [],
-              finalPrompt: '',
-              strategy: 'Unknown',
-              turnCount: 0,
-              summary: '',
-            },
-            gradingResult: output.gradingResult,
-          }))
-      };
-      return result;
-    });
+          .map((output, outputIndex) => {
+            if (!hasConversationData(output)) {
+              return null;
+            }
+
+            const normalizedData = normalizeConversationData(output);
+            return {
+              provider: table.head.prompts[outputIndex]?.provider || 'unknown',
+              providerLabel: table.head.prompts[outputIndex]?.label || 'unknown',
+              pass: output.pass,
+              score: output.score,
+              cost: output.cost,
+              latencyMs: output.latencyMs,
+              conversationData: normalizedData,
+              gradingResult: output.gradingResult,
+            };
+          })
+          .filter(Boolean);
+
+        if (conversationsWithData.length === 0) {
+          return null;
+        }
+
+        return {
+          testId: index + 1,
+          testCase: {
+            vars: row.test.vars,
+            assert: row.test.assert,
+            metadata: row.test.metadata,
+          },
+          conversations: conversationsWithData,
+        };
+      })
+      .filter(Boolean);
+
+    if (conversationData.length === 0) {
+      showToast('No conversation data found in this evaluation', 'info');
+      return;
+    }
 
     const blob = new Blob([JSON.stringify(conversationData, null, 2)], {
       type: 'application/json'
     });
     openDownloadDialog(blob, `${evalId}-conversations.json`);
+    handleClose();
+  };
+
+  const downloadConversationCsv = () => {
+    if (!table) {
+      showToast('No table data', 'error');
+      return;
+    }
+
+    const csvRows = [];
+    const headers = [
+      'Test ID',
+      'Provider',
+      'Pass',
+      'Score',
+      'Strategy',
+      'Turn Count',
+      'Summary',
+      'Final Prompt',
+      'Full Conversation',
+    ];
+    csvRows.push(headers);
+
+    let hasData = false;
+    table.body.forEach((row, index) => {
+      row.outputs
+        .filter((output): output is EvaluateTableOutput => output != null)
+        .forEach((output, outputIndex) => {
+          if (!hasConversationData(output)) {
+            return;
+          }
+
+          hasData = true;
+          const normalizedData = normalizeConversationData(output);
+          const rowValues = [
+            index + 1,
+            table.head.prompts[outputIndex]?.provider || 'unknown',
+            output.pass ? 'PASS' : 'FAIL',
+            output.score || '',
+            normalizedData.strategy,
+            normalizedData.turnCount,
+            normalizedData.summary,
+            normalizedData.finalPrompt,
+            JSON.stringify(normalizedData.messages),
+          ];
+          csvRows.push(rowValues);
+        });
+    });
+
+    if (!hasData) {
+      showToast('No conversation data found in this evaluation', 'info');
+      return;
+    }
+
+    const output = csvStringify(csvRows);
+    const blob = new Blob([output], { type: 'text/csv;charset=utf-8;' });
+    openDownloadDialog(blob, `${evalId}-conversations.csv`);
     handleClose();
   };
 
@@ -341,15 +395,22 @@ function DownloadMenu() {
             downloadTable();
             break;
           case '5':
-            downloadConversationJson();
+            if (table && hasAnyConversations(table)) {
+              downloadConversationCsv();
+            }
             break;
           case '6':
-            downloadBurpPayloads();
+            if (table && hasAnyConversations(table)) {
+              downloadConversationJson();
+            }
             break;
           case '7':
-            downloadDpoJson();
+            downloadBurpPayloads();
             break;
           case '8':
+            downloadDpoJson();
+            break;
+          case '9':
             downloadHumanEvalTestCases();
             break;
         }
@@ -535,15 +596,29 @@ function DownloadMenu() {
               Download Table JSON
             </Button>
 
-            <Button
-              onClick={downloadConversationJson}
-              startIcon={<DownloadIcon />}
-              variant="outlined"
-              color="primary"
-              fullWidth
-            >
-              Download Conversation History JSON
-            </Button>
+            {table && hasAnyConversations(table) && (
+              <>
+                <Button
+                  onClick={downloadConversationCsv}
+                  startIcon={<DownloadIcon />}
+                  variant="outlined"
+                  color="primary"
+                  fullWidth
+                >
+                  Download Conversation CSV
+                </Button>
+
+                <Button
+                  onClick={downloadConversationJson}
+                  startIcon={<DownloadIcon />}
+                  variant="outlined"
+                  color="primary"
+                  fullWidth
+                >
+                  Download Conversation JSON
+                </Button>
+              </>
+            )}
 
             <Divider />
             <Typography variant="subtitle1">Advanced Options</Typography>
