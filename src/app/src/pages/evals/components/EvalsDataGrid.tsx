@@ -250,6 +250,11 @@ export default function EvalsDataGrid({
     };
   }, [fetchEvals, location]); // Include location to trigger refetch on navigation
 
+  // Reset to first page when search or sort changes
+  useEffect(() => {
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  }, [debouncedSearchText, sortModel]);
+
   /**
    * For server-side pagination, we use the rows as-is from the server.
    * All filtering (including dataset filtering) is handled server-side.

@@ -921,14 +921,21 @@ export async function getPaginatedEvalSummaries(
   const db = getDb();
 
   const {
-    limit = 50,
-    offset = 0,
+    limit: rawLimit = 50,
+    offset: rawOffset = 0,
     search = '',
     sort = 'createdAt',
     order = 'desc',
     datasetId,
     focusedEvalId,
   } = params;
+
+  // Validate and sanitize pagination params
+  const limit = Math.max(
+    1,
+    Math.min(100, Number.isFinite(rawLimit as number) ? (rawLimit as number) : 50),
+  );
+  const offset = Math.max(0, Number.isFinite(rawOffset as number) ? (rawOffset as number) : 0);
 
   // Build base query with joins
   const baseQuery = db
