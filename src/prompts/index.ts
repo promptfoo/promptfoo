@@ -24,7 +24,7 @@ import type {
   ProviderOptionsMap,
   TestSuite,
   UnifiedConfig,
-} from '../types';
+} from '../types/index';
 
 export * from './grading';
 

@@ -9,7 +9,7 @@ import { printBorder } from '../util';
 import { resolveConfigs } from '../util/config/load';
 import type { Command } from 'commander';
 
-import type { UnifiedConfig } from '../types';
+import type { UnifiedConfig } from '../types/index';
 
 interface DebugOptions {
   config?: string;

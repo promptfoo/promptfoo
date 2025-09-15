@@ -26,7 +26,7 @@ import {
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
 

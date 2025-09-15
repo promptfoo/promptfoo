@@ -19,7 +19,7 @@ import { loadApiProvider } from '../providers';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
 import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
 import { checkCloudPermissions } from '../util/cloud';
@@ -42,7 +42,7 @@ import type {
   TestSuite,
   TokenUsage,
   UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({

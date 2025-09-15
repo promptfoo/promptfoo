@@ -20,7 +20,7 @@ import { fetchWithProxy } from '../../util/fetch';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
-import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 
 // ========================================================
 // Schemas

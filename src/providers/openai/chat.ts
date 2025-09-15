@@ -15,7 +15,11 @@ import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 

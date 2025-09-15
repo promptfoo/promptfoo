@@ -31,7 +31,7 @@ import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
-import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types';
+import type { RedteamStrategyObject, TestCase, TestCaseWithPlugin } from '../../types/index';
 
 export interface Strategy {
   id: string;

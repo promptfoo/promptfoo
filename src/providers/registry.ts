@@ -92,7 +92,7 @@ import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
 import { createLlamaApiProvider } from './llamaApi';
 
-import type { LoadApiProviderContext } from '../types';
+import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 interface ProviderFactory {
