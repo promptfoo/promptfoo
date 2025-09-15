@@ -134,8 +134,9 @@ describe('ModelAuditResult', () => {
       fireEvent.click(screen.getByLabelText('Delete scan permanently'));
     });
     await waitFor(() => {
-      expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans/1',
-        expect.objectContaining({ method: 'DELETE' })
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/model-audit/scans/1',
+        expect.objectContaining({ method: 'DELETE' }),
       );
       expect(mockNavigate).toHaveBeenCalledWith('/model-audit/history');
     });
@@ -219,7 +220,6 @@ describe('ModelAuditResult', () => {
       expect(screen.queryByText('8 / 10')).not.toBeInTheDocument();
     });
   });
-
 
   it('displays an error message when download fails', async () => {
     mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);

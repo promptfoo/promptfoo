@@ -48,7 +48,8 @@ export default function ConfigurationTab({
   const isNotInstalled = installationStatus?.installed === false;
   const installationUnknown = installationStatus?.installed === null;
 
-  const scanButtonDisabled = isScanning || paths.length === 0 || isCheckingInstallation || isNotInstalled;
+  const scanButtonDisabled =
+    isScanning || paths.length === 0 || isCheckingInstallation || isNotInstalled;
 
   const getScanButtonText = () => {
     if (isScanning) {

@@ -57,7 +57,9 @@ describe('ModelAuditResultLatestPage', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 4, name: 'Latest Scan Results' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 4, name: 'Latest Scan Results' }),
+      ).toBeInTheDocument();
       expect(screen.getByText('Latest Scan • /path/to/latest/model')).toBeInTheDocument();
       expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans/latest', expect.any(Object));
     });
@@ -87,7 +89,9 @@ describe('ModelAuditResultLatestPage', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 4, name: 'Latest Scan Results' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 4, name: 'Latest Scan Results' }),
+      ).toBeInTheDocument();
       expect(screen.getByText('Fallback Scan • /path/to/fallback/model')).toBeInTheDocument();
       expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans/latest', expect.any(Object));
       expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans?limit=1', expect.any(Object));

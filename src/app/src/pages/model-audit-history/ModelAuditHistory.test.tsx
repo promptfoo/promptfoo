@@ -188,7 +188,6 @@ describe('ModelAuditHistory', () => {
     });
   });
 
-
   it('calls onScanSelected when a row is clicked', async () => {
     const onScanSelected = vi.fn();
     mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve({ scans }) } as Response);
@@ -218,8 +217,6 @@ describe('ModelAuditHistory', () => {
     });
     expect(onScanSelected).toHaveBeenCalledWith('1');
   });
-
-
 
   it('shows/hides utility buttons based on showUtilityButtons prop', async () => {
     mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve({ scans }) } as Response);
@@ -290,7 +287,6 @@ describe('ModelAuditHistory', () => {
       expect(screen.getByText('Scan 3')).toBeInTheDocument();
     });
   });
-
 
   it('gracefully handles row clicks when no onScanSelected callback is provided', async () => {
     mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve({ scans }) } as Response);

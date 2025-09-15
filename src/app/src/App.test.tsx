@@ -1,5 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider, createRoutesFromElements, Route, Navigate } from 'react-router-dom';
+import {
+  createMemoryRouter,
+  RouterProvider,
+  createRoutesFromElements,
+  Route,
+  Navigate,
+} from 'react-router-dom';
 import { describe, it, expect, vi } from 'vitest';
 import { ToastProvider } from './contexts/ToastContext';
 import PageShell from './components/PageShell';
@@ -25,7 +31,11 @@ vi.mock('./pages/model-audit/page', () => ({
 vi.mock('./components/PageShell', () => ({
   default: () => {
     const { Outlet } = require('react-router-dom');
-    return <div><Outlet /></div>;
+    return (
+      <div>
+        <Outlet />
+      </div>
+    );
   },
 }));
 vi.mock('./contexts/ToastContext', () => ({
@@ -53,15 +63,33 @@ const createTestRouter = (initialEntries: string[]) => {
     createRoutesFromElements(
       <Route path="/" element={<PageShell />}>
         <Route index element={<Navigate to="/evals" replace />} />
-        <Route path="/model-audit" element={<div data-testid="model-audit-latest-page">ModelAuditLatestPage</div>} />
-        <Route path="/model-audit/setup" element={<div data-testid="model-audit-setup-page">ModelAuditSetupPage</div>} />
-        <Route path="/model-audit/history" element={<div data-testid="model-audit-history-page">ModelAuditHistoryPage</div>} />
-        <Route path="/model-audit/history/:id" element={<div data-testid="model-audit-result-page">ModelAuditResultPage</div>} />
-        <Route path="/model-audit/:id" element={<div data-testid="model-audit-result-page">ModelAuditResultPage</div>} />
-        <Route path="/model-audit-legacy" element={<div data-testid="model-audit-legacy-page">ModelAuditLegacyPage</div>} />
-      </Route>
+        <Route
+          path="/model-audit"
+          element={<div data-testid="model-audit-latest-page">ModelAuditLatestPage</div>}
+        />
+        <Route
+          path="/model-audit/setup"
+          element={<div data-testid="model-audit-setup-page">ModelAuditSetupPage</div>}
+        />
+        <Route
+          path="/model-audit/history"
+          element={<div data-testid="model-audit-history-page">ModelAuditHistoryPage</div>}
+        />
+        <Route
+          path="/model-audit/history/:id"
+          element={<div data-testid="model-audit-result-page">ModelAuditResultPage</div>}
+        />
+        <Route
+          path="/model-audit/:id"
+          element={<div data-testid="model-audit-result-page">ModelAuditResultPage</div>}
+        />
+        <Route
+          path="/model-audit-legacy"
+          element={<div data-testid="model-audit-legacy-page">ModelAuditLegacyPage</div>}
+        />
+      </Route>,
     ),
-    { initialEntries }
+    { initialEntries },
   );
 };
 
