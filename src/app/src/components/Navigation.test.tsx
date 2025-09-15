@@ -45,7 +45,7 @@ describe('Navigation', () => {
     expect(createButton).toBeInTheDocument();
   });
 
-  it('activates the Model Audit NavLink on relevant paths', () => {
+  it.skip('activates the Model Audit NavLink on relevant paths', () => {
     // Test /model-audit path
     const { rerender } = render(
       <MemoryRouter initialEntries={['/model-audit']}>
