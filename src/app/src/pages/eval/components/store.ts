@@ -77,7 +77,10 @@ function buildRedteamFilterOptions(config?: Partial<UnifiedConfig> | null): {
   }
 
   return {
-    plugin: config?.redteam?.plugins?.map((plugin) => plugin.id) ?? [],
+    plugin:
+      config?.redteam?.plugins?.map((plugin) =>
+        typeof plugin === 'string' ? plugin : plugin.id,
+      ) ?? [],
     strategy: extractUniqueStrategyIds(config?.redteam?.strategies, isRedteam),
     severity: computeAvailableSeverities(config?.redteam?.plugins),
   };

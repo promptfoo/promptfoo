@@ -1515,5 +1515,40 @@ describe('useTableStore', () => {
       const state = useTableStore.getState();
       expect(state.filters.options.severity).toContain(Severity.Critical);
     });
+
+    it('should populate plugin options when redteam plugins are provided as string IDs (fetchEvalData)', async () => {
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+          config: { redteam: { strategies: [], plugins: ['pii', 'jailbreak'] } },
+        }),
+      });
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData('eval-id');
+      });
+
+      expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'jailbreak']);
+    });
+
+    it('should populate plugin options when resultsFile redteam plugins are string IDs (setTableFromResultsFile)', () => {
+      const mockResultsFile: ResultsFile = {
+        version: 4,
+        config: { redteam: { strategies: [], plugins: ['pii', 'bias'] } },
+        results: { results: [] } as any,
+        prompts: [],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        author: 'test',
+      } as any;
+
+      act(() => {
+        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      });
+
+      expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'bias']);
+    });
   });
 });
