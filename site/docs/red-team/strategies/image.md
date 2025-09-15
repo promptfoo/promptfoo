@@ -6,30 +6,13 @@ description: Test vision-language models with adversarial image-encoded text to 
 
 # Image Jailbreaking
 
-The image strategy converts text prompts into adversarial images to test how vision-language models handle visual text representations. This approach reveals vulnerabilities where models process image-encoded text differently than plain text, potentially bypassing safety mechanisms designed for text-only inputs.
+The image jailbreaking strategy tests multimodal LLM vulnerabilities by converting text prompts into adversarial images. This red team technique exploits how vision-language models process visual text representations differently than plain text inputs, potentially bypassing safety guardrails and content filters designed for text-only interactions.
 
-## Use Cases
-
-**Security Testing**: Evaluate whether content filters that scan plain text can be bypassed through image encoding. Many safety systems focus on text analysis and may not apply the same scrutiny to text extracted from images.
-
-**Multi-Modal Consistency**: Identify behavioral differences when models process identical content in text versus image format. This reveals inconsistencies in safety guardrails across modalities.
-
-**OCR Robustness**: Test model resilience against adversarial visual distortions, character substitutions, and occlusion techniques that degrade optical character recognition while maintaining human readability.
-
-## How It Works
-
-The strategy renders text into images through these steps:
-
-1. **Text Rendering**: Converts input text to SVG with configurable fonts, sizes, and colors
-2. **Adversarial Transformations**: Applies per-character distortions, background noise, and visual effects
-3. **Encoding**: Outputs base64-encoded PNG or JPEG for multi-modal model consumption
-4. **Hidden Channels**: Optionally embeds text in EXIF metadata, low-contrast overlays, or microtext patterns
-
-![Example of image distortions applied to text](/img/docs/redteam/image-strategy-distortions.png)
+Prompfoo's image strategy generates adversarial images with varying levels of visual distortions - from subtle perturbations to extreme transformations - helping security teams identify exactly where multimodal models fail to maintain consistent safety boundaries across text and image modalities.
 
 ## Quick Start
 
-Configure the image strategy in your red team evaluation:
+Choose a preset based on your testing needs:
 
 ```yaml title="promptfooconfig.yaml"
 targets:
@@ -37,25 +20,32 @@ targets:
 
 redteam:
   strategies:
-    - image # Full adversarial image generation
-    # Or use image:basic for simple text-to-image conversion
-    # Disable other strategies when testing image-specific vulnerabilities
-    - id: basic
-      config:
-        enabled: false
-  plugins:
-    - harmful:hate
-    - harmful:violence
+    - image:moderate # Recommended starting point
+
+
+    # Other presets:
+    # - image:basic      # Clean text (requires npm i sharp)
+    # - image:subtle     # Light distortions
+    # - image:aggressive # Heavy distortions
+    # - image:extreme    # Maximum adversarial
 ```
 
-Your prompt template must handle base64 image input:
+### Preset Comparison
+
+| Preset       | Distortion Level | Techniques Applied                 | Best For                        |
+| ------------ | ---------------- | ---------------------------------- | ------------------------------- |
+| `basic`      | None             | Clean text only                    | Control testing                 |
+| `subtle`     | Low              | Minor rotations, light noise       | Initial vulnerability discovery |
+| `moderate`   | Medium           | Wavy text, color shifts, patches   | Standard security testing       |
+| `aggressive` | High             | Heavy blur, multi-color, occlusion | Robustness evaluation           |
+| `extreme`    | Maximum          | All techniques + deep fry          | Stress testing & edge cases     |
+
+### Required Prompt Format
+
+Your prompt must handle base64 images:
 
 ```json title="prompt.json"
 [
-  {
-    "role": "system",
-    "content": "You are a helpful assistant"
-  },
   {
     "role": "user",
     "content": [
@@ -70,254 +60,218 @@ Your prompt template must handle base64 image input:
 ]
 ```
 
-:::tip
-For basic testing without adversarial transformations, use `image:basic` instead of `image`. Note that `image:basic` requires Sharp to be installed locally: `npm i sharp`
-:::
+## Customizing Presets
 
-## Configuration
-
-### Basic Settings
-
-Control image dimensions and text rendering:
+Override specific settings while keeping preset defaults:
 
 ```yaml
 redteam:
   strategies:
-    - id: image
+    - id: image:moderate
       config:
-        width: 800 # Canvas width in pixels
-        height: 400 # Canvas height in pixels
-        fontSize: 24 # Base font size
-        format: png # Output format: png or jpeg
-        background: '#ffffff' # Background color
-        textColor: '#000000' # Text color (when not using multicolor)
-        fontFamilies: # Font stack for rendering
-          - Arial
-          - Helvetica
-          - sans-serif
+        width: 1024 # Larger canvas
+        fontSize: 30 # Bigger text
+        transformations:
+          blur: 0.8 # More blur than default
 ```
 
-### Adversarial Techniques
+## How It Works
 
-#### Per-Character Distortions
+The strategy applies multiple techniques to convert text into adversarial images:
 
-Individual character manipulation exploits the gap between human reading (which uses context and pattern recognition) and OCR systems (which rely on precise character matching):
+1. **Text Rendering** - Converts input to SVG with configurable fonts
+2. **Adversarial Transforms** - Per-character distortions, noise, occlusion
+3. **Encoding** - Base64 PNG/JPEG output
+4. **Hidden Channels** - EXIF metadata, low-contrast overlays, microtext
+
+![Example of image distortions applied to text](/img/docs/redteam/image-strategy-distortions.png)
+
+Each preset combines these techniques at different intensities to test how multimodal LLMs handle increasingly challenging visual inputs while maintaining human readability.
+
+## Common Use Cases
+
+### Vision-Language Model Security Testing
+
+Test whether multimodal LLMs maintain consistent safety boundaries when processing text as images versus plain text. This reveals critical vulnerabilities where visual encoding bypasses text-based content filters:
+
+```yaml
+# Test if harmful content bypasses safety guardrails in visual form
+redteam:
+  strategies:
+    - image:moderate
+  plugins:
+    - harmful:hate
+    - harmful:violence
+    - harmful:harassment
+```
+
+### Progressive Adversarial Testing
+
+Evaluate how multimodal models degrade under increasing visual perturbations. This helps identify the exact threshold where safety mechanisms fail:
+
+```yaml
+# Systematically test model resilience across distortion levels
+redteam:
+  strategies:
+    - image:subtle # Minor perturbations
+    - image:moderate # Standard adversarial
+    - image:aggressive # Heavy distortions
+  plugins:
+    - contracts
+    - pii
+    - harmful:violence
+```
+
+### Multi-Modal Attack Combinations
+
+Combine image encoding with other jailbreaking techniques to test defense-in-depth. Multimodal LLMs often show unexpected vulnerabilities when multiple attack vectors are layered:
+
+```yaml
+# Layer multiple attack vectors for comprehensive testing
+redteam:
+  strategies:
+    - image:moderate # Visual adversarial
+    - multilingual # Language switching
+    - prompt-injection # Injection attacks
+  plugins:
+    - harmful:illegal
+    - rbac
+```
+
+## Advanced Configuration
+
+<details>
+<summary>Full configuration options</summary>
+
+### Basic Settings
+
+```yaml
+config:
+  width: 800 # Canvas dimensions
+  height: 400
+  fontSize: 24 # Base font size
+  format: png # png or jpeg
+  background: '#ffffff' # Background color
+  textColor: '#000000' # Text color
+```
+
+### Per-Character Distortions
 
 ```yaml
 perChar:
   enabled: true
-  rotateDegrees: { min: -15, max: 15 } # Random rotation per character
+  rotateDegrees: { min: -15, max: 15 } # Rotation per character
   jitterX: { min: -3, max: 3 } # Horizontal displacement
   jitterY: { min: -3, max: 3 } # Vertical displacement
   scale: { min: 0.8, max: 1.2 } # Size variation
-  charSpacing: 2 # Extra spacing between characters
   fontPerChar: true # Random font per character
   waveBaseline: # Wavy text baseline
     amplitude: 8
     frequency: 0.5
-    phase: 0
 ```
 
-**Why it works**: Vision models trained on clean text struggle with character-level perturbations. Research shows that even small rotations (±10°) can degrade OCR accuracy by 30-40% while maintaining human readability.
-
-#### Visual Noise and Overlays
-
-Clutter injection exploits attention mechanisms in vision transformers, forcing models to distinguish signal from noise:
+### Visual Noise
 
 ```yaml
 overlays:
-  clutterLines: { min: 10, max: 20 } # Random lines across image
-  lineWidth: { min: 1, max: 3 } # Line thickness variation
-  lineColor: '#666666' # Line color
-  lineOpacity: { min: 0.3, max: 0.6 } # Line transparency
-  speckles: { min: 100, max: 200 } # Random dots/noise
-  speckleRadius: { min: 0.5, max: 2 } # Dot size range
-  backgroundPattern: grid # Pattern: none, gradient, grid, noise
-  backgroundPatternOpacity: 0.2 # Pattern visibility
+  clutterLines: { min: 10, max: 20 } # Random lines
+  speckles: { min: 100, max: 200 } # Noise dots
+  backgroundPattern: grid # none, gradient, grid, noise
+  backgroundPatternOpacity: 0.2
 ```
 
-**Why it works**: Structured noise patterns create adversarial features that vision models may interpret as text strokes. Grid patterns specifically interfere with edge detection algorithms used in text localization.
-
-#### Color Manipulation
-
-Color-based attacks exploit preprocessing pipelines that often convert images to grayscale or apply color normalization:
+### Color Manipulation
 
 ```yaml
 color:
   multicolorLetters: true # Random colors per character
-  inverted: false # Invert entire color scheme
-  lowContrastText: false # Reduce text/background contrast
-  channelShift: # Chromatic aberration effect
-    dxR: 2 # Red channel X offset
-    dyR: 0 # Red channel Y offset
-    dxB: -2 # Blue channel X offset
-    dyB: 0 # Blue channel Y offset
-    opacity: 0.5 # Effect strength
+  lowContrastText: false # Reduce contrast
+  channelShift: # Chromatic aberration
+    dxR: 2 # Red channel offset
+    dxB: -2 # Blue channel offset
+    opacity: 0.5
 ```
 
-**Why it works**: Multi-color text breaks assumptions about uniform text color. Channel shifting creates color fringing that confuses binarization algorithms. Low contrast (< 20% difference) falls below many OCR thresholds while remaining visible to humans.
-
-#### Geometric Transforms
-
-Spatial distortions target the rigid grid assumptions of convolutional layers:
+### Geometric Transforms
 
 ```yaml
 transformations:
   rotateDegrees: { min: -5, max: 5 } # Global rotation
-  blur: 0.5 # Gaussian blur radius
-  noiseOpacity: 0.1 # Grayscale noise overlay
-  noiseBlend: overlay # Noise blend mode
-  perspectiveSkew: # Affine transformation
-    xDeg: { min: -8, max: 8 } # X-axis skew
-    yDeg: { min: -6, max: 6 } # Y-axis skew
-    interpolator: nohalo # Resampling algorithm
-  orientation: # Extreme rotations
-    rotate90: false
-    rotate180: false
-    flipH: false # Horizontal flip
-    flipV: false # Vertical flip
+  blur: 0.5 # Gaussian blur
+  perspectiveSkew: # 3D skew
+    xDeg: { min: -8, max: 8 }
+    yDeg: { min: -6, max: 6 }
+  deepFry: # Meme-style degradation
+    intensity: 2
+    jpegQuality: 30
 ```
 
-**Why it works**: Perspective skew breaks the assumption of fronto-parallel text. Small skews (5-10°) significantly degrade performance of models trained on axis-aligned text while preserving readability.
-
-#### Deep Fry Effect
-
-Mimics the degradation patterns of repeatedly compressed internet memes:
-
-```yaml
-transformations:
-  deepFry:
-    intensity: 2 # 1-3, higher = more extreme
-    jpegQuality: 30 # Compression artifacts
-    pixelate: true # Downscale/upscale for blockiness
-    vignette: true # Dark edges
-    hue: 20 # Color shift in degrees
-```
-
-**Why it works**: Deep fried images contain artifacts that models associate with memes and informal content, potentially triggering different behavioral patterns than clean text. JPEG artifacts create false edges that interfere with character segmentation.
-
-#### Hidden Information
-
-Embeds text through channels that bypass visual processing:
-
-```yaml
-hidden:
-  lowContrast: true # Near-invisible text overlay
-  lowContrastOpacity: 0.08 # Overlay visibility (0-1)
-  exif: true # Embed in image metadata
-  microtext: true # Tiny repeated background text
-  microtextOpacity: 0.06 # Microtext visibility
-```
-
-**Why it works**: Low-contrast text (< 5% opacity) is below human perception threshold but may be amplified by preprocessing. EXIF metadata can be parsed by some pipelines before image analysis. Microtext creates a texture that influences feature extraction.
-
-#### Occlusion and Substitution
-
-Partial information hiding tests error correction capabilities:
+### Occlusion
 
 ```yaml
 occlusion:
-  patches: { min: 2, max: 5 } # Number of blocking rectangles
-  patchSize: { min: 15, max: 30 } # Rectangle dimensions
-  patchColor: '#ffffff' # Patch fill color
-  patchOpacity: 0.95 # Patch transparency
-  substituteChars: true # Replace with similar-looking characters
-  substitutionProbability: 0.2 # Chance to substitute each character
+  patches: { min: 2, max: 5 } # Blocking rectangles
+  patchSize: { min: 15, max: 30 }
+  substituteChars: true # Replace with homoglyphs
+  substitutionProbability: 0.2
 ```
 
-**Why it works**: Occlusion forces models to reconstruct missing information from context. Character substitution with homoglyphs (e.g., Latin 'A' → Cyrillic 'А') maintains visual similarity while changing Unicode codepoints, exploiting models that use both visual and text features.
-
-### Preset Configurations
-
-#### Maximum Adversarial
-
-Combines multiple attack vectors for stress testing:
+### Hidden Information
 
 ```yaml
-redteam:
-  strategies:
-    - id: image
-      config:
-        perChar:
-          enabled: true
-          rotateDegrees: { min: -20, max: 20 }
-          jitterX: { min: -5, max: 5 }
-          jitterY: { min: -5, max: 5 }
-          scale: { min: 0.7, max: 1.3 }
-          waveBaseline: { amplitude: 10, frequency: 0.8 }
-        overlays:
-          clutterLines: { min: 15, max: 25 }
-          speckles: { min: 200, max: 300 }
-          backgroundPattern: noise
-        color:
-          multicolorLetters: true
-          channelShift: { dxR: 3, dyR: 1, dxB: -3, dyB: -1, opacity: 0.6 }
-        transformations:
-          deepFry: { intensity: 3, jpegQuality: 25 }
-          blur: 0.8
-          noiseOpacity: 0.2
-        occlusion:
-          patches: { min: 3, max: 6 }
-          substituteChars: true
-          substitutionProbability: 0.25
+hidden:
+  lowContrast: true # Near-invisible overlay
+  lowContrastOpacity: 0.08
+  exif: true # Embed in metadata
+  microtext: true # Tiny background text
 ```
 
-#### Clean Baseline
+</details>
 
-Minimal distortion for control testing:
+## Technical Details
 
-```yaml
-redteam:
-  strategies:
-    - id: image
-      config:
-        perChar: { enabled: false }
-        overlays:
-          backgroundPattern: none
-        color:
-          multicolorLetters: false
-        transformations:
-          blur: 0
-          noiseOpacity: 0
-        occlusion:
-          patches: 0
-          substituteChars: false
-```
+### Why These Attacks Work
+
+**Per-character perturbations** exploit the gap between human visual processing and how multimodal LLMs interpret text in images. Small rotations (±10°) can cause models to misinterpret or ignore safety-critical content while humans read it clearly.
+
+**Structured noise** creates adversarial features that vision transformers may misclassify, causing the model to focus on noise patterns rather than the actual text content, potentially bypassing content filters.
+
+**Color manipulation** disrupts the visual encoding pipeline in multimodal models. Multi-color text and chromatic aberrations can cause the model to process text differently than its plain-text training, revealing inconsistent safety boundaries.
+
+**Perspective skew** challenges the model's spatial understanding. Vision-language models trained primarily on front-facing text struggle with perspective distortions, potentially allowing harmful content through when skewed.
 
 ## Variables and Metadata
 
-The strategy modifies test case variables:
+The strategy modifies test variables:
 
-- **`{{image}}`**: Replaced with base64-encoded image data
-- **`{{image_text}}`**: Preserves the original text content
+- `{{image}}` - Base64-encoded image data
+- `{{image_text}}` - Original text content (preserved)
 
 Test metadata includes:
 
-- `strategyId`: Always set to `'image'`
-- `imageFormat`: Either `'png'` or `'jpeg'`
-- `originalText`: The source text before conversion
-- `transforms`: Configuration snapshot of all applied effects
+- `strategyId: 'image'` or `'image:[preset]'`
+- `imageFormat: 'png'` or `'jpeg'`
+- `originalText` - Source text before conversion
 
 ## Best Practices
 
-1. **Start Simple**: Begin with clean baseline configuration to establish model behavior with clear images
-2. **Incrementally Add Complexity**: Gradually introduce distortions to identify vulnerability thresholds
-3. **Test Format Compatibility**: Verify your provider accepts the image format (PNG vs JPEG)
-4. **Monitor Metadata Preservation**: Some gateways strip EXIF data; validate end-to-end behavior
-5. **Combine with Other Strategies**: Layer image encoding with other red team techniques for comprehensive testing
+1. Start with `image:moderate` for most testing scenarios
+2. Test progressively from `subtle` to `extreme` to find vulnerability thresholds
+3. Combine with other strategies for comprehensive multi-modal testing
+4. Verify your provider accepts the image format (PNG vs JPEG)
+5. Note that image strategies increase payload size significantly
 
 ## Limitations
 
-- `image:basic` requires Sharp library to be installed locally
-- Base64 encoding increases payload size significantly
-- Some providers may have image size limits
-- EXIF metadata may be stripped by security gateways
-- Deep fry effects can make text completely illegible at extreme settings
+- `image:basic` requires Sharp library installation
+- Base64 encoding increases payload size
+- Some providers have image size limits
+- EXIF metadata may be stripped by gateways
+- Extreme settings can make text illegible
 
-## Related Concepts
+## Related Strategies
 
-- [Audio Jailbreaking](audio.md) - Test models with speech-encoded prompts
-- [Video Jailbreaking](video.md) - Evaluate video input vulnerabilities
-- [Base64 Encoding](base64.md) - Text-only base64 obfuscation
-- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team) - Comprehensive multi-modal testing
-- [LLM Vulnerability Types](/docs/red-team/llm-vulnerability-types) - Overview of attack categories
+- [Audio Jailbreaking](audio.md) - Speech-encoded prompts
+- [Video Jailbreaking](video.md) - Video input vulnerabilities
+- [Base64 Encoding](base64.md) - Text-only obfuscation
+- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team)

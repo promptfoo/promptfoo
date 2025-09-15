@@ -30,6 +30,7 @@ import { addRot13 } from './rot13';
 import { addSimbaTestCases } from './simba';
 import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64, addImageToBase64Basic } from './image';
+import { mergeImageConfig } from './imagePresets';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
 
@@ -213,9 +214,11 @@ export const Strategies: Strategy[] = [
   {
     id: 'image',
     action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding image encoding to ${testCases.length} test cases`);
-      const newTestCases = await addImageToBase64(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} image encoded test cases`);
+      // Same as image:aggressive
+      logger.debug(`Adding aggressive image encoding to ${testCases.length} test cases`);
+      const mergedConfig = mergeImageConfig('aggressive', config);
+      const newTestCases = await addImageToBase64(testCases, injectVar, mergedConfig);
+      logger.debug(`Added ${newTestCases.length} aggressive image encoded test cases`);
       return newTestCases;
     },
   },
@@ -225,6 +228,46 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding image encoding (local) to ${testCases.length} test cases`);
       const newTestCases = await addImageToBase64Basic(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} image encoded (local) test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'image:subtle',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding subtle image encoding to ${testCases.length} test cases`);
+      const mergedConfig = mergeImageConfig('subtle', config);
+      const newTestCases = await addImageToBase64(testCases, injectVar, mergedConfig);
+      logger.debug(`Added ${newTestCases.length} subtle image encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'image:moderate',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding moderate image encoding to ${testCases.length} test cases`);
+      const mergedConfig = mergeImageConfig('moderate', config);
+      const newTestCases = await addImageToBase64(testCases, injectVar, mergedConfig);
+      logger.debug(`Added ${newTestCases.length} moderate image encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'image:aggressive',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding aggressive image encoding to ${testCases.length} test cases`);
+      const mergedConfig = mergeImageConfig('aggressive', config);
+      const newTestCases = await addImageToBase64(testCases, injectVar, mergedConfig);
+      logger.debug(`Added ${newTestCases.length} aggressive image encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'image:extreme',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding extreme image encoding to ${testCases.length} test cases`);
+      const mergedConfig = mergeImageConfig('extreme', config);
+      const newTestCases = await addImageToBase64(testCases, injectVar, mergedConfig);
+      logger.debug(`Added ${newTestCases.length} extreme image encoded test cases`);
       return newTestCases;
     },
   },
