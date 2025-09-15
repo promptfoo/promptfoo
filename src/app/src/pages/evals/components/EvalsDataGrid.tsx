@@ -250,9 +250,9 @@ export default function EvalsDataGrid({
     };
   }, [fetchEvals, location]); // Include location to trigger refetch on navigation
 
-  // Reset to first page when search or sort changes
+  // Reset to first page when search or sort changes (only if not already on page 0)
   useEffect(() => {
-    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    setPaginationModel((prev) => prev.page !== 0 ? ({ ...prev, page: 0 }) : prev);
   }, [debouncedSearchText, sortModel]);
 
   /**
