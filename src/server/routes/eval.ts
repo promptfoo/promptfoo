@@ -8,7 +8,7 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { EvalResultsFilterMode } from '../../types';
+import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';

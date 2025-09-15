@@ -15,7 +15,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { TransformContext } from '../util/transform';
 

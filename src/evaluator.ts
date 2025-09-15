@@ -5,7 +5,11 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
-import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
+import {
+  MODEL_GRADED_ASSERTION_TYPES,
+  runAssertions,
+  runCompareAssertion,
+} from './assertions/index';
 import { getCache } from './cache';
 import cliState from './cliState';
 import { FILE_METADATA_KEY } from './constants';
@@ -38,7 +42,7 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
-} from './types';
+} from './types/index';
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -65,7 +69,7 @@ import type {
   ScoringFunction,
   TokenUsage,
   Vars,
-} from './types';
+} from './types/index';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -761,6 +765,17 @@ class Evaluator {
 
     // Split prompts by provider
     // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
+
+    // Create a map of existing prompts for resume support
+    const existingPromptsMap = new Map<string, CompletedPrompt>();
+    if (cliState.resume && this.evalRecord.persisted && this.evalRecord.prompts.length > 0) {
+      logger.debug('Resuming evaluation: preserving metrics from previous run');
+      for (const existingPrompt of this.evalRecord.prompts) {
+        const key = `${existingPrompt.provider}:${existingPrompt.id}`;
+        existingPromptsMap.set(key, existingPrompt);
+      }
+    }
+
     for (const provider of testSuite.providers) {
       for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
@@ -768,12 +783,17 @@ class Evaluator {
         if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
           continue;
         }
+
+        const promptId = generateIdFromPrompt(prompt);
+        const existingPromptKey = `${providerKey}:${promptId}`;
+        const existingPrompt = existingPromptsMap.get(existingPromptKey);
+
         const completedPrompt = {
           ...prompt,
-          id: generateIdFromPrompt(prompt),
+          id: promptId,
           provider: providerKey,
           label: prompt.label,
-          metrics: {
+          metrics: existingPrompt?.metrics || {
             score: 0,
             testPassCount: 0,
             testFailCount: 0,
@@ -1044,6 +1064,40 @@ class Evaluator {
         }
       }
     }
+    // Pre-mark comparison rows before any filtering (used by resume logic)
+    for (const evalOption of runEvalOptions) {
+      if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
+        rowsWithSelectBestAssertion.add(evalOption.testIdx);
+      }
+      if (evalOption.test.assert?.some((a) => a.type === 'max-score')) {
+        rowsWithMaxScoreAssertion.add(evalOption.testIdx);
+      }
+    }
+
+    // Resume support: if CLI is in resume mode, skip already-completed (testIdx,promptIdx) pairs
+    if (cliState.resume && this.evalRecord.persisted) {
+      try {
+        const { default: EvalResult } = await import('./models/evalResult');
+        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);
+        const originalCount = runEvalOptions.length;
+        // Filter out steps that already exist in DB
+        for (let i = runEvalOptions.length - 1; i >= 0; i--) {
+          const step = runEvalOptions[i];
+          if (completedPairs.has(`${step.testIdx}:${step.promptIdx}`)) {
+            runEvalOptions.splice(i, 1);
+          }
+        }
+        const skipped = originalCount - runEvalOptions.length;
+        if (skipped > 0) {
+          logger.info(`Resuming: skipping ${skipped} previously completed cases`);
+        }
+      } catch (err) {
+        logger.warn(
+          `Resume: failed to load completed results. Running full evaluation. ${String(err)}`,
+        );
+      }
+    }
+
     // Determine run parameters
 
     if (concurrency > 1) {
@@ -1416,13 +1470,18 @@ class Evaluator {
         await this.evalRecord.addPrompts(prompts);
       });
     } catch (err) {
-      if (ciProgressReporter) {
-        ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
-      }
       if (options.abortSignal?.aborted) {
+        // User interruption or max duration timeout
         evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
-        logger.warn(`Evaluation aborted: ${String(err)}`);
+        if (evalTimedOut) {
+          logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+        } else {
+          logger.info('Evaluation interrupted, saving progress...');
+        }
       } else {
+        if (ciProgressReporter) {
+          ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
+        }
         throw err;
       }
     }

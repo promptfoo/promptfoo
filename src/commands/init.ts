@@ -9,7 +9,7 @@ import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
-import { isRunningUnderNpx } from '../util';
+import { isRunningUnderNpx } from '../util/index';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';

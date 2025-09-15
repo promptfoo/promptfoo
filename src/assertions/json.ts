@@ -3,7 +3,7 @@ import invariant from '../util/invariant';
 import { extractJsonObjects, getAjv } from '../util/json';
 import type { ValidateFunction } from 'ajv';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export function handleIsJson({
   outputString,

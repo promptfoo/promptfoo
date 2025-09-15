@@ -29,7 +29,7 @@ import {
   type TestSuite,
   type UnifiedConfig,
   UnifiedConfigSchema,
-} from '../../types';
+} from '../../types/index';
 import { isRunningUnderNpx, readFilters } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';

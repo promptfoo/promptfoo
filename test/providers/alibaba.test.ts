@@ -6,7 +6,7 @@ import {
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
-import type { ProviderOptions } from '../../src/types';
+import type { ProviderOptions } from '../../src/types/index';
 
 jest.mock('../../src/logger');
 jest.mock('../../src/providers/openai');

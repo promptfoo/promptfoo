@@ -2,7 +2,7 @@ import confirm from '@inquirer/confirm';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { setupEnv } from '../util';
+import { setupEnv } from '../util/index';
 import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database';
 import type { Command } from 'commander';
 

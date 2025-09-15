@@ -7,7 +7,7 @@ import type {
   ApiModerationProvider,
   ModerationFlag,
   ProviderModerationResponse,
-} from '../../types';
+} from '../../types/index';
 
 const OPENAI_MODERATION_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },

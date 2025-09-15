@@ -6,7 +6,7 @@ import { importModule } from '../../src/esm';
 import { processPrompts, readPrompts, readProviderPromptMap } from '../../src/prompts';
 import { maybeFilePath } from '../../src/prompts/utils';
 
-import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types';
+import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types/index';
 
 jest.mock('proxy-agent', () => ({
   ProxyAgent: jest.fn().mockImplementation(() => ({})),

@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 
-import type { Assertion, AssertionValue, ResultSuggestion } from '../../types';
+import type { Assertion, AssertionValue, ResultSuggestion } from '../../types/index';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 const PLUGIN_ID = 'promptfoo:redteam:politics';

@@ -8,7 +8,7 @@ import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
 
 import type { Tool } from '../../src/providers/google//types';
-import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types';
+import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types/index';
 
 jest.mock('fs');
 jest.mock('path', () => ({

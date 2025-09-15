@@ -3,7 +3,7 @@ import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import type { GradingConfig } from '../../src/types';
+import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesSimilarity', () => {
   beforeEach(() => {
