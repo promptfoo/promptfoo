@@ -10,7 +10,6 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
 import SearchIcon from '@mui/icons-material/Search';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { Grid2 } from '@mui/material';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -646,36 +645,113 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         !isConfigValid() || !hasAnyPluginsConfigured() ? getNextButtonTooltip() : undefined
       }
     >
-      {/* Warning banner when all/most plugins are selected - full width sticky */}
+      {/* Suggestion card when too many plugins are selected */}
       {hasSelectedMostPlugins && (
-        <Alert
-          severity="warning"
-          icon={<WarningAmberIcon />}
+        <Paper
+          elevation={0}
           sx={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 9,
-            margin: -3,
-            marginBottom: 3,
-            padding: theme.spacing(2, 3),
-            borderRadius: 0,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            '& .MuiAlert-message': {
-              width: '100%',
+            mb: 3,
+            p: 3,
+            borderRadius: 3,
+            background: (theme) =>
+              theme.palette.mode === 'dark'
+                ? 'linear-gradient(135deg, rgba(33, 150, 243, 0.05) 0%, rgba(33, 150, 243, 0.02) 100%)'
+                : 'linear-gradient(135deg, rgba(33, 150, 243, 0.03) 0%, rgba(33, 150, 243, 0.01) 100%)',
+            border: '1px solid',
+            borderColor: (theme) =>
+              theme.palette.mode === 'dark'
+                ? 'rgba(33, 150, 243, 0.2)'
+                : 'rgba(33, 150, 243, 0.15)',
+            position: 'relative',
+            overflow: 'hidden',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '3px',
+              background: 'linear-gradient(90deg, #2196F3, #21CBF3)',
             },
           }}
         >
-          <Box>
-            <Typography variant="body2" fontWeight="bold" gutterBottom>
-              Performance Warning: Too Many Plugins Selected
-            </Typography>
-            <Typography variant="body2">
-              Selecting many plugins is usually not efficient and will significantly increase
-              evaluation time and cost. It's recommended to use the preset configurations or select
-              only the plugins specifically needed for your use case.
-            </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: 2,
+                background: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(33, 150, 243, 0.15)'
+                    : 'rgba(33, 150, 243, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                mt: 0.5,
+              }}
+            >
+              <HelpOutlineIcon sx={{ color: 'primary.main', fontSize: 20 }} />
+            </Box>
+
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 600,
+                  color: 'text.primary',
+                  mb: 0.5,
+                }}
+              >
+                You've selected {selectedPlugins.size} plugins
+              </Typography>
+
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.secondary',
+                  mb: 2,
+                  lineHeight: 1.5,
+                }}
+              >
+                That's more than twice our recommended set ({DEFAULT_PLUGINS.size} plugins). This
+                will significantly increase evaluation time and may not provide better results.
+              </Typography>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={() => handlePresetSelect(presets.find((p) => p.name === 'Recommended')!)}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 500,
+                    px: 2,
+                    boxShadow: 'none',
+                    '&:hover': {
+                      boxShadow: '0 2px 8px rgba(33, 150, 243, 0.25)',
+                    },
+                  }}
+                >
+                  Use Recommended ({DEFAULT_PLUGINS.size})
+                </Button>
+
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: 'text.secondary',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                  }}
+                >
+                  ⚡ Much faster • Still comprehensive
+                </Typography>
+              </Box>
+            </Box>
           </Box>
-        </Alert>
+        </Paper>
       )}
 
       <ErrorBoundary FallbackComponent={ErrorFallback}>
