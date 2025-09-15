@@ -48,7 +48,7 @@ import ToolsDialog from './ToolsDialog';
 
 import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 
-const App: React.FC = () => {
+const App = () => {
   const navigate = useNavigate();
   const [evalId, setEvalId] = React.useState<string | null>(null);
   const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);

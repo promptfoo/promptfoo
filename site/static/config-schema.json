@@ -204,9 +204,6 @@
                             "JFROG_API_KEY": {
                               "type": "string"
                             },
-                            "LAMBDA_API_KEY": {
-                              "type": "string"
-                            },
                             "LANGFUSE_HOST": {
                               "type": "string"
                             },
@@ -1280,6 +1277,7 @@
                           "toxicity",
                           "unsafebench",
                           "unverifiable-claims",
+                          "vlguard",
                           "xstest"
                         ]
                       },
@@ -1473,6 +1471,7 @@
                               "toxicity",
                               "unsafebench",
                               "unverifiable-claims",
+                              "vlguard",
                               "xstest"
                             ]
                           },

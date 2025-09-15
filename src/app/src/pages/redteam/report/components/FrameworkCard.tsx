@@ -1,5 +1,3 @@
-import React from 'react';
-
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
@@ -43,7 +41,7 @@ interface FrameworkCardProps {
   idx: number;
 }
 
-const FrameworkCard: React.FC<FrameworkCardProps> = ({
+const FrameworkCard = ({
   framework,
   isCompliant,
   frameworkSeverity,
@@ -53,7 +51,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
   sortedNonCompliantPlugins,
   getPluginPassRate,
   idx,
-}) => {
+}: FrameworkCardProps) => {
   const theme = useTheme();
   const sortedPlugins = sortedNonCompliantPlugins(nonCompliantPlugins);
   const breakInside = idx === 0 ? 'undefined' : 'avoid';

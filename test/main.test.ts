@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { setLogLevel } from '../src/logger';
 import { addCommonOptionsRecursively } from '../src/main';
-import { setupEnv } from '../src/util';
+import { setupEnv } from '../src/util/index';
 
 // Mock the dependencies
 jest.mock('../src/util', () => ({

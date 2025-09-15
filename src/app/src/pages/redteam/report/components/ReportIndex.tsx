@@ -25,7 +25,7 @@ type SortField = 'description' | 'createdAt' | 'evalId';
 
 const ROWS_PER_PAGE = 50;
 
-const ReportIndex: React.FC = () => {
+const ReportIndex = () => {
   const navigate = useNavigate();
   const [recentEvals, setRecentEvals] = React.useState<ResultLightweightWithLabel[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);

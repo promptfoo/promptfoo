@@ -5,7 +5,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { canCreateTargets, getDefaultTeam } from '../util/cloud';
-import { fetchWithProxy } from '../util/fetch';
+import { fetchWithProxy } from '../util/fetch/index';
 import type { Command } from 'commander';
 
 export function authCommand(program: Command) {

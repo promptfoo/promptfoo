@@ -10,7 +10,7 @@ import {
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 
-import type { ApiProvider, Assertion, TestCase } from '../../src/types';
+import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
 
 jest.mock('fs');
 jest.mock('path');

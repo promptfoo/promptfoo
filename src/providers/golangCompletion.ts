@@ -6,7 +6,7 @@ import util from 'util';
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import { parsePathOrGlob } from '../util';
+import { parsePathOrGlob } from '../util/index';
 import { sha256 } from '../util/createHash';
 import { safeJsonStringify } from '../util/json';
 

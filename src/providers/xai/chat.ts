@@ -1,9 +1,9 @@
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 
-import type { ApiProvider, ProviderOptions } from '../../types';
+import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
 type XAIConfig = {

@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { loadApiProvider } from '../../providers';
+import { loadApiProvider } from '../../providers/index';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
