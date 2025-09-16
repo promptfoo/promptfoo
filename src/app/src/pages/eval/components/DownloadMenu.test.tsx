@@ -1,5 +1,5 @@
 import { screen } from '@testing-library/dom';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DownloadMenu from './DownloadMenu';
@@ -98,18 +98,6 @@ describe('DownloadMenu', () => {
     expect(screen.getByText('Download YAML Config')).toBeInTheDocument();
   });
 
-  it('closes the dialog when clicking outside', async () => {
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    expect(screen.getByText('Download YAML Config')).toBeInTheDocument();
-
-    fireEvent.keyDown(document.body, { key: 'Escape', code: 'Escape' });
-
-    await waitFor(() => {
-      expect(screen.queryByText('Download YAML Config')).not.toBeInTheDocument();
-    });
-  });
-
   it('downloads YAML config when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
@@ -124,7 +112,7 @@ describe('DownloadMenu', () => {
   it('downloads CSV when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Table CSV'));
+    await userEvent.click(screen.getByText('CSV Export'));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -135,7 +123,7 @@ describe('DownloadMenu', () => {
   it('downloads Table JSON when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Table JSON'));
+    await userEvent.click(screen.getByText('JSON Export'));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -146,7 +134,7 @@ describe('DownloadMenu', () => {
   it('downloads DPO JSON when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download DPO JSON'));
+    await userEvent.click(screen.getByText('DPO JSON'));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -157,7 +145,7 @@ describe('DownloadMenu', () => {
   it('downloads Human Eval Test YAML when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Human Eval Test YAML'));
+    await userEvent.click(screen.getByText('Human Eval YAML'));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -165,11 +153,34 @@ describe('DownloadMenu', () => {
     });
   });
 
-  it('does not handle keyboard shortcuts when dialog is closed', () => {
-    render(<DownloadMenu />);
+  it('handles malformed output structures in DPO JSON export without crashing', async () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          {
+            test: { vars: { testVar: 'value' } },
+            vars: ['value1', 'value2'],
+            outputs: [{ pass: true }],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [{ pass: false, text: 'passed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
 
-    fireEvent.keyDown(document, { key: '1' });
-    expect(window.URL.createObjectURL).not.toHaveBeenCalled();
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('DPO JSON'));
+
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    });
   });
 
   it('shows a toast when table data is not available', async () => {
@@ -184,7 +195,7 @@ describe('DownloadMenu', () => {
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Table CSV'));
+    await userEvent.click(screen.getByText('CSV Export'));
 
     expect(showToastMock).toHaveBeenCalledWith('No table data', 'error');
   });
@@ -212,7 +223,7 @@ describe('DownloadMenu', () => {
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Table CSV'));
+    await userEvent.click(screen.getByText('CSV Export'));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -242,7 +253,7 @@ describe('DownloadMenu', () => {
 
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Human Eval Test YAML'));
+    await userEvent.click(screen.getByText('Human Eval YAML'));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -278,7 +289,7 @@ describe('DownloadMenu', () => {
   it('downloads Burp Suite Payloads when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
-    await userEvent.click(screen.getByText('Download Burp Suite Payloads'));
+    await userEvent.click(screen.getByText('Burp Payloads'));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -291,9 +302,40 @@ describe('DownloadMenu', () => {
     await userEvent.click(screen.getByText('Download'));
 
     // Check the category headings
-    expect(screen.getByText('Promptfoo Configs')).toBeInTheDocument();
-    expect(screen.getByText('Table Data')).toBeInTheDocument();
-    expect(screen.getByText('Advanced Options')).toBeInTheDocument();
+    expect(screen.getByText('Configuration Files')).toBeInTheDocument();
+    expect(screen.getByText('Table Data Exports')).toBeInTheDocument();
+    expect(screen.getByText('Advanced Exports')).toBeInTheDocument();
+  });
+
+  it('displays the "Downloaded" indicator in CommandBlock after downloading YAML config', async () => {
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('Download YAML Config'));
+
+    await waitFor(() => {
+      const commandBlock = screen
+        .getByText('Run this command to execute the eval again:')
+        .closest('.MuiPaper-root');
+      expect(commandBlock).toBeInTheDocument();
+      expect(screen.getByText('Downloaded')).toBeVisible();
+      expect(commandBlock?.querySelector('svg[data-testid="CheckCircleIcon"]')).toBeInTheDocument();
+    });
+  });
+
+  it('shows an error toast when clipboard API fails', async () => {
+    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockImplementationOnce(() =>
+      Promise.reject(new Error('Clipboard write failed')),
+    );
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+
+    const copyButton = screen.getAllByLabelText('Copy command')[0];
+    await userEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Failed to copy command', 'error');
+    });
   });
 
   describe('Failed Tests Config Button disabled state', () => {
@@ -307,7 +349,7 @@ describe('DownloadMenu', () => {
       render(<DownloadMenu />);
       await userEvent.click(screen.getByText('Download'));
 
-      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
       expect(button).toBeDisabled();
     });
 
@@ -324,7 +366,7 @@ describe('DownloadMenu', () => {
       render(<DownloadMenu />);
       await userEvent.click(screen.getByText('Download'));
 
-      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
       expect(button).toBeDisabled();
     });
 
@@ -341,7 +383,7 @@ describe('DownloadMenu', () => {
       render(<DownloadMenu />);
       await userEvent.click(screen.getByText('Download'));
 
-      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
       expect(button).toBeDisabled();
     });
 
@@ -369,7 +411,7 @@ describe('DownloadMenu', () => {
       render(<DownloadMenu />);
       await userEvent.click(screen.getByText('Download'));
 
-      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
       expect(button).toBeDisabled();
     });
 
@@ -384,7 +426,7 @@ describe('DownloadMenu', () => {
       render(<DownloadMenu />);
       await userEvent.click(screen.getByText('Download'));
 
-      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
       expect(button).not.toBeDisabled();
     });
 
@@ -401,7 +443,7 @@ describe('DownloadMenu', () => {
       render(<DownloadMenu />);
       await userEvent.click(screen.getByText('Download'));
 
-      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
       // Empty body means no tests, so should be disabled
       expect(button).toBeDisabled();
     });
