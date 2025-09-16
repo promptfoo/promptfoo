@@ -280,16 +280,6 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     const assert = asserts[i];
     assert.metric = metric;
 
-    // Apply global configuration (if exists)
-    const globalConfig = assertionConfigs['*'];
-    if (globalConfig) {
-      for (const [configKey, configValue] of Object.entries(globalConfig)) {
-        (assert as any)[configKey] = configValue;
-        // Include each key/value on the metadata object
-        metadata[configKey] = configValue;
-      }
-    }
-
     // Apply index-specific configuration (if exists) - overrides global
     const indexConfig = assertionConfigs[i];
     if (indexConfig) {
