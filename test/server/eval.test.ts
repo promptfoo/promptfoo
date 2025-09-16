@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -221,7 +222,7 @@ describe('eval routes', () => {
         `INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
           success, score, metadata
-        ) VALUES 
+        ) VALUES
         ('result1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0, '{"key1": "value1", "key2": "value2"}'),
         ('result2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}')`,
       );
@@ -231,8 +232,6 @@ describe('eval routes', () => {
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('keys');
       expect(res.body.keys).toEqual(expect.arrayContaining(['key1', 'key2', 'key3']));
-      expect(res.headers['cache-control']).toContain('private, max-age=1800');
-      expect(res.headers['vary']).toContain('Authorization');
     });
 
     it('should return 404 for non-existent eval', async () => {

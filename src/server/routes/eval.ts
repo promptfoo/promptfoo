@@ -288,12 +288,6 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
 
     const keys = await EvalQueries.getMetadataKeysFromEval(id);
 
-    // Set targeted caching headers - only affects this specific endpoint
-    res.set({
-      'Cache-Control': 'private, max-age=1800', // 30 minute cache, private to user
-      Vary: 'Authorization', // Cache per user if auth is involved
-    });
-
     const response = ApiSchemas.Eval.MetadataKeys.Response.parse({ keys });
     res.json(response);
   } catch (error) {

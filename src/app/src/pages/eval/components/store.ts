@@ -420,24 +420,14 @@ export const useTableStore = create<TableState>()((set, get) => ({
       currentState.currentMetadataKeysRequest.abort();
     }
 
-    if (skipLoadingState) {
-      set({
-        shouldHighlightSearchText: false,
-        metadataKeys: [],
-        metadataKeysLoading: true,
-        metadataKeysError: false,
-        currentMetadataKeysRequest: null,
-      });
-    } else {
-      set({
-        isFetching: true,
-        shouldHighlightSearchText: false,
-        metadataKeys: [],
-        metadataKeysLoading: true,
-        metadataKeysError: false,
-        currentMetadataKeysRequest: null,
-      });
-    }
+    set({
+      isFetching: skipLoadingState ? get().isFetching : true,
+      shouldHighlightSearchText: false,
+      metadataKeys: [],
+      metadataKeysLoading: true,
+      metadataKeysError: false,
+      currentMetadataKeysRequest: null,
+    });
 
     try {
       console.log(`Fetching data for eval ${id} with options:`, options);
@@ -516,20 +506,12 @@ export const useTableStore = create<TableState>()((set, get) => ({
       return null;
     } catch (error) {
       console.error('Error fetching eval data:', error);
-      if (skipLoadingState) {
-        set({
-          isStreaming: false,
-          metadataKeysLoading: false,
-          currentMetadataKeysRequest: null,
-        });
-      } else {
-        set({
-          isFetching: false,
-          isStreaming: false,
-          metadataKeysLoading: false,
-          currentMetadataKeysRequest: null,
-        });
-      }
+      set({
+        isFetching: skipLoadingState ? get().isFetching : false,
+        isStreaming: false,
+        metadataKeysLoading: false,
+        currentMetadataKeysRequest: null,
+      });
       return null;
     }
   },
