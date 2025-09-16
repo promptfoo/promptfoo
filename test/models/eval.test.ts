@@ -357,7 +357,7 @@ describe('evaluator', () => {
     });
 
     it('should return paginated results with default parameters', async () => {
-      const result = await evalWithResults.getTablePage({});
+      const result = await evalWithResults.getTablePage({ filters: [] });
 
       expect(result).toHaveProperty('head');
       expect(result).toHaveProperty('body');
@@ -376,8 +376,8 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const firstPage = await largeEval.getTablePage({ offset: 0, limit: 5 });
-      const secondPage = await largeEval.getTablePage({ offset: 5, limit: 5 });
+      const firstPage = await largeEval.getTablePage({ offset: 0, limit: 5, filters: [] });
+      const secondPage = await largeEval.getTablePage({ offset: 5, limit: 5, filters: [] });
 
       expect(firstPage.body.length).toBeLessThanOrEqual(5);
       expect(secondPage.body.length).toBeLessThanOrEqual(5);
@@ -396,7 +396,7 @@ describe('evaluator', () => {
     });
 
     it('should filter by errors', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'errors' });
+      const result = await evalWithResults.getTablePage({ filterMode: 'errors', filters: [] });
 
       // Ensure there are results for the test to be meaningful
       const hasResults = result.body.length > 0;
@@ -413,7 +413,7 @@ describe('evaluator', () => {
     });
 
     it('should filter by failures', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'failures' });
+      const result = await evalWithResults.getTablePage({ filterMode: 'failures', filters: [] });
 
       // Ensure there are results for the test to be meaningful
       const hasResults = result.body.length > 0;
@@ -429,7 +429,7 @@ describe('evaluator', () => {
     });
 
     it('should filter by passes', async () => {
-      const result = await evalWithResults.getTablePage({ filterMode: 'passes' });
+      const result = await evalWithResults.getTablePage({ filterMode: 'passes', filters: [] });
 
       // Ensure there are results for the test to be meaningful
       const hasResults = result.body.length > 0;
@@ -444,7 +444,7 @@ describe('evaluator', () => {
 
     it('should filter by specific test indices', async () => {
       const testIndices = [1, 3, 5];
-      const result = await evalWithResults.getTablePage({ testIndices });
+      const result = await evalWithResults.getTablePage({ testIndices, filters: [] });
 
       // Should only return results for the specified test indices
       const returnedIndices = result.body.map((row) => row.testIdx);
@@ -459,7 +459,7 @@ describe('evaluator', () => {
     it('should handle search queries across fields', async () => {
       // This test requires setting up specific search terms in the eval factory
       const searchTerm = 'searchable_content';
-      const result = await evalWithResults.getTablePage({ searchQuery: searchTerm });
+      const result = await evalWithResults.getTablePage({ searchQuery: searchTerm, filters: [] });
 
       // Results should contain the search term in at least one field
       expect(result.body.length).toBeGreaterThan(0);
@@ -539,8 +539,11 @@ describe('evaluator', () => {
     });
 
     it('should return correct counts for filtered results', async () => {
-      const allResults = await evalWithResults.getTablePage({});
-      const filteredResults = await evalWithResults.getTablePage({ filterMode: 'passes' });
+      const allResults = await evalWithResults.getTablePage({ filters: [] });
+      const filteredResults = await evalWithResults.getTablePage({
+        filterMode: 'passes',
+        filters: [],
+      });
 
       // Total count should be the same for both queries
       expect(filteredResults.totalCount).toBe(allResults.totalCount);
@@ -553,6 +556,7 @@ describe('evaluator', () => {
       // Test with input containing SQL injection attempt
       const result = await evalWithResults.getTablePage({
         searchQuery: "'; DROP TABLE eval_results; --",
+        filters: [],
       });
 
       // Should still return results without error
@@ -564,7 +568,7 @@ describe('evaluator', () => {
       // Create an eval with no results
       const emptyEval = await EvalFactory.create({ numResults: 0 });
 
-      const result = await emptyEval.getTablePage({});
+      const result = await emptyEval.getTablePage({ filters: [] });
 
       expect(result.body).toEqual([]);
       expect(result.totalCount).toBe(0);
