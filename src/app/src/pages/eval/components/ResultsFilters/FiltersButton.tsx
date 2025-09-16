@@ -8,8 +8,11 @@ import Tooltip from '@mui/material/Tooltip';
 
 const CountBadge = styled(Badge)`
   & .${badgeClasses.badge} {
-    top: -12px;
-    right: -6px;
+    top: -8px;
+    right: -8px;
+    min-width: 16px;
+    height: 16px;
+    font-size: 0.75rem;
   }
 `;
 

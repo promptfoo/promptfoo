@@ -10,7 +10,7 @@ import type {
   GradingResult,
   PluginConfig,
   TestCase,
-} from '../../types';
+} from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:policy';
 
@@ -151,6 +151,9 @@ export class PolicyViolationGrader extends RedteamGraderBase {
     provider: ApiProvider | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const { policy, ...restMetadata } = test.metadata || {};
+
+    // For custom policies, we skip the refusal check by passing skipRefusalCheck=true
+    // This allows the policy grader to evaluate refusals according to the policy rubric
     return super.getResult(
       prompt,
       llmOutput,
@@ -163,6 +166,8 @@ export class PolicyViolationGrader extends RedteamGraderBase {
       },
       provider,
       undefined,
+      undefined,
+      true, // skipRefusalCheck - custom policies should evaluate refusals
     );
   }
 }

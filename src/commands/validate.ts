@@ -3,12 +3,12 @@ import dedent from 'dedent';
 import { fromError } from 'zod-validation-error';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import { TestSuiteSchema, UnifiedConfigSchema } from '../types';
-import { setupEnv } from '../util';
+import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
+import { setupEnv } from '../util/index';
 import { resolveConfigs } from '../util/config/load';
 import type { Command } from 'commander';
 
-import type { UnifiedConfig } from '../types';
+import type { UnifiedConfig } from '../types/index';
 
 interface ValidateOptions {
   config?: string[];

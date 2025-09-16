@@ -15,6 +15,8 @@ Pass and fail scores are separate from **errors**, where the output could not be
 
 Configuring your grader starts when you create a new target within Promptfoo and outline details about the application in the "Usage Details" section. The `purpose` that you provide in the target setup, as well as any additional context about external system access if applicable, informs the grader. The more information you provide, the better the red team attacks will be.
 
+For custom `llm-rubric` assertions, see [Pass vs. Score Semantics](/docs/configuration/expected-outputs/model-graded/llm-rubric#pass-vs-score-semantics) if you encounter unexpected PASS results.
+
 The purpose can include details about how the LLM application should behave, including specifications like:
 
 - Tone, personality, and helpfulness

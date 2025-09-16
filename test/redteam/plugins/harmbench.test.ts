@@ -1,5 +1,5 @@
 import { HarmbenchGrader, HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
-import * as fetchModule from '../../../src/util/fetch';
+import * as fetchModule from '../../../src/util/fetch/index';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 

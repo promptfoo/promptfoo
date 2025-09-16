@@ -3,7 +3,7 @@ import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { resolveConfigs } from '../../src/util/config/load';
 
-import type { UnifiedConfig } from '../../src/types';
+import type { UnifiedConfig } from '../../src/types/index';
 
 jest.mock('../../src/logger');
 jest.mock('../../src/util/config/load');

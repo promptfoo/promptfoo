@@ -1,6 +1,6 @@
 import { RedteamGraderBase } from './base';
 
-import type { AtomicTestCase, GradingResult } from '../../types';
+import type { AtomicTestCase, GradingResult } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:ascii-smuggling';
 

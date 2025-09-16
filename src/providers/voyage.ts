@@ -3,7 +3,11 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiEmbeddingProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
+import type {
+  ApiEmbeddingProvider,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
 
 export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   modelName: string;

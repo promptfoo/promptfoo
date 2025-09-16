@@ -4,7 +4,7 @@ import { Command } from 'commander';
 import { exportCommand } from '../../src/commands/export';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { writeOutput } from '../../src/util';
+import { writeOutput } from '../../src/util/index';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 
 jest.mock('../../src/telemetry', () => ({
