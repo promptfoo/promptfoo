@@ -27,6 +27,7 @@ The form editor provides a user-friendly interface for configuring common provid
    - For any fields beyond the common ones, use the JSON tab
    - The form will alert you if your configuration contains additional fields
    - Click "JSON" to see and edit the full configuration object
+   - Note: Some fields like "API Host", "Timeout", "Headers" are JSON-only and not available in the form editor
 
 ### JSON Editor
 
@@ -73,7 +74,46 @@ headers:
 timeout: 30000
 ```
 
-### Complex Provider Configuration (Requires JSON Editor)
+### Complex Provider Configuration (JSON Editor)
+
+When using the JSON editor in the web UI, your configuration would look like:
+
+```json
+{
+  "apiKey": "sk-your-api-key",
+  "temperature": 0.7,
+  "config": {
+    "model_config": {
+      "top_p": 0.9,
+      "frequency_penalty": 0.5,
+      "presence_penalty": 0.5
+    },
+    "generation_config": {
+      "max_length": 2048,
+      "min_length": 10,
+      "do_sample": true
+    }
+  },
+  "stop_sequences": [
+    "\n\n",
+    "END",
+    "STOP"
+  ],
+  "response_format": {
+    "type": "json_object",
+    "schema": {
+      "properties": {
+        "answer": { "type": "string" },
+        "confidence": { "type": "number" }
+      }
+    }
+  }
+}
+```
+
+### Same Configuration in YAML (CLI Files)
+
+For comparison, the equivalent YAML configuration for CLI use:
 
 ```yaml
 apiKey: sk-your-api-key
@@ -104,15 +144,15 @@ response_format:
 
 ## Tips
 
-1. **Quick Setup**: Use the Form tab for common fields, then switch to YAML for anything else
+1. **Quick Setup**: Use the Form tab for common fields, then switch to JSON for anything else
 
 2. **Environment Variables**: You can still use environment variables for sensitive values like API keys. Set them in your environment and leave the fields empty in the UI.
 
 3. **Provider-Specific Fields**: Some providers have specific required fields (e.g., Azure requires `deployment_id`). The UI will show validation errors for missing required fields.
 
-4. **Adding Custom Fields**: Simply switch to the YAML tab and add any field your provider needs
+4. **Adding Custom Fields**: Simply switch to the JSON tab and add any field your provider needs
 
-5. **Copying Configurations**: The YAML editor is perfect for pasting existing configurations from your YAML files
+5. **Copying Configurations**: The JSON editor is perfect for pasting existing configurations from your JSON or YAML files
 
 ## Migration from CLI
 

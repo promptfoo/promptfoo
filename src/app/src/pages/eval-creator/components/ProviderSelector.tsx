@@ -18,45 +18,6 @@ const defaultProviders: ProviderOptions[] = (
 )
   .concat([
     {
-      id: 'openai:gpt-5',
-      label: 'OpenAI: GPT-5',
-      config: {
-        organization: '',
-        temperature: 0.5,
-        max_tokens: 1024,
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-        function_call: undefined,
-        functions: undefined,
-        stop: undefined,
-      },
-    },
-    {
-      id: 'openai:gpt-5-mini',
-      label: 'OpenAI: GPT-5 Mini',
-      config: {
-        organization: '',
-        temperature: 0.5,
-        max_tokens: 1024,
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-      },
-    },
-    {
-      id: 'openai:gpt-5-nano',
-      label: 'OpenAI: GPT-5 Nano',
-      config: {
-        organization: '',
-        temperature: 0.5,
-        max_tokens: 1024,
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-      },
-    },
-    {
       id: 'openai:gpt-4o',
       label: 'OpenAI: GPT-4o',
       config: {
@@ -81,36 +42,6 @@ const defaultProviders: ProviderOptions[] = (
         top_p: 1.0,
         frequency_penalty: 0.0,
         presence_penalty: 0.0,
-      },
-    },
-    {
-      id: 'openai:o3',
-      label: 'OpenAI: GPT-o3 (with thinking)',
-      config: {
-        organization: '',
-        isReasoningModel: true,
-        max_completion_tokens: 1024,
-        reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
-      },
-    },
-    {
-      id: 'openai:o4-mini',
-      label: 'OpenAI: GPT-o4 Mini (with thinking)',
-      config: {
-        organization: '',
-        isReasoningModel: true,
-        max_completion_tokens: 2048,
-        reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
-      },
-    },
-    {
-      id: 'openai:o3-mini',
-      label: 'OpenAI: GPT-o3 Mini (with thinking)',
-      config: {
-        organization: '',
-        isReasoningModel: true,
-        max_completion_tokens: 2048,
-        reasoning_effort: 'medium', // Options: 'low', 'medium', 'high'
       },
     },
   ])
@@ -289,26 +220,6 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
-      id: 'azure:chat:gpt-5',
-      label: 'Azure: GPT-5',
-      config: {
-        api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2025-08-07',
-        temperature: 0.5,
-        max_tokens: 1024,
-      },
-    },
-    {
-      id: 'azure:chat:gpt-5-mini',
-      label: 'Azure: GPT-5 Mini',
-      config: {
-        api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2025-08-07',
-        temperature: 0.5,
-        max_tokens: 1024,
-      },
-    },
-    {
       id: 'azure:chat:gpt-4o',
       label: 'Azure: GPT-4o',
       config: {
@@ -326,76 +237,6 @@ const defaultProviders: ProviderOptions[] = (
         api_version: '2025-08-07',
         temperature: 0.5,
         max_tokens: 2048,
-      },
-    },
-    {
-      id: 'azure:chat:o4-mini',
-      label: 'Azure: O4 Mini',
-      config: {
-        api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-05-15-preview',
-        temperature: 0.5,
-        max_tokens: 4096,
-      },
-    },
-    {
-      id: 'azure:chat:o3-mini',
-      label: 'Azure: O3 Mini',
-      config: {
-        api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-05-15-preview',
-        temperature: 0.5,
-        max_tokens: 4096,
-      },
-    },
-  ])
-  .concat([
-    {
-      id: 'vertex:gemini-2.5-pro',
-      label: 'Vertex: Gemini 2.5 Pro',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
-      },
-    },
-    {
-      id: 'vertex:gemini-2.5-flash',
-      label: 'Vertex: Gemini 2.5 Flash',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
-      },
-    },
-    {
-      id: 'vertex:gemini-2.0-pro',
-      label: 'Vertex: Gemini 2.0 Pro',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
-      },
-    },
-    {
-      id: 'vertex:gemini-2.0-flash-001',
-      label: 'Vertex: Gemini 2.0 Flash',
-      config: {
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-          topK: 40,
-        },
       },
     },
   ])

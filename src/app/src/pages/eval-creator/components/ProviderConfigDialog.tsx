@@ -58,6 +58,7 @@ const ProviderConfigDialog = ({
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const [jsonText, setJsonText] = useState<string>('');
+  const [jsonFieldText, setJsonFieldText] = useState<Record<string, string>>({});
 
   // Get schema for current provider
   const schema = useMemo(() => {
@@ -97,18 +98,28 @@ const ProviderConfigDialog = ({
     // If we have a schema, initialize with defaults
     if (schema) {
       const initialConfig: Record<string, any> = {};
+      const initialJsonFieldText: Record<string, string> = {};
+
       schema.fields.forEach((field) => {
         // Always include the field in config so it shows in the form
         const value = config[field.name] ?? field.defaultValue ?? '';
         initialConfig[field.name] = value;
+
+        // Initialize JSON text for object/array fields
+        if ((field.type === 'object' || field.type === 'array') && value) {
+          initialJsonFieldText[field.name] = JSON.stringify(value, null, 2);
+        }
       });
+
       setLocalConfig(initialConfig);
+      setJsonFieldText(initialJsonFieldText);
       setJsonText(JSON.stringify(initialConfig, null, 2));
       // Validate initial config
       validateConfig(initialConfig);
     } else {
       // No schema, just use the provided config
       setLocalConfig(config);
+      setJsonFieldText({}); // Clear JSON field text when no schema
       setValidationErrors([]);
       setJsonText(JSON.stringify(config || {}, null, 2));
     }
@@ -124,17 +135,12 @@ const ProviderConfigDialog = ({
     }
   }, [open, providerId, config, schema, hasSchema]);
 
-  // Memoize JSON text to avoid expensive stringify on every render
-  const jsonTextFromConfig = useMemo(() => {
-    return JSON.stringify(localConfig || {}, null, 2);
-  }, [localConfig]);
-
-  // Update JSON text only when switching tabs or when config changes significantly
+  // Update JSON text when switching to form tab to sync with form changes
   useEffect(() => {
     if (tabValue === 0) {
-      setJsonText(jsonTextFromConfig);
+      setJsonText(JSON.stringify(localConfig || {}, null, 2));
     }
-  }, [jsonTextFromConfig, tabValue]);
+  }, [localConfig, tabValue]);
 
   // Handle field change with debounced validation
   const handleFieldChange = (fieldName: string, value: any) => {
@@ -235,9 +241,15 @@ const ProviderConfigDialog = ({
         return (
           <JsonTextField
             label={field.label}
-            value={JSON.stringify(value || (field.type === 'array' ? [] : {}))}
-            onChange={(parsed, error) => {
-              if (!error) {
+            value={jsonFieldText[field.name] || JSON.stringify(value || (field.type === 'array' ? [] : {}))}
+            includeRaw
+            onChange={(parsed, error, raw) => {
+              // Always update the raw text so users can see their keystrokes
+              if (raw !== undefined) {
+                setJsonFieldText(prev => ({ ...prev, [field.name]: raw }));
+              }
+              // Only update the config when JSON is valid
+              if (!error && parsed !== null) {
                 handleFieldChange(field.name, parsed);
               }
             }}
@@ -279,23 +291,6 @@ const ProviderConfigDialog = ({
                   }
                 : undefined
             }
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                // Find the form by traversing up the DOM tree
-                const form = (e.currentTarget as HTMLElement).closest('form') || document.querySelector('form');
-                const inputs = Array.from(form?.querySelectorAll('input, textarea, select') || []);
-                const currentIndex = inputs.indexOf(e.currentTarget as HTMLElement);
-                const nextInput = inputs[currentIndex + 1] as HTMLElement;
-                if (nextInput) {
-                  nextInput.focus();
-                } else {
-                  // Focus save button if at last field
-                  const saveButton = document.querySelector('[data-testid="save-button"]') as HTMLElement;
-                  saveButton?.focus();
-                }
-              }
-            }}
           />
         );
     }

@@ -285,6 +285,19 @@ export function getProviderSchema(providerId: string): ProviderSchema | null {
   const rawType = providerId.split(':')[0];
   const aliasMap: Record<string, string> = {
     azureopenai: 'azure',
+    'azure-openai': 'azure',
+    azureai: 'azure',
+    'azure-ai': 'azure',
+    'google-vertex': 'vertex',
+    'vertex-ai': 'vertex',
+    googleai: 'vertex',
+    'aws-bedrock': 'bedrock',
+    claude: 'anthropic',
+    'openai-gpt': 'openai',
+    gpt: 'openai',
+    'huggingface-hub': 'huggingface',
+    'hf-hub': 'huggingface',
+    hf: 'huggingface',
   };
   const providerType = aliasMap[rawType] || rawType;
   return providerSchemas[providerType] || null;
