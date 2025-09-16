@@ -1,5 +1,5 @@
 import { screen } from '@testing-library/dom';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DownloadMenu from './DownloadMenu';
@@ -153,6 +153,36 @@ describe('DownloadMenu', () => {
     });
   });
 
+  it('handles malformed output structures in DPO JSON export without crashing', async () => {
+    (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          {
+            test: { vars: { testVar: 'value' } },
+            vars: ['value1', 'value2'],
+            outputs: [{ pass: true }],
+          },
+          {
+            test: { vars: { testVar: 'value2' } },
+            vars: ['value3', 'value4'],
+            outputs: [{ pass: false, text: 'passed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('DPO JSON'));
+
+    await waitFor(() => {
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    });
+  });
+
   it('shows a toast when table data is not available', async () => {
     (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       table: null,
@@ -277,6 +307,37 @@ describe('DownloadMenu', () => {
     expect(screen.getByText('Advanced Exports')).toBeInTheDocument();
   });
 
+  it('displays the "Downloaded" indicator in CommandBlock after downloading YAML config', async () => {
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+    await userEvent.click(screen.getByText('Download YAML Config'));
+
+    await waitFor(() => {
+      const commandBlock = screen
+        .getByText('Run this command to execute the eval again:')
+        .closest('.MuiPaper-root');
+      expect(commandBlock).toBeInTheDocument();
+      expect(screen.getByText('Downloaded')).toBeVisible();
+      expect(commandBlock?.querySelector('svg[data-testid="CheckCircleIcon"]')).toBeInTheDocument();
+    });
+  });
+
+  it('shows an error toast when clipboard API fails', async () => {
+    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockImplementationOnce(() =>
+      Promise.reject(new Error('Clipboard write failed')),
+    );
+
+    render(<DownloadMenu />);
+    await userEvent.click(screen.getByText('Download'));
+
+    const copyButton = screen.getAllByLabelText('Copy command')[0];
+    await userEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Failed to copy command', 'error');
+    });
+  });
+
   describe('Failed Tests Config Button disabled state', () => {
     it('disables the button when table is null', async () => {
       (useResultsViewStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -382,7 +443,7 @@ describe('DownloadMenu', () => {
       render(<DownloadMenu />);
       await userEvent.click(screen.getByText('Download'));
 
-      const button = screen.getByRole('button', { name: /Download Failed Tests Config/i });
+      const button = screen.getByRole('button', { name: /Download Failed Tests/i });
       // Empty body means no tests, so should be disabled
       expect(button).toBeDisabled();
     });
