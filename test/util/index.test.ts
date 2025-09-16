@@ -11,7 +11,7 @@ import {
   type EvaluateResult,
   ResultFailureReason,
   type TestCase,
-} from '../../src/types';
+} from '../../src/types/index';
 import {
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
@@ -25,7 +25,7 @@ import {
   writeMultipleOutputs,
   writeOutput,
   createOutputMetadata,
-} from '../../src/util';
+} from '../../src/util/index';
 import { TestGrader } from './utils';
 
 jest.mock('../../src/database', () => ({
@@ -738,14 +738,14 @@ describe('setupEnv', () => {
     jest.resetAllMocks();
   });
 
-  it('should call dotenv.config without parameters when envPath is undefined', () => {
+  it('should call dotenv.config with quiet=true when envPath is undefined', () => {
     setupEnv(undefined);
 
     expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
-    expect(dotenvConfigSpy).toHaveBeenCalledWith();
+    expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
   });
 
-  it('should call dotenv.config with path and override=true when envPath is specified', () => {
+  it('should call dotenv.config with path, override=true, and quiet=true when envPath is specified', () => {
     const testEnvPath = '.env.test';
 
     setupEnv(testEnvPath);
@@ -754,6 +754,7 @@ describe('setupEnv', () => {
     expect(dotenvConfigSpy).toHaveBeenCalledWith({
       path: testEnvPath,
       override: true,
+      quiet: true,
     });
   });
 

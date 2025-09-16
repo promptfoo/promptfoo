@@ -6,7 +6,7 @@ description: Configure Amazon Bedrock for LLM evaluations with Claude, Llama, No
 
 # Bedrock
 
-The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, AI21's Jamba, and other models. The complete list of available models can be found [here](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
 
 ## Setup
 
@@ -47,17 +47,97 @@ The `bedrock` lets you use Amazon Bedrock in your evals. This is a common way to
          temperature: 0.7
    ```
 
+## Application Inference Profiles
+
+AWS Bedrock supports Application Inference Profiles, which allow you to use a single ARN to access multiple foundation models across different regions. This helps optimize costs and availability while maintaining consistent performance.
+
+### Using Inference Profiles
+
+When using an inference profile ARN, you must specify the `inferenceModelType` in your configuration to indicate which model family the profile is configured for:
+
+```yaml
+providers:
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+    config:
+      inferenceModelType: 'claude' # Required for inference profiles
+      region: 'us-east-1'
+      max_tokens: 256
+      temperature: 0.7
+```
+
+### Supported Model Types
+
+The `inferenceModelType` config option supports the following values:
+
+- `claude` - For Anthropic Claude models
+- `nova` - For Amazon Nova models
+- `llama` - Defaults to Llama 4 (latest version)
+- `llama2` - For Meta Llama 2 models
+- `llama3` - For Meta Llama 3 models
+- `llama3.1` or `llama3_1` - For Meta Llama 3.1 models
+- `llama3.2` or `llama3_2` - For Meta Llama 3.2 models
+- `llama3.3` or `llama3_3` - For Meta Llama 3.3 models
+- `llama4` - For Meta Llama 4 models
+- `mistral` - For Mistral models
+- `cohere` - For Cohere models
+- `ai21` - For AI21 models
+- `titan` - For Amazon Titan models
+- `deepseek` - For DeepSeek models
+- `openai` - For OpenAI models
+
+### Example: Multi-Region Inference Profile
+
+```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  # Using an inference profile that routes to Claude models
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
+    config:
+      inferenceModelType: 'claude'
+      max_tokens: 1024
+      temperature: 0.7
+      anthropic_version: 'bedrock-2023-05-31'
+
+  # Using an inference profile for Llama models
+  - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/llama-profile
+    config:
+      inferenceModelType: 'llama3.3'
+      max_gen_len: 1024
+      temperature: 0.7
+
+  # Using an inference profile for Nova models
+  - id: bedrock:arn:aws:bedrock:eu-west-1:123456789012:application-inference-profile/nova-profile
+    config:
+      inferenceModelType: 'nova'
+      interfaceConfig:
+        max_new_tokens: 1024
+        temperature: 0.7
+```
+
+:::tip
+
+Application Inference Profiles provide several benefits:
+
+- **Automatic failover**: If one region is unavailable, requests automatically route to another region
+- **Cost optimization**: Routes to the most cost-effective available model
+- **Simplified management**: Use a single ARN instead of managing multiple model IDs
+
+When using inference profiles, ensure the `inferenceModelType` matches the model family your profile is configured for, as the configuration parameters differ between model types.
+
+:::
+
 ## Authentication
 
-Amazon Bedrock follows a specific credential resolution order that prioritizes explicitly configured credentials over default AWS mechanisms.
+Amazon Bedrock supports multiple authentication methods, including the new API key authentication for simplified access. Credentials are resolved in this priority order:
 
 ### Credential Resolution Order
 
 When authenticating with AWS Bedrock, credentials are resolved in this sequence:
 
-1. **Config file credentials**: Explicitly provided `accessKeyId` and `secretAccessKey` in your promptfoo configuration
-2. **SSO profile**: When a `profile` is specified in your config
-3. **AWS default credential chain**:
+1. **Config file credentials**: Explicitly provided `accessKeyId` and `secretAccessKey` in your promptfoo configuration (highest priority)
+2. **API Key authentication**: Bedrock API keys via config or environment variable
+3. **SSO profile**: When a `profile` is specified in your config
+4. **AWS default credential chain**:
    - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
    - Shared credentials file (`~/.aws/credentials`)
    - EC2 instance profile or ECS task role
@@ -81,7 +161,50 @@ providers:
 
 This method overrides all other credential sources, including EC2 instance roles.
 
-#### 2. SSO profile authentication
+#### 2. API Key authentication
+
+Amazon Bedrock API keys provide a simplified authentication method that doesn't require managing AWS IAM credentials. This is especially useful for developers who want quick access to Bedrock models.
+
+**Using environment variables:**
+
+Set the `AWS_BEARER_TOKEN_BEDROCK` environment variable:
+
+```bash
+export AWS_BEARER_TOKEN_BEDROCK="your-api-key-here"
+```
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      region: 'us-east-1' # Optional, defaults to us-east-1
+```
+
+**Using config file:**
+
+Specify the API key directly in your configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      apiKey: 'your-api-key-here'
+      region: 'us-east-1' # Optional, defaults to us-east-1
+```
+
+:::note
+
+API keys are limited to Amazon Bedrock and Amazon Bedrock Runtime actions. They cannot be used with:
+
+- InvokeModelWithBidirectionalStream operations
+- Agents for Amazon Bedrock API operations
+- Data Automation for Amazon Bedrock API operations
+
+For these advanced features, use traditional AWS IAM credentials instead.
+
+:::
+
+#### 3. SSO profile authentication
 
 Use a profile from your AWS configuration:
 
@@ -93,7 +216,7 @@ providers:
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
 
-#### 3. Default credentials (lowest priority)
+#### 4. Default credentials (lowest priority)
 
 Rely on the AWS default credential chain:
 
@@ -116,6 +239,15 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
+  # Using inference profiles (requires inferenceModelType)
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-claude-profile
+    config:
+      inferenceModelType: 'claude'
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 256
+
+  # Using regular model IDs
   - id: bedrock:meta.llama3-1-405b-instruct-v1:0
     config:
       region: 'us-east-1'
@@ -151,11 +283,23 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    config:
+      region: 'us-west-2'
+      temperature: 0.7
+      max_completion_tokens: 256
+      reasoning_effort: 'medium'
+  - id: bedrock:openai.gpt-oss-20b-1:0
+    config:
+      region: 'us-west-2'
+      temperature: 0.7
+      max_completion_tokens: 256
+      reasoning_effort: 'low'
 
 tests:
   - vars:
@@ -169,6 +313,10 @@ tests:
 ## Model-specific Configuration
 
 Different models may support different configuration options. Here are some model-specific parameters:
+
+### General Configuration Options
+
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`
 
 ### Amazon Nova Models
 
@@ -364,9 +512,65 @@ DeepSeek models support an extended thinking capability. The `showThinking` para
 
 This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
 
+### OpenAI Models
+
+OpenAI's open-weight models are available through AWS Bedrock with full support for their reasoning capabilities and parameters. The available models include:
+
+- **`openai.gpt-oss-120b-1:0`**: 120 billion parameter model with strong reasoning capabilities
+- **`openai.gpt-oss-20b-1:0`**: 20 billion parameter model, more cost-effective
+
+```yaml
+config:
+  max_completion_tokens: 1024 # Maximum tokens for response (OpenAI-style parameter)
+  temperature: 0.7 # Controls randomness (0.0 to 1.0)
+  top_p: 0.9 # Nucleus sampling parameter
+  frequency_penalty: 0.1 # Reduces repetition of frequent tokens
+  presence_penalty: 0.1 # Reduces repetition of any tokens
+  stop: ['END', 'STOP'] # Stop sequences
+  reasoning_effort: 'medium' # Controls reasoning depth: 'low', 'medium', 'high'
+```
+
+#### Reasoning Effort
+
+OpenAI models support adjustable reasoning effort through the `reasoning_effort` parameter:
+
+- **`low`**: Faster responses with basic reasoning
+- **`medium`**: Balanced performance and reasoning depth
+- **`high`**: Thorough reasoning, slower but more accurate responses
+
+The reasoning effort is implemented via system prompt instructions, allowing the model to adjust its cognitive processing depth.
+
+#### Usage Example
+
+```yaml
+providers:
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    config:
+      region: 'us-west-2'
+      max_completion_tokens: 2048
+      temperature: 0.3
+      top_p: 0.95
+      reasoning_effort: 'high'
+  - id: bedrock:openai.gpt-oss-20b-1:0
+    config:
+      region: 'us-west-2'
+      max_completion_tokens: 1024
+      temperature: 0.5
+      reasoning_effort: 'medium'
+      stop: ['END', 'FINAL']
+```
+
+:::note
+
+OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bedrock models. This aligns with OpenAI's API specification and allows for more precise control over response length.
+
+:::
+
 ## Model-graded tests
 
 You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-4.1-2025-04-14` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
+
+You can use either regular model IDs or application inference profiles for grading:
 
 :::warning
 
@@ -380,10 +584,17 @@ To set this for all your test cases, add the [`defaultTest`](/docs/configuration
 defaultTest:
   options:
     provider:
-      id: provider:chat:modelname
+      # Using a regular model ID
+      id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
       config:
         temperature: 0
         # Other provider config options
+
+      # Or using an inference profile
+      # id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/grading-profile
+      # config:
+      #   inferenceModelType: 'claude'
+      #   temperature: 0
 ```
 
 You can also do this for individual assertions:
@@ -517,6 +728,12 @@ providers:
 
 The following environment variables can be used to configure the Bedrock provider:
 
+**Authentication:**
+
+- `AWS_BEARER_TOKEN_BEDROCK`: Bedrock API key for simplified authentication
+
+**Configuration:**
+
 - `AWS_BEDROCK_REGION`: Default region for Bedrock API calls
 - `AWS_BEDROCK_MAX_TOKENS`: Default maximum number of tokens to generate
 - `AWS_BEDROCK_TEMPERATURE`: Default temperature for generation
@@ -534,6 +751,27 @@ Model-specific environment variables:
 These environment variables can be overridden by the configuration specified in the YAML file.
 
 ## Troubleshooting
+
+### Inference profile requires inferenceModelType
+
+If you see this error when using an inference profile ARN:
+
+```text
+Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai
+```
+
+This means you're using an application inference profile ARN but haven't specified which model family it's configured for. Add the `inferenceModelType` to your configuration:
+
+```yaml
+providers:
+  # Incorrect - missing inferenceModelType
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+
+  # Correct - includes inferenceModelType
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile
+    config:
+      inferenceModelType: 'claude' # Specify the model family
+```
 
 ### ValidationException: On-demand throughput isn't supported
 
@@ -606,8 +844,8 @@ The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
 
 For example:
 
-- `bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0` (US region)
-- `bedrock:kb:eu.anthropic.claude-3-7-sonnet-20250219-v1:0` (EU region)
+- `bedrock:kb:us.anthropic.claude-3-5-sonnet-20241022-v2:0` (US region)
+- `bedrock:kb:eu.anthropic.claude-3-5-sonnet-20241022-v2:0` (EU region)
 
 Configuration options include:
 
@@ -618,7 +856,7 @@ Configuration options include:
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication
 
-### Example
+### Knowledge Base Example
 
 Here's a complete example to test your Knowledge Base with a few questions:
 
@@ -637,7 +875,7 @@ providers:
       max_tokens: 1000
 
   # Regular Claude model for comparison
-  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-2'
       temperature: 0.0
@@ -700,6 +938,22 @@ This approach allows you to:
 - **Validate recall**: Ensure important information appears in retrieved context
 
 See the [Knowledge Base contextTransform example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for complete configuration examples.
+
+## AgentCore
+
+AWS Bedrock AgentCore provides a managed service for deploying and operating AI agents at scale. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock AgentCore Provider](./bedrock-agentcore.md) documentation.
+
+Quick example:
+
+```yaml
+providers:
+  - bedrock:agentcore:YOUR_AGENT_ID
+    config:
+      enableTrace: true
+      memoryConfig:
+        type: short-term
+        enabled: true
+```
 
 ## See Also
 

@@ -5,7 +5,6 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import {
   type Plugin as PluginType,
   Severity,
@@ -15,6 +14,8 @@ import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './Overview.css';
+
+import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 
 interface OverviewProps {
   categoryStats: Record<PluginType, { pass: number; total: number }>;
@@ -58,12 +59,12 @@ const DARK_MODE_SECONDARY_TEXT_COLORS = {
   [Severity.Low]: '#00e676',
 };
 
-const Overview: React.FC<OverviewProps> = ({
+const Overview = ({
   categoryStats,
   plugins,
   vulnerabilitiesDataGridRef,
   setVulnerabilitiesDataGridFilterModel,
-}) => {
+}: OverviewProps) => {
   const { pluginPassRateThreshold } = useReportStore();
 
   const severityCounts = Object.values(Severity).reduce(

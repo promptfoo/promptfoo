@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { writeOutput } from '../../src/util';
+import { writeOutput } from '../../src/util/index';
 
 // Mock dependencies
 jest.mock('../../src/database', () => ({
@@ -147,7 +147,7 @@ describe('JSON export with improved error handling', () => {
     it('should not create output file when memory error occurs', async () => {
       try {
         await writeOutput(tempFilePath, mockEval, null);
-      } catch (error) {
+      } catch (_error) {
         // Expected to throw
       }
 

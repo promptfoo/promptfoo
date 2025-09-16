@@ -3,7 +3,11 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider } from '../../types/providers';
 
@@ -110,8 +114,6 @@ export class HyperbolicAudioProvider implements ApiProvider {
       body.language = config.language;
     }
 
-    logger.debug(`Calling Hyperbolic Audio API: ${JSON.stringify(body)}`);
-
     const headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
@@ -141,8 +143,6 @@ export class HyperbolicAudioProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`\tHyperbolic audio API response: ${JSON.stringify(data)}`);
 
     if (data.error) {
       return {

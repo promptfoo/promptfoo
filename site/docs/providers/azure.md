@@ -68,8 +68,239 @@ providers:
 - `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
+- `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-4.1, gpt-5, o3-mini)
 
 Vision-capable models (GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
+
+## Azure Responses API
+
+The Azure OpenAI Responses API is a stateful API that brings together the best capabilities from chat completions and assistants API in one unified experience. It provides advanced features like MCP servers, code interpreter, and background tasks.
+
+### Using the Responses API
+
+To use the Azure Responses API with promptfoo, use the `azure:responses` provider type:
+
+```yaml
+providers:
+  # Using the azure:responses alias (recommended)
+  # Note: deployment name must match your Azure deployment, not the model name
+  - id: azure:responses:my-gpt-4-1-deployment
+    config:
+      temperature: 0.7
+      instructions: 'You are a helpful assistant.'
+      response_format: file://./response-schema.json
+      # For newer v1 API, use 'preview' (default)
+      # For legacy API, use specific version like '2025-04-01-preview'
+      apiVersion: 'preview'
+
+  # Or using openai:responses with Azure configuration (legacy method)
+  - id: openai:responses:gpt-4.1
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      apiKey: '${AZURE_API_KEY}'
+      temperature: 0.7
+      instructions: 'You are a helpful assistant.'
+```
+
+### Supported Responses Models
+
+The Responses API supports all Azure OpenAI models:
+
+- **GPT-5 Series**: `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-chat`
+- **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
+- **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`
+- **Specialized Models**: `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`
+- **Deep Research Models**: `o3-deep-research`, `o4-mini-deep-research`
+
+### Responses API Features
+
+#### Response Format with External Files
+
+Load complex JSON schemas from external files for better organization:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      response_format: file://./schemas/response-schema.json
+```
+
+Example `response-schema.json`:
+
+```json
+{
+  "type": "json_schema",
+  "name": "structured_output",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "result": { "type": "string" },
+      "confidence": { "type": "number" }
+    },
+    "required": ["result", "confidence"],
+    "additionalProperties": false
+  }
+}
+```
+
+#### Advanced Configuration
+
+**Instructions**: Provide system-level instructions to guide model behavior:
+
+```yaml
+config:
+  instructions: 'You are a helpful assistant specializing in technical documentation.'
+```
+
+**Background Tasks**: Enable asynchronous processing for long-running tasks:
+
+```yaml
+config:
+  background: true
+  store: true
+```
+
+**Chaining Responses**: Chain multiple responses together for multi-turn conversations:
+
+```yaml
+config:
+  previous_response_id: '{{previous_id}}'
+```
+
+**MCP Servers**: Connect to remote MCP servers for extended tool capabilities:
+
+```yaml
+config:
+  tools:
+    - type: mcp
+      server_label: github
+      server_url: https://example.com/mcp-server
+      require_approval: never
+      headers:
+        Authorization: 'Bearer ${MCP_API_KEY}'
+```
+
+**Code Interpreter**: Enable code execution capabilities:
+
+```yaml
+config:
+  tools:
+    - type: code_interpreter
+      container:
+        type: auto
+```
+
+**Web Search**: Enable web search capabilities:
+
+```yaml
+config:
+  tools:
+    - type: web_search_preview
+```
+
+**Image Generation**: Use image generation with supported models:
+
+```yaml
+config:
+  tools:
+    - type: image_generation
+      partial_images: 2 # For streaming partial images
+```
+
+### Complete Responses API Example
+
+Here's a comprehensive example using multiple Azure Responses API features:
+
+```yaml
+# promptfooconfig.yaml
+description: Azure Responses API evaluation
+
+providers:
+  # Using the new azure:responses alias (recommended)
+  - id: azure:responses:gpt-4.1-deployment
+    label: azure-gpt-4.1
+    config:
+      temperature: 0.7
+      max_output_tokens: 2000
+      instructions: 'You are a helpful AI assistant.'
+      response_format: file://./response-format.json
+      tools:
+        - type: code_interpreter
+          container:
+            type: auto
+        - type: web_search_preview
+      metadata:
+        session: 'eval-001'
+        user: 'test-user'
+      store: true
+
+  # Reasoning model example
+  - id: azure:responses:o3-mini-deployment
+    label: azure-reasoning
+    config:
+      reasoning_effort: medium
+      max_completion_tokens: 4000
+
+prompts:
+  - 'Analyze this data and provide insights: {{data}}'
+  - 'Write a Python function to solve: {{problem}}'
+
+tests:
+  - vars:
+      data: 'Sales increased by 25% in Q3 compared to Q2'
+    assert:
+      - type: contains
+        value: 'growth'
+      - type: contains
+        value: '25%'
+
+  - vars:
+      problem: 'Calculate fibonacci sequence up to n terms'
+    assert:
+      - type: javascript
+        value: 'output.includes("def fibonacci") || output.includes("function fibonacci")'
+      - type: contains
+        value: 'recursive'
+```
+
+### Additional Responses API Configuration
+
+**Streaming**: Enable streaming for real-time output:
+
+```yaml
+config:
+  stream: true
+```
+
+**Parallel Tool Calls**: Allow multiple tool calls in parallel:
+
+```yaml
+config:
+  parallel_tool_calls: true
+  max_tool_calls: 5
+```
+
+**Truncation**: Configure how input is truncated when it exceeds limits:
+
+```yaml
+config:
+  truncation: auto # or 'disabled'
+```
+
+**Webhook URL**: Set a webhook for async notifications:
+
+```yaml
+config:
+  webhook_url: 'https://your-webhook.com/callback'
+```
+
+### Responses API Limitations
+
+- Web search tool support is still in development
+- PDF file upload with `purpose: user_data` requires workaround (use `purpose: assistants`)
+- Background mode requires `store: true`
+- Some features may have region-specific availability
 
 ## Environment Variables
 
@@ -289,7 +520,27 @@ defaultTest:
 
 ## AI Services
 
-You may also specify `deployment_id` and `dataSources`, used to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/use-your-data#conversation-history-for-better-results).
+You may also specify `data_sources` to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/references/on-your-data).
+
+```yaml
+providers:
+  - id: azure:chat:deploymentNameHere
+    config:
+      apiHost: 'xxxxxxxx.openai.azure.com'
+      deployment_id: 'abc123'
+data_sources:
+ - type: azure_search
+  parameters:
+   endpoint: https://xxxxxxxx.search.windows.net
+    index_name: index123
+     authentication:
+      type: api_key
+       key: ''
+```
+
+:::note
+
+For legacy Azure OpenAI API versions before 2024-02-15-preview, you can also specify `deployment_id` and `dataSources`, used to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/use-your-data#conversation-history-for-better-results).
 
 ```yaml
 providers:
@@ -305,7 +556,7 @@ providers:
             indexName: '...'
 ```
 
-(The inconsistency in naming convention between `deployment_id` and `dataSources` reflects the actual naming in the Azure API.)
+:::
 
 ## Configuration Reference
 

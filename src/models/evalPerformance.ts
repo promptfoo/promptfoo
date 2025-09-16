@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import logger from '../logger';
+
+import type { EvalResultsFilterMode } from '../types/index';
 
 interface CountCacheEntry {
   count: number;
@@ -56,7 +58,7 @@ export async function queryTestIndicesOptimized(
   opts: {
     offset?: number;
     limit?: number;
-    filterMode?: string;
+    filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
   },
@@ -64,7 +66,7 @@ export async function queryTestIndicesOptimized(
   const db = getDb();
   const offset = opts.offset ?? 0;
   const limit = opts.limit ?? 50;
-  const mode = opts.filterMode ?? 'all';
+  const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
   // Build base query with efficient filtering
   let baseQuery = sql`eval_id = ${evalId}`;

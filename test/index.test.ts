@@ -3,9 +3,9 @@ import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
 import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
-import { readProviderPromptMap } from '../src/prompts';
-import * as providers from '../src/providers';
-import { writeMultipleOutputs, writeOutput } from '../src/util';
+import { readProviderPromptMap } from '../src/prompts/index';
+import * as providers from '../src/providers/index';
+import { writeMultipleOutputs, writeOutput } from '../src/util/index';
 import * as fileUtils from '../src/util/file';
 
 jest.mock('../src/cache');
@@ -94,9 +94,11 @@ describe('index.ts exports', () => {
     'CompletedPromptSchema',
     'CompletionTokenDetailsSchema',
     'DerivedMetricSchema',
+    'EvalResultsFilterMode',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',
+    'PolicyObjectSchema',
     'ResultFailureReason',
     'ScenarioSchema',
     'SpecialAssertionTypesSchema',
@@ -950,5 +952,264 @@ describe('evaluate with external defaultTest', () => {
 
     expect(fileUtils.maybeLoadFromExternalFile).not.toHaveBeenCalled();
     expect(summary.results).toHaveLength(1);
+  });
+
+  describe('ApiProvider instances in configurations', () => {
+    let mockApiProvider: any;
+    let mockCustomProvider: any;
+    let resolveProviderSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      mockApiProvider = {
+        id: () => 'mock-api-provider',
+        callApi: jest.fn().mockResolvedValue({ output: 'mock response' }),
+      };
+
+      mockCustomProvider = {
+        id: () => 'custom-validator',
+        callApi: jest.fn().mockResolvedValue({ output: 'custom validation response' }),
+      };
+
+      // Mock resolveProvider to track calls and return mock providers
+      resolveProviderSpy = jest
+        .spyOn(providers, 'resolveProvider')
+        .mockImplementation(async (provider) => {
+          if (typeof provider === 'string') {
+            return { id: () => provider, callApi: jest.fn() };
+          }
+          if (typeof provider === 'object' && 'id' in provider && typeof provider.id === 'string') {
+            // This is a ProviderOptions object
+            return { id: () => provider.id as string, callApi: jest.fn() };
+          }
+          // This shouldn't be called for ApiProvider instances due to our fix
+          return provider;
+        });
+    });
+
+    afterEach(() => {
+      resolveProviderSpy.mockRestore();
+    });
+
+    it('should not resolve ApiProvider instances in defaultTest.options.provider', async () => {
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [mockApiProvider],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: {
+          options: {
+            provider: mockCustomProvider, // ApiProvider instance
+          },
+        },
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+      await evaluate(testSuite);
+
+      // Verify that resolveProvider was NOT called with the ApiProvider instance
+      expect(resolveProviderSpy).not.toHaveBeenCalledWith(
+        mockCustomProvider,
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Verify the ApiProvider instance is passed through unchanged
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultTest: expect.objectContaining({
+            options: expect.objectContaining({
+              provider: mockCustomProvider, // Should be the same instance
+            }),
+          }),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should not resolve ApiProvider instances in defaultTest.provider', async () => {
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [mockApiProvider],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: {
+          provider: mockCustomProvider, // ApiProvider instance
+        },
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+      await evaluate(testSuite);
+
+      // Verify that resolveProvider was NOT called with the ApiProvider instance
+      expect(resolveProviderSpy).not.toHaveBeenCalledWith(
+        mockCustomProvider,
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Verify the ApiProvider instance is passed through unchanged
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultTest: expect.objectContaining({
+            provider: mockCustomProvider, // Should be the same instance
+          }),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should not resolve ApiProvider instances in test.options.provider', async () => {
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [mockApiProvider],
+        tests: [
+          {
+            vars: { test: 'value' },
+            options: {
+              provider: mockCustomProvider, // ApiProvider instance
+            },
+          },
+        ],
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+      await evaluate(testSuite);
+
+      // Verify that resolveProvider was NOT called with the ApiProvider instance
+      expect(resolveProviderSpy).not.toHaveBeenCalledWith(
+        mockCustomProvider,
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Verify the ApiProvider instance is passed through unchanged
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              options: expect.objectContaining({
+                provider: mockCustomProvider, // Should be the same instance
+              }),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should not resolve ApiProvider instances in assertion.provider', async () => {
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [mockApiProvider],
+        tests: [
+          {
+            vars: { test: 'value' },
+            assert: [
+              {
+                type: 'llm-rubric' as const,
+                value: 'Test assertion',
+                provider: mockCustomProvider, // ApiProvider instance
+              },
+            ],
+          },
+        ],
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+      await evaluate(testSuite);
+
+      // Verify that resolveProvider was NOT called with the ApiProvider instance
+      expect(resolveProviderSpy).not.toHaveBeenCalledWith(
+        mockCustomProvider,
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Verify the ApiProvider instance is passed through unchanged
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              assert: expect.arrayContaining([
+                expect.objectContaining({
+                  provider: mockCustomProvider, // Should be the same instance
+                }),
+              ]),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should verify ApiProvider instances are preserved through the evaluation', async () => {
+      // This test focuses on the key behavior: ApiProvider instances should be passed through unchanged
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [mockApiProvider],
+        tests: [
+          {
+            vars: { test: 'value' },
+            options: {
+              provider: mockCustomProvider, // ApiProvider instance
+            },
+          },
+        ],
+        defaultTest: {
+          options: {
+            provider: mockCustomProvider, // ApiProvider instance
+          },
+          assert: [
+            {
+              type: 'llm-rubric' as const,
+              value: 'Test assertion',
+              provider: mockCustomProvider, // ApiProvider instance
+            },
+          ],
+        },
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+      await evaluate(testSuite);
+
+      // The key test: verify that ApiProvider instances were NOT passed to resolveProvider
+      expect(resolveProviderSpy).not.toHaveBeenCalledWith(
+        mockCustomProvider,
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Verify that the ApiProvider instances are preserved in the final test suite
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultTest: expect.objectContaining({
+            options: expect.objectContaining({
+              provider: mockCustomProvider, // Same instance
+            }),
+            assert: expect.arrayContaining([
+              expect.objectContaining({
+                provider: mockCustomProvider, // Same instance
+              }),
+            ]),
+          }),
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              options: expect.objectContaining({
+                provider: mockCustomProvider, // Same instance
+              }),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
   });
 });

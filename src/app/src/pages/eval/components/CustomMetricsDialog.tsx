@@ -30,7 +30,7 @@ interface MetricRow {
   [key: string]: any; // For dynamic prompt columns
 }
 
-const MetricsTable: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   const { table, filters, addFilter } = useTableStore();
   const theme = useTheme();
 
@@ -390,7 +390,6 @@ const MetricsTable: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </GridToolbarContainer>
         ),
       }}
-      hideFooter
     />
   );
 };
@@ -404,7 +403,7 @@ export default function CustomMetricsDialog({
 }) {
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogContent>
+      <DialogContent sx={{ height: '80vh' }}>
         <MetricsTable onClose={onClose} />
       </DialogContent>
     </Dialog>

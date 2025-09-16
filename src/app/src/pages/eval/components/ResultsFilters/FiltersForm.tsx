@@ -26,6 +26,7 @@ const TYPE_LABELS_BY_TYPE: Record<ResultsFilter['type'], string> = {
   metadata: 'Metadata',
   plugin: 'Plugin',
   strategy: 'Strategy',
+  severity: 'Severity',
 };
 
 const OPERATOR_LABELS_BY_OPERATOR: Record<ResultsFilter['operator'], string> = {
@@ -64,7 +65,6 @@ function Dropdown({
         label={label}
         disabled={disabled}
         sx={{
-          backgroundColor: 'background.paper',
           '& .MuiSelect-select': {
             py: 1,
           },
@@ -114,7 +114,6 @@ function DebouncedTextField({
       value={localValue}
       onChange={(e) => setLocalValue(e.target.value)}
       sx={{
-        backgroundColor: 'background.paper',
         '& .MuiInputBase-input': {
           py: 1,
         },
@@ -153,6 +152,11 @@ function Filter({
     .filter((filter) => filter.id !== value.id && filter.type === 'strategy' && filter.value)
     .map((filter) => filter.value);
 
+  // Compute selected severity values (excluding current filter)
+  const selectedSeverityValues = Object.values(filters.values)
+    .filter((filter) => filter.id !== value.id && filter.type === 'severity' && filter.value)
+    .map((filter) => filter.value);
+
   /**
    * Updates the metadata field.
    * @param field - The new metadata field.
@@ -182,7 +186,10 @@ function Filter({
       }
       // Reset operator to 'equals' when changing to types that only support 'equals'
       if (
-        (filterType === 'metric' || filterType === 'plugin' || filterType === 'strategy') &&
+        (filterType === 'metric' ||
+          filterType === 'plugin' ||
+          filterType === 'strategy' ||
+          filterType === 'severity') &&
         value.operator !== 'equals'
       ) {
         updatedFilter.operator = 'equals';
@@ -248,8 +255,9 @@ function Filter({
         display: 'flex',
         gap: 1.5,
         alignItems: 'center',
-        p: 1,
+        p: 1.5,
         borderRadius: 1,
+        overflow: 'hidden',
         '&:hover': {
           backgroundColor: 'action.hover',
         },
@@ -268,7 +276,16 @@ function Filter({
         <CloseIcon fontSize="small" />
       </IconButton>
 
-      <Box sx={{ display: 'flex', gap: 1.5, flex: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 1.5,
+          flex: 1,
+          alignItems: 'center',
+          flexWrap: 'nowrap',
+          minWidth: 0,
+        }}
+      >
         {index !== 0 &&
           (() => {
             // Get the filter with sortIndex === 1 to determine the logic operator for all filters
@@ -305,11 +322,14 @@ function Filter({
               : []),
             { label: TYPE_LABELS_BY_TYPE.metadata, value: 'metadata' },
             // Show plugin and strategy filters if there are any options available i.e. these are redteam eval results.
-            ...(filters.options.plugin.length > 0
+            ...((filters.options.plugin?.length ?? 0) > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.plugin, value: 'plugin' }]
               : []),
-            ...(filters.options.strategy.length > 0
+            ...((filters.options.strategy?.length ?? 0) > 0
               ? [{ label: TYPE_LABELS_BY_TYPE.strategy, value: 'strategy' }]
+              : []),
+            ...((filters.options.severity?.length ?? 0) > 0
+              ? [{ label: TYPE_LABELS_BY_TYPE.severity, value: 'severity' }]
               : []),
           ]}
           value={value.type}
@@ -334,7 +354,10 @@ function Filter({
           id={`${index}-operator-select`}
           label="Operator"
           values={
-            value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy'
+            value.type === 'metric' ||
+            value.type === 'plugin' ||
+            value.type === 'strategy' ||
+            value.type === 'severity'
               ? [{ label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' }]
               : [
                   { label: OPERATOR_LABELS_BY_OPERATOR.equals, value: 'equals' },
@@ -347,8 +370,11 @@ function Filter({
           width={150}
         />
 
-        <Box sx={{ flex: 1, minWidth: 250 }}>
-          {value.type === 'metric' || value.type === 'plugin' || value.type === 'strategy' ? (
+        <Box sx={{ flex: 1, minWidth: 200, maxWidth: 300 }}>
+          {value.type === 'metric' ||
+          value.type === 'plugin' ||
+          value.type === 'strategy' ||
+          value.type === 'severity' ? (
             <Dropdown
               id={`${index}-value-select`}
               label={TYPE_LABELS_BY_TYPE[value.type]}
@@ -401,7 +427,9 @@ function Filter({
                     ? selectedPluginValues
                     : value.type === 'strategy'
                       ? selectedStrategyValues
-                      : []
+                      : value.type === 'severity'
+                        ? selectedSeverityValues
+                        : []
               }
             />
           ) : (
@@ -440,10 +468,12 @@ export default function FiltersForm({
     let defaultType: ResultsFilter['type'] = 'metadata';
     if (filters.options.metric.length > 0) {
       defaultType = 'metric';
-    } else if (filters.options.plugin.length > 1) {
+    } else if ((filters.options.plugin?.length ?? 0) > 1) {
       defaultType = 'plugin';
-    } else if (filters.options.strategy.length > 1) {
+    } else if ((filters.options.strategy?.length ?? 0) > 1) {
       defaultType = 'strategy';
+    } else if ((filters.options.severity?.length ?? 0) > 0) {
+      defaultType = 'severity';
     }
 
     addFilter({
@@ -494,8 +524,8 @@ export default function FiltersForm({
       PaperProps={{
         sx: {
           mt: 1,
-          minWidth: 600,
-          maxWidth: '90vw',
+          minWidth: { xs: 400, sm: 600 },
+          maxWidth: { xs: '95vw', sm: '90vw' },
           maxHeight: '80vh',
           overflow: 'hidden',
           display: 'flex',

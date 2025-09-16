@@ -130,7 +130,7 @@ describe('Plugins', () => {
     it('should validate policy plugin config', async () => {
       const policyPlugin = Plugins.find((p) => p.key === 'policy');
       expect(() => policyPlugin?.validate?.({})).toThrow(
-        'Policy plugin requires `config.policy` to be set',
+        'Invariant failed: One of the policy plugins is invalid. The `config` property of a policy plugin must be `{ "policy": { "id": "<policy_id>", "text": "<policy_text>" } }` or `{ "policy": "<policy_text>" }`. Received: {}',
       );
     });
 
@@ -291,15 +291,14 @@ describe('Plugins', () => {
       const unalignedPlugin = Plugins.find(
         (p) => p.key === Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0],
       );
-      await expect(
-        unalignedPlugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          delayMs: 0,
-        }),
-      ).rejects.toThrow('requires remote generation to be enabled');
+      const result = await unalignedPlugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        delayMs: 0,
+      });
+      expect(result).toEqual([]);
     });
   });
 

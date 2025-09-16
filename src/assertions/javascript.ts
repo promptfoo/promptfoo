@@ -1,7 +1,7 @@
-import { type GradingResult, isGradingResult } from '../types';
+import { type GradingResult, isGradingResult } from '../types/index';
 import invariant from '../util/invariant';
 
-import type { AssertionParams } from '../types';
+import type { AssertionParams } from '../types/index';
 
 const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
@@ -73,7 +73,7 @@ export const handleJavascript = async ({
       pass = result !== inverse;
       score = pass ? 1 : 0;
     } else if (typeof result === 'number') {
-      pass = assertion.threshold ? result >= assertion.threshold : result > 0;
+      pass = assertion.threshold !== undefined ? result >= assertion.threshold : result > 0;
       score = result;
     } else if (typeof result === 'object') {
       return result;

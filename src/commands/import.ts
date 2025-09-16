@@ -1,6 +1,6 @@
 import fs from 'fs';
 
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';

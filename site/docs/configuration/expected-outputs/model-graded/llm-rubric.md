@@ -139,6 +139,90 @@ defaultTest:
     ]
 ```
 
+## Non-English Evaluation
+
+To get evaluation output in languages other than English, you can use different approaches:
+
+### Option 1: rubricPrompt Override (Recommended)
+
+For reliable multilingual output with compatible assertion types:
+
+```yaml
+defaultTest:
+  options:
+    rubricPrompt: |
+      [
+        {
+          "role": "system",
+          // German: "You evaluate outputs based on criteria. Respond with JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALL responses in German."
+          "content": "Du bewertest Ausgaben nach Kriterien. Antworte mit JSON: {\"reason\": \"string\", \"pass\": boolean, \"score\": number}. ALLE Antworten auf Deutsch."
+        },
+        {
+          "role": "user", 
+          // German: "Output: {{ output }}\nCriterion: {{ rubric }}"
+          "content": "Ausgabe: {{ output }}\nKriterium: {{ rubric }}"
+        }
+      ]
+
+assert:
+  - type: llm-rubric
+    # German: "Responds politely and helpfully"
+    value: 'Antwortet höflich und hilfreich'
+```
+
+### Option 2: Language Instructions in Rubric
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: 'Responds politely and helpfully. Provide your evaluation reason in German.'
+```
+
+### Option 3: Full Native Language Rubric
+
+```yaml
+# German
+assert:
+  - type: llm-rubric
+    # German: "Responds politely and helpfully. Provide reasoning in German."
+    value: "Antwortet höflich und hilfreich. Begründung auf Deutsch geben."
+
+# Japanese
+assert:
+  - type: llm-rubric
+    # Japanese: "Does not contain harmful content. Please provide evaluation reasoning in Japanese."
+    value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
+```
+
+**Note:** Option 1 works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. For other assertion types like `factuality` or `context-recall`, create assertion-specific prompts that match their expected formats.
+
+### Assertion-Specific Prompts
+
+For assertions requiring specific output formats:
+
+```yaml
+# factuality - requires {"category": "A/B/C/D/E", "reason": "..."}
+tests:
+  - options:
+      rubricPrompt: |
+        [
+          {
+            "role": "system",
+            // German: "You compare factual accuracy. Respond with JSON: {\"category\": \"A/B/C/D/E\", \"reason\": \"string\"}. A=subset, B=superset, C=identical, D=contradiction, E=irrelevant. ALL responses in German."
+            "content": "Du vergleichst Faktentreue. Antworte mit JSON: {\"category\": \"A/B/C/D/E\", \"reason\": \"string\"}. A=Teilmenge, B=Obermenge, C=identisch, D=Widerspruch, E=irrelevant. ALLE Antworten auf Deutsch."
+          },
+          {
+            "role": "user",
+            // German: "Expert answer: {{ rubric }}\nSubmitted answer: {{ output }}"
+            "content": "Expertenantwort: {{ rubric }}\nEingereichte Antwort: {{ output }}"
+          }
+        ]
+    assert:
+      - type: factuality
+        # German: "Berlin is the capital of Germany"
+        value: 'Berlin ist die Hauptstadt von Deutschland'
+```
+
 ### Object handling in rubric prompts
 
 When using `{{output}}` or `{{rubric}}` variables that contain objects, promptfoo automatically converts them to JSON strings by default to prevent display issues. If you need to access specific properties of objects in your rubric prompts, you can enable object property access:
@@ -174,6 +258,52 @@ assert:
 ```
 
 The threshold is applied to the score returned by the LLM (which ranges from 0.0 to 1.0). If the LLM returns an explicit pass/fail status, the threshold will still be enforced - both conditions must be met for the assertion to pass.
+
+## Pass vs. Score Semantics
+
+- PASS is determined by the LLM's boolean `pass` field unless you set a `threshold`.
+- If the model omits `pass`, promptfoo assumes `pass: true` by default.
+- `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
+- When `threshold` is set, both must be true for the assertion to pass:
+  - `pass === true`
+  - `score >= threshold`
+
+This means that without a `threshold`, a result like `{ pass: true, score: 0 }` will pass. If you want the numeric score (e.g., 0/1 rubric) to drive PASS/FAIL, set a `threshold` accordingly or have the model return explicit `pass`.
+
+:::caution
+If the model omits `pass` and you don't set `threshold`, the assertion passes even with `score: 0`.
+:::
+
+### Common misconfiguration
+
+```yaml
+# ❌ Problem: Returns 0/1 scores but no threshold set
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    # Missing threshold - always passes due to pass defaulting to true
+```
+
+**Fixes:**
+
+```yaml
+# ✅ Option A: Add threshold
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    threshold: 1
+
+# ✅ Option B: Control pass explicitly
+assert:
+  - type: llm-rubric
+    value: |
+      Return {"pass": true, "score": 1} if the response is correct
+      Return {"pass": false, "score": 0} if the response is incorrect
+```
 
 ## Further reading
 

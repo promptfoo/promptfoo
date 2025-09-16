@@ -1,7 +1,7 @@
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleLatency = ({ assertion, latencyMs }: AssertionParams): GradingResult => {
-  if (!assertion.threshold) {
+  if (assertion.threshold === undefined) {
     throw new Error('Latency assertion must have a threshold in milliseconds');
   }
   if (latencyMs === undefined) {

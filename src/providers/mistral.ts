@@ -10,7 +10,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 const MISTRAL_CHAT_MODELS = [
@@ -427,7 +427,6 @@ export class MistralEmbeddingProvider implements ApiProvider {
     };
 
     const url = `${this.getApiUrl()}/embeddings`;
-    logger.debug(`Mistral Embedding API request: ${url} ${JSON.stringify(body)}`);
 
     let data;
     let cached = false;
@@ -449,8 +448,6 @@ export class MistralEmbeddingProvider implements ApiProvider {
       logger.error(`API call error: ${err}`);
       throw err;
     }
-
-    logger.debug(`Mistral Embedding API response: ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;

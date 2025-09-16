@@ -16,7 +16,7 @@ jest.mock('util', () => ({
   }),
 }));
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: jest.fn(),
 }));
 
@@ -24,8 +24,7 @@ jest.mock('../package.json', () => ({
   version: '0.11.0',
 }));
 
-import packageJson from '../package.json';
-import { fetchWithTimeout } from '../src/fetch';
+import { fetchWithTimeout } from '../src/util/fetch/index';
 import {
   checkForUpdates,
   checkModelAuditUpdates,
@@ -33,6 +32,7 @@ import {
   getModelAuditCurrentVersion,
   getModelAuditLatestVersion,
 } from '../src/updates';
+import packageJson from '../package.json';
 
 beforeEach(() => {
   mockExecAsync = jest.fn();

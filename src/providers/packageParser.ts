@@ -6,7 +6,7 @@ import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
 
-import type { ApiProvider, ProviderOptions } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 
 function getValue<T extends object, K extends string>(obj: T, path: K): any {
   return path.split('.').reduce((acc: any, key: string) => {

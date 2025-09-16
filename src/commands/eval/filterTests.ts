@@ -1,8 +1,8 @@
 import logger from '../../logger';
-import { ResultFailureReason } from '../../types';
+import { ResultFailureReason } from '../../types/index';
 import { filterTestsByResults } from './filterTestsUtil';
 
-import type { TestSuite } from '../../types';
+import type { TestSuite } from '../../types/index';
 
 /**
  * Options for filtering test cases in a test suite.

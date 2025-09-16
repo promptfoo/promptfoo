@@ -3,7 +3,7 @@ import { rm } from 'fs/promises';
 
 import yaml from 'js-yaml';
 import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
-import { TestSuiteConfigSchema } from '../src/types';
+import { TestSuiteConfigSchema } from '../src/types/index';
 
 jest.mock('fs', () => ({
   existsSync: jest.fn(),
@@ -45,7 +45,7 @@ jest.mock('../src/telemetry', () => ({
   record: jest.fn(),
 }));
 
-jest.mock('../src/fetch', () => ({
+jest.mock('../src/util/fetch/index.ts', () => ({
   fetch: jest.fn(),
 }));
 
@@ -165,8 +165,10 @@ describe('createDummyFiles', () => {
   });
 
   it('should generate valid YAML configuration for RAG setup', async () => {
-    mockSelect.mockResolvedValueOnce('rag').mockResolvedValueOnce('python');
-    mockCheckbox.mockResolvedValueOnce(['openai:gpt-4o']);
+    mockSelect
+      .mockResolvedValueOnce('rag')
+      .mockResolvedValueOnce('python')
+      .mockResolvedValueOnce('openai:gpt-4o');
 
     await createDummyFiles(tempDir, true);
 
@@ -208,8 +210,8 @@ describe('createDummyFiles', () => {
     expect(vars).toHaveProperty('inquiry');
     expect(vars).toHaveProperty('context');
 
-    expect(mockSelect).toHaveBeenCalledTimes(2);
-    expect(mockCheckbox).toHaveBeenCalledTimes(1);
+    expect(mockSelect).toHaveBeenCalledTimes(3);
+    expect(mockCheckbox).toHaveBeenCalledTimes(0);
     expect(mockConfirm).toHaveBeenCalledTimes(0);
   });
 
@@ -219,8 +221,7 @@ describe('createDummyFiles', () => {
     );
 
     mockConfirm.mockResolvedValueOnce(true);
-    mockSelect.mockResolvedValueOnce('compare');
-    mockCheckbox.mockResolvedValueOnce(['openai:gpt-4o']);
+    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce('openai:gpt-4o');
 
     await createDummyFiles(tempDir, true);
 

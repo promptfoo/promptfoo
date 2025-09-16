@@ -49,10 +49,8 @@ import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import type { StackProps } from '@mui/material/Stack';
+import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
-
-import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 import BarChartIcon from '@mui/icons-material/BarChart';
@@ -65,7 +63,7 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
   [theme.breakpoints.down('sm')]: {
     flexDirection: 'column',
   },
-})) as React.FC<StackProps>;
+}));
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
@@ -220,10 +218,10 @@ export default function ResultsView({
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
 
-  const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
+  const [filterMode, setFilterMode] = React.useState<EvalResultsFilterMode>('all');
 
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
-    const mode = event.target.value as FilterMode;
+    const mode = event.target.value as EvalResultsFilterMode;
     setFilterMode(mode);
 
     const newFailureFilter: { [key: string]: boolean } = {};
@@ -642,6 +640,11 @@ export default function ResultsView({
                           displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
                           filter.value;
                         label = `Strategy: ${displayName}`;
+                      } else if (filter.type === 'severity') {
+                        // Capitalize the first letter of severity value for display
+                        const severityDisplay =
+                          filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
+                        label = `Severity: ${severityDisplay}`;
                       } else {
                         // metadata type
                         label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
@@ -780,7 +783,7 @@ export default function ResultsView({
                       color="primary"
                       variant="contained"
                       startIcon={<EyeIcon />}
-                      onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
+                      onClick={() => navigate(`/reports/?evalId=${evalId || defaultEvalId}`)}
                     >
                       Vulnerability Report
                     </Button>

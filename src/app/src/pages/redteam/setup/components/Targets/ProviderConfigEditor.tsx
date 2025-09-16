@@ -313,7 +313,7 @@ const ProviderConfigEditor = forwardRef<ProviderConfigEditorRef, ProviderConfigE
         )}
 
         {/* Specialized providers - use custom config for now */}
-        {['github', 'xai', 'ai21', 'aimlapi', 'hyperbolic', 'lambdalabs', 'fal', 'voyage'].includes(
+        {['github', 'xai', 'ai21', 'aimlapi', 'hyperbolic', 'fal', 'voyage'].includes(
           providerType || '',
         ) && (
           <CustomTargetConfiguration

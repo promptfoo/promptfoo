@@ -1,7 +1,7 @@
 import { AssertionsResult, DEFAULT_TOKENS_USED } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
 
-import type { AssertionSet, GradingResult } from '../../src/types';
+import type { AssertionSet, GradingResult } from '../../src/types/index';
 
 jest.mock('../../src/envars');
 
