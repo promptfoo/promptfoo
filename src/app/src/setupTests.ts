@@ -20,8 +20,11 @@ if (typeof window !== 'undefined') {
     // Leave other CSS variables intact for tests that expect them
     if (typeof value === 'string' && value.includes('var(--')) {
       // Only replace border-related CSS variables that cause cssstyle parsing errors
-      if (value.includes('1px solid var(--') || value.includes('border') ||
-          value.match(/var\(--[\w-]*border[\w-]*\)/i)) {
+      if (
+        value.includes('1px solid var(--') ||
+        value.includes('border') ||
+        value.match(/var\(--[\w-]*border[\w-]*\)/i)
+      ) {
         value = value
           .replace(/1px solid var\(--[\w-]*border[\w-]*\)/gi, '1px solid transparent')
           .replace(/var\(--[\w-]*border[\w-]*\)/gi, 'transparent');
@@ -32,10 +35,10 @@ if (typeof window !== 'undefined') {
       return originalSetProperty.call(this, property, value, priority);
     } catch (error) {
       // Silently ignore CSS parsing errors for border properties only
-      if (error instanceof TypeError && (
-        error.message.includes('border') ||
-        error.message.includes('Cannot create property')
-      )) {
+      if (
+        error instanceof TypeError &&
+        (error.message.includes('border') || error.message.includes('Cannot create property'))
+      ) {
         return;
       }
       throw error;
@@ -44,11 +47,17 @@ if (typeof window !== 'undefined') {
 
   // Patch border-related property setters to handle CSS variables that cause parsing errors
   const borderProperties = [
-    'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft',
-    'borderWidth', 'borderStyle', 'borderColor'
+    'border',
+    'borderTop',
+    'borderRight',
+    'borderBottom',
+    'borderLeft',
+    'borderWidth',
+    'borderStyle',
+    'borderColor',
   ];
 
-  borderProperties.forEach(prop => {
+  borderProperties.forEach((prop) => {
     const descriptor = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, prop);
     if (descriptor?.set) {
       Object.defineProperty(CSSStyleDeclaration.prototype, prop, {
@@ -70,7 +79,7 @@ if (typeof window !== 'undefined') {
         },
         get: descriptor.get,
         configurable: true,
-        enumerable: true
+        enumerable: true,
       });
     }
   });
