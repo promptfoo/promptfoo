@@ -1158,6 +1158,9 @@ export interface OutputMetadata {
 
 // File exported as --output option
 export interface OutputFile {
+  id?: string;
+  createdAt?: string;
+  author?: string;
   evalId: string | null;
   results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
