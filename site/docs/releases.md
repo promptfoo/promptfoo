@@ -13,24 +13,26 @@ Full release history for Promptfoo open source can be found on [GitHub](https://
 ## August 2025 Release Highlights {#august-2025}
 
 ## General
+
 - **Model audit** allows you to scan AI/LLM models before deployment. Scan results are now saved in the database; they can be viewed and searched in the model audit UI in the new History tab. Model audit scans can also be shared to the cloud. Further information about the types of security risks found and installation are on the [model audit page](/docs/model-audit/).
 
 ![Model Audit UI](/img/release-notes/aug-25/model-audit-aug-25.png)
+
 - Edit prompts and re-run them from the details dialog
 
 ## Assertions and metrics
+
 - **[Conversational relevancy](/docs/configuration/expected-outputs/model-graded/conversation-relevance)** - New model graded metric. Evaluates whether responses in a conversation remain relevant throughout the dialogue.
 - **[contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)** - New assertion. Checks if output contains HTML content without requiring specific tags
 - **[is-html](/docs/configuration/expected-outputs/deterministic/#is-html)** - New assertion. Validates that the entire output is valid HTML
 
-
 ## Providers
+
 - Support for Claude Opus 4.1, gpt-5, gpt-5-mini, gpt-5-nano added. View our [foundation model security reports](https://promptfoo.dev/models/reports).
 - **Prompt config override** - Available for all providers (prompt functions that return a structured object with both prompt content and configuration to merge with the provider). [Example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-prompt-function).
 - **Gemini 2.5 Pro** - Updated Google default grading providers.
 - **Google AI Studio** - Default providers for Google AI Studio using Gemini 2.5-pro added. Google AI Studio credentials can be used natively.
 - **Ollama** - Think and passthrough parameter support added.
-
 
 ## Red-teaming
 
