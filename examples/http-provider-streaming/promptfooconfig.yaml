@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: HTTP provider streaming demonstration
+
+prompts:
+  - 'Tell me about {{topic}}'
+  - 'Write a short explanation of {{topic}}'
+
+providers:
+  # OpenAI-style streaming (most common format)
+  - id: http://localhost:3001/v1/chat/completions
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        model: 'gpt-5'
+        messages:
+          - role: 'user'
+            content: '{{prompt}}'
+        stream: true
+      streaming:
+        enabled: true
+        format: 'sse'
+        chunkProcessor: 'json.choices[0].delta.content'
+        accumulator: 'concat'
+        endMarker: '[DONE]'
+
+  # Simple streaming format
+  - id: http://localhost:3001/stream/simple
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        prompt: '{{prompt}}'
+      streaming:
+        enabled: true
+        format: 'sse'
+        chunkProcessor: 'json.text'
+        accumulator: 'concat'
+        endMarker: '{"done": true}'
+
+  # Newline-delimited JSON streaming
+  - id: http://localhost:3001/stream/newline
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        query: '{{prompt}}'
+      streaming:
+        enabled: true
+        format: 'newline-delimited'
+        chunkProcessor: 'json.text'
+        accumulator: 'concat'
+
+defaultTest:
+  options:
+    debug: true
+  assert:
+    # Ensure streaming produced output
+    - type: javascript
+      value: 'output && output.length > 0'
+    # Verify output is a string
+    - type: javascript
+      value: 'typeof output === "string"'
+
+tests:
+  - vars:
+      topic: 'artificial intelligence'
+  - vars:
+      topic: 'space exploration'
+  - vars:
+      topic: 'renewable energy'

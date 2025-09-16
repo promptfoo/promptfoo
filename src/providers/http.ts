@@ -31,6 +31,35 @@ import type {
   TokenUsage,
 } from '../types/index';
 
+// Streaming types and interfaces
+interface StreamingChunk {
+  data: any;
+  index: number;
+  timestamp: number;
+  raw: string;
+}
+
+interface StreamingResponse extends ProviderResponse {
+  chunks?: StreamingChunk[];
+  streamingMetadata?: {
+    chunkCount: number;
+    streamDuration: number;
+    firstChunkTime: number;
+    lastChunkTime: number;
+  };
+}
+
+interface StreamingOptions {
+  format: 'sse' | 'newline-delimited' | 'raw';
+  chunkProcessor?: string | Function;
+  accumulator: 'concat' | 'replace' | 'custom';
+  endMarker?: string;
+  onChunk?: Function;
+  bufferSize?: number;
+  chunkTimeout: number;
+  maxChunks?: number;
+}
+
 /**
  * Escapes string values in variables for safe JSON template substitution.
  * Converts { key: "value\nwith\nnewlines" } to { key: "value\\nwith\\nnewlines" }
@@ -718,6 +747,19 @@ const TokenEstimationConfigSchema = z.object({
   multiplier: z.number().min(0.01).default(1.3),
 });
 
+// Streaming configuration schema
+const StreamingConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  format: z.enum(['sse', 'newline-delimited', 'raw']).default('sse'),
+  chunkProcessor: z.union([z.string(), z.function()]).optional(),
+  accumulator: z.enum(['concat', 'replace', 'custom']).default('concat'),
+  endMarker: z.string().optional(),
+  onChunk: z.function().optional(),
+  bufferSize: z.number().positive().optional(),
+  chunkTimeout: z.number().positive().default(30000),
+  maxChunks: z.number().positive().optional(),
+});
+
 // Base signature auth fields
 const BaseSignatureAuthSchema = z.object({
   signatureValidityMs: z.number().default(300000),
@@ -905,6 +947,8 @@ export const HttpProviderConfigSchema = z.object({
     .transform(preprocessSignatureAuthConfig),
   // TLS Certificate configuration for HTTPS connections
   tls: TlsCertificateSchema.optional(),
+  // Streaming configuration
+  streaming: StreamingConfigSchema.optional(),
 });
 
 type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
@@ -1520,6 +1564,228 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
   });
 }
 
+/**
+ * Fetch with streaming support for Server-Sent Events and other streaming formats
+ */
+async function fetchWithStreaming(
+  url: string,
+  options: any,
+  timeout: number,
+  streamingOptions: StreamingOptions,
+  maxRetries?: number,
+): Promise<StreamingResponse> {
+  const startTime = Date.now();
+  let chunkIndex = 0;
+  const chunks: StreamingChunk[] = [];
+  let accumulatedContent = '';
+  let firstChunkTime: number | undefined;
+  let lastChunkTime: number | undefined;
+
+  // Import fetch utilities
+  const { fetchWithTimeout } = await import('../util/fetch');
+
+  for (let attempt = 0; attempt <= (maxRetries || 0); attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, options, timeout);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Response body is not readable');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const chunkTimeout = streamingOptions.chunkTimeout || 30000;
+          const chunkPromise = reader.read();
+          const timeoutPromise = new Promise<{ done: true; value: undefined }>((_, reject) =>
+            setTimeout(() => reject(new Error(`Chunk timeout after ${chunkTimeout}ms`)), chunkTimeout)
+          );
+
+          const result = await Promise.race([chunkPromise, timeoutPromise]);
+
+          if (result.done) {
+            break;
+          }
+
+          const chunkText = decoder.decode(result.value, { stream: true });
+          buffer += chunkText;
+
+          const currentTime = Date.now();
+          if (!firstChunkTime) {
+            firstChunkTime = currentTime;
+          }
+          lastChunkTime = currentTime;
+
+          // Process based on streaming format
+          if (streamingOptions.format === 'sse') {
+            // Server-Sent Events format
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const dataContent = line.slice(6); // Remove 'data: ' prefix
+
+                // Check for end marker
+                if (streamingOptions.endMarker && dataContent.trim() === streamingOptions.endMarker) {
+                  break;
+                }
+
+                try {
+                  const chunkData = JSON.parse(dataContent);
+                  const processedContent = await processChunk(chunkData, streamingOptions);
+
+                  if (processedContent !== null && processedContent !== undefined) {
+                    const chunk: StreamingChunk = {
+                      data: chunkData,
+                      index: chunkIndex++,
+                      timestamp: currentTime,
+                      raw: dataContent,
+                    };
+                    chunks.push(chunk);
+
+                    // Accumulate content
+                    if (streamingOptions.accumulator === 'concat') {
+                      accumulatedContent += processedContent;
+                    } else if (streamingOptions.accumulator === 'replace') {
+                      accumulatedContent = processedContent;
+                    }
+
+                    // Call onChunk callback if provided
+                    if (streamingOptions.onChunk) {
+                      await streamingOptions.onChunk(chunk, accumulatedContent);
+                    }
+                  }
+                } catch (e) {
+                  logger.debug(`Failed to parse SSE chunk: ${dataContent}, error: ${e}`);
+                  // Continue processing other chunks
+                }
+              }
+            }
+          } else if (streamingOptions.format === 'newline-delimited') {
+            // Newline-delimited JSON format
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+            for (const line of lines) {
+              if (line.trim()) {
+                try {
+                  const chunkData = JSON.parse(line);
+                  const processedContent = await processChunk(chunkData, streamingOptions);
+
+                  if (processedContent !== null && processedContent !== undefined) {
+                    const chunk: StreamingChunk = {
+                      data: chunkData,
+                      index: chunkIndex++,
+                      timestamp: currentTime,
+                      raw: line,
+                    };
+                    chunks.push(chunk);
+
+                    if (streamingOptions.accumulator === 'concat') {
+                      accumulatedContent += processedContent;
+                    } else if (streamingOptions.accumulator === 'replace') {
+                      accumulatedContent = processedContent;
+                    }
+
+                    if (streamingOptions.onChunk) {
+                      await streamingOptions.onChunk(chunk, accumulatedContent);
+                    }
+                  }
+                } catch (e) {
+                  logger.debug(`Failed to parse newline-delimited chunk: ${line}, error: ${e}`);
+                }
+              }
+            }
+          }
+
+          // Check max chunks limit
+          if (streamingOptions.maxChunks && chunks.length >= streamingOptions.maxChunks) {
+            logger.debug(`Reached max chunks limit: ${streamingOptions.maxChunks}`);
+            break;
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      const endTime = Date.now();
+      return {
+        output: accumulatedContent,
+        chunks,
+        streamingMetadata: {
+          chunkCount: chunks.length,
+          streamDuration: endTime - startTime,
+          firstChunkTime: firstChunkTime || startTime,
+          lastChunkTime: lastChunkTime || endTime,
+        },
+      };
+
+    } catch (error) {
+      logger.debug(`Streaming attempt ${attempt + 1} failed: ${error}`);
+
+      if (attempt === (maxRetries || 0)) {
+        // On final attempt failure, return partial results if any
+        if (chunks.length > 0) {
+          logger.warn(`Streaming failed but returning ${chunks.length} partial chunks`);
+          const endTime = Date.now();
+          return {
+            output: accumulatedContent,
+            chunks,
+            streamingMetadata: {
+              chunkCount: chunks.length,
+              streamDuration: endTime - startTime,
+              firstChunkTime: firstChunkTime || startTime,
+              lastChunkTime: lastChunkTime || endTime,
+            },
+            error: `Streaming failed: ${error}`,
+          };
+        }
+        throw error;
+      }
+
+      // Wait before retry
+      const waitTime = Math.pow(2, attempt) * 1000;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+  }
+
+  throw new Error('Streaming failed after all retries');
+}
+
+/**
+ * Process a streaming chunk using the configured chunk processor
+ */
+async function processChunk(chunkData: any, streamingOptions: StreamingOptions): Promise<string | null> {
+  if (!streamingOptions.chunkProcessor) {
+    return JSON.stringify(chunkData);
+  }
+
+  if (typeof streamingOptions.chunkProcessor === 'function') {
+    return await streamingOptions.chunkProcessor(chunkData);
+  }
+
+  if (typeof streamingOptions.chunkProcessor === 'string') {
+    try {
+      // Create a function to evaluate the expression
+      const processor = new Function('json', `return ${streamingOptions.chunkProcessor}`);
+      return processor(chunkData);
+    } catch (e) {
+      logger.debug(`Chunk processor failed: ${e}`);
+      return null;
+    }
+  }
+
+  return null;
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -1837,6 +2103,37 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
+    // Check if streaming is enabled
+    if (this.config.streaming?.enabled) {
+      logger.debug('[HTTP Provider]: Using streaming mode');
+      const streamingOptions: StreamingOptions = {
+        format: this.config.streaming.format || 'sse',
+        chunkProcessor: this.config.streaming.chunkProcessor,
+        accumulator: this.config.streaming.accumulator || 'concat',
+        endMarker: this.config.streaming.endMarker,
+        onChunk: this.config.streaming.onChunk,
+        bufferSize: this.config.streaming.bufferSize,
+        chunkTimeout: this.config.streaming.chunkTimeout || 30000,
+        maxChunks: this.config.streaming.maxChunks,
+      };
+
+      const streamingResponse = await fetchWithStreaming(
+        url,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        streamingOptions,
+        this.config.maxRetries,
+      );
+
+      // Process streaming response through transform pipeline
+      return this.processStreamingResponse(
+        streamingResponse,
+        transformedPrompt,
+        prompt,
+        { response: streamingResponse as any }
+      );
+    }
+
     const response = await fetchWithCache(
       url,
       fetchOptions,
@@ -1945,6 +2242,37 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
+    // Check if streaming is enabled
+    if (this.config.streaming?.enabled) {
+      logger.debug('[HTTP Provider]: Using streaming mode for raw request');
+      const streamingOptions: StreamingOptions = {
+        format: this.config.streaming.format || 'sse',
+        chunkProcessor: this.config.streaming.chunkProcessor,
+        accumulator: this.config.streaming.accumulator || 'concat',
+        endMarker: this.config.streaming.endMarker,
+        onChunk: this.config.streaming.onChunk,
+        bufferSize: this.config.streaming.bufferSize,
+        chunkTimeout: this.config.streaming.chunkTimeout || 30000,
+        maxChunks: this.config.streaming.maxChunks,
+      };
+
+      const streamingResponse = await fetchWithStreaming(
+        url,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        streamingOptions,
+        this.config.maxRetries,
+      );
+
+      // Process streaming response through transform pipeline
+      return this.processStreamingResponse(
+        streamingResponse,
+        transformedPrompt,
+        prompt,
+        { response: streamingResponse as any }
+      );
+    }
+
     const response = await fetchWithCache(
       url,
       fetchOptions,
@@ -1999,6 +2327,55 @@ export class HttpProvider implements ApiProvider {
       return parsedOutput.output;
     }
     return rawText;
+  }
+
+  /**
+   * Processes streaming response through the transform pipeline
+   */
+  private async processStreamingResponse(
+    streamingResponse: StreamingResponse,
+    transformedPrompt: any,
+    prompt: string,
+    context: TransformResponseContext
+  ): Promise<ProviderResponse> {
+    // Apply transformResponse to the accumulated output
+    const parsedOutput = (await this.transformResponse)(null, streamingResponse.output || '', context);
+
+    // Apply session parsing if configured
+    let sessionId: string | undefined;
+    try {
+      sessionId = this.sessionParser == null
+        ? undefined
+        : (await this.sessionParser)({
+            headers: context.response?.headers,
+            body: parsedOutput || streamingResponse.output
+          });
+    } catch (err) {
+      logger.error(`Error parsing session ID from streaming response: ${String(err)}`);
+      throw err;
+    }
+
+    // Build base response
+    const ret: ProviderResponse = {
+      raw: streamingResponse.output,
+      metadata: {
+        streaming: streamingResponse.streamingMetadata,
+        chunks: streamingResponse.chunks,
+      },
+    };
+
+    if (sessionId) {
+      ret.sessionId = sessionId;
+    }
+
+    // Process through token estimation pipeline
+    return this.processResponseWithTokenEstimation(
+      ret,
+      parsedOutput,
+      streamingResponse.output || '',
+      transformedPrompt,
+      prompt,
+    );
   }
 
   /**

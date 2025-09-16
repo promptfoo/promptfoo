@@ -4765,6 +4765,317 @@ describe('HttpProvider - Sanitization', () => {
     // Note: timeout and maxRetries are not included in the rendered config that gets logged
     expect(logMessage).not.toContain('[REDACTED]');
   });
+
+  describe('streaming functionality', () => {
+    let mockServer: any;
+    let serverPort: number;
+
+    beforeAll(async () => {
+      // Start a simple mock streaming server for tests
+      const http = require('http');
+      serverPort = 13001; // Use different port for tests
+
+      mockServer = http.createServer((req: any, res: any) => {
+        if (req.method === 'POST' && req.url === '/stream/openai') {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          });
+
+          // Send OpenAI-style streaming chunks
+          const chunks = [
+            { choices: [{ delta: { content: 'Hello' } }] },
+            { choices: [{ delta: { content: ' world' } }] },
+            { choices: [{ delta: { content: '!' } }] },
+          ];
+
+          let index = 0;
+          const sendChunk = () => {
+            if (index < chunks.length) {
+              res.write(`data: ${JSON.stringify(chunks[index])}\n\n`);
+              index++;
+              setTimeout(sendChunk, 10);
+            } else {
+              res.write('data: [DONE]\n\n');
+              res.end();
+            }
+          };
+          sendChunk();
+        } else if (req.method === 'POST' && req.url === '/stream/simple') {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          });
+
+          const chunks = [
+            { text: 'First' },
+            { text: ' Second' },
+            { text: ' Third' },
+          ];
+
+          let index = 0;
+          const sendChunk = () => {
+            if (index < chunks.length) {
+              res.write(`data: ${JSON.stringify(chunks[index])}\n\n`);
+              index++;
+              setTimeout(sendChunk, 10);
+            } else {
+              res.write('data: {"done": true}\n\n');
+              res.end();
+            }
+          };
+          sendChunk();
+        } else if (req.method === 'POST' && req.url === '/stream/newline') {
+          res.writeHead(200, {
+            'Content-Type': 'application/x-ndjson',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          });
+
+          const chunks = [
+            { chunk: 1, text: 'Line 1' },
+            { chunk: 2, text: ' Line 2' },
+            { chunk: 3, text: ' Line 3' },
+          ];
+
+          let index = 0;
+          const sendChunk = () => {
+            if (index < chunks.length) {
+              res.write(`${JSON.stringify(chunks[index])}\n`);
+              index++;
+              setTimeout(sendChunk, 10);
+            } else {
+              res.end();
+            }
+          };
+          sendChunk();
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+
+      await new Promise<void>((resolve) => {
+        mockServer.listen(serverPort, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      if (mockServer) {
+        await new Promise<void>((resolve) => {
+          mockServer.close(resolve);
+        });
+      }
+    });
+
+    it('should handle OpenAI-style streaming with SSE format', async () => {
+      const provider = new HttpProvider(`http://localhost:${serverPort}`, {
+        config: {
+          url: `http://localhost:${serverPort}/stream/openai`,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { prompt: '{{ prompt }}' },
+          streaming: {
+            enabled: true,
+            format: 'sse',
+            chunkProcessor: 'json.choices[0].delta.content',
+            accumulator: 'concat',
+            endMarker: '[DONE]',
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Hello world!');
+      expect(result.metadata?.streaming).toBeDefined();
+      expect(result.metadata?.streaming?.chunkCount).toBe(3);
+      expect(result.metadata?.chunks).toHaveLength(3);
+    });
+
+    it('should handle simple streaming format', async () => {
+      const provider = new HttpProvider(`http://localhost:${serverPort}`, {
+        config: {
+          url: `http://localhost:${serverPort}/stream/simple`,
+          method: 'POST',
+          streaming: {
+            enabled: true,
+            format: 'sse',
+            chunkProcessor: 'json.text',
+            accumulator: 'concat',
+            endMarker: '{"done": true}',
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('First Second Third');
+      expect(result.metadata?.streaming?.chunkCount).toBe(3);
+    });
+
+    it('should handle newline-delimited JSON streaming', async () => {
+      const provider = new HttpProvider(`http://localhost:${serverPort}`, {
+        config: {
+          url: `http://localhost:${serverPort}/stream/newline`,
+          method: 'POST',
+          streaming: {
+            enabled: true,
+            format: 'newline-delimited',
+            chunkProcessor: 'json.text',
+            accumulator: 'concat',
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Line 1 Line 2 Line 3');
+      expect(result.metadata?.streaming?.chunkCount).toBe(3);
+    });
+
+    it('should work with transformResponse for streaming', async () => {
+      const provider = new HttpProvider(`http://localhost:${serverPort}`, {
+        config: {
+          url: `http://localhost:${serverPort}/stream/openai`,
+          method: 'POST',
+          streaming: {
+            enabled: true,
+            format: 'sse',
+            chunkProcessor: 'json.choices[0].delta.content',
+            accumulator: 'concat',
+            endMarker: '[DONE]',
+          },
+          transformResponse: (data: any, text: any) => text.toUpperCase(),
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('HELLO WORLD!');
+    });
+
+    it('should handle chunk processor function', async () => {
+      const chunkProcessor = jest.fn((chunk) => chunk.choices[0].delta.content || '');
+
+      const provider = new HttpProvider(`http://localhost:${serverPort}`, {
+        config: {
+          url: `http://localhost:${serverPort}/stream/openai`,
+          method: 'POST',
+          streaming: {
+            enabled: true,
+            format: 'sse',
+            chunkProcessor,
+            accumulator: 'concat',
+            endMarker: '[DONE]',
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Hello world!');
+      expect(chunkProcessor).toHaveBeenCalledTimes(3);
+    });
+
+    it('should handle replace accumulator mode', async () => {
+      const provider = new HttpProvider(`http://localhost:${serverPort}`, {
+        config: {
+          url: `http://localhost:${serverPort}/stream/simple`,
+          method: 'POST',
+          streaming: {
+            enabled: true,
+            format: 'sse',
+            chunkProcessor: 'json.text',
+            accumulator: 'replace',
+            endMarker: '{"done": true}',
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // With replace mode, only the last chunk content should remain
+      expect(result.output).toBe(' Third');
+      expect(result.metadata?.streaming?.chunkCount).toBe(3);
+    });
+
+    it('should apply token estimation to streaming responses', async () => {
+      const provider = new HttpProvider(`http://localhost:${serverPort}`, {
+        config: {
+          url: `http://localhost:${serverPort}/stream/openai`,
+          method: 'POST',
+          streaming: {
+            enabled: true,
+            format: 'sse',
+            chunkProcessor: 'json.choices[0].delta.content',
+            accumulator: 'concat',
+            endMarker: '[DONE]',
+          },
+          tokenEstimation: {
+            enabled: true,
+            multiplier: 1.5,
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Hello world!');
+      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage?.total).toBeGreaterThan(0);
+    });
+
+    it('should handle streaming with maxChunks limit', async () => {
+      const provider = new HttpProvider(`http://localhost:${serverPort}`, {
+        config: {
+          url: `http://localhost:${serverPort}/stream/openai`,
+          method: 'POST',
+          streaming: {
+            enabled: true,
+            format: 'sse',
+            chunkProcessor: 'json.choices[0].delta.content',
+            accumulator: 'concat',
+            endMarker: '[DONE]',
+            maxChunks: 2, // Limit to 2 chunks
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Hello world'); // Should stop after 2 chunks
+      expect(result.metadata?.streaming?.chunkCount).toBe(2);
+    });
+
+    it('should fall back to non-streaming when streaming is disabled', async () => {
+      // Mock fetchWithCache for non-streaming test
+      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: 'non-streaming response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new HttpProvider('http://localhost:3001/test', {
+        config: {
+          method: 'POST',
+          body: { prompt: '{{ prompt }}' },
+          streaming: {
+            enabled: false, // Disabled
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('non-streaming response');
+      expect(result.metadata?.streaming).toBeUndefined();
+      expect(fetchWithCache).toHaveBeenCalled();
+    });
+  });
 });
 
 // Cleanup console mock

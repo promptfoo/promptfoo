@@ -1300,6 +1300,499 @@ Supported config options:
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 
+## Streaming Support
+
+The HTTP provider supports real-time streaming responses from APIs that implement Server-Sent Events (SSE), newline-delimited JSON, or other streaming formats. This is particularly useful for LLM APIs that stream token-by-token responses to provide faster perceived response times.
+
+### Basic Streaming Configuration
+
+Enable streaming with basic configuration:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat/completions'
+      body:
+        model: 'gpt-5'
+        messages:
+          - role: 'user'
+            content: '{{prompt}}'
+        stream: true
+      streaming:
+        enabled: true
+        format: 'sse'
+        chunkProcessor: 'json.choices[0].delta.content'
+        accumulator: 'concat'
+        endMarker: '[DONE]'
+```
+
+### Supported Streaming Formats
+
+#### Server-Sent Events (SSE)
+
+Most common format used by OpenAI and compatible APIs:
+
+```yaml
+streaming:
+  enabled: true
+  format: 'sse'
+  chunkProcessor: 'json.choices[0].delta.content'
+  accumulator: 'concat'
+  endMarker: '[DONE]'
+```
+
+#### Newline-Delimited JSON
+
+Each line contains a complete JSON object:
+
+```yaml
+streaming:
+  enabled: true
+  format: 'newline-delimited'
+  chunkProcessor: 'json.text'
+  accumulator: 'concat'
+```
+
+#### Raw Streaming
+
+For custom streaming formats:
+
+```yaml
+streaming:
+  enabled: true
+  format: 'raw'
+  chunkProcessor: (chunk) => extractContent(chunk)
+  accumulator: 'concat'
+```
+
+### Chunk Processing
+
+The `chunkProcessor` extracts content from each streaming chunk. It can be:
+
+#### JavaScript Expression
+
+Extract data using simple expressions:
+
+```yaml
+# OpenAI format: {"choices": [{"delta": {"content": "text"}}]}
+chunkProcessor: 'json.choices[0].delta.content'
+
+# Simple format: {"text": "content"}
+chunkProcessor: 'json.text'
+
+# Nested data: {"data": {"message": "content"}}
+chunkProcessor: 'json.data.message'
+```
+
+#### Custom Function
+
+Define custom processing logic:
+
+```yaml
+chunkProcessor: |
+  (chunk, context) => {
+    if (!chunk.data) return '';
+    const parsed = JSON.parse(chunk.data);
+    return parsed.choices?.[0]?.delta?.content || '';
+  }
+```
+
+#### File-Based Processor
+
+Load processing logic from a file:
+
+```yaml
+chunkProcessor: 'file://processors/openai-chunk.js'
+```
+
+Example processor file (`processors/openai-chunk.js`):
+
+```javascript
+module.exports = (chunk, context) => {
+  // Skip non-data chunks
+  if (!chunk.data || chunk.data === '[DONE]') {
+    return '';
+  }
+
+  try {
+    const parsed = JSON.parse(chunk.data);
+    return parsed.choices?.[0]?.delta?.content || '';
+  } catch (error) {
+    console.warn('Failed to parse chunk:', chunk.data);
+    return '';
+  }
+};
+```
+
+### Response Accumulation
+
+Control how chunks are combined into the final response:
+
+#### Concatenation (Default)
+
+Concatenate all chunk content:
+
+```yaml
+streaming:
+  accumulator: 'concat'
+```
+
+This builds up the response incrementally: `"Hello"` + `" world"` = `"Hello world"`
+
+#### Replacement
+
+Each chunk replaces the previous content:
+
+```yaml
+streaming:
+  accumulator: 'replace'
+```
+
+Useful for status updates where only the latest chunk matters.
+
+#### Custom Accumulation
+
+Define custom accumulation logic:
+
+```yaml
+streaming:
+  accumulator: 'custom'
+  customAccumulator: |
+    (accumulated, newChunk, context) => {
+      // Custom logic for combining chunks
+      if (newChunk.includes('[END]')) {
+        return accumulated;
+      }
+      return accumulated + newChunk;
+    }
+```
+
+### Stream Termination
+
+Configure how the stream knows when to stop:
+
+#### End Marker
+
+Specify a marker that indicates stream completion:
+
+```yaml
+streaming:
+  endMarker: '[DONE]'        # OpenAI-style
+  # endMarker: '{"done": true}' # JSON marker
+  # endMarker: 'STREAM_END'     # Custom marker
+```
+
+#### Maximum Chunks
+
+Limit the number of chunks processed:
+
+```yaml
+streaming:
+  maxChunks: 100
+```
+
+#### Timeout Configuration
+
+Set timeouts for chunk processing:
+
+```yaml
+streaming:
+  chunkTimeout: 30000  # 30 seconds per chunk
+```
+
+### Advanced Configuration
+
+#### Chunk Callback
+
+Execute custom logic for each chunk:
+
+```yaml
+streaming:
+  onChunk: |
+    (chunk, accumulated, context) => {
+      console.log('Received chunk:', chunk);
+      // Custom logging, metrics, etc.
+    }
+```
+
+#### Buffer Management
+
+Configure internal buffering:
+
+```yaml
+streaming:
+  bufferSize: 1024  # Buffer size in bytes
+```
+
+### Complete Example Configurations
+
+#### OpenAI-Compatible API
+
+```yaml
+providers:
+  - id: openai-streaming
+    config:
+      url: 'https://api.openai.com/v1/chat/completions'
+      headers:
+        Authorization: 'Bearer {{env.OPENAI_API_KEY}}'
+        Content-Type: 'application/json'
+      body:
+        model: 'gpt-5'
+        messages:
+          - role: 'user'
+            content: '{{prompt}}'
+        stream: true
+      streaming:
+        enabled: true
+        format: 'sse'
+        chunkProcessor: 'json.choices[0].delta.content'
+        accumulator: 'concat'
+        endMarker: '[DONE]'
+        chunkTimeout: 30000
+```
+
+#### Custom Streaming API
+
+```yaml
+providers:
+  - id: custom-streaming
+    config:
+      url: 'https://api.example.com/stream'
+      body:
+        prompt: '{{prompt}}'
+        enable_stream: true
+      streaming:
+        enabled: true
+        format: 'newline-delimited'
+        chunkProcessor: 'json.generated_text'
+        accumulator: 'concat'
+        maxChunks: 50
+        onChunk: |
+          (chunk, accumulated) => {
+            if (chunk.includes('ERROR')) {
+              throw new Error('Stream error detected');
+            }
+          }
+```
+
+### Integration with Existing Features
+
+Streaming works seamlessly with all existing HTTP provider features:
+
+#### Authentication
+
+All authentication methods work with streaming:
+
+```yaml
+streaming:
+  enabled: true
+headers:
+  Authorization: 'Bearer {{env.API_KEY}}'
+signatureAuth:
+  type: 'pem'
+  privateKeyPath: '/path/to/key.pem'
+```
+
+#### Request Transforms
+
+Transform requests before streaming:
+
+```yaml
+transformRequest: '{"messages": [{"role": "user", "content": "{{prompt}}"}], "stream": true}'
+streaming:
+  enabled: true
+```
+
+#### Response Transforms
+
+Transform the final accumulated response:
+
+```yaml
+streaming:
+  enabled: true
+  # ... streaming config
+transformResponse: |
+  {
+    output: output.trim(),
+    metadata: { streamed: true }
+  }
+```
+
+#### Session Management
+
+Session parsing works with the final accumulated response:
+
+```yaml
+streaming:
+  enabled: true
+sessionParser: 'data.headers["x-session-id"]'
+```
+
+#### Token Estimation
+
+Token estimation works on the accumulated final response:
+
+```yaml
+streaming:
+  enabled: true
+tokenEstimation:
+  enabled: true
+  multiplier: 1.3
+```
+
+### Error Handling
+
+The streaming implementation handles various error scenarios:
+
+#### Connection Errors
+
+Automatic retries with exponential backoff:
+
+```yaml
+streaming:
+  enabled: true
+maxRetries: 3  # Applies to stream connection failures
+```
+
+#### Chunk Timeouts
+
+Configurable timeout per chunk:
+
+```yaml
+streaming:
+  chunkTimeout: 10000  # 10 seconds per chunk
+```
+
+#### Partial Responses
+
+On stream interruption, returns accumulated content:
+
+```yaml
+streaming:
+  enabled: true
+  # If stream fails after 3 chunks, returns content from those 3 chunks
+```
+
+#### Invalid Chunks
+
+Skips malformed chunks and continues processing:
+
+```yaml
+streaming:
+  enabled: true
+  chunkProcessor: |
+    (chunk) => {
+      try {
+        return JSON.parse(chunk.data).content;
+      } catch (error) {
+        // Skip invalid chunks
+        return '';
+      }
+    }
+```
+
+### Debug Mode
+
+Enable detailed streaming logs:
+
+```yaml
+defaultTest:
+  options:
+    debug: true
+```
+
+This shows:
+- Individual chunks as they arrive
+- Timing information
+- Accumulation progress
+- Final response construction
+
+Example debug output:
+```
+[HTTP Provider] Starting stream for https://api.example.com/v1/chat/completions
+[HTTP Provider] Chunk 1: {"choices":[{"delta":{"content":"Hello"}}]}
+[HTTP Provider] Accumulated: "Hello"
+[HTTP Provider] Chunk 2: {"choices":[{"delta":{"content":" world"}}]}
+[HTTP Provider] Accumulated: "Hello world"
+[HTTP Provider] Stream completed: "[DONE]"
+[HTTP Provider] Final response: "Hello world! How can I help you?"
+```
+
+### Streaming Configuration Options
+
+| Option              | Type                      | Default  | Description                                                    |
+| ------------------- | ------------------------- | -------- | -------------------------------------------------------------- |
+| enabled             | boolean                   | false    | Enable streaming mode                                          |
+| format              | string                    | 'sse'    | Stream format: 'sse', 'newline-delimited', 'raw'             |
+| chunkProcessor      | string \| function        | -        | JavaScript expression or function to extract content from chunks |
+| accumulator         | string                    | 'concat' | How to combine chunks: 'concat', 'replace', 'custom'         |
+| customAccumulator   | function                  | -        | Custom accumulation function (when accumulator is 'custom')   |
+| endMarker           | string                    | -        | Optional marker indicating stream end                          |
+| chunkTimeout        | number                    | 30000    | Timeout per chunk in milliseconds                             |
+| maxChunks           | number                    | -        | Maximum chunks to process                                      |
+| bufferSize          | number                    | -        | Buffer size for processing                                     |
+| onChunk             | function                  | -        | Callback for each chunk                                        |
+
+### Performance Considerations
+
+#### Chunk Processing Efficiency
+
+- Keep `chunkProcessor` functions lightweight
+- Avoid heavy computations in chunk callbacks
+- Use simple expressions when possible
+
+#### Memory Management
+
+- Set reasonable `maxChunks` limits for long streams
+- Configure appropriate `bufferSize` for your use case
+- Monitor memory usage with large responses
+
+#### Network Optimization
+
+- Adjust `chunkTimeout` based on network conditions
+- Consider connection pooling for high-volume scenarios
+- Use appropriate retry strategies for your infrastructure
+
+### Troubleshooting
+
+#### Common Issues
+
+**No chunks received:**
+- Verify the API supports streaming
+- Check that request includes streaming parameters (e.g., `stream: true`)
+- Ensure correct `format` setting
+
+**Chunks not processing:**
+- Verify `chunkProcessor` matches your response format
+- Enable debug mode to see raw chunks
+- Check for JSON parsing errors
+
+**Incomplete responses:**
+- Verify `endMarker` matches your API's completion signal
+- Check network connectivity and timeouts
+- Monitor for connection drops in server logs
+
+**Performance issues:**
+- Optimize `chunkProcessor` function
+- Adjust `chunkTimeout` settings
+- Consider reducing `maxChunks` for testing
+
+#### Testing Streaming
+
+Use the [HTTP Streaming Example](/examples/http-provider-streaming) to test streaming configurations:
+
+```bash
+# Start the mock streaming server
+cd examples/http-provider-streaming
+node mock-server.js
+
+# Run streaming evaluation in another terminal
+npx promptfoo eval -c promptfooconfig.yaml
+```
+
+The example includes mock endpoints for testing different streaming formats and error scenarios.
+
 ## Configuration Generator
 
 Use the generator below to create an HTTP provider configuration based on your endpoint:
