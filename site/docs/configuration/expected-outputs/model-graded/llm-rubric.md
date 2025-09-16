@@ -270,6 +270,41 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 
 This means that without a `threshold`, a result like `{ pass: true, score: 0 }` will pass. If you want the numeric score (e.g., 0/1 rubric) to drive PASS/FAIL, set a `threshold` accordingly or have the model return explicit `pass`.
 
+:::caution
+If the model omits `pass` and you don't set `threshold`, the assertion passes even with `score: 0`.
+:::
+
+### Common misconfiguration
+
+```yaml
+# ❌ Problem: Returns 0/1 scores but no threshold set
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    # Missing threshold - always passes due to pass defaulting to true
+```
+
+**Fixes:**
+
+```yaml
+# ✅ Option A: Add threshold
+assert:
+  - type: llm-rubric
+    value: |
+      Return 0 if the response is incorrect
+      Return 1 if the response is correct
+    threshold: 1
+
+# ✅ Option B: Control pass explicitly
+assert:
+  - type: llm-rubric
+    value: |
+      Return {"pass": true, "score": 1} if the response is correct
+      Return {"pass": false, "score": 0} if the response is incorrect
+```
+
 ## Binary Scoring Example: Success/Failure Detection
 
 When testing systems that should detect specific conditions, you often want tests to PASS only when the condition is correctly identified.
@@ -297,6 +332,26 @@ assert:
 ```
 
 Option B avoids relying on defaults and makes PASS/FAIL unambiguous even without a `threshold`.
+
+### Deterministic backup approach
+
+For critical evaluations like CI/CD pipelines, consider combining `llm-rubric` with a deterministic assertion as a backup:
+
+```yaml
+assert:
+  # Primary: LLM grader with explicit pass control
+  - type: llm-rubric
+    value: |
+      Return {"pass": true, "score": 1} if the output indicates "detected"
+      Return {"pass": false, "score": 0} if the output indicates "not detected"
+
+  # Backup: Deterministic string check
+  - type: contains
+    value: "detected"
+    description: Belt-and-suspenders check for detection keyword
+```
+
+This belt-and-suspenders approach provides confidence that critical detection failures won't be missed due to LLM grader inconsistencies.
 
 ## Further reading
 
