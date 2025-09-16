@@ -1,5 +1,6 @@
 import React from 'react';
 import Box from '@mui/material/Box';
+import Citations from './Citations';
 
 interface CodeDisplayProps {
   content: string;
@@ -24,6 +25,7 @@ interface OutputsPanelProps {
   onMouseEnter: (element: string) => void;
   onMouseLeave: () => void;
   CodeDisplay: CodeDisplayComponent;
+  citations?: any;
 }
 
 export function OutputsPanel({
@@ -36,6 +38,7 @@ export function OutputsPanel({
   onMouseEnter,
   onMouseLeave,
   CodeDisplay,
+  citations,
 }: OutputsPanelProps) {
   return (
     <Box>
@@ -74,6 +77,7 @@ export function OutputsPanel({
           showCopyButton={hoveredElement === 'output' || copiedFields['output']}
         />
       )}
+      {citations && <Citations citations={citations} />}
     </Box>
   );
 }

@@ -1,15 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 
 import { callApi } from '@app/utils/api';
 import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
+import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Tab from '@mui/material/Tab';
@@ -358,8 +355,8 @@ export default function EvalOutputPromptDialog({
     visibleTabs.push('metadata');
   }
 
-  // Only show traces tab if we have actual traces or citations data
-  const hasTracesData = (hasTraces && evaluationId) || citationsData;
+  // Only show traces tab if we have actual traces to display
+  const hasTracesData = Boolean(hasTraces && evaluationId);
 
   // Put Traces tab last if it should be shown
   if (hasTracesData) {
@@ -369,22 +366,50 @@ export default function EvalOutputPromptDialog({
   // Get final tab name after all tabs are added
   const finalTabName = visibleTabs[activeTab] || 'prompt-output';
 
+  const drawerTransitionDuration = useMemo(() => ({ enter: 320, exit: 250 }), []);
+  const drawerSlotProps = useMemo(
+    () => ({
+      transition: {
+        appear: true,
+      },
+    }),
+    [],
+  );
+
   return (
-    <Dialog
+    <Drawer
+      anchor="right"
       open={open}
       onClose={onClose}
-      fullWidth
-      maxWidth="lg"
+      transitionDuration={drawerTransitionDuration}
+      slotProps={drawerSlotProps}
       sx={{
-        '& .MuiDialog-paper': {
-          height: '80vh',
-          minHeight: '600px',
-          maxHeight: '900px',
+        '& .MuiDrawer-paper': {
+          width: { xs: '100%', sm: '75%', md: '65%', lg: '65%' },
+          maxWidth: '1200px',
+          boxSizing: 'border-box',
         },
       }}
     >
-      <DialogTitle>Details{provider && `: ${provider}`}</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {/* Header with title and close button */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          p: 2,
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Typography variant="h6">Details{provider && `: ${provider}`}</Typography>
+        <IconButton edge="end" onClick={onClose} aria-label="close" sx={{ ml: 2 }}>
+          <CloseIcon />
+        </IconButton>
+      </Box>
+
+      {/* Main content area */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100% - 65px)' }}>
         <Tabs
           value={activeTab}
           onChange={handleTabChange}
@@ -393,7 +418,7 @@ export default function EvalOutputPromptDialog({
           sx={{
             borderBottom: 1,
             borderColor: 'divider',
-            mb: 2,
+            px: 2,
             flexShrink: 0,
           }}
         >
@@ -405,10 +430,10 @@ export default function EvalOutputPromptDialog({
         </Tabs>
 
         {/* Tab Panels Container */}
-        <Box sx={{ flexGrow: 1, overflow: 'auto', minHeight: 0 }}>
+        <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
           {/* Prompt & Output Panel */}
           {finalTabName === 'prompt-output' && (
-            <Box sx={{ p: 1 }}>
+            <Box>
               <PromptEditor
                 prompt={prompt}
                 editMode={editMode}
@@ -437,20 +462,21 @@ export default function EvalOutputPromptDialog({
                 onMouseEnter={setHoveredElement}
                 onMouseLeave={() => setHoveredElement(null)}
                 CodeDisplay={CodeDisplay}
+                citations={citationsData}
               />
             </Box>
           )}
 
           {/* Evaluation Panel */}
           {finalTabName === 'evaluation' && (
-            <Box sx={{ p: 1 }}>
+            <Box>
               <EvaluationPanel gradingResults={gradingResults} />
             </Box>
           )}
 
           {/* Messages Panel */}
           {finalTabName === 'messages' && (
-            <Box sx={{ p: 1 }}>
+            <Box>
               {parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
               {redteamHistoryMessages.length > 0 && (
                 <Box mt={parsedMessages.length > 0 ? 3 : 0}>
@@ -462,7 +488,7 @@ export default function EvalOutputPromptDialog({
 
           {/* Metadata Panel */}
           {finalTabName === 'metadata' && (
-            <Box sx={{ p: 1 }}>
+            <Box>
               <MetadataPanel
                 metadata={metadata}
                 expandedMetadata={expandedMetadata}
@@ -476,11 +502,10 @@ export default function EvalOutputPromptDialog({
 
           {/* Traces Panel */}
           {finalTabName === 'traces' && (
-            <Box sx={{ p: 1 }}>
+            <Box>
               <DebuggingPanel
                 evaluationId={evaluationId}
                 testCaseId={testCaseId}
-                citationsData={citationsData}
                 showTraceSection={showTraceSection}
                 onTraceSectionVisibilityChange={(hasContent) => {
                   setShowTraceSection(hasContent);
@@ -491,10 +516,7 @@ export default function EvalOutputPromptDialog({
             </Box>
           )}
         </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </Dialog>
+      </Box>
+    </Drawer>
   );
 }

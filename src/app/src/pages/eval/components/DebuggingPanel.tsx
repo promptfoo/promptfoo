@@ -3,7 +3,6 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { ErrorBoundary } from 'react-error-boundary';
 import TraceView from '../../../components/traces/TraceView';
-import Citations from './Citations';
 
 const subtitleTypographySx = {
   mb: 1,
@@ -13,7 +12,6 @@ const subtitleTypographySx = {
 interface DebuggingPanelProps {
   evaluationId?: string;
   testCaseId?: string;
-  citationsData?: any;
   showTraceSection: boolean;
   onTraceSectionVisibilityChange: (visible: boolean) => void;
 }
@@ -21,7 +19,6 @@ interface DebuggingPanelProps {
 export function DebuggingPanel({
   evaluationId,
   testCaseId,
-  citationsData,
   showTraceSection,
   onTraceSectionVisibilityChange,
 }: DebuggingPanelProps) {
@@ -41,8 +38,6 @@ export function DebuggingPanel({
           </ErrorBoundary>
         </Box>
       )}
-
-      {citationsData && <Citations citations={citationsData} />}
     </Box>
   );
 }

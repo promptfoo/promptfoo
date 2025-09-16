@@ -88,9 +88,6 @@ export default function ChatMessages({ messages }: ChatMessagesProps) {
         backgroundColor: (theme) =>
           theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : '#F8F9FA',
         p: 2,
-        borderRadius: 2,
-        overflowY: 'auto',
-        maxHeight: '60vh',
       }}
     >
       {messages.map((message, index) => (
