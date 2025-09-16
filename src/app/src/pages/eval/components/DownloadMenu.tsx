@@ -263,52 +263,6 @@ function DownloadMenu() {
     setOpen(true);
   };
 
-  const handleKeyDown = React.useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === 'Escape') {
-        handleClose();
-      } else if (open && !event.altKey && !event.ctrlKey && !event.metaKey) {
-        switch (event.key) {
-          case '1':
-            downloadConfig();
-            break;
-          case '2':
-            downloadFailedTestsConfig();
-            break;
-          case '3':
-            downloadCsv();
-            break;
-          case '4':
-            downloadTable();
-            break;
-          case '5':
-            downloadBurpPayloads();
-            break;
-          case '6':
-            downloadDpoJson();
-            break;
-          case '7':
-            downloadHumanEvalTestCases();
-            break;
-        }
-      }
-    },
-    [open],
-  );
-
-  React.useEffect(() => {
-    const handleGlobalKeyDown = (event: KeyboardEvent) => {
-      if (open) {
-        handleKeyDown(event as unknown as React.KeyboardEvent<HTMLDivElement>);
-      }
-    };
-
-    document.addEventListener('keydown', handleGlobalKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleGlobalKeyDown);
-    };
-  }, [handleKeyDown, open]);
-
   // Generate the command text based on filename
   const getCommandText = (fileName: string) => {
     return `promptfoo eval -c ${fileName}`;
@@ -399,7 +353,7 @@ function DownloadMenu() {
         </ListItemIcon>
         <ListItemText>Download</ListItemText>
       </MenuItem>
-      <Dialog onClose={handleClose} open={open} onKeyDown={handleKeyDown} maxWidth="lg">
+      <Dialog onClose={handleClose} open={open} maxWidth="lg">
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h5" component="h2" sx={{ fontWeight: 600 }}>
