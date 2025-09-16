@@ -3,7 +3,7 @@ import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import logger from '../logger';
 
-import type { EvalResultsFilterMode } from '../types/index';
+import type { EvalResultsFilterMode, ResultsFilter } from '../types/index';
 
 interface CountCacheEntry {
   count: number;
@@ -60,7 +60,7 @@ export async function queryTestIndicesOptimized(
     limit?: number;
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
-    filters?: string[];
+    filters?: ResultsFilter[];
   },
 ): Promise<{ testIndices: number[]; filteredCount: number }> {
   const db = getDb();

@@ -43,7 +43,7 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageU
 import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 import EvalResult from './evalResult';
 
-import type { EvalResultsFilterMode } from '../types/index';
+import type { EvalResultsFilterMode, ResultsFilter } from '../types/index';
 
 interface FilteredCountRow {
   count: number | null;
@@ -470,7 +470,7 @@ export default class Eval {
     limit?: number;
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
-    filters?: string[];
+    filters?: ResultsFilter[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
     const db = getDb();
     const offset = opts.offset ?? 0;
@@ -494,7 +494,7 @@ export default class Eval {
       const sanitizeValue = (val: string) => val.replace(/'/g, "''");
 
       opts.filters.forEach((filter) => {
-        const { logicOperator, type, operator, value, field } = JSON.parse(filter);
+        const { logicOperator, type, operator, value, field } = filter;
         let condition: string | null = null;
 
         if (type === 'metric' && operator === 'equals') {
@@ -648,6 +648,8 @@ export default class Eval {
     filteredCount: number;
     id: string;
   }> {
+    const filters = opts.filters?.map((filter) => JSON.parse(filter)) as ResultsFilter[];
+
     // Get total count of tests for this eval
     const totalCount = await this.getResultsCount();
 
@@ -661,7 +663,7 @@ export default class Eval {
       filteredCount = testIndices.length;
     } else {
       // Use optimized query for simple cases, fall back to original for complex filters
-      const hasComplexFilters = opts.filters && opts.filters.length > 0;
+      const hasComplexFilters = filters && filters.length > 0;
 
       let queryResult;
       if (hasComplexFilters) {
@@ -672,7 +674,7 @@ export default class Eval {
           limit: opts.limit,
           filterMode: opts.filterMode,
           searchQuery: opts.searchQuery,
-          filters: opts.filters,
+          filters,
         });
       } else {
         // Use optimized query for better performance
@@ -682,7 +684,7 @@ export default class Eval {
           limit: opts.limit,
           filterMode: opts.filterMode,
           searchQuery: opts.searchQuery,
-          filters: opts.filters,
+          filters,
         });
       }
 
