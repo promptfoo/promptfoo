@@ -1204,26 +1204,3 @@ export const EvalResultsFilterMode = z.enum([
 ]);
 
 export type EvalResultsFilterMode = z.infer<typeof EvalResultsFilterMode>;
-
-export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy' | 'severity';
-
-export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
-
-export type ResultsFilter = {
-  /**
-   * A unique identifier for the filter.
-   */
-  id: string;
-  type: ResultsFilterType;
-  value: string;
-  operator: ResultsFilterOperator;
-  logicOperator: 'and' | 'or';
-  /**
-   * For metadata filters, this is the field name in the metadata object
-   */
-  field?: string;
-  /**
-   * The order in which this filter was added (for maintaining consistent ordering)
-   */
-  sortIndex: number;
-};

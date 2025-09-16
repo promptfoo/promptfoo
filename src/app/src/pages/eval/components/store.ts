@@ -11,8 +11,6 @@ import type {
   EvaluateSummaryV2,
   EvaluateTable,
   ResultsFile,
-  ResultsFilter,
-  ResultsFilterType,
   UnifiedConfig,
 } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
@@ -123,6 +121,29 @@ export interface PaginationState {
   pageIndex: number;
   pageSize: number;
 }
+
+export type ResultsFilterType = 'metric' | 'metadata' | 'plugin' | 'strategy' | 'severity';
+
+export type ResultsFilterOperator = 'equals' | 'contains' | 'not_contains';
+
+export type ResultsFilter = {
+  /**
+   * A unique identifier for the filter.
+   */
+  id: string;
+  type: ResultsFilterType;
+  value: string;
+  operator: ResultsFilterOperator;
+  logicOperator: 'and' | 'or';
+  /**
+   * For metadata filters, this is the field name in the metadata object
+   */
+  field?: string;
+  /**
+   * The order in which this filter was added (for maintaining consistent ordering)
+   */
+  sortIndex: number;
+};
 
 interface TableState {
   evalId: string | null;
