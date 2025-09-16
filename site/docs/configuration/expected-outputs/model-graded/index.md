@@ -607,10 +607,10 @@ assert:
 
 ### Binary classification patterns
 
-When testing systems that classify or detect specific conditions, you typically want tests to PASS only when the correct classification is made:
+When testing systems that classify or detect specific conditions (such as content moderation, sentiment analysis, or custom security tools), you typically want tests to PASS only when the correct classification is made:
 
 ```yaml
-# System should correctly classify positive cases
+# Custom system should correctly classify positive cases
 assert:
   - type: llm-rubric
     value: |
@@ -619,6 +619,8 @@ assert:
 ```
 
 This pattern ensures that classification failures (missed detections) show as test failures in your evaluation results.
+
+Note: For red team testing, use the built-in plugins (like `harmful`, `pii`, etc.) rather than custom `llm-rubric` assertions, as they have specialized grading logic for security scenarios.
 
 ### Threshold usage across assertion types
 

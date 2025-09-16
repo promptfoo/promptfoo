@@ -307,7 +307,7 @@ assert:
 
 ## Binary Scoring Example: Success/Failure Detection
 
-When testing systems that should detect specific conditions, you often want tests to PASS only when the condition is correctly identified.
+When testing custom systems that should detect specific conditions (such as content moderation, sentiment analysis, or custom security tools), you often want tests to PASS only when the condition is correctly identified.
 
 ### Option A: Keep a 0/1 rubric and add a threshold
 
@@ -352,6 +352,8 @@ assert:
 ```
 
 This belt-and-suspenders approach provides confidence that critical detection failures won't be missed due to LLM grader inconsistencies.
+
+**Note**: For red team security testing, use the built-in plugins (like `harmful`, `pii`, `hijacking`, etc.) rather than custom `llm-rubric` assertions, as they have specialized grading logic optimized for security scenarios.
 
 ## Further reading
 
