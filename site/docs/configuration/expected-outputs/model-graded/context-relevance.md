@@ -49,6 +49,24 @@ tests:
         threshold: 0.8 # Most content should be essential
 ```
 
+### Array context
+
+Context can be provided as an array of chunks:
+
+```yaml
+tests:
+  - vars:
+      query: 'What are the benefits of RAG systems?'
+      context:
+        - 'RAG systems improve factual accuracy by incorporating external knowledge sources.'
+        - 'They reduce hallucinations in large language models through grounded responses.'
+        - 'RAG enables up-to-date information retrieval beyond training data cutoffs.'
+        - 'The weather forecast shows rain this weekend.' # irrelevant chunk
+    assert:
+      - type: context-relevance
+        threshold: 0.5 # Score: 3/4 = 0.75
+```
+
 ### Dynamic context extraction
 
 For RAG systems that return context with their response:
@@ -61,6 +79,15 @@ assert:
     threshold: 0.3
 ```
 
+`contextTransform` can also return an array:
+
+```yaml
+assert:
+  - type: context-relevance
+    contextTransform: 'output.chunks' # Extract chunks array
+    threshold: 0.5
+```
+
 ## Score interpretation
 
 - **0.8-1.0**: Almost all content is essential (very focused or minimal retrieval)
@@ -70,7 +97,7 @@ assert:
 ## Limitations
 
 - Only identifies minimum sufficient content
-- Sentence-level granularity
+- Single context strings split by lines (use arrays for better accuracy)
 - Score interpretation varies by use case
 
 ## Related metrics

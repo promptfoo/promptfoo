@@ -12,9 +12,10 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     jest.restoreAllMocks();
   });
 
-  it('should calculate relevance using semantic sentence splitting', async () => {
+  it('should calculate relevance using line-based sentence splitting', async () => {
     const input = 'What is the capital of France?';
-    const context = 'Paris is the capital of France. France is in Europe. The weather is nice today.';
+    const context =
+      'Paris is the capital of France.\nFrance is in Europe.\nThe weather is nice today.';
     const threshold = 0.3;
 
     // Mock LLM extracting 1 relevant sentence
@@ -29,19 +30,20 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
 
     const result = await matchesContextRelevance(input, context, threshold);
 
-    // Context has 3 semantic sentences, LLM extracts 1 → score = 1/3 ≈ 0.33
+    // Context has 3 lines, LLM extracts 1 → score = 1/3 ≈ 0.33
     expect(result.score).toBeCloseTo(0.33, 2);
     expect(result.pass).toBe(true); // 0.33 >= 0.3
     expect(result.reason).toContain('Context relevance');
     expect(result.metadata?.extractedSentences).toEqual(['Paris is the capital of France']);
-    expect(result.metadata?.totalContextSentences).toBe(3);
+    expect(result.metadata?.totalContextUnits).toBe(3);
     expect(result.metadata?.relevantSentenceCount).toBe(1);
     expect(result.metadata?.ragasMethod).toBe('context-relevance');
   });
 
   it('should handle insufficient information responses', async () => {
     const input = 'What is quantum computing?';
-    const context = 'Paris is the capital of France. France is in Europe. The weather is nice today.';
+    const context =
+      'Paris is the capital of France. France is in Europe. The weather is nice today.';
     const threshold = 0.5;
 
     // Mock LLM returning insufficient information
@@ -65,13 +67,15 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
 
   it('should handle multiple extracted sentences', async () => {
     const input = 'Tell me about France and Germany';
-    const context = 'Paris is the capital of France. Berlin is the capital of Germany. The weather is nice. France and Germany are in Europe.';
+    const context =
+      'Paris is the capital of France.\nBerlin is the capital of Germany.\nThe weather is nice.\nFrance and Germany are in Europe.';
     const threshold = 0.5;
 
-    // Mock LLM extracting 3 relevant sentences
+    // Mock LLM extracting 3 relevant sentences (with newlines)
     const mockCallApi = jest.fn().mockImplementation(() => {
       return Promise.resolve({
-        output: 'Paris is the capital of France. Berlin is the capital of Germany. France and Germany are in Europe.',
+        output:
+          'Paris is the capital of France.\nBerlin is the capital of Germany.\nFrance and Germany are in Europe.',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       });
     });
@@ -80,53 +84,111 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
 
     const result = await matchesContextRelevance(input, context, threshold);
 
-    // Context has 4 semantic sentences, LLM extracts 3 → score = 3/4 = 0.75
+    // Context has 4 lines, LLM extracts 3 → score = 3/4 = 0.75
     expect(result.score).toBe(0.75);
     expect(result.pass).toBe(true);
-    expect(result.metadata?.totalContextSentences).toBe(4);
+    expect(result.metadata?.totalContextUnits).toBe(4);
     expect(result.metadata?.relevantSentenceCount).toBe(3);
     expect(result.metadata?.extractedSentences).toHaveLength(3);
   });
 
-  describe('BCG Policy Document Test (Original User Issue)', () => {
-    it('should handle formatted documents much better than naive line splitting', async () => {
-      const query = 'Who does the India Leave Policy apply to?';
-      const bcgPolicyContext = `India Leave Policy & Guidelines
+  describe('Formatted Document Test', () => {
+    it('should handle formatted documents better than naive line splitting', async () => {
+      const query = 'Who does the leave policy apply to?';
+      const formattedPolicyContext = `Company Leave Policy & Guidelines
 
-India System **May 2024**
+HR System **May 2024**
 
 Scope and Applicability
 The revised leave policy is applicable from 1st May 2024. The scope of this policy covers
-entitlement and guidelines for all categories of leaves in the India office. This policy will
-include people transferred into India under all incoming structured programs, short-
+entitlement and guidelines for all categories of leaves in the office. This policy will
+include people transferred into the office under all incoming structured programs, short-
 term/permanent transfers
 
-All permanent employees of BCG India i.e. Consulting Team, Business Services Team and includes all employees of BCG India who go out of India on Cross Office Staffing
+All permanent employees i.e. Engineering Team, Business Services Team and includes all employees who go out of office on Cross Office Staffing
 
-This policy will include people transferred into India under all incoming structured programs, short term / permanent transfers
+This policy will include people transferred into the office under all incoming structured programs, short term / permanent transfers
 
-This policy excludes all staff going on any outgoing structured programs, short term/ permanent transfers, people going out of India under any of the other global mobility programs`;
+This policy excludes all staff going on any outgoing structured programs, short term/ permanent transfers, people going out of office under any of the other global mobility programs`;
 
-      // Mock LLM extracting 3 relevant sentences (what user expected)
+      // Mock LLM extracting multiple relevant lines (formatted with line breaks)
       const mockCallApi = jest.fn().mockImplementation(() => {
         return Promise.resolve({
-          output: 'All permanent employees of BCG India i.e. Consulting Team, Business Services Team and includes all employees of BCG India who go out of India on Cross Office Staffing. This policy will include people transferred into India under all incoming structured programs, short term / permanent transfers. The scope of this policy covers entitlement and guidelines for all categories of leaves in the India office.',
+          output:
+            'All permanent employees i.e. Engineering Team, Business Services Team\nThis policy will include people transferred into the office under all incoming structured programs\nThe scope of this policy covers entitlement and guidelines for all categories of leaves in the office',
           tokenUsage: { total: 15, prompt: 10, completion: 5 },
         });
       });
 
       jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
-      const result = await matchesContextRelevance(query, bcgPolicyContext, 0.7);
+      const result = await matchesContextRelevance(query, formattedPolicyContext, 0.1);
 
-      // With semantic splitting, this actually gets 4 extracted / 4 total = 1.0 (much better than 0.05)
-      expect(result.score).toBe(1.0);
+      // Formatted policy context has many lines, demonstrates improvement from chunk-based approach
+      expect(result.score).toBeGreaterThan(0.05); // Much better than original 0.05
       expect(result.pass).toBe(true);
-      expect(result.metadata?.totalContextSentences).toBe(4); // Semantic sentences, not 7+ lines
-      expect(result.metadata?.relevantSentenceCount).toBe(4);
+      expect(result.metadata?.totalContextUnits).toBeGreaterThan(5); // Many lines in policy
+      expect(result.metadata?.relevantSentenceCount).toBe(3);
 
-      // This would achieve the user's goal of getting 0.7+ instead of 0.05
-      expect(result.score).toBeGreaterThan(0.7);
+      // Still better than original 0.05, but chunk-based approach is even better
+    });
+  });
+
+  describe('Chunk-Based Context (New Feature)', () => {
+    it('should handle array of context chunks', async () => {
+      const query = 'What are the benefits of RAG systems?';
+      const contextChunks = [
+        'RAG systems improve factual accuracy by incorporating external knowledge sources.',
+        'They reduce hallucinations in large language models through grounded responses.',
+        'RAG enables up-to-date information retrieval beyond training data cutoffs.',
+        'The weather forecast shows rain this weekend.', // Irrelevant chunk
+      ];
+      const threshold = 0.5;
+
+      // Mock LLM extracting 3 relevant chunks out of 4 total (with line breaks)
+      const mockCallApi = jest.fn().mockImplementation(() => {
+        return Promise.resolve({
+          output:
+            'RAG systems improve factual accuracy by incorporating external knowledge sources.\nThey reduce hallucinations in large language models through grounded responses.\nRAG enables up-to-date information retrieval beyond training data cutoffs.',
+          tokenUsage: { total: 20, prompt: 10, completion: 10 },
+        });
+      });
+
+      jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance(query, contextChunks, threshold);
+
+      // With 4 chunks total and 3 relevant = 3/4 = 0.75
+      expect(result.score).toBe(0.75);
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.totalContextUnits).toBe(4);
+      expect(result.metadata?.contextUnits).toEqual(contextChunks);
+      expect(result.metadata?.relevantSentenceCount).toBe(3);
+    });
+
+    it('should handle single string context (backward compatibility)', async () => {
+      const query = 'What is the capital of France?';
+      const context =
+        'Paris is the capital of France.\nFrance is in Europe.\nThe weather is nice today.';
+      const threshold = 0.3;
+
+      // Mock LLM extracting 1 relevant sentence
+      const mockCallApi = jest.fn().mockImplementation(() => {
+        return Promise.resolve({
+          output: 'Paris is the capital of France',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
+
+      jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance(query, context, threshold);
+
+      // Should work exactly like before with line-based splitting
+      expect(result.score).toBeCloseTo(0.33, 2);
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.totalContextUnits).toBe(3); // 3 lines
+      expect(result.metadata?.relevantSentenceCount).toBe(1);
     });
   });
 

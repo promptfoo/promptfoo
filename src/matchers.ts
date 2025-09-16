@@ -409,25 +409,6 @@ function splitIntoSentences(text: string) {
   return text.split('\n').filter((sentence) => sentence.trim() !== '');
 }
 
-// CORRECT RAGAS APPROACH: Semantic sentence splitting instead of naive line splitting
-function splitIntoSemanticSentences(text: string): string[] {
-  // Remove multiple whitespace/newlines and normalize
-  const cleaned = text.replace(/\s+/g, ' ').trim();
-
-  if (!cleaned) {
-    return [];
-  }
-
-  // Split by sentence boundaries (.!?)
-  const sentences = cleaned
-    .split(/[.!?]+/)
-    .map(s => s.trim())
-    .filter(s => s.length > 5); // Filter out very short fragments
-
-  return sentences;
-}
-
-
 function processContextForTemplating(
   context: Record<string, string | object>,
   enableObjectAccess: boolean,
@@ -1055,7 +1036,7 @@ export async function matchesAnswerRelevance(
 }
 
 export async function matchesContextRecall(
-  context: string,
+  context: string | string[],
   groundTruth: string,
   threshold: number,
   grading?: GradingConfig,
@@ -1068,9 +1049,12 @@ export async function matchesContextRecall(
     'context recall check',
   );
 
+  // Convert context to string for LLM prompt (join chunks if array)
+  const contextString = Array.isArray(context) ? context.join('\n\n') : context;
+
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
-    context,
+    context: contextString,
     groundTruth,
     ...(vars || {}),
   });
@@ -1133,7 +1117,7 @@ export async function matchesContextRecall(
 
 export async function matchesContextRelevance(
   question: string,
-  context: string,
+  context: string | string[],
   threshold: number,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
@@ -1144,10 +1128,12 @@ export async function matchesContextRelevance(
     'context relevance check',
   );
 
+  // Convert context to string for LLM prompt (join chunks if array)
+  const contextString = Array.isArray(context) ? context.join('\n\n') : context;
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RELEVANCE);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
-    context,
+    context: contextString,
     query: question,
   });
 
@@ -1158,12 +1144,14 @@ export async function matchesContextRelevance(
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
 
-  // PROPER RAGAS CONTEXT RELEVANCE: Split the original context into SEMANTIC sentences
-  const contextSentences = splitIntoSemanticSentences(context);
-  const totalContextSentences = contextSentences.length;
+  // Split context into units: use chunks if provided, otherwise split into sentences
+  const contextUnits = Array.isArray(context)
+    ? context.filter((chunk) => chunk.trim().length > 0)
+    : splitIntoSentences(context);
+  const totalContextUnits = contextUnits.length;
 
-  // Parse the LLM's response to get relevant sentences (also semantic splitting)
-  const extractedSentences = splitIntoSemanticSentences(resp.output);
+  // Parse the LLM's response to get relevant sentences
+  const extractedSentences = splitIntoSentences(resp.output);
   const relevantSentences: string[] = [];
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
 
@@ -1177,13 +1165,15 @@ export async function matchesContextRelevance(
     relevantSentences.push(...extractedSentences);
   }
 
-  // RAGAS CONTEXT RELEVANCE FORMULA: relevant sentences / total sentences in context
-  const score = totalContextSentences > 0 ? numerator / totalContextSentences : 0;
+  // RAGAS CONTEXT RELEVANCE FORMULA: relevant units / total context units
+  const score = totalContextUnits > 0 ? numerator / totalContextUnits : 0;
   const pass = score >= threshold - Number.EPSILON;
 
   const metadata = {
     extractedSentences: relevantSentences,
-    totalContextSentences,
+    totalContextUnits,
+    totalContextSentences: totalContextUnits, // Backward compatibility
+    contextUnits: contextUnits,
     relevantSentenceCount: numerator,
     insufficientInformation,
     score,
@@ -1212,11 +1202,10 @@ export async function matchesContextRelevance(
   };
 }
 
-
 export async function matchesContextFaithfulness(
   query: string,
   output: string,
-  context: string,
+  context: string | string[],
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
@@ -1267,9 +1256,12 @@ export async function matchesContextFaithfulness(
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
+  // Convert context to string for LLM prompt (join chunks if array)
+  const contextString = Array.isArray(context) ? context.join('\n\n') : context;
+
   const statements = splitIntoSentences(resp.output);
   promptText = await renderLlmRubricPrompt(nliPrompt, {
-    context,
+    context: contextString,
     statements,
     ...(vars || {}),
   });
