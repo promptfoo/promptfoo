@@ -129,69 +129,20 @@ If you write `"contains-any: <b> </span>"`, promptfoo treats `<b> </span>` as a 
 
 ### Special CSV Columns
 
-| Column                            | Purpose                                 | Example                              |
-| --------------------------------- | --------------------------------------- | ------------------------------------ |
-| `__expected`                      | Single assertion                        | `contains: Paris`                    |
-| `__expected1`, `__expected2`, ... | Multiple assertions                     | `equals: 42`                         |
-| `__description`                   | Test description                        | `Basic math test`                    |
-| `__prefix`                        | Prepend to prompt                       | `You must answer: `                  |
-| `__suffix`                        | Append to prompt                        | ` (be concise)`                      |
-| `__metric`                        | Metric name for assertions              | `accuracy`                           |
-| `__threshold`                     | Pass threshold (applies to all asserts) | `0.8`                                |
-| `__config:<type>:<key>`           | Assertion-specific properties           | `__config:llm-rubric:threshold: 0.5` |
-| `__metadata:*`                    | Filterable metadata                     | See below                            |
+| Column                            | Purpose                                    | Example                              |
+| --------------------------------- | ------------------------------------------ | ------------------------------------ |
+| `__expected`                      | Single assertion                           | `contains: Paris`                    |
+| `__expected1`, `__expected2`, ... | Multiple assertions                        | `equals: 42`                         |
+| `__description`                   | Test description                           | `Basic math test`                    |
+| `__prefix`                        | Prepend to prompt                          | `You must answer: `                  |
+| `__suffix`                        | Append to prompt                           | ` (be concise)`                      |
+| `__metric`                        | Metric name for assertions                 | `accuracy`                           |
+| `__threshold`                     | Pass threshold (applies to all asserts)    | `0.8`                                |
+| `__metadata:*`                    | Filterable metadata                        | See below                            |
+| `__config:<type>:threshold`       | Set the threshold for a specific assertion | `__config:llm-rubric:threshold: 0.5` |
 
 Using `__metadata` without a key is not supported. Specify the metadata field like `__metadata:category`.
 If a CSV file includes a `__metadata` column without a key, Promptfoo logs a warning and ignores the column.
-
-<!-- TODO(Will): Return here -->
-<!--
-### CSV Assertion Config {#csv-assertion-config}
-
-The `__config:<assertion-type>:<key>` columns allow you to configure specific assertion types with custom properties. This is especially useful for setting thresholds, providers, or other properties for particular assertion types.
-
-#### Syntax
-
-```csv
-__config:<assertion-type>:<key>
-```
-
-- `<assertion-type>`: The type of assertion to configure (e.g., `llm-rubric`, `javascript`, `contains`)
-- `<key>`: The configuration property to set (e.g., `threshold`, `provider`, `weight`)
-
-#### Examples
-
-**Setting threshold for llm-rubric assertions:**
-
-```csv title="test_cases.csv"
-question,__expected,__config:llm-rubric:threshold
-"Explain photosynthesis","llm-rubric: Scientifically accurate explanation",0.75
-"What is 2+2?","llm-rubric: Correct mathematical answer",0.9
-```
-
-**Multiple configurations for different assertion types:**
-
-```csv title="test_cases.csv"
-input,__expected1,__expected2,__config:llm-rubric:threshold,__config:llm-rubric:provider,__config:contains:weight
-"Hello world","llm-rubric: Friendly greeting","contains: world",0.8,"openai:gpt-4",2
-```
-
-**Setting custom config properties:**
-
-```csv title="test_cases.csv"
-code,__expected,__config:javascript:timeout,__config:javascript:retries
-"function test() { return true; }","javascript: output.includes('true')",5000,3
-```
-
-#### Supported Properties
-
-Common properties that can be configured:
-- `threshold`: Minimum score for the assertion to pass (0.0-1.0)
-- `weight`: Weight of the assertion compared to others
-- `provider`: LLM provider for model-graded assertions
-- `rubricPrompt`: Custom grading rubric
-- `transform`: Process output before assertion
-- Other custom properties specific to assertion types -->
 
 ### Metadata in CSV
 

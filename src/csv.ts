@@ -1,6 +1,6 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import logger from './logger';
-import { BaseAssertionTypesSchema } from './types/index';
+import { AssertionTypeSchema, BaseAssertionTypesSchema } from './types/index';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 
@@ -136,7 +136,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
   const metadata: Record<string, any> = {};
-  // Store assertion configurations by type
+  // Store assertion-specific configurations by type
   const assertionConfigs: Record<string, Record<string, any>> = {};
   let providerOutput: string | object | undefined;
   let description: string | undefined;
@@ -220,20 +220,20 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       } else {
         const [assertionType, configKey] = configParts;
         // Validate assertion type
-        // TODO(Will): Read these from the definitions.
-        // const isValidType =
-        //   BaseAssertionTypesSchema.safeParse(assertionType).success ||
-        //   assertionType === 'llm-rubric' ||
-        //   assertionType === 'javascript' ||
-        //   assertionType === 'python' ||
-        //   assertionType.startsWith('not-');
-
-        if (!isValidType) {
+        if (!AssertionTypeSchema.safeParse(assertionType).success) {
           logger.error(
             `Invalid assertion type "${assertionType}" in __config column "${key}". ` +
-              `Valid assertion types include: ${BaseAssertionTypesSchema.options.join(', ')}, llm-rubric, javascript, python, and not- prefixed versions.`,
+              `Valid assertion types include: ${AssertionTypeSchema.options.join(', ')}`,
           );
           throw new Error(`Invalid assertion type "${assertionType}" in __config column`);
+        }
+        // Validate the config key; currently only threshold is supported
+        if (!['threshold'].includes(configKey)) {
+          logger.error(
+            `Invalid config key "${configKey}" in __config column "${key}". ` +
+              `Valid config keys include: threshold`,
+          );
+          throw new Error(`Invalid config key "${configKey}" in __config column`);
         }
 
         // Initialize config object for this assertion type if it doesn't exist
@@ -242,35 +242,16 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
         }
 
         // Parse the value based on the config key
-        // TODO(Will): Don't hardcode config keys.
-        // let parsedValue: any = value;
-        // if (configKey === 'threshold' || configKey === 'weight') {
-        //   // Parse numeric values
-        //   parsedValue = Number.parseFloat(value);
-        //   if (!Number.isFinite(parsedValue)) {
-        //     logger.error(
-        //       `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
-        //     );
-        //     throw new Error(`Invalid numeric value for ${configKey}`);
-        //   }
-        // } else if (value.trim() !== '') {
-        //   // Try to parse numeric values for keys like timeout, retries, etc.
-        //   const numericValue = Number.parseFloat(value);
-        //   if (Number.isFinite(numericValue) && value.trim() === String(numericValue)) {
-        //     parsedValue = numericValue;
-        //   } else if (
-        //     (value.startsWith('{') && value.endsWith('}')) ||
-        //     (value.startsWith('[') && value.endsWith(']'))
-        //   ) {
-        //     // Try to parse as JSON if it looks like JSON
-        //     try {
-        //       parsedValue = JSON.parse(value);
-        //     } catch {
-        //       // If JSON parsing fails, keep as string
-        //       parsedValue = value;
-        //     }
-        //   }
-        // }
+        let parsedValue: any = value;
+        if (configKey === 'threshold') {
+          parsedValue = Number.parseFloat(value);
+          if (!Number.isFinite(parsedValue)) {
+            logger.error(
+              `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
+            );
+            throw new Error(`Invalid numeric value for ${configKey}`);
+          }
+        }
 
         assertionConfigs[assertionType][configKey] = parsedValue;
       }
@@ -286,31 +267,11 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     // Apply configuration for this assertion type if it exists
     const config = assertionConfigs[assert.type];
     if (config) {
-      // Apply each configuration property
       for (const [configKey, configValue] of Object.entries(config)) {
-        // TODO(Will): Re-use the assertion definitions to ascertain the acceptable properties.
-        // // Map config keys to assertion properties
-        // if (configKey === 'threshold' && assert.type === 'llm-rubric') {
-        //   // For llm-rubric, threshold is a direct property
-        //   assert.threshold = configValue as number;
-        // } else if (configKey === 'threshold' || configKey === 'weight') {
-        //   // These are direct properties
-        //   (assert as any)[configKey] = configValue;
-        // } else if (
-        //   configKey === 'provider' ||
-        //   configKey === 'rubricPrompt' ||
-        //   configKey === 'transform' ||
-        //   configKey === 'contextTransform'
-        // ) {
-        //   // These are also direct properties on assertions
-        //   (assert as any)[configKey] = configValue;
-        // } else {
-        //   // Everything else goes into the config object
-        //   if (!assert.config) {
-        //     assert.config = {};
-        //   }
-        //   assert.config[configKey] = configValue;
-        // }
+        // Apply each configuration property
+        (assert as any)[configKey] = configValue;
+        // Include each key/value on the metadata object
+        metadata[configKey] = configValue;
       }
     }
   }
