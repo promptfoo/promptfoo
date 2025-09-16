@@ -54,7 +54,7 @@ if (typeof window !== 'undefined') {
           }
           try {
             return descriptor.set.call(this, value);
-          } catch (error) {
+          } catch (_error) {
             // Ignore CSS parsing errors for border properties
             return;
           }
