@@ -7,7 +7,7 @@ import {
   toPigLatin,
 } from '../../../src/redteam/strategies/otherEncodings';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('other encodings strategy', () => {
   const testCases: TestCase[] = [

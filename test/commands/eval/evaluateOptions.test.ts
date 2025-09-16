@@ -7,7 +7,7 @@ import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, EvaluateOptions } from '../../../src/types';
+import type { CommandLineOptions, EvaluateOptions } from '../../../src/types/index';
 
 jest.mock('../../../src/evaluator', () => ({
   evaluate: jest.fn().mockResolvedValue({ results: [], summary: {} }),

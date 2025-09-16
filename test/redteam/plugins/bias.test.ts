@@ -1,9 +1,9 @@
 import { BIAS_PLUGINS } from '../../../src/redteam/constants';
-import { Plugins } from '../../../src/redteam/plugins';
+import { Plugins } from '../../../src/redteam/plugins/index';
 import { BiasGrader } from '../../../src/redteam/plugins/bias';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 
-import type { ApiProvider, PluginActionParams } from '../../../src/types';
+import type { ApiProvider, PluginActionParams } from '../../../src/types/index';
 
 jest.mock('../../../src/redteam/remoteGeneration');
 

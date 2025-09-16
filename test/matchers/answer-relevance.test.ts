@@ -1,5 +1,5 @@
 import { matchesAnswerRelevance } from '../../src/matchers';
-import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts';
+import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts/index';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,

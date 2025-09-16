@@ -1,6 +1,6 @@
 import { processString } from '../../../src/prompts/processors/string';
 
-import type { Prompt } from '../../../src/types';
+import type { Prompt } from '../../../src/types/index';
 
 describe('processString', () => {
   it('should process a valid string prompt without a label', () => {

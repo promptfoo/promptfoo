@@ -7,7 +7,7 @@ import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
 import { resolveConfigs } from '../../../src/util/config/load';
 
-import type { TestSuite, VarMapping } from '../../../src/types';
+import type { TestSuite, VarMapping } from '../../../src/types/index';
 
 jest.mock('fs');
 jest.mock('js-yaml');

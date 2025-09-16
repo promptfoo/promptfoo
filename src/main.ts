@@ -1,7 +1,11 @@
-#!/usr/bin/env node
-
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { Command } from 'commander';
-import { version } from '../package.json';
+
+// Global variable defined by build system
+declare const BUILD_FORMAT: string | undefined;
+import pkg from '../package.json' with { type: 'json' };
+const { version } = pkg;
 import { checkNodeVersion } from './checkNodeVersion';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -75,6 +79,11 @@ export function addCommonOptionsRecursively(command: Command) {
 async function main() {
   initializeRunLogging();
 
+  // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests
+  if (!process.env.PROMPTFOO_DISABLE_UPDATE && typeof process.env.CI !== 'undefined') {
+    process.env.PROMPTFOO_DISABLE_UPDATE = 'true';
+  }
+
   await checkForUpdates();
   await runDbMigrations();
 
@@ -140,7 +149,10 @@ async function main() {
   program.parse();
 }
 
-if (require.main === module) {
-  checkNodeVersion();
-  main();
+// ESM replacement for require.main === module check
+if (process.env.BUILD_FORMAT === 'esm') {
+  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
+    checkNodeVersion();
+    main();
+  }
 }

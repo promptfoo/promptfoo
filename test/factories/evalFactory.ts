@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 
-import { ResultFailureReason } from '../../src';
-import { getDb } from '../../src/database';
+import { ResultFailureReason } from '../../src/index';
+import { getDb } from '../../src/database/index';
 import { evalsTable } from '../../src/database/tables';
 import Eval from '../../src/models/eval';
 import { oldStyleEval } from './data/eval/database_records';

@@ -1,4 +1,4 @@
-import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts';
+import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts/index';
 import { DefaultSuggestionsProvider } from './providers/openai/defaults';
 
 import type { TokenUsage } from './types/index';

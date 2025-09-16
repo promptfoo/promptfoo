@@ -5,7 +5,7 @@ import logger from '../../../src/logger';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addLikertTestCases } from '../../../src/redteam/strategies/likert';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 jest.mock('cli-progress');
 jest.mock('../../../src/cache');

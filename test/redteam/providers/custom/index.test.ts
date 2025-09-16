@@ -1,5 +1,5 @@
 import { getGraderById } from '../../../../src/redteam/graders';
-import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom';
+import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 

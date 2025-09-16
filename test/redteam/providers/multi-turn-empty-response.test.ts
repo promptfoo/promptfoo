@@ -1,6 +1,6 @@
-import { CrescendoProvider } from '../../../src/redteam/providers/crescendo';
+import { CrescendoProvider } from '../../../src/redteam/providers/crescendo/index';
 import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
-import { CustomProvider } from '../../../src/redteam/providers/custom';
+import { CustomProvider } from '../../../src/redteam/providers/custom/index';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
 
 import type {

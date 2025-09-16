@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Run the CLI tool and capture the output
-output=$(npm run bin redteam generate -- -c test/redteam/integration/promptfooconfig.yaml)
+output=$(npm run bin redteam generate -- -c test/redteam/integration/promptfooconfig.yaml --force)
 
 echo "Done running promptfoo redteam generate"
 

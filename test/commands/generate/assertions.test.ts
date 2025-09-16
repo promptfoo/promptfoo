@@ -7,7 +7,7 @@ import { doGenerateAssertions } from '../../../src/commands/generate/assertions'
 import telemetry from '../../../src/telemetry';
 import { resolveConfigs } from '../../../src/util/config/load';
 
-import type { Assertion, TestSuite } from '../../../src/types';
+import type { Assertion, TestSuite } from '../../../src/types/index';
 
 jest.mock('fs');
 jest.mock('js-yaml');

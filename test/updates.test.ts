@@ -32,7 +32,7 @@ import {
   getModelAuditCurrentVersion,
   getModelAuditLatestVersion,
 } from '../src/updates';
-import packageJson from '../package.json';
+import packageJson from '../package.json' with { type: 'json' };
 
 beforeEach(() => {
   mockExecAsync = jest.fn();

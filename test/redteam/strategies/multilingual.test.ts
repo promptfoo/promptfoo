@@ -7,7 +7,7 @@ import {
   translateBatch,
 } from '../../../src/redteam/strategies/multilingual';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 jest.mock('cli-progress', () => ({
   Presets: { shades_classic: {} },
