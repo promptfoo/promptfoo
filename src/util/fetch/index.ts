@@ -45,18 +45,32 @@ interface SystemError extends Error {
  */
 interface AgentCache {
   agent: Agent | ProxyAgent;
-  proxyUrl: string;
-  tlsConfig: string; // Stringified TLS options for comparison
-  caCertPath: string | undefined;
 }
 
-let cachedAgent: AgentCache | null = null;
+// Cache multiple agents based on their configuration
+const agentCache = new Map<string, AgentCache>();
 
 /**
- * Clear the cached agent - primarily for testing
+ * Clear the cached agents - primarily for testing
  */
 export function clearAgentCache(): void {
-  cachedAgent = null;
+  agentCache.clear();
+}
+
+/**
+ * Generate a cache key based on the agent configuration
+ */
+function getAgentCacheKey(
+  proxyUrl: string,
+  tlsOptions: ConnectionOptions,
+  caCertPath?: string,
+): string {
+  // Create a deterministic key based on the configuration
+  const tlsConfig = JSON.stringify({
+    rejectUnauthorized: tlsOptions.rejectUnauthorized,
+    ca: tlsOptions.ca ? 'present' : 'absent', // Don't include actual CA in key, just its presence
+  });
+  return `${proxyUrl}|${tlsConfig}|${caCertPath || ''}`;
 }
 
 /**
@@ -81,16 +95,15 @@ function getOrCreateAgent(url: string): Agent | ProxyAgent {
   }
 
   const proxyUrl = getProxyForUrl(url);
-  const tlsConfig = JSON.stringify(tlsOptions);
+  const cacheKey = getAgentCacheKey(proxyUrl, tlsOptions, caCertPath);
 
-  // Check if we can reuse the cached agent
-  if (
-    cachedAgent &&
-    cachedAgent.proxyUrl === proxyUrl &&
-    cachedAgent.tlsConfig === tlsConfig &&
-    cachedAgent.caCertPath === caCertPath
-  ) {
-    return cachedAgent.agent;
+  // Check if we have a cached agent for this configuration
+  const cachedEntry = agentCache.get(cacheKey);
+  if (cachedEntry) {
+    if (proxyUrl) {
+      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)} (cached agent)`);
+    }
+    return cachedEntry.agent;
   }
 
   // Create a new agent
@@ -104,18 +117,14 @@ function getOrCreateAgent(url: string): Agent | ProxyAgent {
       headersTimeout: REQUEST_TIMEOUT_MS,
     } as ProxyTlsOptions);
   } else {
+    logger.debug('Creating new Agent (no proxy)');
     agent = new Agent({
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
   }
 
-  // Cache the agent and its configuration
-  cachedAgent = {
-    agent,
-    proxyUrl,
-    tlsConfig,
-    caCertPath,
-  };
+  // Cache the agent
+  agentCache.set(cacheKey, { agent });
 
   // Set as global dispatcher
   setGlobalDispatcher(agent);
