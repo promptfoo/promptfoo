@@ -562,7 +562,7 @@ describe('logger', () => {
       expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
-    it('should log failed responses as error', async () => {
+    it('should log failed responses as debug when error flag not set', async () => {
       // @ts-expect-error
       mockResponse.ok = false;
       // @ts-expect-error
@@ -577,11 +577,11 @@ describe('logger', () => {
         response: mockResponse as Response,
       });
 
-      expect(mockLogger.error).toHaveBeenCalledWith({
+      expect(mockLogger.debug).toHaveBeenCalledWith({
         message: expect.stringContaining('API request:'),
         location: expect.any(String),
       });
-      expect(mockLogger.debug).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('should log as error when error flag is true', async () => {
@@ -716,18 +716,18 @@ describe('logger', () => {
 
     it('should handle various HTTP status codes', async () => {
       const statusCodes = [
-        { code: 200, text: 'OK', shouldError: false },
-        { code: 201, text: 'Created', shouldError: false },
-        { code: 400, text: 'Bad Request', shouldError: true },
-        { code: 401, text: 'Unauthorized', shouldError: true },
-        { code: 403, text: 'Forbidden', shouldError: true },
-        { code: 404, text: 'Not Found', shouldError: true },
-        { code: 500, text: 'Internal Server Error', shouldError: true },
-        { code: 502, text: 'Bad Gateway', shouldError: true },
-        { code: 503, text: 'Service Unavailable', shouldError: true },
+        { code: 200, text: 'OK' },
+        { code: 201, text: 'Created' },
+        { code: 400, text: 'Bad Request' },
+        { code: 401, text: 'Unauthorized' },
+        { code: 403, text: 'Forbidden' },
+        { code: 404, text: 'Not Found' },
+        { code: 500, text: 'Internal Server Error' },
+        { code: 502, text: 'Bad Gateway' },
+        { code: 503, text: 'Service Unavailable' },
       ];
 
-      for (const { code, text, shouldError } of statusCodes) {
+      for (const { code, text } of statusCodes) {
         mockLogger.debug.mockClear();
         mockLogger.error.mockClear();
 
@@ -745,19 +745,47 @@ describe('logger', () => {
           response: mockResponse as Response,
         });
 
-        const loggedMessage = shouldError
-          ? mockLogger.error.mock.calls[0][0].message
-          : mockLogger.debug.mock.calls[0][0].message;
+        // All status codes should log as debug when error flag is not set
+        const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
 
         expect(loggedMessage).toContain(`Status: ${code} ${text}`);
+        expect(mockLogger.debug).toHaveBeenCalled();
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      }
+    });
 
-        if (shouldError) {
-          expect(mockLogger.error).toHaveBeenCalled();
-          expect(mockLogger.debug).not.toHaveBeenCalled();
-        } else {
-          expect(mockLogger.debug).toHaveBeenCalled();
-          expect(mockLogger.error).not.toHaveBeenCalled();
-        }
+    it('should log as error when error flag is set regardless of status code', async () => {
+      const statusCodes = [
+        { code: 200, text: 'OK' },
+        { code: 400, text: 'Bad Request' },
+        { code: 500, text: 'Internal Server Error' },
+      ];
+
+      for (const { code, text } of statusCodes) {
+        mockLogger.debug.mockClear();
+        mockLogger.error.mockClear();
+
+        // @ts-expect-error
+        mockResponse.ok = code >= 200 && code < 300;
+        // @ts-expect-error
+        mockResponse.status = code;
+        // @ts-expect-error
+        mockResponse.statusText = text;
+
+        await logger.logRequestResponse({
+          url: 'https://api.example.com/test',
+          requestBody: { data: 'test' },
+          requestMethod: 'POST',
+          response: mockResponse as Response,
+          error: true, // Explicitly set error flag
+        });
+
+        // Should always log as error when error flag is true
+        const loggedMessage = mockLogger.error.mock.calls[0][0].message;
+
+        expect(loggedMessage).toContain(`Status: ${code} ${text}`);
+        expect(mockLogger.error).toHaveBeenCalled();
+        expect(mockLogger.debug).not.toHaveBeenCalled();
       }
     });
 

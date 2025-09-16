@@ -42,6 +42,8 @@ import {
   FOUNDATION_PLUGINS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  HUGGINGFACE_GATED_PLUGINS,
+  MCP_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
   OWASP_API_TOP_10_MAPPING,
@@ -340,6 +342,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     {
       name: 'Guardrails Evaluation',
       plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
+    },
+    {
+      name: 'MCP',
+      plugins: new Set(MCP_PLUGINS),
     },
     {
       name: 'Harmful',
@@ -988,6 +994,25 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
                         >
                           no strategies
                         </Typography>
+                      )}
+                      {HUGGINGFACE_GATED_PLUGINS.includes(plugin as any) && (
+                        <Tooltip title="This dataset requires a HuggingFace API key to access. Set HF_TOKEN environment variable.">
+                          <Typography
+                            variant="caption"
+                            sx={(theme) => ({
+                              fontSize: '0.7rem',
+                              color: 'warning.main',
+                              fontWeight: 500,
+                              backgroundColor: alpha(theme.palette.warning.main, 0.08),
+                              px: 0.5,
+                              py: 0.25,
+                              borderRadius: 0.5,
+                              border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`,
+                            })}
+                          >
+                            🤗 API key required
+                          </Typography>
+                        </Tooltip>
                       )}
                     </Box>
                     <Typography

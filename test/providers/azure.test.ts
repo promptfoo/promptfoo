@@ -6,7 +6,7 @@ import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azure/warnings'
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 
-import type { TestCase, TestSuite } from '../../src/types';
+import type { TestCase, TestSuite } from '../../src/types/index';
 
 jest.mock('../../src/cache', () => ({
   fetchWithCache: jest.fn(),

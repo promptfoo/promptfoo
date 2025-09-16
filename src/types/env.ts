@@ -49,7 +49,6 @@ export const ProviderEnvOverridesSchema = z.object({
   HYPERBOLIC_API_KEY: z.string().optional(),
   HUGGING_FACE_HUB_TOKEN: z.string().optional(),
   JFROG_API_KEY: z.string().optional(),
-  LAMBDA_API_KEY: z.string().optional(),
   LANGFUSE_HOST: z.string().optional(),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),

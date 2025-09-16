@@ -160,23 +160,33 @@ table.results-table,
 .results-table tr .cell-actions {
   display: flex;
   gap: 0.5rem;
-  visibility: hidden;
   position: absolute;
-  top: 1.25rem;
+  top: 1rem;
   right: 0.75rem;
   line-height: 0;
   font-size: 1.25rem;
 }
 
+.results-table tr .cell-actions [role='tooltip'] {
+  line-height: normal;
+}
+
+.results-table tr .cell-actions .action {
+  /* using opacity instead of visibility to maintain focus order */
+  opacity: 0;
+  line-height: normal;
+}
+
 /* Show all actions on hover */
-.results-table .first-prompt-col:hover .cell-actions,
-.results-table .second-prompt-column:hover .cell-actions {
-  visibility: visible;
+.results-table td:hover .cell-actions .action,
+.results-table td:focus-visible .cell-actions .action,
+.results-table td:focus-within .cell-actions .action {
+  opacity: 1;
 }
 
 /* Always show active thumbs */
 .results-table tr .cell-actions .action.active {
-  visibility: visible !important;
+  opacity: 1;
 }
 
 .results-table tr .cell-detail {
@@ -195,11 +205,18 @@ table.results-table,
   color: #888;
 }
 
-.results-table tr .cell-actions .action {
+/* Allows button to be styled as a span*/
+.results-table tr button.action {
+  background: none;
+  color: inherit;
+  border: none;
+  padding: 0;
+  font: inherit;
+  appearance: none;
   cursor: pointer;
 }
 
-.results-table tr .cell-actions .action.active span {
+.results-table tr .cell-actions .action.active {
   filter: saturate(1.5);
 }
 
