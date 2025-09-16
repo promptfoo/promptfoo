@@ -60,7 +60,7 @@ export async function queryTestIndicesOptimized(
     limit?: number;
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
-    filters?: ResultsFilter[];
+    filters?: string[];
   },
 ): Promise<{ testIndices: number[]; filteredCount: number }> {
   const db = getDb();
