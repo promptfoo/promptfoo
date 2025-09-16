@@ -305,7 +305,6 @@ assert:
       Return {"pass": false, "score": 0} if the response is incorrect
 ```
 
-
 ## Further reading
 
 See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.

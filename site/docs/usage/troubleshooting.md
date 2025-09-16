@@ -180,7 +180,6 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
-
 ## How to triage stuck evals
 
 When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Here's how to fix them:

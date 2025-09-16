@@ -605,7 +605,6 @@ assert:
       Return {"pass": false, "score": 0} if the response is incorrect
 ```
 
-
 ### Threshold usage across assertion types
 
 Different assertion types use thresholds differently:
@@ -614,16 +613,16 @@ Different assertion types use thresholds differently:
 assert:
   # Similarity-based (0-1 range)
   - type: context-faithfulness
-    threshold: 0.8  # Requires 80%+ faithfulness
+    threshold: 0.8 # Requires 80%+ faithfulness
 
   # Binary scoring (0 or 1)
   - type: llm-rubric
-    value: "Is helpful and accurate"
-    threshold: 1  # Requires perfect score
+    value: 'Is helpful and accurate'
+    threshold: 1 # Requires perfect score
 
   # Custom scoring (any range)
   - type: pi
-    value: "Quality of response"
+    value: 'Quality of response'
     threshold: 0.7
 ```
 
