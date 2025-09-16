@@ -511,7 +511,15 @@ export default function FiltersForm({
   onClose: () => void;
   anchorEl: HTMLElement | null;
 }) {
-  const { filters, addFilter, removeAllFilters } = useTableStore();
+  const {
+    filters,
+    addFilter,
+    removeAllFilters,
+    metadataKeys,
+    metadataKeysLoading,
+    fetchMetadataKeys,
+    evalId,
+  } = useTableStore();
 
   /**
    * Adds a new filter with default values.
@@ -555,6 +563,24 @@ export default function FiltersForm({
       handleAddFilter();
     }
   }, [filters.values, open, handleAddFilter]);
+
+  /**
+   * Fetch metadata keys when the filter form opens if there are existing metadata filters
+   * or if metadata keys haven't been loaded yet.
+   */
+  useEffect(() => {
+    if (open && evalId && !metadataKeysLoading) {
+      // Check if there are any existing metadata filters
+      const hasMetadataFilters = Object.values(filters.values).some(
+        (filter) => filter.type === 'metadata',
+      );
+
+      // Fetch if we have metadata filters but no keys, or if keys are empty
+      if (hasMetadataFilters && (!metadataKeys || metadataKeys.length === 0)) {
+        fetchMetadataKeys(evalId);
+      }
+    }
+  }, [open, evalId, metadataKeysLoading, filters.values, metadataKeys, fetchMetadataKeys]);
 
   const filterValuesList = useMemo(() => {
     // Sort by sortIndex to ensure consistent ordering

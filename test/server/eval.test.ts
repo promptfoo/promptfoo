@@ -1,4 +1,3 @@
-import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
