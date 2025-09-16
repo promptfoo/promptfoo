@@ -279,6 +279,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = ApiSchemas.Eval.MetadataKeys.Params.parse(req.params);
+    const { comparisonEvalIds = [] } = ApiSchemas.Eval.MetadataKeys.Query.parse(req.query);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -286,7 +287,21 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
       return;
     }
 
-    const keys = await EvalQueries.getMetadataKeysFromEval(id);
+    // Validate that comparison evals exist
+    if (comparisonEvalIds.length > 0) {
+      const comparisonEvals = await Promise.all(
+        comparisonEvalIds.map(compId => Eval.findById(compId))
+      );
+      const missingEvals = comparisonEvalIds.filter((_, index) => !comparisonEvals[index]);
+      if (missingEvals.length > 0) {
+        res.status(400).json({
+          error: `Comparison evals not found: ${missingEvals.join(', ')}`
+        });
+        return;
+      }
+    }
+
+    const keys = await EvalQueries.getMetadataKeysFromEval(id, comparisonEvalIds);
 
     const response = ApiSchemas.Eval.MetadataKeys.Response.parse({ keys });
     res.json(response);

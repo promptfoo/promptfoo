@@ -124,21 +124,36 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
     }
   }
 
-  static async getMetadataKeysFromEval(evalId: string): Promise<string[]> {
+  static async getMetadataKeysFromEval(evalId: string, comparisonEvalIds: string[] = []): Promise<string[]> {
     interface MetadataKeyResult {
       key: string;
     }
 
     const db = getDb();
-    const query = sql`
-      SELECT DISTINCT j.key FROM (
-        SELECT metadata FROM eval_results 
-        WHERE eval_id = ${evalId} AND metadata IS NOT NULL AND metadata != '{}'
-      ) t, json_each(t.metadata) j
-      ORDER BY j.key
-    `;
-    const results: MetadataKeyResult[] = await db.all(query);
-    return results.map((r) => r.key);
+    try {
+      // Combine primary eval ID with comparison eval IDs
+      const allEvalIds = [evalId, ...comparisonEvalIds];
+
+      // Use json_valid() to filter out malformed JSON and add LIMIT for DoS protection
+      const query = sql`
+        SELECT DISTINCT j.key FROM (
+          SELECT metadata FROM eval_results
+          WHERE eval_id IN (${sql.join(allEvalIds, sql`, `)})
+            AND metadata IS NOT NULL
+            AND metadata != '{}'
+            AND json_valid(metadata)
+          LIMIT 10000
+        ) t, json_each(t.metadata) j
+        ORDER BY j.key
+        LIMIT 1000
+      `;
+      const results: MetadataKeyResult[] = await db.all(query);
+      return results.map((r) => r.key);
+    } catch (error) {
+      // Log error but return empty array to prevent breaking the UI
+      logger.error(`Error fetching metadata keys for eval ${evalId} and comparisons [${comparisonEvalIds.join(', ')}]: ${error}`);
+      return [];
+    }
   }
 }
 

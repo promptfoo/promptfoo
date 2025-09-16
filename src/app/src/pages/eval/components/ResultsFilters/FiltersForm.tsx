@@ -144,6 +144,8 @@ function Filter({
     metadataKeys,
     metadataKeysLoading,
     metadataKeysError,
+    fetchMetadataKeys,
+    evalId,
   } = useTableStore();
 
   // Get list of already selected metric values (excluding current filter)
@@ -203,9 +205,15 @@ function Filter({
       ) {
         updatedFilter.operator = 'equals';
       }
+
+      // Fetch metadata keys when user switches to metadata filter type
+      if (filterType === 'metadata' && evalId && !metadataKeysLoading && metadataKeys.length === 0) {
+        fetchMetadataKeys(evalId);
+      }
+
       updateFilter(updatedFilter);
     },
-    [value, updateFilter],
+    [value, updateFilter, evalId, metadataKeysLoading, metadataKeys.length, fetchMetadataKeys],
   );
 
   /**
