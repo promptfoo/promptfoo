@@ -23,6 +23,9 @@ interface PythonProviderConfig {
   pythonExecutable?: string;
   // Internal/legacy config for backwards compatibility
   persistent?: boolean;
+  // Persistent mode configuration
+  persistentIdleTimeout?: number; // milliseconds before idle shutdown (default: 300000 = 5 minutes)
+  maxRestarts?: number; // max restart attempts (default: 3)
 }
 
 export class PythonProvider implements ApiProvider {
@@ -93,6 +96,8 @@ export class PythonProvider implements ApiProvider {
 
           this.persistentManager = new PersistentPythonManager(absPath, this.id(), {
             pythonExecutable: this.config.pythonExecutable,
+            persistentIdleTimeout: this.config.persistentIdleTimeout,
+            maxRestarts: this.config.maxRestarts,
           });
 
           // Handle critical errors from persistent manager to prevent crashes
