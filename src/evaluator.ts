@@ -21,7 +21,7 @@ import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { getSessionId } from './redteam/util';
+import { getSessionId, isSimbaTestCase } from './redteam/util';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -368,11 +368,35 @@ export async function runEval({
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      response = await activeProvider.callApi(
-        renderedPrompt,
-        callApiContext,
-        abortSignal ? { abortSignal } : undefined,
-      );
+      // Handle Simba providers specially - they use runSimba instead of callApi
+      if (activeProvider.id() === 'promptfoo:redteam:simba') {
+        const simbaProvider = activeProvider as any;
+        if (simbaProvider.runSimba) {
+          // Simba returns EvaluateResult[] directly, so we need to return early
+          const simbaResults: EvaluateResult[] = await simbaProvider.runSimba(
+            renderedPrompt,
+            callApiContext,
+            abortSignal ? { abortSignal } : undefined,
+            concurrency,
+          );
+
+          // Update results with proper indices for Simba
+          for (const result of simbaResults) {
+            result.promptIdx = promptIdx;
+            result.testIdx = testIdx++;
+          }
+
+          return simbaResults;
+        } else {
+          throw new Error('Simba provider does not have runSimba method');
+        }
+      } else {
+        response = await activeProvider.callApi(
+          renderedPrompt,
+          callApiContext,
+          abortSignal ? { abortSignal } : undefined,
+        );
+      }
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -1409,12 +1433,15 @@ class Evaluator {
       }
     };
 
-    // Separate serial and concurrent eval options
+    // Separate serial, concurrent, and Simba eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const concurrentRunEvalOptions: RunEvalOptions[] = [];
+    const simbaRunEvalOptions: RunEvalOptions[] = [];
 
     for (const evalOption of runEvalOptions) {
-      if (evalOption.test.options?.runSerially) {
+      if (isSimbaTestCase(evalOption)) {
+        simbaRunEvalOptions.push(evalOption);
+      } else if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
         concurrentRunEvalOptions.push(evalOption);
@@ -1428,6 +1455,11 @@ class Evaluator {
     if (concurrentRunEvalOptions.length > 0) {
       logger.info(
         `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+      );
+    }
+    if (simbaRunEvalOptions.length > 0) {
+      logger.info(
+        `Running ${simbaRunEvalOptions.length} Simba test cases sequentially after normal tests...`,
       );
     }
 
@@ -1444,7 +1476,7 @@ class Evaluator {
             const provider = evalStep.provider.label || evalStep.provider.id();
             const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
             logger.info(
-              `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+              `[${numComplete}/${runEvalOptions.length}] Running ${provider} with vars: ${vars}`,
             );
           }
           const idx = runEvalOptions.indexOf(evalStep);
@@ -1463,6 +1495,28 @@ class Evaluator {
         processedIndices.add(idx);
         await this.evalRecord.addPrompts(prompts);
       });
+
+      // Finally run Simba evaluations sequentially (they have their own internal concurrency)
+      if (simbaRunEvalOptions.length > 0) {
+        logger.info(`Running ${simbaRunEvalOptions.length} Simba test cases sequentially...`);
+
+        for (const evalStep of simbaRunEvalOptions) {
+          if (isWebUI) {
+            const provider = evalStep.provider.label || evalStep.provider.id();
+            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
+            logger.info(
+              `[${numComplete}/${runEvalOptions.length}] Running Simba ${provider} with vars: ${vars}`,
+            );
+          }
+          checkAbort();
+          const idx = runEvalOptions.indexOf(evalStep);
+          await processEvalStepWithTimeout(evalStep, idx);
+          processedIndices.add(idx);
+        }
+
+        // Simba phase complete
+        logger.info('Simba test cases completed');
+      }
     } catch (err) {
       if (options.abortSignal?.aborted) {
         // User interruption or max duration timeout
