@@ -63,7 +63,9 @@ describe('ProviderSelector', () => {
     fireEvent.change(screen.getByPlaceholderText('Search and select LLM providers...'), {
       target: { value: providerToSelect },
     });
-    fireEvent.keyDown(screen.getByPlaceholderText('Search and select LLM providers...'), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByPlaceholderText('Search and select LLM providers...'), {
+      key: 'Enter',
+    });
 
     expect(mockOnChange).toHaveBeenCalledWith([
       { id: 'openai:gpt-4', config: { temperature: 0.5 } },
