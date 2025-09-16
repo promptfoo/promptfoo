@@ -426,6 +426,7 @@ export async function doEval(
     });
 
     // Cleanup signal handler
+    /*
     if (sigintHandler) {
       process.removeListener('SIGINT', sigintHandler);
     }
@@ -442,6 +443,7 @@ export async function doEval(
       printBorder();
       return ret;
     }
+      */
 
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
