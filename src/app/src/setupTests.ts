@@ -15,7 +15,7 @@ import 'prismjs/components/prism-http';
 if (typeof window !== 'undefined') {
   // Mock CSS property handling for problematic CSS variables
   const originalSetProperty = CSSStyleDeclaration.prototype.setProperty;
-  CSSStyleDeclaration.prototype.setProperty = function(property, value, priority) {
+  CSSStyleDeclaration.prototype.setProperty = function (property, value, priority) {
     try {
       return originalSetProperty.call(this, property, value, priority);
     } catch (error) {
