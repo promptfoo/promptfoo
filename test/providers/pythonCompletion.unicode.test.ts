@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import type { CallApiContextParams } from '../../src/types';
+import type { CallApiContextParams } from '../../src/types/index';
 import { runPython } from '../../src/python/pythonUtils';
 
 // Mock the expensive Python execution for fast, reliable tests

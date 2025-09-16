@@ -18,7 +18,7 @@ import {
   type ProviderResponse,
   ResultFailureReason,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 
 import type { ModelAuditScanResults } from '../types/modelAudit';
 

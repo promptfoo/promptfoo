@@ -3,7 +3,13 @@ import logger from '../../logger';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type { ApiProvider, Assertion, AtomicTestCase, GradingResult, TestCase } from '../../types';
+import type {
+  ApiProvider,
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  TestCase,
+} from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:beavertails';
 

@@ -6,7 +6,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { maybeLoadToolsFromExternalFile } from '../../util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
@@ -28,6 +28,26 @@ import type { TokenUsage } from '../../types/shared';
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
   value === undefined ? undefined : typeof value === 'string' ? Number(value) : value;
 
+export type BedrockModelFamily =
+  | 'claude'
+  | 'nova'
+  | 'llama'
+  | 'llama2'
+  | 'llama3'
+  | 'llama3.1'
+  | 'llama3_1'
+  | 'llama3.2'
+  | 'llama3_2'
+  | 'llama3.3'
+  | 'llama3_3'
+  | 'llama4'
+  | 'mistral'
+  | 'cohere'
+  | 'ai21'
+  | 'titan'
+  | 'deepseek'
+  | 'openai';
+
 interface BedrockOptions {
   accessKeyId?: string;
   apiKey?: string;
@@ -39,6 +59,8 @@ interface BedrockOptions {
   guardrailVersion?: string;
   trace?: Trace;
   showThinking?: boolean;
+  endpoint?: string;
+  inferenceModelType?: BedrockModelFamily;
 }
 
 export interface TextGenerationOptions {
@@ -1479,7 +1501,61 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
-function getHandlerForModel(modelName: string) {
+function getHandlerForModel(modelName: string, config?: BedrockOptions): IBedrockModel {
+  // Check if it's an inference profile ARN
+  if (modelName.includes('arn:') && modelName.includes('inference-profile')) {
+    // For inference profiles, use the model type from config to determine handler
+    const inferenceModelType = config?.inferenceModelType;
+
+    if (!inferenceModelType) {
+      throw new Error(
+        'Inference profile requires inferenceModelType to be specified in config. ' +
+          'Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai',
+      );
+    }
+
+    // Map model type to appropriate handler
+    switch (inferenceModelType) {
+      case 'claude':
+        return BEDROCK_MODEL.CLAUDE_MESSAGES;
+      case 'nova':
+        return BEDROCK_MODEL.AMAZON_NOVA;
+      case 'llama':
+        // Default to the latest Llama version for generic 'llama' inference profiles
+        return BEDROCK_MODEL.LLAMA4;
+      case 'llama2':
+        return BEDROCK_MODEL.LLAMA2;
+      case 'llama3':
+        return BEDROCK_MODEL.LLAMA3;
+      case 'llama3.1':
+      case 'llama3_1':
+        return BEDROCK_MODEL.LLAMA3_1;
+      case 'llama3.2':
+      case 'llama3_2':
+        return BEDROCK_MODEL.LLAMA3_2;
+      case 'llama3.3':
+      case 'llama3_3':
+        return BEDROCK_MODEL.LLAMA3_3;
+      case 'llama4':
+        return BEDROCK_MODEL.LLAMA4;
+      case 'mistral':
+        return BEDROCK_MODEL.MISTRAL;
+      case 'cohere':
+        return BEDROCK_MODEL.COHERE_COMMAND_R;
+      case 'ai21':
+        return BEDROCK_MODEL.AI21;
+      case 'titan':
+        return BEDROCK_MODEL.TITAN_TEXT;
+      case 'deepseek':
+        return BEDROCK_MODEL.DEEPSEEK;
+      case 'openai':
+        return BEDROCK_MODEL.OPENAI;
+      default:
+        throw new Error(`Unknown inference model type: ${inferenceModelType}`);
+    }
+  }
+
+  // Existing logic for direct model IDs
   const ret = AWS_BEDROCK_MODELS[modelName];
   if (ret) {
     return ret;
@@ -1648,6 +1724,7 @@ export abstract class AwsBedrockGenericProvider {
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
+          ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
         });
 
         this.bedrock = bedrock;
@@ -1682,7 +1759,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    let model = getHandlerForModel(this.modelName);
+    let model = getHandlerForModel(this.modelName, { ...this.config, ...context?.prompt.config });
     if (!model) {
       logger.warn(
         `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,

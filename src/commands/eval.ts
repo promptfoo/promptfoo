@@ -15,13 +15,13 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { loadApiProvider } from '../providers';
+import { loadApiProvider } from '../providers/index';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util';
+import { isRunningUnderNpx, printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import { checkCloudPermissions } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
@@ -42,7 +42,7 @@ import type {
   TestSuite,
   TokenUsage,
   UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({

@@ -1,7 +1,7 @@
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvInt } from '../envars';
 
-import type { ApiProvider } from '../types';
+import type { ApiProvider } from '../types/index';
 
 /**
  * The default timeout for API requests in milliseconds.

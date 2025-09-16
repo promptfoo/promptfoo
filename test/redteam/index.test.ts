@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
 import logger from '../../src/logger';
-import { loadApiProvider } from '../../src/providers';
+import { loadApiProvider } from '../../src/providers/index';
 import { HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
@@ -21,7 +21,7 @@ import { DEFAULT_LANGUAGES } from '../../src/redteam/strategies/multilingual';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 
-import type { TestCaseWithPlugin } from '../../src/types';
+import type { TestCaseWithPlugin } from '../../src/types/index';
 
 jest.mock('cli-progress');
 jest.mock('../../src/logger');
