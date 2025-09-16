@@ -409,6 +409,25 @@ function splitIntoSentences(text: string) {
   return text.split('\n').filter((sentence) => sentence.trim() !== '');
 }
 
+// CORRECT RAGAS APPROACH: Semantic sentence splitting instead of naive line splitting
+function splitIntoSemanticSentences(text: string): string[] {
+  // Remove multiple whitespace/newlines and normalize
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+
+  if (!cleaned) {
+    return [];
+  }
+
+  // Split by sentence boundaries (.!?)
+  const sentences = cleaned
+    .split(/[.!?]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 5); // Filter out very short fragments
+
+  return sentences;
+}
+
+
 function processContextForTemplating(
   context: Record<string, string | object>,
   enableObjectAccess: boolean,
@@ -1125,6 +1144,7 @@ export async function matchesContextRelevance(
     'context relevance check',
   );
 
+
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RELEVANCE);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
     context,
@@ -1138,12 +1158,12 @@ export async function matchesContextRelevance(
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
 
-  // Split the original context into sentences to get the total count
-  const contextSentences = splitIntoSentences(context);
+  // PROPER RAGAS CONTEXT RELEVANCE: Split the original context into SEMANTIC sentences
+  const contextSentences = splitIntoSemanticSentences(context);
   const totalContextSentences = contextSentences.length;
 
-  // Parse the LLM's response to get relevant sentences
-  const extractedSentences = splitIntoSentences(resp.output);
+  // Parse the LLM's response to get relevant sentences (also semantic splitting)
+  const extractedSentences = splitIntoSemanticSentences(resp.output);
   const relevantSentences: string[] = [];
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
 
@@ -1157,7 +1177,7 @@ export async function matchesContextRelevance(
     relevantSentences.push(...extractedSentences);
   }
 
-  // RAGAS calculates: relevant sentences / total sentences in context
+  // RAGAS CONTEXT RELEVANCE FORMULA: relevant sentences / total sentences in context
   const score = totalContextSentences > 0 ? numerator / totalContextSentences : 0;
   const pass = score >= threshold - Number.EPSILON;
 
@@ -1167,14 +1187,15 @@ export async function matchesContextRelevance(
     relevantSentenceCount: numerator,
     insufficientInformation,
     score,
+    ragasMethod: 'context-relevance',
   };
 
   return {
     pass,
     score,
     reason: pass
-      ? `Relevance ${score.toFixed(2)} is >= ${threshold}`
-      : `Relevance ${score.toFixed(2)} is < ${threshold}`,
+      ? `Context relevance ${score.toFixed(2)} is >= ${threshold}`
+      : `Context relevance ${score.toFixed(2)} is < ${threshold}`,
     tokensUsed: {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
@@ -1190,6 +1211,7 @@ export async function matchesContextRelevance(
     metadata,
   };
 }
+
 
 export async function matchesContextFaithfulness(
   query: string,
