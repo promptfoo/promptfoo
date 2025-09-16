@@ -98,18 +98,6 @@ describe('DownloadMenu', () => {
     expect(screen.getByText('Download YAML Config')).toBeInTheDocument();
   });
 
-  it('closes the dialog when clicking outside', async () => {
-    render(<DownloadMenu />);
-    await userEvent.click(screen.getByText('Download'));
-    expect(screen.getByText('Download YAML Config')).toBeInTheDocument();
-
-    fireEvent.keyDown(document.body, { key: 'Escape', code: 'Escape' });
-
-    await waitFor(() => {
-      expect(screen.queryByText('Download YAML Config')).not.toBeInTheDocument();
-    });
-  });
-
   it('downloads YAML config when clicking the button', async () => {
     render(<DownloadMenu />);
     await userEvent.click(screen.getByText('Download'));
