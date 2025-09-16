@@ -31,6 +31,10 @@ describe('useUserStore', () => {
     expect(mockedCallApi).toHaveBeenCalledWith('/user/email');
   };
 
+  const verifyUserIdState = (expectedUserId: string | null) => {
+    expect(useUserStore.getState().userId).toBe(expectedUserId);
+  };
+
   describe('fetchEmail', () => {
     it.each([
       {
@@ -112,7 +116,7 @@ describe('useUserStore', () => {
 
   describe('fetchUserId', () => {
     it('should set userId when fetchUserId is called and fetchUserId resolves successfully', async () => {
-      expect(useUserStore.getState().userId).toBeNull();
+      verifyUserIdState(null);
       const testUserId = 'test-user-id';
       mockedFetchUserId.mockResolvedValue(testUserId);
 
@@ -120,7 +124,7 @@ describe('useUserStore', () => {
         await useUserStore.getState().fetchUserId();
       });
 
-      expect(useUserStore.getState().userId).toBe(testUserId);
+      verifyUserIdState(testUserId);
     });
 
     it('should not make an API call if userId is already present in the state', async () => {
@@ -132,6 +136,17 @@ describe('useUserStore', () => {
       });
 
       expect(mockedFetchUserId).not.toHaveBeenCalled();
+    });
+
+    it('should set userId to null when fetchUserId resolves with an empty string', async () => {
+      verifyUserIdState(null);
+      mockedFetchUserId.mockResolvedValue('');
+
+      await act(async () => {
+        await useUserStore.getState().fetchUserId();
+      });
+
+      verifyUserIdState(null);
     });
   });
 
@@ -151,13 +166,13 @@ describe('useUserStore', () => {
     it('should update the userId state when setUserId is called with a valid userId string', () => {
       const testUserId = 'test-user-id';
 
-      expect(useUserStore.getState().userId).toBeNull();
+      verifyUserIdState(null);
 
       act(() => {
         useUserStore.getState().setUserId(testUserId);
       });
 
-      expect(useUserStore.getState().userId).toBe(testUserId);
+      verifyUserIdState(testUserId);
     });
   });
 });
