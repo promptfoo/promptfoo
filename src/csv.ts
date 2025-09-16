@@ -212,6 +212,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       );
     } else if (key.startsWith('__config:')) {
       // Parse __config:<assertion-type>:<key> columns
+      // NOTE: Does not validate whether a given key is valid for the assertion type.
       const configParts = key.slice('__config:'.length).split(':');
       if (configParts.length !== 2) {
         logger.warn(
