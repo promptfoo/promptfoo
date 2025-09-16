@@ -593,35 +593,6 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
     return [...defaultProviders, ...customProviders];
   }, [customProviders]);
 
-  // Optimize provider filtering for large lists
-  const [searchTerm, setSearchTerm] = React.useState('');
-  const filteredProviders = React.useMemo(() => {
-    if (!searchTerm) {
-      return allProviders;
-    }
-    const search = searchTerm.toLowerCase();
-    return allProviders.filter((provider) => {
-      const label = getOptionLabel(provider).toLowerCase();
-      const id = getProviderId(provider).toLowerCase();
-      return label.includes(search) || id.includes(search);
-    });
-  }, [allProviders, searchTerm]);
-
-  const handleProviderClick = (provider: ProviderOptions | string) => {
-    setSelectedProvider(typeof provider === 'string' ? { id: provider } : provider);
-  };
-
-  const handleSave = (providerId: string, config: Record<string, any>) => {
-    if (onProviderConfigUpdate) {
-      // Use granular update when available
-      onProviderConfigUpdate(providerId, config);
-    } else {
-      // Fallback to full array replacement
-      onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
-    }
-    setSelectedProvider(null);
-  };
-
   const getOptionLabel = (option: string | ProviderOptions): string => {
     if (!option) {
       return '';
@@ -652,6 +623,35 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
     }
 
     return '';
+  };
+
+  // Optimize provider filtering for large lists
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const filteredProviders = React.useMemo(() => {
+    if (!searchTerm) {
+      return allProviders;
+    }
+    const search = searchTerm.toLowerCase();
+    return allProviders.filter((provider) => {
+      const label = getOptionLabel(provider).toLowerCase();
+      const id = getProviderId(provider).toLowerCase();
+      return label.includes(search) || id.includes(search);
+    });
+  }, [allProviders, searchTerm]);
+
+  const handleProviderClick = (provider: ProviderOptions | string) => {
+    setSelectedProvider(typeof provider === 'string' ? { id: provider } : provider);
+  };
+
+  const handleSave = (providerId: string, config: Record<string, any>) => {
+    if (onProviderConfigUpdate) {
+      // Use granular update when available
+      onProviderConfigUpdate(providerId, config);
+    } else {
+      // Fallback to full array replacement
+      onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
+    }
+    setSelectedProvider(null);
   };
 
   return (
@@ -718,23 +718,22 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({
               );
             })
           }
+          filterOptions={(options, { inputValue }) => {
+            // Update search term from Autocomplete's input
+            setSearchTerm(inputValue);
+            // Let Autocomplete handle the filtering with our pre-filtered list
+            return options;
+          }}
           renderInput={(params) => (
             <TextField
               {...params}
               variant="outlined"
               placeholder="Search and select LLM providers..."
-              onChange={(e) => {
-                // Handle search term change
-                const inputValue = e.target.value;
-                if (typeof inputValue === 'string') {
-                  setSearchTerm(inputValue);
-                }
-              }}
               helperText={
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                   {providers.length > 0
-                    ? `${providers.length} provider(s) selected. Click to configure settings. ${filteredProviders.length} providers available.`
-                    : `Type to search from ${filteredProviders.length} available providers`}
+                    ? 'Click a provider to configure its settings. Hover over chips to see model IDs.'
+                    : 'Select LLM providers from the dropdown or type to search'}
                   {providers.length > 0 && (
                     <Tooltip title="Model IDs are shown below options in the dropdown menu, as tooltips when hovering over selected models, and in the configuration dialog">
                       <Button size="small" sx={{ ml: 1, minWidth: 0, p: 0.5 }}>

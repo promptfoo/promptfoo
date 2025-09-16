@@ -282,7 +282,11 @@ export const providerSchemas: Record<string, ProviderSchema> = {
 // Get schema for a provider ID
 export function getProviderSchema(providerId: string): ProviderSchema | null {
   // Extract provider type from ID (e.g., "openai:gpt-4" -> "openai")
-  const providerType = providerId.split(':')[0];
+  const rawType = providerId.split(':')[0];
+  const aliasMap: Record<string, string> = {
+    azureopenai: 'azure',
+  };
+  const providerType = aliasMap[rawType] || rawType;
   return providerSchemas[providerType] || null;
 }
 

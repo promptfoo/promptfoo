@@ -24,30 +24,23 @@ The form editor provides a user-friendly interface for configuring common provid
    - **Headers**: Custom HTTP headers as a JSON object
 
 2. **Additional Configuration**
-   - For any fields beyond the common ones, use the YAML tab
+   - For any fields beyond the common ones, use the JSON tab
    - The form will alert you if your configuration contains additional fields
-   - Click "Switch to YAML" to see and edit all configuration
+   - Click "JSON" to see and edit the full configuration object
 
-3. **Auto-Save Feature**
-   - Changes are automatically saved after 2 seconds of inactivity
-   - Works seamlessly in the background
-   - No need to manually save unless you want to close immediately
+### JSON Editor
 
-### YAML Editor
+The JSON editor tab is where you can configure any provider setting:
 
-The YAML editor tab is where you can configure any provider setting:
-
-- **Full control** - Add any configuration field your provider supports
-- **Syntax highlighting** with dark mode support
-- **Real-time syncing** - Common fields are synced with the form editor
-- **Validation** - Shows errors for invalid YAML syntax
-- **Auto-save** - Same seamless 2-second auto-save
-- **Use it for**:
+- Full control — add any configuration field your provider supports
+- Syntax highlighting with dark mode support
+- Validation — shows errors for invalid JSON syntax
+- Use it for:
   - Adding custom fields beyond the common ones
   - Nested configuration objects
   - Array values
   - Complex provider-specific settings
-  - Pasting existing configurations from YAML files
+  - Pasting existing configurations from JSON payloads
 
 ## Examples
 
@@ -64,8 +57,8 @@ max_tokens: 2048
 
 ```yaml
 deployment_id: your-deployment-name
-api_host: your-resource.openai.azure.com
-api_version: 2024-02-15-preview
+endpoint: https://your-resource.openai.azure.com
+apiVersion: 2024-02-01
 apiKey: your-azure-key
 temperature: 0.5
 ```
@@ -80,7 +73,7 @@ headers:
 timeout: 30000
 ```
 
-### Complex Provider Configuration (Requires YAML Editor)
+### Complex Provider Configuration (Requires JSON Editor)
 
 ```yaml
 apiKey: sk-your-api-key
@@ -125,9 +118,9 @@ response_format:
 
 If you're migrating from CLI-based configuration, you can:
 
-1. Copy the `config` section from your YAML file
+1. Copy the `config` section from your YAML file (or convert to JSON)
 2. Open the provider configuration dialog in the web UI
-3. Switch to the YAML Editor tab
+3. Switch to the JSON Editor tab
 4. Paste your configuration
 5. Click Save
 

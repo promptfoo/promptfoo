@@ -57,6 +57,7 @@ const ProviderConfigDialog = ({
   const [isLoading, setIsLoading] = useState(false);
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
+  const [jsonText, setJsonText] = useState<string>('');
 
   // Get schema for current provider
   const schema = useMemo(() => {
@@ -69,12 +70,22 @@ const ProviderConfigDialog = ({
   }, [providerId]);
   const hasSchema = !!schema;
 
-  // Validate configuration
+  // Validate configuration with enhanced feedback
   const validateConfig = (configToValidate: Record<string, any>) => {
-    const { errors, warnings } = validateProviderConfig(providerId, configToValidate);
-    setValidationErrors(errors);
-    setValidationWarnings(warnings);
-    return errors.length === 0;
+    try {
+      const result: any = validateProviderConfig(providerId, configToValidate) as any;
+      const errors: string[] = result?.errors ?? [];
+      const warnings: string[] = result?.warnings ?? [];
+
+      setValidationErrors(errors);
+      setValidationWarnings(warnings);
+      return errors.length === 0;
+    } catch (validationError) {
+      console.error('Validation error:', validationError);
+      setValidationErrors(['Configuration validation failed. Please check your settings.']);
+      setValidationWarnings([]);
+      return false;
+    }
   };
 
   // Initialize config when dialog opens or provider changes
@@ -92,12 +103,14 @@ const ProviderConfigDialog = ({
         initialConfig[field.name] = value;
       });
       setLocalConfig(initialConfig);
+      setJsonText(JSON.stringify(initialConfig, null, 2));
       // Validate initial config
       validateConfig(initialConfig);
     } else {
       // No schema, just use the provided config
       setLocalConfig(config);
       setValidationErrors([]);
+      setJsonText(JSON.stringify(config || {}, null, 2));
     }
 
     setJsonError(null);
@@ -111,15 +124,25 @@ const ProviderConfigDialog = ({
     }
   }, [open, providerId, config, schema, hasSchema]);
 
-  // Handle field change
+  // Memoize JSON text to avoid expensive stringify on every render
+  const jsonTextFromConfig = useMemo(() => {
+    return JSON.stringify(localConfig || {}, null, 2);
+  }, [localConfig]);
+
+  // Update JSON text only when switching tabs or when config changes significantly
+  useEffect(() => {
+    if (tabValue === 0) {
+      setJsonText(jsonTextFromConfig);
+    }
+  }, [jsonTextFromConfig, tabValue]);
+
+  // Handle field change with debounced validation
   const handleFieldChange = (fieldName: string, value: any) => {
     const newConfig = { ...localConfig, [fieldName]: value };
     setLocalConfig(newConfig);
 
-    // Clear validation errors as user types
-    if (validationErrors.length > 0) {
-      validateConfig(newConfig);
-    }
+    // Immediate validation for better UX
+    validateConfig(newConfig);
   };
 
   // Handle save
@@ -212,7 +235,7 @@ const ProviderConfigDialog = ({
         return (
           <JsonTextField
             label={field.label}
-            defaultValue={JSON.stringify(value || (field.type === 'array' ? [] : {}))}
+            value={JSON.stringify(value || (field.type === 'array' ? [] : {}))}
             onChange={(parsed, error) => {
               if (!error) {
                 handleFieldChange(field.name, parsed);
@@ -259,9 +282,10 @@ const ProviderConfigDialog = ({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                const form = e.currentTarget.form;
+                // Find the form by traversing up the DOM tree
+                const form = (e.currentTarget as HTMLElement).closest('form') || document.querySelector('form');
                 const inputs = Array.from(form?.querySelectorAll('input, textarea, select') || []);
-                const currentIndex = inputs.indexOf(e.currentTarget);
+                const currentIndex = inputs.indexOf(e.currentTarget as HTMLElement);
                 const nextInput = inputs[currentIndex + 1] as HTMLElement;
                 if (nextInput) {
                   nextInput.focus();
@@ -334,6 +358,12 @@ const ProviderConfigDialog = ({
           </Alert>
         )}
 
+        {validationErrors.length === 0 && validationWarnings.length === 0 && localConfig && Object.keys(localConfig).length > 0 && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            Configuration looks good! Ready to save.
+          </Alert>
+        )}
+
         {tabValue === 0 && schema ? (
           <Box>
             {schema.fields.map((field) => (
@@ -351,10 +381,14 @@ const ProviderConfigDialog = ({
             )}
             <JsonTextField
               label="Configuration JSON"
-              defaultValue={JSON.stringify(localConfig, null, 2)}
-              onChange={(parsed, error) => {
+              value={jsonText}
+              includeRaw
+              onChange={(parsed, error, raw) => {
+                if (raw !== undefined) {
+                  setJsonText(raw);
+                }
                 if (error) {
-                  setJsonError(error);
+                  setJsonError(`Invalid JSON: ${error}`);
                 } else {
                   setJsonError(null);
                   setLocalConfig(parsed);

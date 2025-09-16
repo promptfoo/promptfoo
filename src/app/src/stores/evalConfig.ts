@@ -86,6 +86,32 @@ export const useStore = create<EvalConfigState>()(
     {
       name: 'promptfoo',
       skipHydration: true,
+      // Avoid persisting sensitive secrets such as API keys
+      partialize: (state) => {
+        const redactSecrets = (obj: any) => {
+          if (!obj || typeof obj !== 'object') {
+            return obj;
+          }
+          const copy: any = Array.isArray(obj) ? [...obj] : { ...obj };
+          if ('apiKey' in copy) {
+            delete copy.apiKey;
+          }
+          return copy;
+        };
+
+        const redactedProviders = Array.isArray(state.config.providers)
+          ? (state.config.providers as any[]).map((p) =>
+              p && typeof p === 'object' && 'config' in p ? { ...p, config: redactSecrets(p.config) } : p,
+            )
+          : state.config.providers;
+
+        return {
+          config: {
+            ...state.config,
+            providers: redactedProviders as any,
+          },
+        } as Partial<EvalConfigState>;
+      },
     },
   ),
 );
