@@ -16,18 +16,22 @@ if (typeof window !== 'undefined') {
   // Comprehensive fix for cssstyle library CSS variable parsing issues
   const originalSetProperty = CSSStyleDeclaration.prototype.setProperty;
   CSSStyleDeclaration.prototype.setProperty = function (property, value, priority) {
-    // Replace CSS variables with placeholder values to avoid parsing errors
+    // Only replace CSS variables that cause parsing errors (border-related)
+    // Leave other CSS variables intact for tests that expect them
     if (typeof value === 'string' && value.includes('var(--')) {
-      // Replace common CSS variables that cause parsing issues
-      value = value
-        .replace(/var\(--[\w-]+\)/g, 'transparent') // Replace CSS variables with a safe fallback
-        .replace(/1px solid var\(--[\w-]+\)/g, '1px solid transparent'); // Specific fix for border values
+      // Only replace border-related CSS variables that cause cssstyle parsing errors
+      if (value.includes('1px solid var(--') || value.includes('border') ||
+          value.match(/var\(--[\w-]*border[\w-]*\)/i)) {
+        value = value
+          .replace(/1px solid var\(--[\w-]*border[\w-]*\)/gi, '1px solid transparent')
+          .replace(/var\(--[\w-]*border[\w-]*\)/gi, 'transparent');
+      }
     }
 
     try {
       return originalSetProperty.call(this, property, value, priority);
     } catch (error) {
-      // Silently ignore any remaining CSS parsing errors
+      // Silently ignore CSS parsing errors for border properties only
       if (error instanceof TypeError && (
         error.message.includes('border') ||
         error.message.includes('Cannot create property')
@@ -38,7 +42,7 @@ if (typeof window !== 'undefined') {
     }
   };
 
-  // Patch all border-related property setters to handle CSS variables
+  // Patch border-related property setters to handle CSS variables that cause parsing errors
   const borderProperties = [
     'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft',
     'borderWidth', 'borderStyle', 'borderColor'
@@ -49,8 +53,13 @@ if (typeof window !== 'undefined') {
     if (descriptor?.set) {
       Object.defineProperty(CSSStyleDeclaration.prototype, prop, {
         set: function (value) {
+          // Only replace border-related CSS variables that cause parsing errors
           if (typeof value === 'string' && value.includes('var(--')) {
-            value = value.replace(/var\(--[\w-]+\)/g, 'transparent');
+            if (value.match(/var\(--[\w-]*border[\w-]*\)/i) || value.includes('1px solid var(--')) {
+              value = value
+                .replace(/1px solid var\(--[\w-]*border[\w-]*\)/gi, '1px solid transparent')
+                .replace(/var\(--[\w-]*border[\w-]*\)/gi, 'transparent');
+            }
           }
           try {
             return descriptor.set.call(this, value);
