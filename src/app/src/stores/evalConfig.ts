@@ -96,15 +96,16 @@ export const useStore = create<EvalConfigState>()(
           const copy: any = Array.isArray(obj) ? [...obj] : { ...obj };
 
           // Redact common secret field names (case-insensitive)
-          const secretKeyPatterns = /^(api[-_]?key|apikey|access[-_]?key|secret[-_]?key|private[-_]?key|token|auth[-_]?token|bearer[-_]?token|refresh[-_]?token|id[-_]?token|jwt[-_]?token|secret|password|passphrase|client[-_]?secret|client[-_]?key|azure[-_]?client[-_]?secret|aws[-_]?secret[-_]?access[-_]?key|service[-_]?account[-_]?key|google[-_]?application[-_]?credentials|openai[-_]?api[-_]?key|anthropic[-_]?api[-_]?key|cohere[-_]?api[-_]?key|huggingface[-_]?api[-_]?token|replicate[-_]?api[-_]?token|together[-_]?api[-_]?key)$/i;
+          const secretKeyPatterns =
+            /^(api[-_]?key|apikey|access[-_]?key|secret[-_]?key|private[-_]?key|token|auth[-_]?token|bearer[-_]?token|refresh[-_]?token|id[-_]?token|jwt[-_]?token|secret|password|passphrase|client[-_]?secret|client[-_]?key|azure[-_]?client[-_]?secret|aws[-_]?secret[-_]?access[-_]?key|service[-_]?account[-_]?key|google[-_]?application[-_]?credentials|openai[-_]?api[-_]?key|anthropic[-_]?api[-_]?key|cohere[-_]?api[-_]?key|huggingface[-_]?api[-_]?token|replicate[-_]?api[-_]?token|together[-_]?api[-_]?key)$/i;
 
-          Object.keys(copy).forEach(key => {
+          Object.keys(copy).forEach((key) => {
             if (secretKeyPatterns.test(key)) {
               delete copy[key];
             } else if (key === 'headers' && typeof copy[key] === 'object') {
               // Handle nested headers.authorization patterns
               const headersCopy = { ...copy[key] };
-              Object.keys(headersCopy).forEach(headerKey => {
+              Object.keys(headersCopy).forEach((headerKey) => {
                 if (/^authorization$/i.test(headerKey)) {
                   delete headersCopy[headerKey];
                 }
@@ -121,7 +122,9 @@ export const useStore = create<EvalConfigState>()(
 
         const redactedProviders = Array.isArray(state.config.providers)
           ? (state.config.providers as any[]).map((p) =>
-              p && typeof p === 'object' && 'config' in p ? { ...p, config: redactSecrets(p.config) } : p,
+              p && typeof p === 'object' && 'config' in p
+                ? { ...p, config: redactSecrets(p.config) }
+                : p,
             )
           : state.config.providers;
 

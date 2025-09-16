@@ -10,7 +10,13 @@ interface JsonTextFieldProps extends Omit<TextFieldProps, 'onChange' | 'value' |
   includeRaw?: boolean;
 }
 
-const JsonTextField: React.FC<JsonTextFieldProps> = ({ onChange, value: controlledValue, defaultValue, includeRaw = false, ...props }) => {
+const JsonTextField: React.FC<JsonTextFieldProps> = ({
+  onChange,
+  value: controlledValue,
+  defaultValue,
+  includeRaw = false,
+  ...props
+}) => {
   // Determine if controlled at component initialization (never changes)
   const isControlled = React.useRef(controlledValue !== undefined);
   const [internalValue, setInternalValue] = React.useState<string>(defaultValue ?? '');

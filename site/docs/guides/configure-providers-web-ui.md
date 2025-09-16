@@ -94,11 +94,7 @@ When using the JSON editor in the web UI, your configuration would look like:
       "do_sample": true
     }
   },
-  "stop_sequences": [
-    "\n\n",
-    "END",
-    "STOP"
-  ],
+  "stop_sequences": ["\n\n", "END", "STOP"],
   "response_format": {
     "type": "json_object",
     "schema": {

@@ -241,12 +241,15 @@ const ProviderConfigDialog = ({
         return (
           <JsonTextField
             label={field.label}
-            value={jsonFieldText[field.name] || JSON.stringify(value || (field.type === 'array' ? [] : {}))}
+            value={
+              jsonFieldText[field.name] ||
+              JSON.stringify(value || (field.type === 'array' ? [] : {}))
+            }
             includeRaw
             onChange={(parsed, error, raw) => {
               // Always update the raw text so users can see their keystrokes
               if (raw !== undefined) {
-                setJsonFieldText(prev => ({ ...prev, [field.name]: raw }));
+                setJsonFieldText((prev) => ({ ...prev, [field.name]: raw }));
               }
               // Only update the config when JSON is valid
               if (!error && parsed !== null) {
@@ -353,11 +356,14 @@ const ProviderConfigDialog = ({
           </Alert>
         )}
 
-        {validationErrors.length === 0 && validationWarnings.length === 0 && localConfig && Object.keys(localConfig).length > 0 && (
-          <Alert severity="success" sx={{ mb: 2 }}>
-            Configuration looks good! Ready to save.
-          </Alert>
-        )}
+        {validationErrors.length === 0 &&
+          validationWarnings.length === 0 &&
+          localConfig &&
+          Object.keys(localConfig).length > 0 && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Configuration looks good! Ready to save.
+            </Alert>
+          )}
 
         {tabValue === 0 && schema ? (
           <Box>
@@ -405,7 +411,9 @@ const ProviderConfigDialog = ({
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose} disabled={isLoading}>Cancel</Button>
+        <Button onClick={onClose} disabled={isLoading}>
+          Cancel
+        </Button>
         <Button
           onClick={handleSave}
           variant="contained"
