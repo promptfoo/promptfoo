@@ -648,6 +648,7 @@ export default class Eval {
     filteredCount: number;
     id: string;
   }> {
+    // Deserialize the filters
     const filters = opts.filters?.map((filter) => JSON.parse(filter)) as ResultsFilter[];
 
     // Get total count of tests for this eval
@@ -727,11 +728,23 @@ export default class Eval {
       resultsByTestIdx.get(result.testIdx)!.push(result);
     }
 
-    // Create table rows in the same order as the original query
+    // Create table rows in the same order as the original query.
+    // Reconcile different results for severity filters: if a red team test case has a severity which differs from the
+    // severity requested in the filter, we need to drop this result. This case will occur when by default the plugin
+    // uses the filtered-on severity but the severity is overridden by the user.
+    const isFilteredOnSeverity = filters.some((filter) => filter.type === 'severity');
+    const targetSeverity = filters.find((filter) => filter.type === 'severity')?.value;
     for (const testIdx of testIndices) {
       const results = resultsByTestIdx.get(testIdx) || [];
       if (results.length > 0) {
-        body.push(convertTestResultsToTableRow(results, vars));
+        const row = convertTestResultsToTableRow(results, vars);
+
+        // Drop the result if it doesn't match the target severity
+        if (isFilteredOnSeverity && row.test.metadata?.severity !== targetSeverity) {
+          continue;
+        }
+
+        body.push(row);
       }
     }
 
