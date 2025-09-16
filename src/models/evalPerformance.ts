@@ -3,7 +3,7 @@ import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import logger from '../logger';
 
-import type { EvalResultsFilterMode, ResultsFilter } from '../types/index';
+import type { EvalResultsFilterMode } from '../types/index';
 
 interface CountCacheEntry {
   count: number;

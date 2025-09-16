@@ -726,7 +726,7 @@ export default class Eval {
       resultsByTestIdx.get(result.testIdx)!.push(result);
     }
 
-    // Create table rows in the same order as the original query.
+    // Create table rows in the same order as the original query
     for (const testIdx of testIndices) {
       const results = resultsByTestIdx.get(testIdx) || [];
       if (results.length > 0) {
