@@ -649,7 +649,7 @@ export default class Eval {
     id: string;
   }> {
     // Deserialize the filters
-    const filters = opts.filters?.map((filter) => JSON.parse(filter)) as ResultsFilter[];
+    const filters = (opts.filters ?? []).map((filter) => JSON.parse(filter)) as ResultsFilter[];
 
     // Get total count of tests for this eval
     const totalCount = await this.getResultsCount();
@@ -739,12 +739,12 @@ export default class Eval {
       if (results.length > 0) {
         const row = convertTestResultsToTableRow(results, vars);
 
-        // Drop the result if it doesn't match the target severity
+        // Drop the result and update the filtered count if it doesn't match the target severity
         if (isFilteredOnSeverity && row.test.metadata?.severity !== targetSeverity) {
-          continue;
+          filteredCount--;
+        } else {
+          body.push(row);
         }
-
-        body.push(row);
       }
     }
 
