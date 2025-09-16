@@ -551,24 +551,21 @@ export default class Eval {
 
           // Build pluginId match conditions for this severity
           const pluginIdPath = "json_extract(metadata, '$.pluginId')";
-          const pluginConds: string[] = [];
-          for (const pluginId of matchingPluginIds) {
+          const pluginConditions: string[] = matchingPluginIds.map((pluginId) => {
             const sanitizedPluginId = sanitizeValue(pluginId);
-            pluginConds.push(
-              pluginId.includes(':')
-                ? // It's a specific subcategory
-                  `${pluginIdPath} = '${sanitizedPluginId}'`
-                : // It's a category, match any plugin starting with this prefix
-                  `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`,
-            );
-          }
+            return pluginId.includes(':')
+              ? // It's a specific subcategory
+                `${pluginIdPath} = '${sanitizedPluginId}'`
+              : // It's a category, match any plugin starting with this prefix
+                `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
+          });
 
           // Final condition: explicit OR (plugin match AND no conflicting override)
-          if (pluginConds.length > 0) {
+          if (pluginConditions.length > 0) {
             // Plugin-derived severity is only applied when there's no conflicting explicitly-defined override
             // in the row's metadata.
             const overrideOk = `(json_extract(metadata, '$.severity') IS NULL OR json_extract(metadata, '$.severity') = '${sanitizedValue}')`;
-            condition = `(${explicit} OR ((${pluginConds.join(' OR ')}) AND ${overrideOk}))`;
+            condition = `(${explicit} OR ((${pluginConditions.join(' OR ')}) AND ${overrideOk}))`;
           } else {
             condition = `(${explicit})`;
           }
