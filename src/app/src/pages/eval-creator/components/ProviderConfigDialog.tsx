@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 
 import JsonTextField from '@app/components/JsonTextField';
 import {
@@ -52,7 +52,6 @@ const ProviderConfigDialog = ({
   const [showSensitive, setShowSensitive] = useState<Record<string, boolean>>({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const isAzureProvider = providerId.startsWith('azure:');
 
   // Get schema for current provider
   const schema = useMemo(() => getProviderSchema(providerId), [providerId]);
