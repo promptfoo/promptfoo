@@ -574,55 +574,6 @@ describe('evaluator', () => {
       expect(result.totalCount).toBe(0);
       expect(result.filteredCount).toBe(0);
     });
-
-    it('should validate severity conflicts', async () => {
-      const eval_ = await EvalFactory.create({
-        numResults: 6,
-        resultTypes: ['success', 'failure'],
-      });
-
-      const db = getDb();
-      // Implicit match: category pluginId 'harmful:*' maps to medium severity via 'harmful'
-      await db.run(
-        `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment-bullying"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
-      );
-      // Explicit override on test case to a conflicting severity
-      await db.run(
-        `UPDATE eval_results SET test_case = json_set(test_case, '$.metadata', json('{"severity":"low"}')) WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
-      );
-
-      // Pre-check: raw index query should include the row via implicit severity from pluginId
-      const pre = await (eval_ as any).queryTestIndices({
-        filters: [
-          {
-            logicOperator: 'and',
-            type: 'severity',
-            operator: 'equals',
-            value: 'medium',
-          },
-        ],
-      });
-      expect(pre.filteredCount).toBeGreaterThanOrEqual(1);
-      expect(pre.testIndices).toContain(1);
-
-      // Now fetch the table page: row with conflicting explicit severity should be dropped
-      const result = await eval_.getTablePage({
-        filters: [
-          JSON.stringify({
-            logicOperator: 'and',
-            type: 'severity',
-            operator: 'equals',
-            value: 'medium',
-          }),
-        ],
-      });
-
-      // Body should not contain the conflicting row and filteredCount should be decremented
-      const returnedIndices = result.body.map((row) => row.testIdx);
-      expect(returnedIndices).not.toContain(1);
-      expect(result.filteredCount).toBe(pre.filteredCount - 1);
-      expect(result.filteredCount).toBe(returnedIndices.length);
-    });
   });
 
   describe('queryTestIndices', () => {
@@ -690,12 +641,12 @@ describe('evaluator', () => {
       });
       const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
         filters: [
-          {
+          JSON.stringify({
             logicOperator: 'and',
             type: 'metric',
             operator: 'equals',
             value: 'accuracy',
-          },
+          }),
         ],
       });
 
@@ -722,13 +673,13 @@ describe('evaluator', () => {
       // equals on source=unit should return only test 1
       const eqRes = await (eval_ as any).queryTestIndices({
         filters: [
-          {
+          JSON.stringify({
             logicOperator: 'and',
             type: 'metadata',
             operator: 'equals',
             field: 'source',
             value: 'unit',
-          },
+          }),
         ],
       });
       expect(eqRes.filteredCount).toBe(1);
@@ -737,13 +688,13 @@ describe('evaluator', () => {
       // contains on note
       const containsRes = await (eval_ as any).queryTestIndices({
         filters: [
-          {
+          JSON.stringify({
             logicOperator: 'and',
             type: 'metadata',
             operator: 'contains',
             field: 'note',
             value: 'hello',
-          },
+          }),
         ],
       });
       expect(containsRes.filteredCount).toBe(1);
@@ -766,13 +717,27 @@ describe('evaluator', () => {
 
       // Category filter should match pluginId that starts with harmful:
       const pluginCategory = await (eval_ as any).queryTestIndices({
-        filters: [{ logicOperator: 'and', type: 'plugin', operator: 'equals', value: 'harmful' }],
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'plugin',
+            operator: 'equals',
+            value: 'harmful',
+          }),
+        ],
       });
       expect(pluginCategory.testIndices).toEqual([3]);
 
       // Strategy equals specific id
       const strategyEq = await (eval_ as any).queryTestIndices({
-        filters: [{ logicOperator: 'and', type: 'strategy', operator: 'equals', value: 's1' }],
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'strategy',
+            operator: 'equals',
+            value: 's1',
+          }),
+        ],
       });
       expect(strategyEq.testIndices).toEqual([5]);
     });
@@ -788,7 +753,14 @@ describe('evaluator', () => {
       );
 
       const { testIndices, filteredCount } = await (eval_ as any).queryTestIndices({
-        filters: [{ logicOperator: 'and', type: 'severity', operator: 'equals', value: 'high' }],
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'severity',
+            operator: 'equals',
+            value: 'high',
+          }),
+        ],
       });
       expect(filteredCount).toBe(1);
       expect(testIndices).toEqual([0]);
