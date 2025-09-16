@@ -27,23 +27,38 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
     );
   }
 
-  try {
-    const require = createRequire(path.resolve(basePath));
-    const filePath = require.resolve(packageName);
-    const module = await importModule(filePath);
-    const entity = getValue(module, entityName ?? 'default');
+  // Try multiple approaches for backwards compatibility
+  const attempts = [
+    // Try with package.json file path (fixes cases where basePath is a directory)
+    () => createRequire(path.resolve(basePath, 'package.json')),
+    // Try with index.js file path (fallback)
+    () => createRequire(path.resolve(basePath, 'index.js')),
+    // Try with original approach (for cases where basePath is already a file)
+    () => createRequire(path.resolve(basePath)),
+  ];
 
-    if (!entity) {
-      logger.error(dedent`
-        Could not find entity: ${chalk.bold(entityName)} in module: ${chalk.bold(filePath)}.
-      `);
-      process.exit(1);
+  for (const createRequireAttempt of attempts) {
+    try {
+      const require = createRequireAttempt();
+      const filePath = require.resolve(packageName);
+      const module = await importModule(filePath);
+      const entity = getValue(module, entityName ?? 'default');
+
+      if (!entity) {
+        logger.error(dedent`
+          Could not find entity: ${chalk.bold(entityName)} in module: ${chalk.bold(filePath)}.
+        `);
+        process.exit(1);
+      }
+
+      return entity;
+    } catch (error) {
+      // Continue to next attempt if this one fails
+      continue;
     }
-
-    return entity;
-  } catch {
-    throw new Error(`Package not found: ${packageName}. Make sure it's installed in ${basePath}`);
   }
+
+  throw new Error(`Package not found: ${packageName}. Make sure it's installed in ${basePath}`);
 }
 
 export async function parsePackageProvider(
