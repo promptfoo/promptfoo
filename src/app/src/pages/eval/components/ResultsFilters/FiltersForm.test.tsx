@@ -1,10 +1,11 @@
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { render, screen, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-import FiltersForm from './FiltersForm';
-import { useTableStore, type ResultsFilter } from '../store';
 import { Box } from '@mui/material';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useTableStore } from '../store';
+import FiltersForm from './FiltersForm';
+import type { ResultsFilter } from '@promptfoo/types';
 
 vi.mock('../store', () => ({
   useTableStore: vi.fn(),
