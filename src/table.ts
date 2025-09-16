@@ -70,5 +70,5 @@ export function wrapTable(
   for (const row of rows) {
     table.push(Object.values(row));
   }
-  return table;
+  return table.toString();
 }

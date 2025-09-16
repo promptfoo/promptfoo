@@ -99,7 +99,6 @@ async function fetchRemoteTestCases(
       },
       REQUEST_TIMEOUT_MS,
     );
-
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
