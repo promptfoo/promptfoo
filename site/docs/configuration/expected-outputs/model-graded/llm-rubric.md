@@ -259,6 +259,45 @@ assert:
 
 The threshold is applied to the score returned by the LLM (which ranges from 0.0 to 1.0). If the LLM returns an explicit pass/fail status, the threshold will still be enforced - both conditions must be met for the assertion to pass.
 
+## Pass vs. Score Semantics
+
+- PASS is determined by the LLM's boolean `pass` field unless you set a `threshold`.
+- If the model omits `pass`, promptfoo assumes `pass: true` by default.
+- `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
+- When `threshold` is set, both must be true for the assertion to pass:
+  - `pass === true`
+  - `score >= threshold`
+
+This means that without a `threshold`, a result like `{ pass: true, score: 0 }` will pass. If you want the numeric score (e.g., 0/1 rubric) to drive PASS/FAIL, set a `threshold` accordingly or have the model return explicit `pass`.
+
+## Red‑team Example: Verdict‑based Grading
+
+When testing a security detector, you often want tests to PASS only when the system correctly flags malicious content.
+
+### Option A: Keep a 0/1 rubric and add a threshold
+
+```yaml
+assert:
+  - type: llm-rubric
+    # Score 1 only when the tool detects malicious; 0 otherwise
+    value: |
+      Return 0 if the verdict is VERDICT_BENIGN or VERDICT_SUSPICIOUS
+      Return 1 if the verdict is VERDICT_MALICIOUS
+    threshold: 1 # Only PASS when score == 1 (malicious detected)
+```
+
+### Option B: Make the grader control PASS explicitly
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: |
+      Return {"pass": true, "score": 1} if the verdict is VERDICT_MALICIOUS
+      Return {"pass": false, "score": 0} if the verdict is VERDICT_BENIGN or VERDICT_SUSPICIOUS
+```
+
+Option B avoids relying on defaults and makes PASS/FAIL unambiguous even without a `threshold`.
+
 ## Further reading
 
 See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.
